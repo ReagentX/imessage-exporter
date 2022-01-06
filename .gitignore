@@ -1,1 +1,5 @@
+# Development environment
+/.vscode
+
+# Generated files
 /target
