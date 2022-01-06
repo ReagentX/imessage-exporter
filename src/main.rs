@@ -1,3 +1,22 @@
+use rusqlite::{Connection, OpenFlags};
+use chrono::DateTime;
+
+mod tables;
+
 fn main() {
-    println!("Hello, world!");
+    let db_path = "/Users/chris/Library/Messages/chat.db";
+    let db = match Connection::open_with_flags(&db_path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
+        Ok(res) => res,
+        Err(why) => panic!("Unable to read from chat database: {}\nEnsure full disk access is enabled for your terminal emulator in System Preferences > Security and Privacy > Full Disk Access", why),
+    };
+    println!("{:?}", db);
+
+    let mut statement = db.prepare("SELECT * from message LIMIT 10").unwrap();
+    let mut messages = statement.query_map([], |row| {
+        Ok(tables::messages::Message::from_row(row))
+    }).unwrap();
+    for message in messages {
+        let msg = message.unwrap().unwrap();
+        println!("{:?}: {:?}", DateTime::format(&msg.date(), "%b %d, %Y %l:%M:%S %p").to_string(), msg.text);
+    }
 }
