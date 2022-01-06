@@ -1,7 +1,9 @@
 use rusqlite::{Connection, OpenFlags};
-use chrono::DateTime;
 
 mod tables;
+mod util;
+
+use util::dates::format;
 
 fn main() {
     let db_path = "/Users/chris/Library/Messages/chat.db";
@@ -12,11 +14,11 @@ fn main() {
     println!("{:?}", db);
 
     let mut statement = db.prepare("SELECT * from message LIMIT 10").unwrap();
-    let mut messages = statement.query_map([], |row| {
-        Ok(tables::messages::Message::from_row(row))
-    }).unwrap();
+    let messages = statement
+        .query_map([], |row| Ok(tables::messages::Message::from_row(row)))
+        .unwrap();
     for message in messages {
         let msg = message.unwrap().unwrap();
-        println!("{:?}: {:?}", DateTime::format(&msg.date(), "%b %d, %Y %l:%M:%S %p").to_string(), msg.text);
+        println!("{:?}: {:?}", format(&msg.date()), msg.text);
     }
 }
