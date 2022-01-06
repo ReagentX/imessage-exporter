@@ -13,7 +13,7 @@ fn main() {
     };
     println!("{:?}", db);
 
-    let mut statement = db.prepare("SELECT * from message LIMIT 10").unwrap();
+    let mut statement = db.prepare("SELECT * from message ORDER BY date LIMIT 10").unwrap();
     let messages = statement
         .query_map([], |row| Ok(tables::messages::Message::from_row(row)))
         .unwrap();
