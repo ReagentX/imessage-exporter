@@ -81,6 +81,7 @@ pub struct Message {
     pub was_delivered_quietly: i32,
     pub did_notify_recipient: i32,
     pub synced_syndication_ranges: Option<String>,
+    offset: i64,
 }
 
 impl Message {
@@ -164,31 +165,27 @@ impl Message {
             was_delivered_quietly: row.get(75)?,
             did_notify_recipient: row.get(76)?,
             synced_syndication_ranges: row.get(77)?,
+            offset: Utc.ymd(2001, 1, 1).and_hms(0, 0, 0).timestamp(),
         })
     }
 
-    // TODO: date epoch is 1/1/2001
-    // 549950016386106752
-
-    // 978332400000
-    pub fn date(&self) -> DateTime<Local> {
-        // TODO: Abstract this to a class to conver the time depending if it is daylight savings or not
-        let base = Utc.ymd(2001, 1, 1).and_hms(0, 0, 0);
-        // self.date comes from the db
-        let utc_stamp = NaiveDateTime::from_timestamp((self.date / 1000000000) + base.timestamp(), 0);
+    fn get_local_time(&self, date_stamp: &i64) -> DateTime<Local> {
+        let utc_stamp = NaiveDateTime::from_timestamp((date_stamp / 1000000000) + self.offset, 0);
         let local_time = Local.from_utc_datetime(&utc_stamp);
         Local
             .ymd(local_time.year(), local_time.month(), local_time.day())
             .and_hms(local_time.hour(), local_time.minute(), local_time.second())
     }
 
+    pub fn date(&self) -> DateTime<Local> {
+        self.get_local_time(&self.date)
+    }
+
     pub fn date_delivered(&self) -> DateTime<Local> {
-        todo!();
-        // OffsetDateTime::from_unix_timestamp((self.date_delivered / 1000000000) + 978375600).ok()
+        self.get_local_time(&self.date_delivered)
     }
 
     pub fn date_read(&self) -> DateTime<Local> {
-        todo!();
-        // OffsetDateTime::from_unix_timestamp((self.date_read / 1000000000) + 978375600).ok()
+        self.get_local_time(&self.date_read)
     }
 }
