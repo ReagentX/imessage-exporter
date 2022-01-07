@@ -3,6 +3,7 @@ use rusqlite::{Connection, OpenFlags};
 mod tables;
 mod util;
 
+use tables::{handle::Handle, table::Table};
 use util::dates::format;
 
 fn main() {
@@ -11,9 +12,10 @@ fn main() {
         Ok(res) => res,
         Err(why) => panic!("Unable to read from chat database: {}\nEnsure full disk access is enabled for your terminal emulator in System Preferences > Security and Privacy > Full Disk Access", why),
     };
-    println!("{:?}", db);
 
-    let mut statement = db.prepare("SELECT * from message ORDER BY date LIMIT 10").unwrap();
+    let mut statement = db
+        .prepare("SELECT * from message ORDER BY date LIMIT 10")
+        .unwrap();
     let messages = statement
         .query_map([], |row| Ok(tables::messages::Message::from_row(row)))
         .unwrap();
@@ -21,4 +23,7 @@ fn main() {
         let msg = message.unwrap().unwrap();
         println!("{:?}: {:?}", format(&msg.date()), msg.text);
     }
+
+    let contacts = Handle::get_map(&db);
+    println!("{:?}", contacts);
 }
