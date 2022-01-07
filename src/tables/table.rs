@@ -1,8 +1,7 @@
 use rusqlite::{Row, Result};
 
 pub trait Table {
-    type A;
-    fn from_row(row: &Row) -> Result<Self::A>;
+    fn from_row(row: &Row) -> Result<Self> where Self: Sized;
 }
 
 pub const HANDLE: &str = "handle";

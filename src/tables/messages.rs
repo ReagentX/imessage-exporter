@@ -88,8 +88,7 @@ pub struct Message {
 }
 
 impl Table for Message {
-    type A = Message;
-    fn from_row(row: &Row) -> Result<Self::A> {
+    fn from_row(row: &Row) -> Result<Message> {
         Ok(Message {
             rowid: row.get(0)?,
             guid: row.get(1)?,

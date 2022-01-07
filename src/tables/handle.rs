@@ -15,9 +15,9 @@ pub struct Handle {
 }
 
 impl Table for Handle {
-    type A = Handle;
+    // type A = Handle;
 
-    fn from_row(row: &Row) -> Result<Self::A> {
+    fn from_row(row: &Row) -> Result<Handle> {
         Ok(Handle {
             rowid: row.get(0)?,
             id: row.get(1)?,
@@ -49,6 +49,8 @@ impl Handle {
             let contact = handle.unwrap().unwrap();
             map.insert(contact.rowid, contact.id);
         }
+
+        // TODO: Map contacts to the unique `person_centric_id` if it exists somehow?
 
         // Done!
         map
