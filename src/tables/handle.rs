@@ -1,4 +1,4 @@
-use rusqlite::Connection;
+use rusqlite::{Connection, Statement};
 use std::collections::HashMap;
 
 use crate::tables::table::{Table, HANDLE};
@@ -15,8 +15,6 @@ pub struct Handle {
 }
 
 impl Table for Handle {
-    // type A = Handle;
-
     fn from_row(row: &Row) -> Result<Handle> {
         Ok(Handle {
             rowid: row.get(0)?,
@@ -27,17 +25,24 @@ impl Table for Handle {
             person_centric_id: row.get(5)?,
         })
     }
+
+    fn get(db: &Connection) -> Statement {
+        db.prepare(&format!("SELECT * from {}", HANDLE)).unwrap()
+    }
 }
 
 impl Handle {
-    pub fn get_map(db: &Connection) -> HashMap<i32, String> {
+    /// Generate a HashMap for looking up contacts by their IDs, collapsing
+    /// duplicate contacts to the same ID String
+    pub fn make_cache(db: &Connection) -> HashMap<i32, String> {
         // Create cache for user IDs
         let mut map = HashMap::new();
 
+        // Condense contacts that share person_centric_id so their IDs map to the same strings
+        let mut dupe_contacts: HashMap<String, Vec<String>> = HashMap::new();
+
         // Create query
-        let mut statement = db
-            .prepare(&format!("SELECT * from {}", HANDLE))
-            .unwrap();
+        let mut statement = Handle::get(db);
 
         // Execute query to build the Handles
         let handles = statement
