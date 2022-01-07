@@ -1,7 +1,10 @@
 use chrono::{naive::NaiveDateTime, offset::Local, DateTime, Datelike, TimeZone, Timelike, Utc};
 use rusqlite::{Result, Row};
 
+use crate::tables::table::Table;
+
 #[derive(Debug)]
+#[allow(non_snake_case)]
 pub struct Message {
     pub rowid: i32,
     pub guid: String,
@@ -11,9 +14,9 @@ pub struct Message {
     pub handle_id: i32,
     pub subject: Option<String>,
     pub country: Option<String>,
-    pub attributedBody: Option<Vec<u8>>,
+    pub attributedBody: Option<Vec<u8>>, // Field name comes from from table
     pub version: i32,
-    pub r#type: i32,
+    pub r#type: i32, // Field name comes from from table
     pub service: String,
     pub account: String,
     pub account_guid: String,
@@ -84,8 +87,9 @@ pub struct Message {
     offset: i64,
 }
 
-impl Message {
-    pub fn from_row(row: &Row) -> Result<Message> {
+impl Table for Message {
+    type A = Message;
+    fn from_row(row: &Row) -> Result<Self::A> {
         Ok(Message {
             rowid: row.get(0)?,
             guid: row.get(1)?,
@@ -168,7 +172,9 @@ impl Message {
             offset: Utc.ymd(2001, 1, 1).and_hms(0, 0, 0).timestamp(),
         })
     }
+}
 
+impl Message {
     fn get_local_time(&self, date_stamp: &i64) -> DateTime<Local> {
         let utc_stamp = NaiveDateTime::from_timestamp((date_stamp / 1000000000) + self.offset, 0);
         let local_time = Local.from_utc_datetime(&utc_stamp);
