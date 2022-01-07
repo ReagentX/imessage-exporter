@@ -8,7 +8,7 @@ use crate::tables::table::Table;
 pub struct Message {
     pub rowid: i32,
     pub guid: String,
-    pub text: String,
+    pub text: Option<String>,
     pub replace: i32,
     pub service_center: Option<String>,
     pub handle_id: i32,
@@ -18,8 +18,8 @@ pub struct Message {
     pub version: i32,
     pub r#type: i32, // Field name comes from from table
     pub service: String,
-    pub account: String,
-    pub account_guid: String,
+    pub account: Option<String>,
+    pub account_guid: Option<String>,
     pub error: i32,
     pub date: i64,
     pub date_read: i64,
@@ -46,7 +46,7 @@ pub struct Message {
     pub was_deduplicated: i32,
     pub is_audio_message: bool,
     pub is_played: bool,
-    pub date_played: i32,
+    pub date_played: i64,
     pub item_type: i32,
     pub other_handle: i32,
     pub group_title: Option<String>,
@@ -64,15 +64,15 @@ pub struct Message {
     pub expressive_send_style_id: Option<String>,
     pub associated_message_range_location: i32,
     pub associated_message_range_length: i32,
-    pub time_expressive_send_played: i32,
+    pub time_expressive_send_played: i64,
     pub message_summary_info: Option<Vec<u8>>,
     pub ck_sync_state: i32,
-    pub ck_record_id: String,
-    pub ck_record_change_tag: String,
-    pub destination_caller_id: String,
+    pub ck_record_id: Option<String>,
+    pub ck_record_change_tag: Option<String>,
+    pub destination_caller_id: Option<String>,
     pub sr_ck_sync_state: i32,
-    pub sr_ck_record_id: String,
-    pub sr_ck_record_change_tag: String,
+    pub sr_ck_record_id: Option<String>,
+    pub sr_ck_record_change_tag: Option<String>,
     pub is_corrupt: bool,
     pub reply_to_guid: Option<String>,
     pub sort_id: i32,
@@ -173,7 +173,9 @@ impl Table for Message {
     }
 
     fn get(db: &Connection) -> Statement {
-        db.prepare("SELECT * from message ORDER BY date LIMIT 10")
+        // TODO: use conversation table to generate messages
+        // TODO: Group chats set the handle to 0 for the sender (i.e., "you")
+        db.prepare("SELECT * from message ORDER BY date")
             .unwrap()
     }
 }
