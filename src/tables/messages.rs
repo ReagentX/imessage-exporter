@@ -1,5 +1,5 @@
 use chrono::{naive::NaiveDateTime, offset::Local, DateTime, Datelike, TimeZone, Timelike, Utc};
-use rusqlite::{Result, Row};
+use rusqlite::{Connection, Result, Row, Statement};
 
 use crate::tables::table::Table;
 
@@ -24,28 +24,28 @@ pub struct Message {
     pub date: i64,
     pub date_read: i64,
     pub date_delivered: i64,
-    pub is_delivered: i32,
-    pub is_finished: i32,
-    pub is_emote: i32,
-    pub is_from_me: i32,
-    pub is_empty: i32,
-    pub is_delayed: i32,
-    pub is_auto_reply: i32,
-    pub is_prepared: i32,
-    pub is_read: i32,
-    pub is_system_message: i32,
-    pub is_sent: i32,
+    pub is_delivered: bool,
+    pub is_finished: bool,
+    pub is_emote: bool,
+    pub is_from_me: bool,
+    pub is_empty: bool,
+    pub is_delayed: bool,
+    pub is_auto_reply: bool,
+    pub is_prepared: bool,
+    pub is_read: bool,
+    pub is_system_message: bool,
+    pub is_sent: bool,
     pub has_dd_results: i32,
-    pub is_service_message: i32,
-    pub is_forward: i32,
+    pub is_service_message: bool,
+    pub is_forward: bool,
     pub was_downgraded: i32,
-    pub is_archive: i32,
+    pub is_archive: bool,
     pub cache_has_attachments: i32,
     pub cache_roomnames: Option<String>,
     pub was_data_detected: i32,
     pub was_deduplicated: i32,
-    pub is_audio_message: i32,
-    pub is_played: i32,
+    pub is_audio_message: bool,
+    pub is_played: bool,
     pub date_played: i32,
     pub item_type: i32,
     pub other_handle: i32,
@@ -53,7 +53,7 @@ pub struct Message {
     pub group_action_type: i32,
     pub share_status: i32,
     pub share_direction: i32,
-    pub is_expirable: i32,
+    pub is_expirable: bool,
     pub expire_state: i32,
     pub message_action_type: i32,
     pub message_source: i32,
@@ -73,10 +73,10 @@ pub struct Message {
     pub sr_ck_sync_state: i32,
     pub sr_ck_record_id: String,
     pub sr_ck_record_change_tag: String,
-    pub is_corrupt: i32,
+    pub is_corrupt: bool,
     pub reply_to_guid: Option<String>,
     pub sort_id: i32,
-    pub is_spam: i32,
+    pub is_spam: bool,
     pub has_unseen_mention: i32,
     pub thread_originator_guid: Option<String>,
     pub thread_originator_part: Option<String>,
@@ -170,6 +170,11 @@ impl Table for Message {
             synced_syndication_ranges: row.get(77)?,
             offset: Utc.ymd(2001, 1, 1).and_hms(0, 0, 0).timestamp(),
         })
+    }
+
+    fn get(db: &Connection) -> Statement {
+        db.prepare("SELECT * from message ORDER BY date LIMIT 10")
+            .unwrap()
     }
 }
 
