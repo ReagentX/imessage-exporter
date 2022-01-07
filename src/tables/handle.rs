@@ -1,8 +1,7 @@
-use rusqlite::{Connection, Statement};
+use rusqlite::{Connection, Result, Row, Statement};
 use std::collections::HashMap;
 
 use crate::tables::table::{Table, HANDLE};
-use rusqlite::{Result, Row};
 
 #[derive(Debug)]
 pub struct Handle {
@@ -32,6 +31,15 @@ impl Table for Handle {
 }
 
 impl Handle {
+    fn get_merged_handle_count(db: &Connection) -> Result<i32> {
+        let query = concat!(
+            "SELECT COUNT(DISTINCT person_centric_id) ",
+            "FROM handle ",
+            "WHERE person_centric_id NOT NULL"
+        );
+        let mut rows = db.prepare(query).unwrap();
+        rows.query_row([], |r| r.get(0))
+    }
     /// Generate a HashMap for looking up contacts by their IDs, collapsing
     /// duplicate contacts to the same ID String
     pub fn make_cache(db: &Connection) -> HashMap<i32, String> {
@@ -40,6 +48,10 @@ impl Handle {
 
         // Condense contacts that share person_centric_id so their IDs map to the same strings
         let mut dupe_contacts: HashMap<String, Vec<String>> = HashMap::new();
+        println!(
+            "Contacts with more than one ID: {}",
+            Handle::get_merged_handle_count(db).unwrap()
+        );
 
         // Create query
         let mut statement = Handle::get(db);
@@ -61,3 +73,5 @@ impl Handle {
         map
     }
 }
+
+// TODO: implement this sql somehow
