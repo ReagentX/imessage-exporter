@@ -15,6 +15,7 @@ fn main() {
 
     // Get contacts
     let contacts = Handle::make_cache(&db);
+    let unknown = "Unknown".to_string();
 
     let mut statement = Message::get(&db);
     let messages = statement
@@ -22,14 +23,17 @@ fn main() {
         .unwrap();
     for message in messages {
         let msg = message.unwrap().unwrap();
-        println!(
-            "{:?} | {:?} {:?}",
-            format(&msg.date()),
-            match msg.is_from_me {
-                true => "Me",
-                false => contacts.get(&msg.handle_id).unwrap(),
-            },
-            msg.text
-        );
+        let handle = contacts.get(&msg.handle_id).unwrap_or(&unknown);
+        if *handle == unknown {
+            println!(
+                "{:?} | {} {:?}",
+                format(&msg.date()),
+                match msg.is_from_me {
+                    true => "Me",
+                    false => handle,
+                },
+                msg.text
+            );
+        }
     }
 }
