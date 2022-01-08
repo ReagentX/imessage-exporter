@@ -3,7 +3,11 @@ use rusqlite::{Connection, OpenFlags};
 mod tables;
 mod util;
 
-use tables::{handle::Handle, messages::Message, table::Table};
+use tables::{
+    handle::Handle,
+    messages::Message,
+    table::{Table, ME},
+};
 use util::dates::format;
 
 fn main() {
@@ -15,7 +19,6 @@ fn main() {
 
     // Get contacts
     let contacts = Handle::make_cache(&db);
-    let unknown = "Unknown".to_string();
 
     let mut statement = Message::get(&db);
     let messages = statement
@@ -23,17 +26,14 @@ fn main() {
         .unwrap();
     for message in messages {
         let msg = message.unwrap().unwrap();
-        let handle = contacts.get(&msg.handle_id).unwrap_or(&unknown);
-        if *handle == unknown {
-            println!(
-                "{:?} | {} {:?}",
-                format(&msg.date()),
-                match msg.is_from_me {
-                    true => "Me",
-                    false => handle,
-                },
-                msg.text
-            );
-        }
+        println!(
+            "{:?} | {} {:?}",
+            format(&msg.date()),
+            match msg.is_from_me {
+                true => ME,
+                false => contacts.get(&msg.handle_id).unwrap(),
+            },
+            msg.text
+        );
     }
 }
