@@ -4,9 +4,10 @@ mod tables;
 mod util;
 
 use tables::{
-    handle::Handle,
-    messages::Message,
     chat::Chat,
+    handle::Handle,
+    join::ChatToHandle,
+    messages::Message,
     table::{Table, ME},
 };
 use util::dates::format;
@@ -23,6 +24,23 @@ fn main() {
 
     // Get chat data
     let chats = Chat::stream(&db);
+
+    // Get chat handle mapping
+    let chat_participants = ChatToHandle::build_cache(&db);
+
+    // Example parsing chat to people
+    for thread in chat_participants {
+        let (chat, participants) = thread;
+        println!(
+            "{}: {}",
+            chat,
+            participants
+                .into_iter()
+                .map(|f| contacts.get(&f).unwrap().to_owned())
+                .collect::<Vec<String>>()
+                .join(", ")
+        )
+    }
 
     // Do message stuff
     let mut statement = Message::get(&db);
