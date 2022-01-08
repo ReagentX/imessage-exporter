@@ -1,7 +1,7 @@
 use chrono::{naive::NaiveDateTime, offset::Local, DateTime, Datelike, TimeZone, Timelike, Utc};
 use rusqlite::{Connection, Result, Row, Statement};
 
-use crate::tables::table::Table;
+use crate::tables::table::{Table, MESSAGE};
 
 #[derive(Debug)]
 #[allow(non_snake_case)]
@@ -175,7 +175,7 @@ impl Table for Message {
     fn get(db: &Connection) -> Statement {
         // TODO: use conversation table to generate messages
         // TODO: Group chats set the handle to 0 for the sender (i.e., "you")
-        db.prepare("SELECT * from message ORDER BY date")
+        db.prepare(&format!("SELECT * from {} ORDER BY date LIMIT 10", MESSAGE))
             .unwrap()
     }
 }
