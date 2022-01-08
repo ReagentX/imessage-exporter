@@ -7,3 +7,4 @@ pub trait Table {
 
 pub const HANDLE: &str = "handle";
 pub const MESSAGE: &str = "message";
+pub const ME: &str = "Me";
