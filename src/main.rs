@@ -6,6 +6,7 @@ mod util;
 use tables::{
     handle::Handle,
     messages::Message,
+    chat::Chat,
     table::{Table, ME},
 };
 use util::dates::format;
@@ -20,6 +21,10 @@ fn main() {
     // Get contacts
     let contacts = Handle::make_cache(&db);
 
+    // Get chat data
+    let chats = Chat::stream(&db);
+
+    // Do message stuff
     let mut statement = Message::get(&db);
     let messages = statement
         .query_map([], |row| Ok(tables::messages::Message::from_row(row)))
