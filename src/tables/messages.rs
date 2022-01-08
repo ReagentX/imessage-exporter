@@ -3,6 +3,8 @@ use rusqlite::{Connection, Result, Row, Statement};
 
 use crate::tables::table::{Table, MESSAGE};
 
+use super::table::CHAT_MESSAGE_JOIN;
+
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct Message {
@@ -84,6 +86,7 @@ pub struct Message {
     pub was_delivered_quietly: i32,
     pub did_notify_recipient: i32,
     pub synced_syndication_ranges: Option<String>,
+    pub chat_id: i32,
     offset: i64,
 }
 
@@ -168,6 +171,7 @@ impl Table for Message {
             was_delivered_quietly: row.get(75)?,
             did_notify_recipient: row.get(76)?,
             synced_syndication_ranges: row.get(77)?,
+            chat_id: row.get(78)?,
             offset: Utc.ymd(2001, 1, 1).and_hms(0, 0, 0).timestamp(),
         })
     }
@@ -175,8 +179,11 @@ impl Table for Message {
     fn get(db: &Connection) -> Statement {
         // TODO: use conversation table to generate messages
         // TODO: Group chats set the handle to 0 for the sender (i.e., "you")
-        db.prepare(&format!("SELECT * from {} ORDER BY date LIMIT 10", MESSAGE))
-            .unwrap()
+        db.prepare(&format!(
+            "SELECT * from {} INNER JOIN {} ON message.rowid = {}.message_id LIMIT 10",
+            MESSAGE, CHAT_MESSAGE_JOIN, CHAT_MESSAGE_JOIN
+        ))
+        .unwrap()
     }
 }
 
