@@ -10,7 +10,7 @@ pub fn from_command_line() -> ArgMatches {
                 .long("db-path")
                 .help("Specify a custom path for the iMessage databse file")
                 .takes_value(true)
-                .value_name("stream"),
+                .value_name("path/to/chat.db"),
         )
         .arg(
             Arg::new("no-copy")
