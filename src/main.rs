@@ -10,9 +10,12 @@ use tables::{
     messages::Message,
     table::{Table, ME},
 };
-use util::dates::format;
+use util::{dates::format, options::from_command_line};
 
 fn main() {
+    let options = from_command_line();
+
+    // Setup database connection
     let db_path = "/Users/chris/Library/Messages/chat.db";
     let db = match Connection::open_with_flags(&db_path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
         Ok(res) => res,
