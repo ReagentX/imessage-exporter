@@ -1,10 +1,17 @@
-use rusqlite::{Connection, Result, Row, Statement};
+use rusqlite::{Connection, OpenFlags, Result, Row, Statement};
 
 pub trait Table {
     fn from_row(row: &Row) -> Result<Self>
     where
         Self: Sized;
     fn get(db: &Connection) -> Statement;
+}
+
+pub fn get_connection(path: &str) -> Connection {
+    match Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
+        Ok(res) => res,
+        Err(why) => panic!("Unable to read from chat database: {}\nEnsure full disk access is enabled for your terminal emulator in System Preferences > Security and Privacy > Full Disk Access", why),
+    }
 }
 
 pub const HANDLE: &str = "handle";
