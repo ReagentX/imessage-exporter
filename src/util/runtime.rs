@@ -55,10 +55,10 @@ impl State {
             let (chat, participants) = thread;
             println!(
                 "{}: {}",
-                chat,
+                self.chats.get(chat).unwrap().chat_identifier,
                 participants
-                    .into_iter()
-                    .map(|f| self.contacts.get(&f).unwrap().to_owned())
+                    .iter()
+                    .map(|f| self.contacts.get(f).unwrap().to_owned())
                     .collect::<Vec<String>>()
                     .join(", ")
             )
