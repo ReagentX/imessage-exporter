@@ -11,11 +11,11 @@ use crate::tables::{
 };
 
 pub struct State {
-    chats: HashMap<i32, Chat>,
-    chat_participants: HashMap<i32, HashSet<i32>>,
-    contacts: HashMap<i32, String>,
-    no_copy: bool,
-    db: Connection,
+    chatrooms: HashMap<i32, Chat>, // Map of chatroom ID to chatroom information
+    chatroom_participants: HashMap<i32, HashSet<i32>>, // Map of chatroom ID to chatroom participants
+    participants: HashMap<i32, String>,                // Map of participant ID to contact info
+    no_copy: bool,  // If true, do not copy files from the Libary to the Archive
+    db: Connection,  // The connection we use to query the database
 }
 
 impl State {
@@ -23,9 +23,9 @@ impl State {
         let conn = get_connection(&db_path);
         Some(State {
             // TODO: Implement Try for these `?`
-            chats: Chat::cache(&conn),
-            chat_participants: ChatToHandle::cache(&conn),
-            contacts: Handle::cache(&conn),
+            chatrooms: Chat::cache(&conn),
+            chatroom_participants: ChatToHandle::cache(&conn),
+            participants: Handle::cache(&conn),
             no_copy,
             db: conn,
         })
@@ -43,7 +43,7 @@ impl State {
                 &msg.date(),
                 match msg.is_from_me {
                     true => ME,
-                    false => self.contacts.get(&msg.handle_id).unwrap(),
+                    false => self.participants.get(&msg.handle_id).unwrap(),
                 },
                 msg.text
             );
@@ -51,14 +51,14 @@ impl State {
     }
 
     pub fn iter_threads(&self) {
-        for thread in &self.chat_participants {
+        for thread in &self.chatroom_participants {
             let (chat, participants) = thread;
             println!(
                 "{}: {}",
-                self.chats.get(chat).unwrap().chat_identifier,
+                self.chatrooms.get(chat).unwrap().chat_identifier,
                 participants
                     .iter()
-                    .map(|f| self.contacts.get(f).unwrap().to_owned())
+                    .map(|f| self.participants.get(f).unwrap().to_owned())
                     .collect::<Vec<String>>()
                     .join(", ")
             )
