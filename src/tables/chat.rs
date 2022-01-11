@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::tables::table::{Table, CHAT};
 use rusqlite::{Connection, Result, Row, Statement};
 
@@ -77,7 +79,9 @@ impl Table for Chat {
 }
 
 impl Chat {
-    pub fn stream(db: &Connection) {
+    pub fn cache(db: &Connection) -> HashMap<i32, Chat> {
+        let mut map: HashMap<i32, Chat> = HashMap::new();
+
         let mut statement = Chat::get(db);
 
         let chats = statement
@@ -85,8 +89,9 @@ impl Chat {
             .unwrap();
 
         for chat in chats {
-            chat.unwrap().unwrap();
-            // println!("{:?}", chat.unwrap().unwrap());
+            let result = chat.unwrap().unwrap();
+            map.insert(result.rowid, result);
         }
+        map
     }
 }

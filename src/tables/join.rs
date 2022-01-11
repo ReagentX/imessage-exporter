@@ -23,7 +23,7 @@ impl Table for ChatToHandle {
 }
 
 impl ChatToHandle {
-    pub fn build_cache(db: &Connection) -> HashMap<i32, HashSet<i32>> {
+    pub fn cache(db: &Connection) -> HashMap<i32, HashSet<i32>> {
         let mut cache: HashMap<i32, HashSet<i32>> = HashMap::new();
 
         let mut rows = ChatToHandle::get(db);

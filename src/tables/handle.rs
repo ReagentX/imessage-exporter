@@ -114,7 +114,7 @@ impl Handle {
 
     /// Generate a HashMap for looking up contacts by their IDs, collapsing
     /// duplicate contacts to the same ID String regardless of service
-    pub fn make_cache(db: &Connection) -> HashMap<i32, String> {
+    pub fn cache(db: &Connection) -> HashMap<i32, String> {
         // Create cache for user IDs
         let mut map = HashMap::new();
         // Handle ID 0 is self in group chats
