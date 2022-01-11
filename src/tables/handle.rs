@@ -1,7 +1,7 @@
 use rusqlite::{Connection, Result, Row, Statement};
 use std::collections::{HashMap, HashSet};
 
-use crate::tables::table::{Table, HANDLE, ME};
+use crate::tables::table::{Cacheable, Table, HANDLE, ME};
 
 #[derive(Debug)]
 pub struct Handle {
@@ -111,10 +111,13 @@ impl Handle {
         }
         row_to_id
     }
+}
 
+impl Cacheable for Handle {
+    type T = String;
     /// Generate a HashMap for looking up contacts by their IDs, collapsing
     /// duplicate contacts to the same ID String regardless of service
-    pub fn cache(db: &Connection) -> HashMap<i32, String> {
+    fn cache(db: &Connection) -> HashMap<i32, String> {
         // Create cache for user IDs
         let mut map = HashMap::new();
         // Handle ID 0 is self in group chats
@@ -149,5 +152,3 @@ impl Handle {
         map
     }
 }
-
-// TODO: implement this sql somehow

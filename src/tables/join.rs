@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::tables::table::{Table, CHAT_HANDLE_JOIN};
+use crate::tables::table::{Cacheable, Table, CHAT_HANDLE_JOIN};
 use rusqlite::{Connection, Result, Row, Statement};
 
 pub struct ChatToHandle {
@@ -22,8 +22,9 @@ impl Table for ChatToHandle {
     }
 }
 
-impl ChatToHandle {
-    pub fn cache(db: &Connection) -> HashMap<i32, HashSet<i32>> {
+impl Cacheable for ChatToHandle {
+    type T = HashSet<i32>;
+    fn cache(db: &Connection) -> HashMap<i32, HashSet<i32>> {
         let mut cache: HashMap<i32, HashSet<i32>> = HashMap::new();
 
         let mut rows = ChatToHandle::get(db);
