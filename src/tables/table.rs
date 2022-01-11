@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use rusqlite::{Connection, OpenFlags, Result, Row, Statement};
 
 pub trait Table {
@@ -5,6 +7,11 @@ pub trait Table {
     where
         Self: Sized;
     fn get(db: &Connection) -> Statement;
+}
+
+pub trait Cacheable {
+    type T;
+    fn cache(db: &Connection) -> HashMap<i32, Self::T>;
 }
 
 pub fn get_connection(path: &str) -> Connection {
