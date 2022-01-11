@@ -7,7 +7,7 @@ use crate::tables::{
     handle::Handle,
     join::ChatToHandle,
     messages::Message,
-    table::{get_connection, Table, ME},
+    table::{get_connection, Cacheable, Table, ME},
 };
 
 pub struct State {
