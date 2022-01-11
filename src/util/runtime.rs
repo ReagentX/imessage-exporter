@@ -2,12 +2,15 @@ use std::collections::{HashMap, HashSet};
 
 use rusqlite::Connection;
 
-use crate::tables::{
-    chat::Chat,
-    handle::Handle,
-    join::ChatToHandle,
-    messages::Message,
-    table::{get_connection, Cacheable, Table, ME},
+use crate::{
+    tables::{
+        chat::Chat,
+        handle::Handle,
+        join::ChatToHandle,
+        messages::Message,
+        table::{get_connection, Cacheable, Table, ME},
+    },
+    util::dates::format,
 };
 
 pub struct State {
@@ -15,7 +18,7 @@ pub struct State {
     chatroom_participants: HashMap<i32, HashSet<i32>>, // Map of chatroom ID to chatroom participants
     participants: HashMap<i32, String>,                // Map of participant ID to contact info
     no_copy: bool,  // If true, do not copy files from the Libary to the Archive
-    db: Connection,  // The connection we use to query the database
+    db: Connection, // The connection we use to query the database
 }
 
 impl State {
@@ -40,7 +43,7 @@ impl State {
             let msg = message.unwrap().unwrap();
             println!(
                 "{:?} | {} {:?}",
-                &msg.date(),
+                format(&msg.date()),
                 match msg.is_from_me {
                     true => ME,
                     false => self.participants.get(&msg.handle_id).unwrap(),
