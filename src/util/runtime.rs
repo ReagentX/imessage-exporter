@@ -89,7 +89,7 @@ impl State {
         Handle::run_diagnostic(&self.db);
         Message::run_diagnostic(&self.db);
         Attachment::run_diagnostic(&self.db);
-        println!("");
+        println!();
     }
 
     pub fn start(&self) {
