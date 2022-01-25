@@ -4,6 +4,7 @@ use rusqlite::Connection;
 
 use crate::{
     tables::{
+        attachment::Attachment,
         chat::Chat,
         handle::Handle,
         join::ChatToHandle,
@@ -25,7 +26,7 @@ impl State {
     pub fn new(db_path: String, no_copy: bool) -> Option<State> {
         let conn = get_connection(&db_path);
         Some(State {
-            // TODO: Implement Try for these `?`
+            // TODO: Implement Try for these cache calls `?`
             chatrooms: Chat::cache(&conn),
             chatroom_participants: ChatToHandle::cache(&conn),
             participants: Handle::cache(&conn),
@@ -66,5 +67,34 @@ impl State {
                     .join(", ")
             )
         }
+    }
+
+    pub fn iter_attachments(&self) {
+        let mut statement = Attachment::get(&self.db);
+        let attachments = statement
+            .query_map([], |row| Ok(Attachment::from_row(row)))
+            .unwrap();
+
+        for attachment in attachments {
+            // println!("Attachment: {attachment:?}");
+            let file = attachment.unwrap().unwrap();
+            println!("{:?}", file.filename);
+        }
+    }
+
+    // TODO: Finish implementation
+    /// Handles diagnostic tests for database
+    pub fn run_diagnostic(&self) {
+        println!("");
+        println!(
+            "Contacts with more than one ID: {}",
+            Handle::run_diagnostic(&self.db).unwrap()
+        );
+        Attachment::run_diagnostic(&self.db);
+        println!("");
+    }
+
+    pub fn start(&self) {
+        todo!()
     }
 }
