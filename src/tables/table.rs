@@ -25,6 +25,7 @@ pub fn get_connection(path: &str) -> Connection {
 pub const HANDLE: &str = "handle";
 pub const MESSAGE: &str = "message";
 pub const CHAT: &str = "chat";
+pub const ATTACHMENT: &str = "attachment";
 pub const CHAT_MESSAGE_JOIN: &str = "chat_message_join";
 pub const CHAT_HANDLE_JOIN: &str = "chat_handle_join";
 
