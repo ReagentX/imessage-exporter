@@ -9,7 +9,7 @@ use crate::{
         handle::Handle,
         join::ChatToHandle,
         messages::Message,
-        table::{get_connection, Cacheable, Table, ME},
+        table::{get_connection, Cacheable, Table, ME, Diagnostic},
     },
     util::dates::format,
 };
@@ -85,12 +85,10 @@ impl State {
     // TODO: Finish implementation
     /// Handles diagnostic tests for database
     pub fn run_diagnostic(&self) {
-        println!("");
-        println!(
-            "Contacts with more than one ID: {}",
-            Handle::run_diagnostic(&self.db).unwrap()
-        );
+        println!("iMessage Database Diagnostics\n");
+        Handle::run_diagnostic(&self.db);
         Attachment::run_diagnostic(&self.db);
+        Message::run_diagnostic(&self.db);
         println!("");
     }
 
