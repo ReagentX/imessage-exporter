@@ -36,6 +36,7 @@ pub const CHAT_HANDLE_JOIN: &str = "chat_handle_join";
 // CLI Arg Names
 pub const OPTION_PATH: &str = "db-path";
 pub const OPTION_COPY: &str = "no-copy";
+pub const OPTION_DIAGNOSTIC: &str = "diagnostics";
 
 // Default information
 pub const ME: &str = "Me";

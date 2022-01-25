@@ -87,12 +87,12 @@ impl State {
     pub fn run_diagnostic(&self) {
         println!("iMessage Database Diagnostics\n");
         Handle::run_diagnostic(&self.db);
-        Attachment::run_diagnostic(&self.db);
         Message::run_diagnostic(&self.db);
+        Attachment::run_diagnostic(&self.db);
         println!("");
     }
 
     pub fn start(&self) {
-        self.run_diagnostic();
+        todo!()
     }
 }
