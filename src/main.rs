@@ -1,3 +1,5 @@
+use tables::attachment::Attachment;
+
 mod tables;
 mod util;
 
@@ -19,6 +21,11 @@ fn main() {
     let app = util::runtime::State::new(db_path.to_owned(), no_copy).unwrap();
 
     // Run some app methods
-    app.iter_threads();
-    app.iter_messages();
+    // app.iter_threads();
+    // app.iter_messages();
+    app.iter_attachments();
+    // app.run_diagnostic();
+
+    // Theoretically: start app
+    app.start();
 }
