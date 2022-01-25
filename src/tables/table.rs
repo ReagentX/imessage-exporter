@@ -14,6 +14,10 @@ pub trait Cacheable {
     fn cache(db: &Connection) -> HashMap<i32, Self::T>;
 }
 
+pub trait Diagnostic {
+    fn run_diagnostic(db: &Connection);
+}
+
 pub fn get_connection(path: &str) -> Connection {
     match Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
         Ok(res) => res,
