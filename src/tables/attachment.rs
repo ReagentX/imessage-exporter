@@ -1,6 +1,9 @@
 use rusqlite::{Connection, Result, Row, Statement};
 
-use crate::tables::table::{Diagnostic, Table, ATTACHMENT};
+use crate::{
+    tables::table::{Diagnostic, Table, ATTACHMENT},
+    util::output::processing,
+};
 
 #[derive(Debug)]
 pub struct Attachment {
@@ -72,6 +75,7 @@ impl Diagnostic for Attachment {
     // TODO: make diagnostic methods/traits for issues like this!
     // TODO: Diagnostic subcommand like this!
     fn run_diagnostic(db: &Connection) {
+        processing();
         let mut statement_ck = db
             .prepare(&format!(
                 "SELECT count(rowid) FROM {} WHERE typeof(ck_server_change_token_blob) == 'text'",
@@ -89,7 +93,7 @@ impl Diagnostic for Attachment {
         let num_blank_sr: Option<i32> = statement_sr.query_row([], |r| r.get(0)).unwrap_or(None);
 
         if num_blank_ck.is_some() || num_blank_sr.is_some() {
-            println!("Missing attachment data:");
+            println!("\rMissing attachment data:");
         }
         if let Some(ck) = num_blank_ck {
             println!("    ck_server_change_token_blob: {ck:?}");

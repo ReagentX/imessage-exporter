@@ -1,7 +1,10 @@
 use rusqlite::{Connection, Result, Row, Statement};
 use std::collections::{HashMap, HashSet};
 
-use crate::tables::table::{Cacheable, Diagnostic, Table, HANDLE, ME};
+use crate::{
+    tables::table::{Cacheable, Diagnostic, Table, HANDLE, ME},
+    util::output::processing,
+};
 
 #[derive(Debug)]
 pub struct Handle {
@@ -141,6 +144,7 @@ impl Diagnostic for Handle {
     /// same contact across ids (numbers, emails, etc) and across
     /// services (iMessage, Jabber, iChat, SMS, etc)
     fn run_diagnostic(db: &Connection) {
+        processing();
         let query = concat!(
             "SELECT COUNT(DISTINCT person_centric_id) ",
             "FROM handle ",
@@ -150,7 +154,7 @@ impl Diagnostic for Handle {
         let count_dupes: Option<i32> = rows.query_row([], |r| r.get(0)).unwrap_or(None);
 
         if let Some(dupes) = count_dupes {
-            println!("Contacts with more than one ID: {dupes}");
+            println!("\rContacts with more than one ID: {dupes}");
         }
     }
 }

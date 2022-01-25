@@ -1,7 +1,10 @@
 use chrono::{naive::NaiveDateTime, offset::Local, DateTime, Datelike, TimeZone, Timelike, Utc};
 use rusqlite::{Connection, Result, Row, Statement};
 
-use crate::tables::table::{Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE};
+use crate::{
+    tables::table::{Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE},
+    util::output::processing,
+};
 
 #[derive(Debug)]
 #[allow(non_snake_case)]
@@ -208,6 +211,7 @@ impl Message {
 
 impl Diagnostic for Message {
     fn run_diagnostic(db: &Connection) {
+        processing();
         let mut messages_without_chat = db
             .prepare(&format!("SELECT COUNT(m.rowid) from {MESSAGE} as m LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.rowid = c.message_id WHERE c.chat_id is NULL ORDER BY m.ROWID"))
             .unwrap();
@@ -217,7 +221,7 @@ impl Diagnostic for Message {
             .unwrap_or(None);
 
         if let Some(dangling) = num_dangling {
-            println!("Messages not associated with a chat: {dangling}");
+            println!("\rMessages not associated with a chat: {dangling}");
         }
     }
 }
