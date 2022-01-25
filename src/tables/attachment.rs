@@ -1,6 +1,6 @@
 use rusqlite::{Connection, Result, Row, Statement};
 
-use crate::tables::table::{Cacheable, Table, ATTACHMENT, ME};
+use crate::tables::table::{Diagnostic, Table, ATTACHMENT};
 
 #[derive(Debug)]
 pub struct Attachment {
@@ -68,10 +68,10 @@ impl Table for Attachment {
     }
 }
 
-impl Attachment {
+impl Diagnostic for Attachment {
     // TODO: make diagnostic methods/traits for issues like this!
     // TODO: Diagnostic subcommand like this!
-    pub fn run_diagnostic(db: &Connection) {
+    fn run_diagnostic(db: &Connection) {
         let mut statement_ck = db
             .prepare(&format!(
                 "SELECT count(rowid) FROM {} WHERE typeof(ck_server_change_token_blob) == 'text'",

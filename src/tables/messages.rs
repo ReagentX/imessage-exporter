@@ -1,9 +1,7 @@
 use chrono::{naive::NaiveDateTime, offset::Local, DateTime, Datelike, TimeZone, Timelike, Utc};
 use rusqlite::{Connection, Result, Row, Statement};
 
-use crate::tables::table::{Table, MESSAGE};
-
-use super::table::CHAT_MESSAGE_JOIN;
+use crate::tables::table::{Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE};
 
 #[derive(Debug)]
 #[allow(non_snake_case)]
@@ -86,7 +84,7 @@ pub struct Message {
     pub was_delivered_quietly: i32,
     pub did_notify_recipient: i32,
     pub synced_syndication_ranges: Option<String>,
-    pub chat_id: i32,
+    pub chat_id: Option<i32>,
     offset: i64,
 }
 
@@ -205,5 +203,21 @@ impl Message {
 
     pub fn date_read(&self) -> DateTime<Local> {
         self.get_local_time(&self.date_read)
+    }
+}
+
+impl Diagnostic for Message {
+    fn run_diagnostic(db: &Connection) {
+        let mut messages_without_chat = db
+            .prepare(&format!("SELECT COUNT(m.rowid) from {MESSAGE} as m LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.rowid = c.message_id WHERE c.chat_id is NULL ORDER BY m.ROWID"))
+            .unwrap();
+
+        let num_dangling: Option<i32> = messages_without_chat
+            .query_row([], |r| r.get(0))
+            .unwrap_or(None);
+
+        if let Some(dangling) = num_dangling {
+            println!("Messages not associated with a chat: {dangling}");
+        }
     }
 }

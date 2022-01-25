@@ -1,7 +1,7 @@
 use rusqlite::{Connection, Result, Row, Statement};
 use std::collections::{HashMap, HashSet};
 
-use crate::tables::table::{Cacheable, Table, HANDLE, ME};
+use crate::tables::table::{Cacheable, Diagnostic, Table, HANDLE, ME};
 
 #[derive(Debug)]
 pub struct Handle {
@@ -31,21 +31,6 @@ impl Table for Handle {
 }
 
 impl Handle {
-    // TODO: make diagnostic methods/traits for issues like this!
-    /// Get the number of handles that are duplicated
-    /// The person_centric_id is used to map handles that represent the
-    /// same contact across ids (numbers, emails, etc) and across
-    /// services (iMessage, Jabber, iChat, SMS, etc)
-    pub fn run_diagnostic(db: &Connection) -> Result<i32> {
-        let query = concat!(
-            "SELECT COUNT(DISTINCT person_centric_id) ",
-            "FROM handle ",
-            "WHERE person_centric_id NOT NULL"
-        );
-        let mut rows = db.prepare(query).unwrap();
-        rows.query_row([], |r| r.get(0))
-    }
-
     fn get_person_id_map(db: &Connection) -> HashMap<i32, String> {
         let mut person_to_id: HashMap<String, HashSet<String>> = HashMap::new();
         let mut row_to_id = HashMap::new();
@@ -147,5 +132,25 @@ impl Cacheable for Handle {
 
         // Done!
         map
+    }
+}
+
+impl Diagnostic for Handle {
+    /// Get the number of handles that are duplicated
+    /// The person_centric_id is used to map handles that represent the
+    /// same contact across ids (numbers, emails, etc) and across
+    /// services (iMessage, Jabber, iChat, SMS, etc)
+    fn run_diagnostic(db: &Connection) {
+        let query = concat!(
+            "SELECT COUNT(DISTINCT person_centric_id) ",
+            "FROM handle ",
+            "WHERE person_centric_id NOT NULL"
+        );
+        let mut rows = db.prepare(query).unwrap();
+        let count_dupes: Option<i32> = rows.query_row([], |r| r.get(0)).unwrap_or(None);
+
+        if let Some(dupes) = count_dupes {
+            println!("Contacts with more than one ID: {dupes}");
+        }
     }
 }
