@@ -25,7 +25,6 @@ fn main() {
     // app.iter_messages();
     app.iter_attachments();
     // TODO: implement cache for attachment
-    // app.run_diagnostic();
 
     // Theoretically: start app
     app.start();

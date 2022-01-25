@@ -93,6 +93,6 @@ impl State {
     }
 
     pub fn start(&self) {
-        todo!()
+        self.run_diagnostic();
     }
 }
