@@ -31,11 +31,12 @@ impl Table for Handle {
 }
 
 impl Handle {
+    // TODO: make diagnostic methods/traits for issues like this!
     /// Get the number of handles that are duplicated
     /// The person_centric_id is used to map handles that represent the
     /// same contact across ids (numbers, emails, etc) and across
     /// services (iMessage, Jabber, iChat, SMS, etc)
-    fn get_merged_handle_count(db: &Connection) -> Result<i32> {
+    pub fn run_diagnostic(db: &Connection) -> Result<i32> {
         let query = concat!(
             "SELECT COUNT(DISTINCT person_centric_id) ",
             "FROM handle ",
@@ -138,10 +139,6 @@ impl Cacheable for Handle {
         }
 
         // Condense contacts that share person_centric_id so their IDs map to the same strings
-        println!(
-            "Contacts with more than one ID: {}",
-            Handle::get_merged_handle_count(db).unwrap()
-        );
         let dupe_contacts = Handle::get_person_id_map(db);
         for contact in dupe_contacts {
             let (id, new) = contact;

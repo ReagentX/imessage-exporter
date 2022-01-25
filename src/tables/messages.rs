@@ -180,8 +180,7 @@ impl Table for Message {
         // TODO: use conversation table to generate messages
         // TODO: Group chats set the handle to 0 for the sender (i.e., "you")
         db.prepare(&format!(
-            "SELECT * from {} INNER JOIN {} ON message.rowid = {}.message_id LIMIT 10",
-            MESSAGE, CHAT_MESSAGE_JOIN, CHAT_MESSAGE_JOIN
+            "SELECT m.*, c.chat_id from {MESSAGE} as m LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.rowid = c.message_id ORDER BY m.ROWID LIMIT 10",
         ))
         .unwrap()
     }
