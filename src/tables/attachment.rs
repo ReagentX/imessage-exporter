@@ -1,4 +1,5 @@
 use rusqlite::{Connection, Result, Row, Statement};
+use std::{env::var, path::Path};
 
 use crate::{
     tables::table::{Diagnostic, Table, ATTACHMENT},
@@ -78,22 +79,43 @@ impl Diagnostic for Attachment {
         processing();
         let mut statement_ck = db
             .prepare(&format!(
-                "SELECT count(rowid) FROM {} WHERE typeof(ck_server_change_token_blob) == 'text'",
-                ATTACHMENT
+                "SELECT count(rowid) FROM {ATTACHMENT} WHERE typeof(ck_server_change_token_blob) == 'text'"
             ))
             .unwrap();
         let num_blank_ck: Option<i32> = statement_ck.query_row([], |r| r.get(0)).unwrap_or(None);
 
         let mut statement_sr = db
             .prepare(&format!(
-                "SELECT count(rowid) FROM {} WHERE typeof(sr_ck_server_change_token_blob) == 'text'", 
-                ATTACHMENT
+                "SELECT count(rowid) FROM {ATTACHMENT} WHERE typeof(sr_ck_server_change_token_blob) == 'text'"
             ))
             .unwrap();
         let num_blank_sr: Option<i32> = statement_sr.query_row([], |r| r.get(0)).unwrap_or(None);
 
-        if num_blank_ck.is_some() || num_blank_sr.is_some() {
+        let mut statement_sr = db
+            .prepare(&format!("SELECT filename FROM {ATTACHMENT}"))
+            .unwrap();
+        let paths = statement_sr.query_map([], |r| Ok(r.get(0))).unwrap();
+
+        let home = var("HOME").unwrap();
+        let missing_files = paths.fold(
+            0,
+            |res, path: Result<Result<String, rusqlite::Error>, rusqlite::Error>| -> i32 {
+                res + if let Ok(path) = path.unwrap() {
+                    match Path::new(&path.replace("~", &home)).exists() {
+                        false => 1,
+                        true => 0,
+                    }
+                } else {
+                    0
+                }
+            },
+        );
+
+        if num_blank_ck.is_some() || num_blank_sr.is_some() || missing_files > 0 {
             println!("\rMissing attachment data:");
+        }
+        if missing_files > 0 {
+            println!("    Missing files: {missing_files:?}");
         }
         if let Some(ck) = num_blank_ck {
             println!("    ck_server_change_token_blob: {ck:?}");
@@ -101,5 +123,16 @@ impl Diagnostic for Attachment {
         if let Some(sr) = num_blank_sr {
             println!("    ck_server_change_token_blob: {sr:?}");
         }
+    }
+}
+
+impl Attachment {
+    pub fn path_from_message(id: i32, db: &Connection) -> Option<String> {
+        let mut search = db
+            .prepare(&format!(
+                "SELECT filename FROM {ATTACHMENT} WHERE rowid == {id}",
+            ))
+            .unwrap();
+        search.query_row([], |r| r.get(0)).unwrap_or(None)
     }
 }
