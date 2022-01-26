@@ -2,7 +2,7 @@ use chrono::{naive::NaiveDateTime, offset::Local, DateTime, Datelike, TimeZone, 
 use rusqlite::{Connection, Result, Row, Statement};
 
 use crate::{
-    tables::table::{Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE},
+    tables::table::{Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE, MESSAGE_ATTACHMENT_JOIN},
     util::output::processing,
 };
 
@@ -88,6 +88,7 @@ pub struct Message {
     pub did_notify_recipient: i32,
     pub synced_syndication_ranges: Option<String>,
     pub chat_id: Option<i32>,
+    pub attachment_id: Option<i32>,
     offset: i64,
 }
 
@@ -173,6 +174,7 @@ impl Table for Message {
             did_notify_recipient: row.get(76)?,
             synced_syndication_ranges: row.get(77)?,
             chat_id: row.get(78)?,
+            attachment_id: row.get(79)?,
             offset: Utc.ymd(2001, 1, 1).and_hms(0, 0, 0).timestamp(),
         })
     }
@@ -181,9 +183,33 @@ impl Table for Message {
         // TODO: use conversation table to generate messages
         // TODO: Group chats set the handle to 0 for the sender (i.e., "you")
         db.prepare(&format!(
-            "SELECT m.*, c.chat_id from {MESSAGE} as m LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.rowid = c.message_id ORDER BY m.ROWID LIMIT 10",
+            "SELECT m.*, c.chat_id, a.attachment_id
+            FROM {MESSAGE} as m
+            LEFT JOIN {CHAT_MESSAGE_JOIN} as c
+            ON m.rowid = c.message_id
+            LEFT JOIN {MESSAGE_ATTACHMENT_JOIN} as a
+            ON m.rowid = a.message_id
+            ORDER BY m.ROWID
+            LIMIT 10;",
         ))
         .unwrap()
+    }
+}
+
+impl Diagnostic for Message {
+    fn run_diagnostic(db: &Connection) {
+        processing();
+        let mut messages_without_chat = db
+            .prepare(&format!("SELECT COUNT(m.rowid) from {MESSAGE} as m LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.rowid = c.message_id WHERE c.chat_id is NULL ORDER BY m.ROWID"))
+            .unwrap();
+
+        let num_dangling: Option<i32> = messages_without_chat
+            .query_row([], |r| r.get(0))
+            .unwrap_or(None);
+
+        if let Some(dangling) = num_dangling {
+            println!("\rMessages not associated with a chat: {dangling}");
+        }
     }
 }
 
@@ -206,22 +232,5 @@ impl Message {
 
     pub fn date_read(&self) -> DateTime<Local> {
         self.get_local_time(&self.date_read)
-    }
-}
-
-impl Diagnostic for Message {
-    fn run_diagnostic(db: &Connection) {
-        processing();
-        let mut messages_without_chat = db
-            .prepare(&format!("SELECT COUNT(m.rowid) from {MESSAGE} as m LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.rowid = c.message_id WHERE c.chat_id is NULL ORDER BY m.ROWID"))
-            .unwrap();
-
-        let num_dangling: Option<i32> = messages_without_chat
-            .query_row([], |r| r.get(0))
-            .unwrap_or(None);
-
-        if let Some(dangling) = num_dangling {
-            println!("\rMessages not associated with a chat: {dangling}");
-        }
     }
 }

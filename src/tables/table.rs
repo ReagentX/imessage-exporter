@@ -31,6 +31,7 @@ pub const MESSAGE: &str = "message";
 pub const CHAT: &str = "chat";
 pub const ATTACHMENT: &str = "attachment";
 pub const CHAT_MESSAGE_JOIN: &str = "chat_message_join";
+pub const MESSAGE_ATTACHMENT_JOIN: &str = "message_attachment_join";
 pub const CHAT_HANDLE_JOIN: &str = "chat_handle_join";
 
 // CLI Arg Names
