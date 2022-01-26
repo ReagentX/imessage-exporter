@@ -10,6 +10,5 @@ pub fn home() -> String {
 }
 
 pub fn default_db_path() -> String {
-    let h = home();
-    format!("{h}/{DEFAULT_PATH}")
+    format!("{}/{DEFAULT_PATH}", home())
 }
