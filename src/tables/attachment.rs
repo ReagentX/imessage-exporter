@@ -3,7 +3,7 @@ use std::{env::var, path::Path};
 
 use crate::{
     tables::table::{Diagnostic, Table, ATTACHMENT},
-    util::output::processing,
+    util::{dirs::home, output::processing},
 };
 
 #[derive(Debug)]
@@ -73,8 +73,6 @@ impl Table for Attachment {
 }
 
 impl Diagnostic for Attachment {
-    // TODO: make diagnostic methods/traits for issues like this!
-    // TODO: Diagnostic subcommand like this!
     fn run_diagnostic(db: &Connection) {
         processing();
         let mut statement_ck = db
@@ -96,20 +94,17 @@ impl Diagnostic for Attachment {
             .unwrap();
         let paths = statement_sr.query_map([], |r| Ok(r.get(0))).unwrap();
 
-        let home = var("HOME").unwrap();
-        let missing_files = paths.fold(
-            0,
-            |res, path: Result<Result<String, rusqlite::Error>, rusqlite::Error>| -> i32 {
-                res + if let Ok(path) = path.unwrap() {
-                    match Path::new(&path.replace("~", &home)).exists() {
-                        false => 1,
-                        true => 0,
-                    }
+        let home = home();
+        let missing_files = paths
+            .filter_map(Result::ok)
+            .filter(|path: &Result<String, rusqlite::Error>| {
+                if let Ok(path) = path {
+                    !Path::new(&path.replace("~", &home)).exists()
                 } else {
-                    0
+                    false
                 }
-            },
-        );
+            })
+            .count();
 
         if num_blank_ck.is_some() || num_blank_sr.is_some() || missing_files > 0 {
             println!("\rMissing attachment data:");
