@@ -33,6 +33,63 @@ impl Table for Handle {
     }
 }
 
+impl Cacheable for Handle {
+    type T = String;
+    /// Generate a HashMap for looking up contacts by their IDs, collapsing
+    /// duplicate contacts to the same ID String regardless of service
+    fn cache(db: &Connection) -> HashMap<i32, String> {
+        // Create cache for user IDs
+        let mut map = HashMap::new();
+        // Handle ID 0 is self in group chats
+        map.insert(0, ME.to_string());
+
+        // Create query
+        let mut statement = Handle::get(db);
+
+        // Execute query to build the Handles
+        let handles = statement
+            .query_map([], |row| Ok(Handle::from_row(row)))
+            .unwrap();
+
+        // Iterate over the handles and update the map
+        for handle in handles {
+            let contact = handle.unwrap().unwrap();
+            map.insert(contact.rowid, contact.id);
+        }
+
+        // Condense contacts that share person_centric_id so their IDs map to the same strings
+        let dupe_contacts = Handle::get_person_id_map(db);
+        for contact in dupe_contacts {
+            let (id, new) = contact;
+            map.insert(id, new);
+        }
+
+        // Done!
+        map
+    }
+}
+
+impl Diagnostic for Handle {
+    /// Get the number of handles that are duplicated
+    /// The person_centric_id is used to map handles that represent the
+    /// same contact across ids (numbers, emails, etc) and across
+    /// services (iMessage, Jabber, iChat, SMS, etc)
+    fn run_diagnostic(db: &Connection) {
+        processing();
+        let query = concat!(
+            "SELECT COUNT(DISTINCT person_centric_id) ",
+            "FROM handle ",
+            "WHERE person_centric_id NOT NULL"
+        );
+        let mut rows = db.prepare(query).unwrap();
+        let count_dupes: Option<i32> = rows.query_row([], |r| r.get(0)).unwrap_or(None);
+
+        if let Some(dupes) = count_dupes {
+            println!("\rContacts with more than one ID: {dupes}");
+        }
+    }
+}
+
 impl Handle {
     fn get_person_id_map(db: &Connection) -> HashMap<i32, String> {
         let mut person_to_id: HashMap<String, HashSet<String>> = HashMap::new();
@@ -99,62 +156,5 @@ impl Handle {
             row_to_id.insert(rowid.to_owned(), data_to_insert);
         }
         row_to_id
-    }
-}
-
-impl Cacheable for Handle {
-    type T = String;
-    /// Generate a HashMap for looking up contacts by their IDs, collapsing
-    /// duplicate contacts to the same ID String regardless of service
-    fn cache(db: &Connection) -> HashMap<i32, String> {
-        // Create cache for user IDs
-        let mut map = HashMap::new();
-        // Handle ID 0 is self in group chats
-        map.insert(0, ME.to_string());
-
-        // Create query
-        let mut statement = Handle::get(db);
-
-        // Execute query to build the Handles
-        let handles = statement
-            .query_map([], |row| Ok(Handle::from_row(row)))
-            .unwrap();
-
-        // Iterate over the handles and update the map
-        for handle in handles {
-            let contact = handle.unwrap().unwrap();
-            map.insert(contact.rowid, contact.id);
-        }
-
-        // Condense contacts that share person_centric_id so their IDs map to the same strings
-        let dupe_contacts = Handle::get_person_id_map(db);
-        for contact in dupe_contacts {
-            let (id, new) = contact;
-            map.insert(id, new);
-        }
-
-        // Done!
-        map
-    }
-}
-
-impl Diagnostic for Handle {
-    /// Get the number of handles that are duplicated
-    /// The person_centric_id is used to map handles that represent the
-    /// same contact across ids (numbers, emails, etc) and across
-    /// services (iMessage, Jabber, iChat, SMS, etc)
-    fn run_diagnostic(db: &Connection) {
-        processing();
-        let query = concat!(
-            "SELECT COUNT(DISTINCT person_centric_id) ",
-            "FROM handle ",
-            "WHERE person_centric_id NOT NULL"
-        );
-        let mut rows = db.prepare(query).unwrap();
-        let count_dupes: Option<i32> = rows.query_row([], |r| r.get(0)).unwrap_or(None);
-
-        if let Some(dupes) = count_dupes {
-            println!("\rContacts with more than one ID: {dupes}");
-        }
     }
 }
