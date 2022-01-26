@@ -41,4 +41,4 @@ pub const OPTION_DIAGNOSTIC: &str = "diagnostics";
 
 // Default information
 pub const ME: &str = "Me";
-pub const DEFAULT_PATH: &str = "/Users/chris/Library/Messages/chat.db";
+pub const DEFAULT_PATH: &str = "Library/Messages/chat.db";
