@@ -9,7 +9,7 @@ use crate::{
         handle::Handle,
         join::ChatToHandle,
         messages::Message,
-        table::{get_connection, Cacheable, Table, ME, Diagnostic},
+        table::{get_connection, Cacheable, Diagnostic, Table, ME},
     },
     util::dates::format,
 };
@@ -49,7 +49,10 @@ impl State {
                     true => ME,
                     false => self.participants.get(&msg.handle_id).unwrap(),
                 },
-                msg.text
+                match msg.attachment_id {
+                    Some(id) => Some(format!("{:?}{:?}", msg.text, Attachment::path_from_message(id, &self.db))),
+                    None => msg.text,
+                }
             );
         }
     }
