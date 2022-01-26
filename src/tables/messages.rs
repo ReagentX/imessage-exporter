@@ -180,8 +180,8 @@ impl Table for Message {
     }
 
     fn get(db: &Connection) -> Statement {
-        // TODO: use conversation table to generate messages
-        // TODO: Group chats set the handle to 0 for the sender (i.e., "you")
+        // TODO: use conversation table to sort messages to their respective chats
+        // TODO: FYI, Group chats set the handle to 0 for the sender (i.e., "you")
         db.prepare(&format!(
             "SELECT m.*, c.chat_id, a.attachment_id
             FROM {MESSAGE} as m

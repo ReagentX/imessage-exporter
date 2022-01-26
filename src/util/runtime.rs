@@ -50,7 +50,11 @@ impl State {
                     false => self.participants.get(&msg.handle_id).unwrap(),
                 },
                 match msg.attachment_id {
-                    Some(id) => Some(format!("{:?}{:?}", msg.text, Attachment::path_from_message(id, &self.db))),
+                    Some(id) => Some(format!(
+                        "{:?}{:?}",
+                        msg.text,
+                        Attachment::path_from_message(id, &self.db)
+                    )),
                     None => msg.text,
                 }
             );
@@ -85,7 +89,6 @@ impl State {
         }
     }
 
-    // TODO: Finish implementation
     /// Handles diagnostic tests for database
     pub fn run_diagnostic(&self) {
         println!("iMessage Database Diagnostics\n");
