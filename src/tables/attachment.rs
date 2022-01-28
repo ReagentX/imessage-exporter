@@ -1,5 +1,5 @@
-use rusqlite::{Connection, Result, Row, Statement};
-use std::{env::var, path::Path};
+use rusqlite::{Connection, Error as E, Result, Row, Statement};
+use std::path::Path;
 
 use crate::{
     tables::table::{Diagnostic, Table, ATTACHMENT},
@@ -97,7 +97,7 @@ impl Diagnostic for Attachment {
         let home = home();
         let missing_files = paths
             .filter_map(Result::ok)
-            .filter(|path: &Result<String, rusqlite::Error>| {
+            .filter(|path: &Result<String, E>| {
                 if let Ok(path) = path {
                     !Path::new(&path.replace("~", &home)).exists()
                 } else {
