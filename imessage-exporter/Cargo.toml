@@ -1,0 +1,10 @@
+[package]
+edition = "2021"
+name = "imessage-exporter"
+version = "0.0.0"
+
+[dependencies]
+chrono = "0.4"
+clap = "3.0.5"
+imessage-database = {path = "../imessage-database"}
+rusqlite = {version = "0.26.3", features = ["blob"]}
