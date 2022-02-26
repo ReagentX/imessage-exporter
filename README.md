@@ -8,4 +8,4 @@ The `imessage_database` library provides models that allow us to access iMessage
 
 ## Runtime
 
-The `imessage_exporter` binary provides the ability to export iMessage data to `txt`, `csv` and rich `pdf` formats. It also has some diagnostic tooling to find problems with the iMessage database.
+The `imessage_exporter` binary provides the ability to export iMessage data to `txt`, `csv`, `pdf`, or `html` formats. It also has some diagnostic tooling to find problems with the iMessage database.
