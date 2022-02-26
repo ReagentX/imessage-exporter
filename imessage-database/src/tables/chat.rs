@@ -80,6 +80,19 @@ impl Table for Chat {
 
 impl Cacheable for Chat {
     type T = Chat;
+    /// Generate a hashmap containing each chatroom's ID pointing to the chatroom's metadata
+    ///
+    /// # Example:
+    ///
+    /// ```
+    /// use imessage_database::util::dirs::default_db_path;
+    /// use imessage_database::tables::table::{Cacheable, get_connection};
+    /// use imessage_database::tables::chat::Chat;
+    ///
+    /// let db_path = default_db_path();
+    /// let conn = get_connection(&db_path);
+    /// let chatrooms = Chat::cache(&conn);
+    /// ```
     fn cache(db: &Connection) -> HashMap<i32, Self> {
         let mut map: HashMap<i32, Chat> = HashMap::new();
 

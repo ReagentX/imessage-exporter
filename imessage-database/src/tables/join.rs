@@ -24,6 +24,19 @@ impl Table for ChatToHandle {
 
 impl Cacheable for ChatToHandle {
     type T = HashSet<i32>;
+    /// Generate a hashmap containing each chatroom's ID pointing to a HashSet of participant handle IDs
+    ///
+    /// # Example:
+    ///
+    /// ```
+    /// use imessage_database::util::dirs::default_db_path;
+    /// use imessage_database::tables::table::{Cacheable, get_connection};
+    /// use imessage_database::tables::join::ChatToHandle;
+    ///
+    /// let db_path = default_db_path();
+    /// let conn = get_connection(&db_path);
+    /// let chatrooms = ChatToHandle::cache(&conn);
+    /// ```
     fn cache(db: &Connection) -> HashMap<i32, HashSet<i32>> {
         let mut cache: HashMap<i32, HashSet<i32>> = HashMap::new();
 

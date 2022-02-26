@@ -1,6 +1,9 @@
 use clap::{App, Arg, ArgMatches};
 
-use crate::tables::table::{OPTION_COPY, OPTION_PATH, OPTION_DIAGNOSTIC};
+// CLI Arg Names
+pub const OPTION_PATH: &str = "db-path";
+pub const OPTION_COPY: &str = "no-copy";
+pub const OPTION_DIAGNOSTIC: &str = "diagnostics";
 
 pub fn from_command_line() -> ArgMatches {
     let matches = App::new("iMessage Exporter")

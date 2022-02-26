@@ -73,6 +73,25 @@ impl Table for Attachment {
 }
 
 impl Diagnostic for Attachment {
+    /// Emit diagnotsic data for the Attachments table
+    ///
+    /// Get the number of attachments that are missing from the filesystem
+    /// or are missing one of the following columns:
+    ///
+    /// - ck_server_change_token_blob
+    /// - sr_ck_server_change_token_blob
+    ///
+    /// # Example:
+    ///
+    /// ```
+    /// use imessage_database::util::dirs::default_db_path;
+    /// use imessage_database::tables::table::{Diagnostic, get_connection};
+    /// use imessage_database::tables::attachment::Attachment;
+    ///
+    /// let db_path = default_db_path();
+    /// let conn = get_connection(&db_path);
+    /// Attachment::run_diagnostic(&conn);
+    /// ```
     fn run_diagnostic(db: &Connection) {
         processing();
         let mut statement_ck = db

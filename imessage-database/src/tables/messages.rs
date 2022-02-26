@@ -197,6 +197,19 @@ impl Table for Message {
 }
 
 impl Diagnostic for Message {
+    /// Emit diagnotsic data for the Messages table
+    ///
+    /// # Example:
+    ///
+    /// ```
+    /// use imessage_database::util::dirs::default_db_path;
+    /// use imessage_database::tables::table::{Diagnostic, get_connection};
+    /// use imessage_database::tables::messages::Message;
+    ///
+    /// let db_path = default_db_path();
+    /// let conn = get_connection(&db_path);
+    /// Message::run_diagnostic(&conn);
+    /// ```
     fn run_diagnostic(db: &Connection) {
         processing();
         let mut messages_without_chat = db

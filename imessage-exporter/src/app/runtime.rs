@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use rusqlite::Connection;
 
-use crate::{
+use imessage_database::{
     tables::{
         attachment::Attachment,
         chat::Chat,

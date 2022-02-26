@@ -37,6 +37,18 @@ impl Cacheable for Handle {
     type T = String;
     /// Generate a HashMap for looking up contacts by their IDs, collapsing
     /// duplicate contacts to the same ID String regardless of service
+    ///
+    /// # Example:
+    ///
+    /// ```
+    /// use imessage_database::util::dirs::default_db_path;
+    /// use imessage_database::tables::table::{Cacheable, get_connection};
+    /// use imessage_database::tables::handle::Handle;
+    ///
+    /// let db_path = default_db_path();
+    /// let conn = get_connection(&db_path);
+    /// let chatrooms = Handle::cache(&conn);
+    /// ```
     fn cache(db: &Connection) -> HashMap<i32, String> {
         // Create cache for user IDs
         let mut map = HashMap::new();
@@ -70,10 +82,24 @@ impl Cacheable for Handle {
 }
 
 impl Diagnostic for Handle {
+    /// Emit diagnotsic data for the Handles table
+    /// 
     /// Get the number of handles that are duplicated
     /// The person_centric_id is used to map handles that represent the
     /// same contact across ids (numbers, emails, etc) and across
     /// services (iMessage, Jabber, iChat, SMS, etc)
+    ///
+    /// # Example:
+    ///
+    /// ```
+    /// use imessage_database::util::dirs::default_db_path;
+    /// use imessage_database::tables::table::{Diagnostic, get_connection};
+    /// use imessage_database::tables::handle::Handle;
+    ///
+    /// let db_path = default_db_path();
+    /// let conn = get_connection(&db_path);
+    /// Handle::run_diagnostic(&conn);
+    /// ```
     fn run_diagnostic(db: &Connection) {
         processing();
         let query = concat!(
@@ -146,11 +172,7 @@ impl Handle {
         for contact in &row_data {
             let (person_centric_id, rowid, _) = contact;
             let data_to_insert = match person_to_id.get_mut(person_centric_id) {
-                Some(person) => person
-                    .to_owned()
-                    .into_iter()
-                    .collect::<Vec<String>>()
-                    .join(" "),
+                Some(person) => person.iter().cloned().collect::<Vec<String>>().join(" "),
                 None => panic!("Attempted to resolve contact with no person_centric_id!"),
             };
             row_to_id.insert(rowid.to_owned(), data_to_insert);
