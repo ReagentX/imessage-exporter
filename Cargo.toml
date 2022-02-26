@@ -3,3 +3,11 @@ members = [
     "imessage-database",
     "imessage-exporter",
 ]
+
+[profile.release]
+# Remove symbols from release
+strip = true
+# Perform Link Time Optimization
+lto = true
+# Do not unwind stack on crash
+panic = "abort"
