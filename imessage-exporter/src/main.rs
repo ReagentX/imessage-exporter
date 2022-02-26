@@ -1,33 +1,16 @@
 mod app;
 use app::{
-    options::{from_command_line, OPTION_COPY, OPTION_DIAGNOSTIC, OPTION_PATH},
+    options::{from_command_line, Options},
     runtime::State,
 };
-use imessage_database::util::dirs::default_db_path;
 
 fn main() {
-    // Get options from command line
-    let options = from_command_line();
-    let user_path = options.value_of(OPTION_PATH);
-    let no_copy = options.is_present(OPTION_COPY);
-    let diag = options.is_present(OPTION_DIAGNOSTIC);
+    // Get args from command line
+    let args = from_command_line();
+    // Create application options
+    let options = Options::from_args(&args);
 
-    // Get the local database connection string
-    let default = default_db_path();
-    let db_path = user_path.unwrap_or(&default);
-
-    // Create app state and runtime
-    let app = State::new(db_path.to_owned(), no_copy).unwrap();
-
-    if diag {
-        app.run_diagnostic();
-    } else {
-        // Run some app methods
-        // app.iter_threads();
-        app.iter_messages();
-        // app.iter_attachments();
-
-        // Theoretically: start app
-        app.start();
-    }
+    // Create app state and start
+    let app = State::new(options).unwrap();
+    app.start()
 }
