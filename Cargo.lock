@@ -121,11 +121,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "imessage-export"
-version = "0.1.0"
+name = "imessage-database"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "rusqlite",
+]
+
+[[package]]
+name = "imessage-exporter"
+version = "0.0.0"
 dependencies = [
  "chrono",
  "clap",
+ "imessage-database",
  "rusqlite",
 ]
 

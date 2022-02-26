@@ -1,11 +1,5 @@
-[package]
-edition = "2021"
-name = "imessage-export"
-version = "0.1.0"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-chrono = "0.4"
-clap = "3.0.5"
-rusqlite = {version = "0.26.3", features = ["blob"]}
+[workspace]
+members = [
+    "imessage-database",
+    "imessage-exporter",
+]
