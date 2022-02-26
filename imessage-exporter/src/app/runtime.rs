@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use rusqlite::Connection;
 
+use crate::app::options::Options;
 use imessage_database::{
     tables::{
         attachment::Attachment,
@@ -14,23 +15,23 @@ use imessage_database::{
     util::dates::format,
 };
 
-pub struct State {
+pub struct State<'a> {
     chatrooms: HashMap<i32, Chat>, // Map of chatroom ID to chatroom information
     chatroom_participants: HashMap<i32, HashSet<i32>>, // Map of chatroom ID to chatroom participants
     participants: HashMap<i32, String>,                // Map of participant ID to contact info
-    no_copy: bool,  // If true, do not copy files from the Libary to the Archive
+    options: Options<'a>,                              // App configuration options
     db: Connection, // The connection we use to query the database
 }
 
-impl State {
-    pub fn new(db_path: String, no_copy: bool) -> Option<State> {
-        let conn = get_connection(&db_path);
+impl<'a> State<'a> {
+    pub fn new(options: Options) -> Option<State> {
+        let conn = get_connection(&options.db_path);
         Some(State {
             // TODO: Implement Try for these cache calls `?`
             chatrooms: Chat::cache(&conn),
             chatroom_participants: ChatToHandle::cache(&conn),
             participants: Handle::cache(&conn),
-            no_copy,
+            options,
             db: conn,
         })
     }
@@ -99,6 +100,33 @@ impl State {
     }
 
     pub fn start(&self) {
-        todo!()
+        if !self.options.valid {
+            //
+        } else if self.options.diagnostic {
+            self.run_diagnostic();
+        } else if self.options.export_type.is_some() {
+            match self.options.export_type.unwrap() {
+                "txt" => {
+                    println!("txt")
+                }
+                "csv" => {
+                    println!("csv")
+                }
+                "pdf" => {
+                    println!("pdf")
+                }
+                "html" => {
+                    println!("html")
+                }
+                _ => {
+                    println!("Unknown export type!")
+                }
+            }
+        } else {
+            // Run some app methods
+            // self.iter_threads();
+            self.iter_messages();
+            // self.iter_attachments();
+        }
     }
 }
