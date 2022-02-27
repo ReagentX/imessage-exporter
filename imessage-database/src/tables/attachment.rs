@@ -118,7 +118,7 @@ impl Diagnostic for Attachment {
             .filter_map(Result::ok)
             .filter(|path: &Result<String, E>| {
                 if let Ok(path) = path {
-                    !Path::new(&path.replace("~", &home)).exists()
+                    !Path::new(&path.replace('~', &home)).exists()
                 } else {
                     false
                 }
