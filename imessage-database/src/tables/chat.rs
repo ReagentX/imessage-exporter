@@ -109,3 +109,16 @@ impl Cacheable for Chat {
         map
     }
 }
+
+impl Chat {
+    pub fn name(&self) -> &str {
+        match &self.display_name {
+            Some(name) => if name.is_empty() {
+                &self.chat_identifier
+            } else {
+                name
+            }
+            None => &self.chat_identifier,
+        }
+    }
+}
