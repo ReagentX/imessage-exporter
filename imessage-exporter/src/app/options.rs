@@ -8,12 +8,19 @@ pub const OPTION_COPY: &str = "no-copy";
 pub const OPTION_DIAGNOSTIC: &str = "diagnostics";
 pub const OPTION_EXPORT_TYPE: &str = "export";
 pub const OPTION_EXPORT_PATH: &str = "export-path";
-pub const ABOUT: &str = "";
+
+// Other CLI Text
+pub const SUPPORTED_FILE_TYPES: &str = "txt, csv, pdf, html";
+pub const ABOUT: &str = concat!(
+    "The `imessage_exporter` binary exports iMessage data to\n",
+    "`txt`, `csv`, `pdf`, or `html` formats. It can also run\n",
+    "diagnostics to find problems with the iMessage database."
+);
 
 pub struct Options<'a> {
     /// Path to database file
     pub db_path: String,
-    /// If true, do not copy files from the Libary to the Archive
+    /// If true, do not copy files from the Libary to the export
     pub no_copy: bool,
     /// If true, emit diagnostic information to stdout
     pub diagnostic: bool,
@@ -101,7 +108,7 @@ pub fn from_command_line() -> ArgMatches {
                 .long(OPTION_EXPORT_TYPE)
                 .help("Specify a single file format to export messages into")
                 .takes_value(true)
-                .value_name("txt, csv, pdf, html"),
+                .value_name(SUPPORTED_FILE_TYPES),
         )
         .arg(
             Arg::new(OPTION_EXPORT_PATH)
