@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use rusqlite::Connection;
 
-use crate::app::options::Options;
+use crate::app::options::{Options, SUPPORTED_FILE_TYPES};
 use imessage_database::{
     tables::{
         attachment::Attachment,
@@ -15,15 +15,35 @@ use imessage_database::{
     util::dates::format,
 };
 
+/// Stores the application state and handles application lifecycle
 pub struct State<'a> {
-    chatrooms: HashMap<i32, Chat>, // Map of chatroom ID to chatroom information
-    chatroom_participants: HashMap<i32, HashSet<i32>>, // Map of chatroom ID to chatroom participants
-    participants: HashMap<i32, String>,                // Map of participant ID to contact info
-    options: Options<'a>,                              // App configuration options
-    db: Connection, // The connection we use to query the database
+    /// Map of chatroom ID to chatroom information
+    chatrooms: HashMap<i32, Chat>,
+    /// Map of chatroom ID to chatroom participants
+    chatroom_participants: HashMap<i32, HashSet<i32>>,
+    /// Map of participant ID to contact info
+    participants: HashMap<i32, String>,
+    /// App configuration options
+    options: Options<'a>,
+    /// The connection we use to query the database
+    db: Connection,
 }
 
 impl<'a> State<'a> {
+    /// Create a new instance of the application
+    ///
+    /// # Example:
+    ///
+    /// ```
+    /// use crate::app::{
+    ///    options::{from_command_line, Options},
+    ///    runtime::State,
+    /// };
+    ///
+    /// let args = from_command_line();
+    /// let options = Options::from_args(&args);
+    /// let app = State::new(options).unwrap();
+    /// ```
     pub fn new(options: Options) -> Option<State> {
         let conn = get_connection(&options.db_path);
         Some(State {
@@ -36,7 +56,7 @@ impl<'a> State<'a> {
         })
     }
 
-    pub fn iter_messages(&self) {
+    fn iter_messages(&self) {
         let mut statement = Message::get(&self.db);
         let messages = statement
             .query_map([], |row| Ok(Message::from_row(row)))
@@ -62,7 +82,7 @@ impl<'a> State<'a> {
         }
     }
 
-    pub fn iter_threads(&self) {
+    fn iter_threads(&self) {
         for thread in &self.chatroom_participants {
             let (chat, participants) = thread;
             println!(
@@ -77,7 +97,7 @@ impl<'a> State<'a> {
         }
     }
 
-    pub fn iter_attachments(&self) {
+    fn iter_attachments(&self) {
         let mut statement = Attachment::get(&self.db);
         let attachments = statement
             .query_map([], |row| Ok(Attachment::from_row(row)))
@@ -91,7 +111,7 @@ impl<'a> State<'a> {
     }
 
     /// Handles diagnostic tests for database
-    pub fn run_diagnostic(&self) {
+    fn run_diagnostic(&self) {
         println!("iMessage Database Diagnostics\n");
         Handle::run_diagnostic(&self.db);
         Message::run_diagnostic(&self.db);
@@ -99,6 +119,22 @@ impl<'a> State<'a> {
         println!();
     }
 
+    /// Start the app given the provided set of options. This will either run
+    /// diagnostic tests on the database or export data to the specified file type.
+    ///
+    // # Example:
+    ///
+    /// ```
+    /// use crate::app::{
+    ///    options::{from_command_line, Options},
+    ///    runtime::State,
+    /// };
+    ///
+    /// let args = from_command_line();
+    /// let options = Options::from_args(&args);
+    /// let app = State::new(options).unwrap();
+    /// app.start();
+    /// ```
     pub fn start(&self) {
         if !self.options.valid {
             //
@@ -118,8 +154,8 @@ impl<'a> State<'a> {
                 "html" => {
                     println!("html")
                 }
-                _ => {
-                    println!("Unknown export type!")
+                other => {
+                    println!("{other} is not a valid export type! Must be one of <{SUPPORTED_FILE_TYPES}>")
                 }
             }
         } else {
