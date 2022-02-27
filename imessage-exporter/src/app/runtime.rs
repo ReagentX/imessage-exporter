@@ -84,10 +84,11 @@ impl<'a> State<'a> {
 
     fn iter_threads(&self) {
         for thread in &self.chatroom_participants {
-            let (chat, participants) = thread;
+            let (chat_id, participants) = thread;
+            let chatroom = self.chatrooms.get(chat_id).unwrap();
             println!(
                 "{}: {}",
-                self.chatrooms.get(chat).unwrap().chat_identifier,
+                chatroom.name(),
                 participants
                     .iter()
                     .map(|f| self.participants.get(f).unwrap().to_owned())
@@ -160,8 +161,8 @@ impl<'a> State<'a> {
             }
         } else {
             // Run some app methods
-            // self.iter_threads();
-            self.iter_messages();
+            self.iter_threads();
+            // self.iter_messages();
             // self.iter_attachments();
         }
     }
