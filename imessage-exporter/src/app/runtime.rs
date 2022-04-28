@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use rusqlite::Connection;
 
@@ -10,7 +10,7 @@ use imessage_database::{
         handle::Handle,
         join::ChatToHandle,
         messages::Message,
-        table::{get_connection, Cacheable, Diagnostic, Table, ME},
+        table::{get_connection, Cacheable, Deduplicate, Diagnostic, Table, ME},
     },
     util::dates::format,
 };
@@ -19,10 +19,14 @@ use imessage_database::{
 pub struct State<'a> {
     /// Map of chatroom ID to chatroom information
     chatrooms: HashMap<i32, Chat>,
+    // Map of chatroom ID to an internal unique chatroom ID
+    real_chatrooms: HashMap<i32, i32>,
     /// Map of chatroom ID to chatroom participants
-    chatroom_participants: HashMap<i32, HashSet<i32>>,
+    chatroom_participants: HashMap<i32, BTreeSet<i32>>,
     /// Map of participant ID to contact info
     participants: HashMap<i32, String>,
+    // Map of participant ID to an internal unique participant ID
+    real_participants: HashMap<i32, i32>,
     /// App configuration options
     options: Options<'a>,
     /// The connection we use to query the database
@@ -46,11 +50,16 @@ impl<'a> State<'a> {
     /// ```
     pub fn new(options: Options) -> Option<State> {
         let conn = get_connection(&options.db_path);
+        let chatrooms = Chat::cache(&conn);
+        let chatroom_participants = ChatToHandle::cache(&conn);
+        let participants = Handle::cache(&conn);
         Some(State {
             // TODO: Implement Try for these cache calls `?`
-            chatrooms: Chat::cache(&conn),
-            chatroom_participants: ChatToHandle::cache(&conn),
-            participants: Handle::cache(&conn),
+            chatrooms,
+            real_chatrooms: Chat::dedupe(&chatroom_participants),
+            chatroom_participants,
+            real_participants: Handle::dedupe(&participants),
+            participants,
             options,
             db: conn,
         })
@@ -87,14 +96,27 @@ impl<'a> State<'a> {
             let (chat_id, participants) = thread;
             let chatroom = self.chatrooms.get(chat_id).unwrap();
             println!(
-                "{}: {}",
+                "{} ({}: {}): {}",
                 chatroom.name(),
+                chat_id,
+                self.real_chatrooms.get(chat_id).unwrap(),
                 participants
                     .iter()
-                    .map(|f| self.participants.get(f).unwrap().to_owned())
+                    .map(|participant_id| format!(
+                        "{}",
+                        self.real_participants.get(participant_id).unwrap()
+                    ))
                     .collect::<Vec<String>>()
                     .join(", ")
             )
+        }
+    }
+
+    fn iter_handles(&self) {
+        // 62, 122
+        for handle in &self.real_participants {
+            let (handle_id, handle_name) = handle;
+            println!("{}: {}", handle_id, handle_name,)
         }
     }
 
@@ -117,7 +139,19 @@ impl<'a> State<'a> {
         Handle::run_diagnostic(&self.db);
         Message::run_diagnostic(&self.db);
         Attachment::run_diagnostic(&self.db);
-        println!();
+
+        // Global Diagnostics
+        let unique_handles: HashSet<i32> = HashSet::from_iter(self.real_participants.values().cloned());
+        let duplicated_handles = self.participants.len() - unique_handles.len();
+        if duplicated_handles > 1 {
+            println!("Duplicated contacts: {duplicated_handles}");
+        }
+
+        let unique_chats: HashSet<i32> = HashSet::from_iter(self.real_chatrooms.values().cloned());
+        let duplicated_chats = self.chatrooms.len() - unique_chats.len();
+        if duplicated_chats > 1 {
+            println!("Duplicated chats: {duplicated_chats}");
+        }
     }
 
     /// Start the app given the provided set of options. This will either run
@@ -162,6 +196,7 @@ impl<'a> State<'a> {
         } else {
             // Run some app methods
             self.iter_threads();
+            // self.iter_handles();
             // self.iter_messages();
             // self.iter_attachments();
         }
