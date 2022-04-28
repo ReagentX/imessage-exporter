@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 
 use crate::tables::table::{Cacheable, Table, CHAT_HANDLE_JOIN};
 use rusqlite::{Connection, Result, Row, Statement};
@@ -23,7 +23,7 @@ impl Table for ChatToHandle {
 }
 
 impl Cacheable for ChatToHandle {
-    type T = HashSet<i32>;
+    type T = BTreeSet<i32>;
     /// Generate a hashmap containing each chatroom's ID pointing to a HashSet of participant handle IDs
     ///
     /// # Example:
@@ -37,8 +37,8 @@ impl Cacheable for ChatToHandle {
     /// let conn = get_connection(&db_path);
     /// let chatrooms = ChatToHandle::cache(&conn);
     /// ```
-    fn cache(db: &Connection) -> HashMap<i32, HashSet<i32>> {
-        let mut cache: HashMap<i32, HashSet<i32>> = HashMap::new();
+    fn cache(db: &Connection) -> HashMap<i32, BTreeSet<i32>> {
+        let mut cache: HashMap<i32, BTreeSet<i32>> = HashMap::new();
 
         let mut rows = ChatToHandle::get(db);
         let mappings = rows
@@ -52,7 +52,7 @@ impl Cacheable for ChatToHandle {
                     handles.insert(joiner.handle_id);
                 }
                 None => {
-                    let mut data_to_cache = HashSet::new();
+                    let mut data_to_cache = BTreeSet::new();
                     data_to_cache.insert(joiner.handle_id);
                     cache.insert(joiner.chat_id, data_to_cache);
                 }
