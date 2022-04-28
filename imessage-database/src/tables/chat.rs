@@ -106,8 +106,6 @@ impl Cacheable for Chat {
             .query_map([], |row| Ok(Chat::from_row(row)))
             .unwrap();
 
-        // TODO: Fix duplicated chats, i.e. multiple primary IDs that point to the same participants
-        // We need a single chat ID that we can derive from the existing chat ID,
         for chat in chats {
             let result = chat.unwrap().unwrap();
             map.insert(result.rowid, result);
