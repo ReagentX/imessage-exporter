@@ -2,7 +2,7 @@ use rusqlite::{Connection, Result, Row, Statement};
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    tables::table::{Cacheable, Diagnostic, Table, HANDLE, ME},
+    tables::table::{Cacheable, Deduplicate, Diagnostic, Table, HANDLE, ME},
     util::output::processing,
 };
 
@@ -81,9 +81,40 @@ impl Cacheable for Handle {
     }
 }
 
+impl Deduplicate for Handle {
+    type T = String;
+
+    /// Given the initial set of duplciated handles, deduplciate them
+    ///
+    /// This returns a new hashmap that maps the real handle ID to a new deduplicated unique handle ID
+    /// that represents a single handle for all of the deduplicate handles
+    fn dedupe(duplicated_data: &HashMap<i32, String>) -> HashMap<i32, i32> {
+        let mut deduplicated_participants = HashMap::new();
+        let mut participant_to_unique_participant_id: HashMap<Self::T, i32> = HashMap::new();
+
+        // Build cache of each unique set of participants to a new identifier:
+        let mut unique_participant_identifier = 0;
+        for participants_pair in duplicated_data {
+            let (chat_id, participants) = participants_pair;
+            match participant_to_unique_participant_id.get(participants) {
+                Some(id) => {
+                    deduplicated_participants.insert(chat_id.to_owned(), id.to_owned());
+                }
+                None => {
+                    participant_to_unique_participant_id
+                        .insert(participants.to_owned(), unique_participant_identifier);
+                    deduplicated_participants.insert(chat_id.to_owned(), unique_participant_identifier);
+                    unique_participant_identifier += 1;
+                }
+            }
+        }
+        deduplicated_participants
+    }
+}
+
 impl Diagnostic for Handle {
     /// Emit diagnotsic data for the Handles table
-    /// 
+    ///
     /// Get the number of handles that are duplicated
     /// The person_centric_id is used to map handles that represent the
     /// same contact across ids (numbers, emails, etc) and across
@@ -117,9 +148,14 @@ impl Diagnostic for Handle {
 }
 
 impl Handle {
+    /// The handles table does not have a lot of information and can have many duplicate values.
+    ///
+    /// This method generates a hashmap of each separate item in this table to a combined string
+    /// that represents all of the copies, so any handle ID will always map to the same string
+    /// for a given chat participant
     fn get_person_id_map(db: &Connection) -> HashMap<i32, String> {
         let mut person_to_id: HashMap<String, HashSet<String>> = HashMap::new();
-        let mut row_to_id = HashMap::new();
+        let mut row_to_id: HashMap<i32, String> = HashMap::new();
         let mut row_data: Vec<(String, i32, String)> = vec![];
 
         // Build query

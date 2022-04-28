@@ -1,6 +1,8 @@
-use std::collections::HashMap;
+use std::{
+    collections::{BTreeSet, HashMap},
+};
 
-use crate::tables::table::{Cacheable, Table, CHAT};
+use crate::tables::table::{Cacheable, Deduplicate, Table, CHAT};
 use rusqlite::{Connection, Result, Row, Statement};
 
 #[derive(Debug)]
@@ -81,6 +83,8 @@ impl Table for Chat {
 impl Cacheable for Chat {
     type T = Chat;
     /// Generate a hashmap containing each chatroom's ID pointing to the chatroom's metadata
+    /// These chatroom ID's contain duplicates and must be deduped later once we have all of
+    /// the participants parsed out. On its own this data is not useful.
     ///
     /// # Example:
     ///
@@ -93,8 +97,8 @@ impl Cacheable for Chat {
     /// let conn = get_connection(&db_path);
     /// let chatrooms = Chat::cache(&conn);
     /// ```
-    fn cache(db: &Connection) -> HashMap<i32, Self> {
-        let mut map: HashMap<i32, Chat> = HashMap::new();
+    fn cache(db: &Connection) -> HashMap<i32, Self::T> {
+        let mut map: HashMap<i32, Self::T> = HashMap::new();
 
         let mut statement = Chat::get(db);
 
@@ -102,6 +106,8 @@ impl Cacheable for Chat {
             .query_map([], |row| Ok(Chat::from_row(row)))
             .unwrap();
 
+        // TODO: Fix duplicated chats, i.e. multiple primary IDs that point to the same participants
+        // We need a single chat ID that we can derive from the existing chat ID,
         for chat in chats {
             let result = chat.unwrap().unwrap();
             map.insert(result.rowid, result);
@@ -110,13 +116,46 @@ impl Cacheable for Chat {
     }
 }
 
+impl Deduplicate for Chat {
+    type T = BTreeSet<i32>;
+
+    /// Given the initial set of duplciated chats, deduplciate them based on the participants
+    ///
+    /// This returns a new hashmap that maps the real chat ID to a new deduplicated unique chat ID
+    /// that represents a single chat for all of the same participants, even if they have multiple handles
+    fn dedupe(duplicated_data: &HashMap<i32, Self::T>) -> HashMap<i32, i32> {
+        let mut deduplicated_chats = HashMap::new();
+        let mut participants_to_unique_chat_id: HashMap<Self::T, i32> = HashMap::new();
+
+        // Build cache of each unique set of participants to a new identifier:
+        let mut unique_chat_identifier = 0;
+        for participants_pair in duplicated_data {
+            let (chat_id, participants) = participants_pair;
+            match participants_to_unique_chat_id.get(participants) {
+                Some(id) => {
+                    deduplicated_chats.insert(chat_id.to_owned(), id.to_owned());
+                }
+                None => {
+                    participants_to_unique_chat_id
+                        .insert(participants.to_owned(), unique_chat_identifier);
+                    deduplicated_chats.insert(chat_id.to_owned(), unique_chat_identifier);
+                    unique_chat_identifier += 1;
+                }
+            }
+        }
+        deduplicated_chats
+    }
+}
+
 impl Chat {
     pub fn name(&self) -> &str {
         match &self.display_name {
-            Some(name) => if name.is_empty() {
-                &self.chat_identifier
-            } else {
-                name
+            Some(name) => {
+                if name.is_empty() {
+                    &self.chat_identifier
+                } else {
+                    name
+                }
             }
             None => &self.chat_identifier,
         }
