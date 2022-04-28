@@ -18,6 +18,12 @@ pub trait Cacheable {
     fn cache(db: &Connection) -> HashMap<i32, Self::T>;
 }
 
+/// Defines behavior for deduplicating data in a table
+pub trait Deduplicate {
+    type T;
+    fn dedupe(duplicated_data: &HashMap<i32, Self::T>) -> HashMap<i32, i32>;
+}
+
 /// Defines behavior for printing diagnostic information for a table
 pub trait Diagnostic {
     /// Emit diagnostic data about the table to `stdout`
