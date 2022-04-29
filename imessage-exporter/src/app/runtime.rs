@@ -1,4 +1,7 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    fmt::Display,
+};
 
 use rusqlite::Connection;
 
@@ -12,7 +15,7 @@ use imessage_database::{
         messages::Message,
         table::{get_connection, Cacheable, Deduplicate, Diagnostic, Table, ME},
     },
-    util::dates::format,
+    util::{dates::format, message_types::get_types_table},
 };
 
 /// Stores the application state and handles application lifecycle
@@ -29,6 +32,8 @@ pub struct State<'a> {
     real_participants: HashMap<i32, i32>,
     /// App configuration options
     options: Options<'a>,
+    /// Types of messages we may encounter
+    message_types: HashMap<i32, Box<dyn Display + 'static>>,
     /// The connection we use to query the database
     db: Connection,
 }
@@ -61,6 +66,7 @@ impl<'a> State<'a> {
             real_participants: Handle::dedupe(&participants),
             participants,
             options,
+            message_types: get_types_table(),
             db: conn,
         })
     }
@@ -104,12 +110,16 @@ impl<'a> State<'a> {
                     false => self.real_participants.get(&msg.handle_id).unwrap(),
                 },
                 match msg.attachment_id {
-                    Some(id) => Some(format!(
-                        "{:?}{:?}",
+                    Some(id) => format!(
+                        "{:?} {:?}",
                         msg.text,
                         Attachment::path_from_message(id, &self.db)
-                    )),
-                    None => msg.text.to_owned(),
+                    )
+                    .to_owned(),
+                    None => match self.message_types.get(&msg.associated_message_type) {
+                        Some(msg_type) => format!("{} {:?}", msg_type, msg.associated_message_guid),
+                        None => format!("{:?}", msg.text),
+                    },
                 }
             );
         }
