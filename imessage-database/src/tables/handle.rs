@@ -88,22 +88,22 @@ impl Deduplicate for Handle {
     ///
     /// This returns a new hashmap that maps the real handle ID to a new deduplicated unique handle ID
     /// that represents a single handle for all of the deduplicate handles
-    fn dedupe(duplicated_data: &HashMap<i32, String>) -> HashMap<i32, i32> {
-        let mut deduplicated_participants = HashMap::new();
+    fn dedupe(duplicated_data: &HashMap<i32, Self::T>) -> HashMap<i32, i32> {
+        let mut deduplicated_participants: HashMap<i32, i32> = HashMap::new();
         let mut participant_to_unique_participant_id: HashMap<Self::T, i32> = HashMap::new();
 
         // Build cache of each unique set of participants to a new identifier:
         let mut unique_participant_identifier = 0;
-        for participants_pair in duplicated_data {
-            let (chat_id, participants) = participants_pair;
-            match participant_to_unique_participant_id.get(participants) {
+        for (participant_id, participant) in duplicated_data {
+            match participant_to_unique_participant_id.get(participant) {
                 Some(id) => {
-                    deduplicated_participants.insert(chat_id.to_owned(), id.to_owned());
+                    deduplicated_participants.insert(participant_id.to_owned(), id.to_owned());
                 }
                 None => {
                     participant_to_unique_participant_id
-                        .insert(participants.to_owned(), unique_participant_identifier);
-                    deduplicated_participants.insert(chat_id.to_owned(), unique_participant_identifier);
+                        .insert(participant.to_owned(), unique_participant_identifier);
+                    deduplicated_participants
+                        .insert(participant_id.to_owned(), unique_participant_identifier);
                     unique_participant_identifier += 1;
                 }
             }
@@ -214,5 +214,25 @@ impl Handle {
             row_to_id.insert(rowid.to_owned(), data_to_insert);
         }
         row_to_id
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::tables::{handle::Handle, table::Deduplicate};
+    use std::collections::{HashMap, HashSet};
+
+    #[test]
+    fn test_can_dedupe() {
+        let mut input: HashMap<i32, String> = HashMap::new();
+        input.insert(1, String::from("A"));
+        input.insert(2, String::from("A"));
+        input.insert(3, String::from("A"));
+        input.insert(4, String::from("B"));
+        input.insert(5, String::from("B"));
+        input.insert(6, String::from("C"));
+
+        let output = Handle::dedupe(&input);
+        panic!("{:?}", output)
     }
 }

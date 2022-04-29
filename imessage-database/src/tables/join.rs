@@ -61,4 +61,7 @@ impl Cacheable for ChatToHandle {
 
         cache
     }
+
+    // TODO: Implement Diagnostic, determine how many chats do not exist in the join table
+    
 }
