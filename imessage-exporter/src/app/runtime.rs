@@ -50,11 +50,11 @@ impl<'a> State<'a> {
     /// ```
     pub fn new(options: Options) -> Option<State> {
         let conn = get_connection(&options.db_path);
+        // TODO: Implement Try for these cache calls `?`
         let chatrooms = Chat::cache(&conn);
         let chatroom_participants = ChatToHandle::cache(&conn);
         let participants = Handle::cache(&conn);
         Some(State {
-            // TODO: Implement Try for these cache calls `?`
             chatrooms,
             real_chatrooms: Chat::dedupe(&chatroom_participants),
             chatroom_participants,
@@ -66,6 +66,7 @@ impl<'a> State<'a> {
     }
 
     fn iter_messages(&self) {
+        let unk: Vec<&String> = vec![];
         let mut statement = Message::get(&self.db);
         let messages = statement
             .query_map([], |row| Ok(Message::from_row(row)))
@@ -73,11 +74,34 @@ impl<'a> State<'a> {
         for message in messages {
             let msg = message.unwrap().unwrap();
             println!(
-                "{:?} | {} {:?}",
+                "Time: {:?} | Chat: {:?} {:?} | Sender: {} (deduped: {}) | {:?}",
                 format(&msg.date()),
+                msg.chat_id,
+                match msg.chat_id {
+                    Some(id) => match self.chatroom_participants.get(&id) {
+                        Some(chatroom) => chatroom
+                            .iter()
+                            .map(|x| self.participants.get(x).unwrap())
+                            .collect::<Vec<&String>>(),
+                        None => {
+                            println!("Found error: message chat ID {} has no members!", id);
+                            Vec::new()
+                        }
+                    },
+                    None => {
+                        println!("Found error: message has no chat ID!");
+                        Vec::new()
+                    }
+                },
+                // Get real participant info
                 match msg.is_from_me {
                     true => ME,
                     false => self.participants.get(&msg.handle_id).unwrap(),
+                },
+                // Get unique participant info
+                match msg.is_from_me {
+                    true => &-1,
+                    false => self.real_participants.get(&msg.handle_id).unwrap(),
                 },
                 match msg.attachment_id {
                     Some(id) => Some(format!(
@@ -85,7 +109,7 @@ impl<'a> State<'a> {
                         msg.text,
                         Attachment::path_from_message(id, &self.db)
                     )),
-                    None => msg.text,
+                    None => msg.text.to_owned(),
                 }
             );
         }
@@ -141,7 +165,8 @@ impl<'a> State<'a> {
         Attachment::run_diagnostic(&self.db);
 
         // Global Diagnostics
-        let unique_handles: HashSet<i32> = HashSet::from_iter(self.real_participants.values().cloned());
+        let unique_handles: HashSet<i32> =
+            HashSet::from_iter(self.real_participants.values().cloned());
         let duplicated_handles = self.participants.len() - unique_handles.len();
         if duplicated_handles > 1 {
             println!("Duplicated contacts: {duplicated_handles}");
@@ -195,9 +220,9 @@ impl<'a> State<'a> {
             }
         } else {
             // Run some app methods
-            self.iter_threads();
+            // self.iter_threads();
             // self.iter_handles();
-            // self.iter_messages();
+            self.iter_messages();
             // self.iter_attachments();
         }
     }
