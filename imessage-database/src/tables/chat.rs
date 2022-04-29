@@ -1,6 +1,4 @@
-use std::{
-    collections::{BTreeSet, HashMap},
-};
+use std::collections::{BTreeSet, HashMap};
 
 use crate::tables::table::{Cacheable, Deduplicate, Table, CHAT};
 use rusqlite::{Connection, Result, Row, Statement};
@@ -122,13 +120,12 @@ impl Deduplicate for Chat {
     /// This returns a new hashmap that maps the real chat ID to a new deduplicated unique chat ID
     /// that represents a single chat for all of the same participants, even if they have multiple handles
     fn dedupe(duplicated_data: &HashMap<i32, Self::T>) -> HashMap<i32, i32> {
-        let mut deduplicated_chats = HashMap::new();
+        let mut deduplicated_chats: HashMap<i32, i32> = HashMap::new();
         let mut participants_to_unique_chat_id: HashMap<Self::T, i32> = HashMap::new();
 
         // Build cache of each unique set of participants to a new identifier:
         let mut unique_chat_identifier = 0;
-        for participants_pair in duplicated_data {
-            let (chat_id, participants) = participants_pair;
+        for (chat_id, participants) in duplicated_data {
             match participants_to_unique_chat_id.get(participants) {
                 Some(id) => {
                     deduplicated_chats.insert(chat_id.to_owned(), id.to_owned());
