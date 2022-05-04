@@ -80,8 +80,11 @@ impl<'a> State<'a> {
             .unwrap();
         for message in messages {
             let msg = message.unwrap().unwrap();
+            if msg.is_reply() {
+                continue;
+            }
             println!(
-                "Time: {:?} | Chat: {:?} {:?} | Sender: {} (deduped: {}) | {:?} | Replies: {}",
+                "Time: {:?} | Chat: {:?} {:?} | Sender: {} (deduped: {}) | {:?} |{}",
                 format(&msg.date()),
                 msg.chat_id,
                 match msg.chat_id {
@@ -126,7 +129,7 @@ impl<'a> State<'a> {
                     0 => String::new(),
                     _ => {
                         let replies = msg.get_replies(&self.db);
-                        format!("{:?}", replies)
+                        format!("Replies: {:?}", replies)
                     }
                 }
             );
