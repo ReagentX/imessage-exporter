@@ -89,6 +89,7 @@ pub struct Message {
     pub synced_syndication_ranges: Option<String>,
     pub chat_id: Option<i32>,
     pub attachment_id: Option<i32>,
+    pub num_replies: i32,
     offset: i64,
 }
 
@@ -175,6 +176,7 @@ impl Table for Message {
             synced_syndication_ranges: row.get(77)?,
             chat_id: row.get(78)?,
             attachment_id: row.get(79)?,
+            num_replies: row.get(80)?,
             offset: Utc.ymd(2001, 1, 1).and_hms(0, 0, 0).timestamp(),
         })
     }
@@ -183,14 +185,18 @@ impl Table for Message {
         // TODO: use conversation table to sort messages to their respective chats
         // TODO: FYI, Group chats set the handle to 0 for the sender (i.e., "you")
         db.prepare(&format!(
-            "SELECT m.*, c.chat_id, a.attachment_id
-            FROM {MESSAGE} as m
-            LEFT JOIN {CHAT_MESSAGE_JOIN} as c
-            ON m.rowid = c.message_id
-            LEFT JOIN {MESSAGE_ATTACHMENT_JOIN} as a
-            ON m.rowid = a.message_id
-            ORDER BY m.ROWID
-            LIMIT 10;",
+            "SELECT 
+                 m.*, 
+                 c.chat_id, 
+                 a.attachment_id,
+                 (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as has_replies
+             FROM 
+                 message as m 
+                 LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id 
+                 LEFT JOIN {MESSAGE_ATTACHMENT_JOIN} as a ON m.ROWID = a.message_id 
+             ORDER BY 
+                 m.ROWID;
+            "
         ))
         .unwrap()
     }
@@ -246,4 +252,43 @@ impl Message {
     pub fn date_read(&self) -> DateTime<Local> {
         self.get_local_time(&self.date_read)
     }
+
+    pub fn is_reply(&self) -> bool {
+        self.thread_originator_guid.is_some()
+    }
+
+    pub fn get_replies(&self, db: &Connection) -> Vec<Self> {
+        let mut out_v = vec![];
+        let mut statement = db.prepare(&format!(
+            "SELECT 
+                 m.*, 
+                 c.chat_id, 
+                 a.attachment_id,
+                 (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as has_replies
+             FROM 
+                 message as m 
+                 LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id 
+                 LEFT JOIN {MESSAGE_ATTACHMENT_JOIN} as a ON m.ROWID = a.message_id
+             WHERE m.thread_originator_guid = \"{}\"
+             ORDER BY 
+                 m.ROWID;
+            ", self.guid
+        ))
+        .unwrap();
+
+        let iter = statement
+            .query_map([], |row| Ok(Message::from_row(row)))
+            .unwrap();
+
+        for message in iter {
+            let m = message.unwrap().unwrap();
+            out_v.push(m)
+        }
+
+        out_v
+    }
+
+    // TODO:
+    // DONE 1. Generate col if a message has replies
+    // 2. Write func to query for replies to that GUID
 }
