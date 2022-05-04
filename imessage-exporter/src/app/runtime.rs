@@ -15,7 +15,8 @@ use imessage_database::{
         messages::Message,
         table::{get_connection, Cacheable, Deduplicate, Diagnostic, Table, ME},
     },
-    util::{dates::format, message_types::get_types_table},
+    message::variants::get_types_table,
+    util::{dates::format},
 };
 
 /// Stores the application state and handles application lifecycle
@@ -80,7 +81,7 @@ impl<'a> State<'a> {
         for message in messages {
             let msg = message.unwrap().unwrap();
             println!(
-                "Time: {:?} | Chat: {:?} {:?} | Sender: {} (deduped: {}) | {:?}",
+                "Time: {:?} | Chat: {:?} {:?} | Sender: {} (deduped: {}) | {:?} | Replies: {}",
                 format(&msg.date()),
                 msg.chat_id,
                 match msg.chat_id {
@@ -120,6 +121,13 @@ impl<'a> State<'a> {
                         Some(msg_type) => format!("{} {:?}", msg_type, msg.associated_message_guid),
                         None => format!("{:?}", msg.text),
                     },
+                },
+                match msg.num_replies {
+                    0 => String::new(),
+                    _ => {
+                        let replies = msg.get_replies(&self.db);
+                        format!("{:?}", replies)
+                    }
                 }
             );
         }
