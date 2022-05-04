@@ -129,7 +129,7 @@ impl<'a> State<'a> {
                     0 => String::new(),
                     _ => {
                         let replies = msg.get_replies(&self.db);
-                        format!("Replies: {:?}", replies)
+                        format!("Replies: {:?}", replies.iter().map(|m| &m.guid).collect::<Vec<&String>>())
                     }
                 }
             );
