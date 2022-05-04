@@ -287,8 +287,4 @@ impl Message {
 
         out_v
     }
-
-    // TODO:
-    // DONE 1. Generate col if a message has replies
-    // 2. Write func to query for replies to that GUID
 }
