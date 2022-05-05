@@ -7,6 +7,7 @@ use rusqlite::Connection;
 
 use crate::app::options::{Options, SUPPORTED_FILE_TYPES};
 use imessage_database::{
+    message::variants::get_types_table,
     tables::{
         attachment::Attachment,
         chat::Chat,
@@ -15,8 +16,7 @@ use imessage_database::{
         messages::Message,
         table::{get_connection, Cacheable, Deduplicate, Diagnostic, Table, ME},
     },
-    message::variants::get_types_table,
-    util::{dates::format},
+    util::dates::format,
 };
 
 /// Stores the application state and handles application lifecycle
@@ -80,9 +80,11 @@ impl<'a> State<'a> {
             .unwrap();
         for message in messages {
             let msg = message.unwrap().unwrap();
+            // Skip messages that are replies, because we would have already rendered them
             if msg.is_reply() {
                 continue;
             }
+            // Emit message info
             println!(
                 "Time: {:?} | Chat: {:?} {:?} | Sender: {} (deduped: {}) | {:?} |{}",
                 format(&msg.date()),
@@ -113,23 +115,18 @@ impl<'a> State<'a> {
                     true => &-1,
                     false => self.real_participants.get(&msg.handle_id).unwrap(),
                 },
-                match msg.attachment_id {
-                    Some(id) => format!(
-                        "{:?} {:?}",
-                        msg.text,
-                        Attachment::path_from_message(id, &self.db)
-                    )
-                    .to_owned(),
-                    None => match self.message_types.get(&msg.associated_message_type) {
-                        Some(msg_type) => format!("{} {:?}", msg_type, msg.associated_message_guid),
-                        None => format!("{:?}", msg.text),
-                    },
+                match msg.num_attachments {
+                    0 => msg.text.as_ref().unwrap_or(&String::new()).to_owned(),
+                    _ => msg.num_attachments.to_string(),
                 },
                 match msg.num_replies {
                     0 => String::new(),
                     _ => {
                         let replies = msg.get_replies(&self.db);
-                        format!("Replies: {:?}", replies.iter().map(|m| &m.guid).collect::<Vec<&String>>())
+                        format!(
+                            "Replies: {:?}",
+                            replies.iter().map(|m| &m.guid).collect::<Vec<&String>>()
+                        )
                     }
                 }
             );
