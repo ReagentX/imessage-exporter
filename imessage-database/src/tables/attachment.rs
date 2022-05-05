@@ -141,12 +141,26 @@ impl Diagnostic for Attachment {
 }
 
 impl Attachment {
-    pub fn path_from_message(id: i32, db: &Connection) -> Option<String> {
-        let mut search = db
+    pub fn from_message(id: i32, db: &Connection) -> Vec<Attachment> {
+        let mut out_l = vec![];
+        let mut statement = db
             .prepare(&format!(
-                "SELECT filename FROM {ATTACHMENT} WHERE rowid == {id}",
+                "
+                SELECT a.* FROM message_attachment_join j 
+                    LEFT JOIN attachment AS a ON j.attachment_id = a.ROWID
+                WHERE j.message_id = {id}
+                "
             ))
             .unwrap();
-        search.query_row([], |r| r.get(0)).unwrap_or(None)
+
+        let iter = statement
+            .query_map([], |row| Ok(Attachment::from_row(row)))
+            .unwrap();
+
+        for attachment in iter {
+            let m = attachment.unwrap().unwrap();
+            out_l.push(m)
+        }
+        out_l
     }
 }
