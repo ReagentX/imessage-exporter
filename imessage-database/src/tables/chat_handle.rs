@@ -31,7 +31,7 @@ impl Cacheable for ChatToHandle {
     /// ```
     /// use imessage_database::util::dirs::default_db_path;
     /// use imessage_database::tables::table::{Cacheable, get_connection};
-    /// use imessage_database::tables::join::ChatToHandle;
+    /// use imessage_database::tables::chat_handle::ChatToHandle;
     ///
     /// let db_path = default_db_path();
     /// let conn = get_connection(&db_path);
