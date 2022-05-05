@@ -11,8 +11,8 @@ use imessage_database::{
     tables::{
         attachment::Attachment,
         chat::Chat,
+        chat_handle::ChatToHandle,
         handle::Handle,
-        join::ChatToHandle,
         messages::Message,
         table::{get_connection, Cacheable, Deduplicate, Diagnostic, Table, ME},
     },
@@ -117,7 +117,17 @@ impl<'a> State<'a> {
                 },
                 match msg.num_attachments {
                     0 => msg.text.as_ref().unwrap_or(&String::new()).to_owned(),
-                    _ => msg.num_attachments.to_string(),
+                    _ => {
+                        let attachments = Attachment::from_message(msg.rowid, &self.db);
+                        format!(
+                            "Attachments: {:?}",
+                            attachments
+                                .iter()
+                                .map(|a| a.filename.as_ref().unwrap_or(&String::new()).to_owned())
+                                .collect::<Vec<String>>()
+                        )
+                        // String::new()
+                    }
                 },
                 match msg.num_replies {
                     0 => String::new(),
