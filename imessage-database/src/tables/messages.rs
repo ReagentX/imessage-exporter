@@ -88,7 +88,7 @@ pub struct Message {
     pub did_notify_recipient: i32,
     pub synced_syndication_ranges: Option<String>,
     pub chat_id: Option<i32>,
-    pub attachment_id: Option<i32>,
+    pub num_attachments: i32,
     pub num_replies: i32,
     offset: i64,
 }
@@ -175,25 +175,22 @@ impl Table for Message {
             did_notify_recipient: row.get(76)?,
             synced_syndication_ranges: row.get(77)?,
             chat_id: row.get(78)?,
-            attachment_id: row.get(79)?,
+            num_attachments: row.get(79)?,
             num_replies: row.get(80)?,
             offset: Utc.ymd(2001, 1, 1).and_hms(0, 0, 0).timestamp(),
         })
     }
 
     fn get(db: &Connection) -> Statement {
-        // TODO: use conversation table to sort messages to their respective chats
-        // TODO: FYI, Group chats set the handle to 0 for the sender (i.e., "you")
         db.prepare(&format!(
             "SELECT 
                  m.*, 
                  c.chat_id, 
-                 a.attachment_id,
-                 (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as has_replies
+                 (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                 (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
              FROM 
                  message as m 
                  LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id 
-                 LEFT JOIN {MESSAGE_ATTACHMENT_JOIN} as a ON m.ROWID = a.message_id 
              ORDER BY 
                  m.ROWID;
             "
@@ -259,16 +256,17 @@ impl Message {
 
     pub fn get_replies(&self, db: &Connection) -> Vec<Self> {
         let mut out_v = vec![];
+        // TODO: attachment count + get_attachment_from_message, same as how replies work now
+        // TODO: same as above, but for reactions
         let mut statement = db.prepare(&format!(
             "SELECT 
                  m.*, 
                  c.chat_id, 
-                 a.attachment_id,
-                 (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as has_replies
+                 (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                 (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
              FROM 
                  message as m 
                  LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id 
-                 LEFT JOIN {MESSAGE_ATTACHMENT_JOIN} as a ON m.ROWID = a.message_id
              WHERE m.thread_originator_guid = \"{}\"
              ORDER BY 
                  m.ROWID;
