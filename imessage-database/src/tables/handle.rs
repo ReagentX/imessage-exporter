@@ -233,6 +233,7 @@ mod tests {
         input.insert(6, String::from("C"));
 
         let output = Handle::dedupe(&input);
-        panic!("{:?}", output)
+        let expected_deduped_ids: HashSet<i32> = output.values().copied().collect();
+        assert_eq!(expected_deduped_ids.len(), 3)
     }
 }
