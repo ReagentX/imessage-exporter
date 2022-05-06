@@ -1,6 +1,9 @@
 use std::fmt::Display;
 
+use crate::Variant;
+
 /// Reactions to iMessages
+#[derive(Debug, Clone, Copy)]
 pub enum Reaction {
     Loved(bool),
     Liked(bool),
@@ -9,6 +12,8 @@ pub enum Reaction {
     Emphasized(bool),
     Questioned(bool),
 }
+
+impl Variant for Reaction {}
 
 impl Display for Reaction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
