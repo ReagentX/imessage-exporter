@@ -2,9 +2,23 @@ use chrono::{naive::NaiveDateTime, offset::Local, DateTime, Datelike, TimeZone, 
 use rusqlite::{Connection, Result, Row, Statement};
 
 use crate::{
+    get_variant,
     tables::table::{Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE, MESSAGE_ATTACHMENT_JOIN},
     util::output::processing,
+    ApplePay, Reaction, Variant,
 };
+
+#[derive(Debug)]
+pub enum MessageType {
+    /// A normal message with no special properties
+    Normal,
+    /// A message that has replies
+    Thread,
+    /// A message that is a reply to another message
+    Reply,
+    /// Special messages,
+    Special(Box<dyn Variant>),
+}
 
 #[derive(Debug)]
 #[allow(non_snake_case)]
@@ -250,39 +264,63 @@ impl Message {
         self.get_local_time(&self.date_read)
     }
 
-    pub fn is_reply(&self) -> bool {
+    fn is_reply(&self) -> bool {
         self.thread_originator_guid.is_some()
+    }
+
+    fn has_attachments(&self) -> bool {
+        self.num_attachments > 0
+    }
+
+    fn has_replies(&self) -> bool {
+        self.num_replies > 0
     }
 
     pub fn get_replies(&self, db: &Connection) -> Vec<Self> {
         let mut out_v = vec![];
-        // TODO: attachment count + get_attachment_from_message, same as how replies work now
-        // TODO: same as above, but for reactions
-        let mut statement = db.prepare(&format!(
-            "SELECT 
-                 m.*, 
-                 c.chat_id, 
-                 (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
-                 (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
-             FROM 
-                 message as m 
-                 LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id 
-             WHERE m.thread_originator_guid = \"{}\"
-             ORDER BY 
-                 m.ROWID;
-            ", self.guid
-        ))
-        .unwrap();
 
-        let iter = statement
-            .query_map([], |row| Ok(Message::from_row(row)))
+        // No need to hit the DB if we know we don't have replies
+        if self.has_replies() {
+            // TODO: reactions count + get_reactions_from_message, same as how replies work now
+            let mut statement = db.prepare(&format!(
+                "SELECT 
+                     m.*, 
+                     c.chat_id, 
+                     (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                     (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
+                 FROM 
+                     message as m 
+                     LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id 
+                 WHERE m.thread_originator_guid = \"{}\"
+                 ORDER BY 
+                     m.ROWID;
+                ", self.guid
+            ))
             .unwrap();
 
-        for message in iter {
-            let m = message.unwrap().unwrap();
-            out_v.push(m)
+            let iter = statement
+                .query_map([], |row| Ok(Message::from_row(row)))
+                .unwrap();
+
+            for message in iter {
+                let m = message.unwrap().unwrap();
+                out_v.push(m)
+            }
         }
 
         out_v
+    }
+
+    pub fn case(&self) -> MessageType {
+        if self.is_reply() {
+            MessageType::Reply
+        } else if self.has_replies() {
+            MessageType::Thread
+        } else {
+            match get_variant(self) {
+                Some(variant) => MessageType::Special(variant),
+                None => MessageType::Normal,
+            }
+        }
     }
 }
