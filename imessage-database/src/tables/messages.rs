@@ -5,7 +5,7 @@ use crate::{
     get_variant,
     tables::table::{Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE, MESSAGE_ATTACHMENT_JOIN},
     util::output::processing,
-    ApplePay, Reaction, Variant,
+    Variant,
 };
 
 #[derive(Debug)]
