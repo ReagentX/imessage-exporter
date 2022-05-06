@@ -4,7 +4,7 @@ The `imessage_exporter` binary exports iMessage data to `txt`, `csv`, `pdf`, or 
 
 ## Installation
 
-`cargo install logria` is the best way to install the app for normal use. (Not supported in Alpha Stage)
+`cargo install imessage_exporter` is the best way to install the app for normal use. (Not supported in Alpha Stage)
 
 ### Installing as a standalone app
 
@@ -15,25 +15,25 @@ The `imessage_exporter` binary exports iMessage data to `txt`, `csv`, `pdf`, or 
 
 ## How To Use
 
-```
-    -d, --diagnostics
-            Print diagnostic information and exit
+```txt
+-d, --diagnostics
+        Print diagnostic information and exit
 
-    -e, --export <txt, csv, pdf, html>
-            Specify a single file format to export messages into
+-e, --export <txt, csv, pdf, html>
+        Specify a single file format to export messages into
 
-    -h, --help
-            Print help information
+-h, --help
+        Print help information
 
-    -n, --no-copy
-            Do not copy attachments, instead reference them in-place
+-n, --no-copy
+        Do not copy attachments, instead reference them in-place
 
-    -o, --export-path <path/to/save/files>
-            Specify a custom directory for outputting exported data
+-o, --export-path <path/to/save/files>
+        Specify a custom directory for outputting exported data
 
-    -p, --db-path <path/to/chat.db>
-            Specify a custom path for the iMessage database file
+-p, --db-path <path/to/chat.db>
+        Specify a custom path for the iMessage database file
 
-    -V, --version
-            Print version information
+-V, --version
+        Print version information
 ```
