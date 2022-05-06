@@ -1,4 +1,8 @@
 mod app;
+mod exporter;
+
+pub use exporter::{exporter::Exporter, txt::TXT};
+
 use app::{
     options::{from_command_line, Options},
     runtime::State,
