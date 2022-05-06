@@ -3,7 +3,7 @@ use std::fmt::Display;
 use crate::Variant;
 
 /// Reactions to iMessages
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 pub enum Reaction {
     Loved(bool),
     Liked(bool),

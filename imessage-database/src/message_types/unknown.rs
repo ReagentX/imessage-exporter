@@ -3,7 +3,7 @@ use std::fmt::Display;
 use crate::Variant;
 
 /// Apple Pay Requests
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 pub enum Unknown {
     Unknown(i32),
 }

@@ -5,9 +5,18 @@ use crate::{
 
 pub fn get_variant(msg: &Message) -> Option<Box<dyn Variant>> {
     match msg.associated_message_type {
+        // Normal message
         0 => None,
-        2 => Some(Box::new(ApplePay::Send(0))),
-        3 => Some(Box::new(ApplePay::Recieve(0))),
+
+        // Apple Pay
+        2 => Some(Box::new(ApplePay::Send(
+            msg.text.as_ref().unwrap().to_owned(),
+        ))),
+        3 => Some(Box::new(ApplePay::Recieve(
+            msg.text.as_ref().unwrap().to_owned(),
+        ))),
+
+        // Reactions
         2000 => Some(Box::new(Reaction::Loved(true))),
         2001 => Some(Box::new(Reaction::Liked(true))),
         2002 => Some(Box::new(Reaction::Disliked(true))),
@@ -20,7 +29,9 @@ pub fn get_variant(msg: &Message) -> Option<Box<dyn Variant>> {
         3003 => Some(Box::new(Reaction::Laughed(false))),
         3004 => Some(Box::new(Reaction::Emphasized(false))),
         3005 => Some(Box::new(Reaction::Questioned(false))),
-        x => Some(Box::new(Unknown::Unknown(x))),
+
+        // Unknown
+        x => Some(Box::new(Unknown::Unknown(x)))
     }
 }
 
