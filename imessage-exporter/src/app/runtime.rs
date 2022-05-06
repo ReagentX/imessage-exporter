@@ -1,22 +1,15 @@
-use std::{
-    collections::{BTreeSet, HashMap, HashSet},
-    fmt::Display,
-};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use rusqlite::Connection;
 
-use crate::app::options::{Options, SUPPORTED_FILE_TYPES};
+use crate::{
+    app::options::{Options, SUPPORTED_FILE_TYPES},
+    Exporter, TXT,
+};
 use imessage_database::{
-    message::variants::get_types_table,
-    tables::{
-        attachment::Attachment,
-        chat::Chat,
-        chat_handle::ChatToHandle,
-        handle::Handle,
-        messages::Message,
-        table::{get_connection, Cacheable, Deduplicate, Diagnostic, Table, ME},
-    },
+    tables::table::{get_connection, Cacheable, Deduplicate, Diagnostic, Table, ME},
     util::dates::format,
+    Attachment, Chat, ChatToHandle, Handle, Message, Variant,
 };
 
 /// Stores the application state and handles application lifecycle
@@ -33,8 +26,6 @@ pub struct State<'a> {
     real_participants: HashMap<i32, i32>,
     /// App configuration options
     options: Options<'a>,
-    /// Types of messages we may encounter
-    message_types: HashMap<i32, Box<dyn Display + 'static>>,
     /// The connection we use to query the database
     db: Connection,
 }
@@ -67,7 +58,6 @@ impl<'a> State<'a> {
             real_participants: Handle::dedupe(&participants),
             participants,
             options,
-            message_types: get_types_table(),
             db: conn,
         })
     }
@@ -80,14 +70,11 @@ impl<'a> State<'a> {
             .unwrap();
         for message in messages {
             let msg = message.unwrap().unwrap();
-            // Skip messages that are replies, because we would have already rendered them
-            if msg.is_reply() {
-                continue;
-            }
             // Emit message info
             println!(
-                "Time: {:?} | Chat: {:?} {:?} | Sender: {} (deduped: {}) | {:?} |{}",
+                "Time: {:?} | Type: {:?} | Chat: {:?} {:?} | Sender: {} (deduped: {}) | {:?} |{}",
                 format(&msg.date()),
+                msg.case(),
                 msg.chat_id,
                 match msg.chat_id {
                     Some(id) => match self.chatroom_participants.get(&id) {
@@ -232,6 +219,7 @@ impl<'a> State<'a> {
             match self.options.export_type.unwrap() {
                 "txt" => {
                     println!("txt")
+                    // Create exporter, pass it data we care about, then kick it off
                 }
                 "csv" => {
                     println!("csv")
