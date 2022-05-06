@@ -3,7 +3,7 @@ pub mod tables;
 pub mod util;
 
 pub use {
-    message_types::{applepay::ApplePay, reactions::Reaction, variants::{Variant, get_variant}, unknown::Unknown},
+    message_types::variants::{ApplePay, Reaction, Variant},
     tables::{
         attachment::Attachment, chat::Chat, chat_handle::ChatToHandle, handle::Handle,
         messages::Message, table::Table,

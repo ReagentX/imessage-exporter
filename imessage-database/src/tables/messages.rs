@@ -2,22 +2,19 @@ use chrono::{naive::NaiveDateTime, offset::Local, DateTime, Datelike, TimeZone, 
 use rusqlite::{Connection, Result, Row, Statement};
 
 use crate::{
-    get_variant,
     tables::table::{Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE, MESSAGE_ATTACHMENT_JOIN},
     util::output::processing,
-    Variant,
+    ApplePay, Reaction, Variant,
 };
 
 #[derive(Debug)]
 pub enum MessageType {
-    /// A normal message with no special properties
-    Normal,
+    /// A normal message not associated with any others
+    Normal(Variant),
     /// A message that has replies
-    Thread,
+    Thread(Variant),
     /// A message that is a reply to another message
-    Reply,
-    /// Special messages,
-    Special(Box<dyn Variant>),
+    Reply(Variant),
 }
 
 #[derive(Debug)]
@@ -311,16 +308,43 @@ impl Message {
         out_v
     }
 
+    fn get_variant(&self) -> Variant {
+        match self.associated_message_type {
+            // Normal message
+            0 => Variant::Normal,
+
+            // Apple Pay
+            2 => Variant::ApplePay(ApplePay::Send(self.text.as_ref().unwrap().to_owned())),
+            3 => Variant::ApplePay(ApplePay::Recieve(self.text.as_ref().unwrap().to_owned())),
+
+            // Reactions
+            2000 => Variant::Reaction(Reaction::Loved(true)),
+            2001 => Variant::Reaction(Reaction::Liked(true)),
+            2002 => Variant::Reaction(Reaction::Disliked(true)),
+            2003 => Variant::Reaction(Reaction::Laughed(true)),
+            2004 => Variant::Reaction(Reaction::Emphasized(true)),
+            2005 => Variant::Reaction(Reaction::Questioned(true)),
+            3000 => Variant::Reaction(Reaction::Loved(false)),
+            3001 => Variant::Reaction(Reaction::Liked(false)),
+            3002 => Variant::Reaction(Reaction::Disliked(false)),
+            3003 => Variant::Reaction(Reaction::Laughed(false)),
+            3004 => Variant::Reaction(Reaction::Emphasized(false)),
+            3005 => Variant::Reaction(Reaction::Questioned(false)),
+
+            // Unknown
+            x => Variant::Unknown(x),
+        }
+    }
+
     pub fn case(&self) -> MessageType {
+        // TODO: Messages with reactions are not replies,
+        // even though they are categorized as replies if the reaction is to a message that is a reply
         if self.is_reply() {
-            MessageType::Reply
+            MessageType::Reply(self.get_variant())
         } else if self.has_replies() {
-            MessageType::Thread
+            MessageType::Thread(self.get_variant())
         } else {
-            match get_variant(self) {
-                Some(variant) => MessageType::Special(variant),
-                None => MessageType::Normal,
-            }
+            MessageType::Normal(self.get_variant())
         }
     }
 }
