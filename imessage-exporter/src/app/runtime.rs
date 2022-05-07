@@ -22,8 +22,10 @@ pub struct State<'a> {
     chatroom_participants: HashMap<i32, BTreeSet<i32>>,
     /// Map of participant ID to contact info
     participants: HashMap<i32, String>,
-    // Map of participant ID to an internal unique participant ID
+    /// Map of participant ID to an internal unique participant ID
     real_participants: HashMap<i32, i32>,
+    /// Messages that are reactions to other messages
+    reactions: HashMap<String, Vec<String>>,
     /// App configuration options
     options: Options<'a>,
     /// The connection we use to query the database
@@ -57,6 +59,7 @@ impl<'a> State<'a> {
             chatroom_participants,
             real_participants: Handle::dedupe(&participants),
             participants,
+            reactions: Message::cache(&conn),
             options,
             db: conn,
         })
@@ -72,61 +75,65 @@ impl<'a> State<'a> {
             let msg = message.unwrap().unwrap();
             // Emit message info
             println!(
-                "Time: {:?} | Type: {:?} | Chat: {:?} {:?} | Sender: {} (deduped: {}) | {:?} |{}",
-                format(&msg.date()),
-                msg.case(),
-                msg.chat_id,
-                match msg.chat_id {
-                    Some(id) => match self.chatroom_participants.get(&id) {
-                        Some(chatroom) => chatroom
-                            .iter()
-                            .map(|x| self.participants.get(x).unwrap())
-                            .collect::<Vec<&String>>(),
-                        None => {
-                            println!("Found error: message chat ID {} has no members!", id);
-                            Vec::new()
-                        }
-                    },
-                    None => {
-                        println!("Found error: message has no chat ID!");
-                        Vec::new()
-                    }
-                },
-                // Get real participant info
-                match msg.is_from_me {
-                    true => ME,
-                    false => self.participants.get(&msg.handle_id).unwrap(),
-                },
-                // Get unique participant info
-                match msg.is_from_me {
-                    true => &-1,
-                    false => self.real_participants.get(&msg.handle_id).unwrap(),
-                },
-                match msg.num_attachments {
-                    0 => msg.text.as_ref().unwrap_or(&String::new()).to_owned(),
-                    _ => {
-                        let attachments = Attachment::from_message(msg.rowid, &self.db);
-                        format!(
-                            "Attachments: {:?}",
-                            attachments
-                                .iter()
-                                .map(|a| a.filename.as_ref().unwrap_or(&String::new()).to_owned())
-                                .collect::<Vec<String>>()
-                        )
-                        // String::new()
-                    }
-                },
-                match msg.num_replies {
-                    0 => String::new(),
-                    _ => {
-                        let replies = msg.get_replies(&self.db);
-                        format!(
-                            "Replies: {:?}",
-                            replies.iter().map(|m| &m.guid).collect::<Vec<&String>>()
-                        )
-                    }
-                }
-            );
+                            "Time: {:?} | Type: {:?} | Chat: {:?} {:?} | Sender: {} (deduped: {}) | {:?} |{} |{}",
+                            format(&msg.date()),
+                            msg.case(),
+                            msg.chat_id,
+                            match msg.chat_id {
+                                Some(id) => match self.chatroom_participants.get(&id) {
+                                    Some(chatroom) => chatroom
+                                        .iter()
+                                        .map(|x| self.participants.get(x).unwrap())
+                                        .collect::<Vec<&String>>(),
+                                    None => {
+                                        println!("Found error: message chat ID {} has no members!", id);
+                                        Vec::new()
+                                    }
+                                },
+                                None => {
+                                    println!("Found error: message has no chat ID!");
+                                    Vec::new()
+                                }
+                            },
+                            // Get real participant info
+                            match msg.is_from_me {
+                                true => ME,
+                                false => self.participants.get(&msg.handle_id).unwrap(),
+                            },
+                            // Get unique participant info
+                            match msg.is_from_me {
+                                true => &-1,
+                                false => self.real_participants.get(&msg.handle_id).unwrap(),
+                            },
+                            match msg.num_attachments {
+                                0 => msg.text.as_ref().unwrap_or(&String::new()).to_owned(),
+                                _ => {
+                                    let attachments = Attachment::from_message(msg.rowid, &self.db);
+                                    format!(
+                                        "Attachments: {:?}",
+                                        attachments
+                                            .iter()
+                                            .map(|a| a.filename.as_ref().unwrap_or(&String::new()).to_owned())
+                                            .collect::<Vec<String>>()
+                                    )
+                                    // String::new()
+                                }
+                            },
+                            match msg.num_replies {
+                                0 => String::new(),
+                                _ => {
+                                    let replies = msg.get_replies(&self.db);
+                                    format!(
+                                        "Replies: {:?}",
+                                        replies.iter().map(|m| &m.guid).collect::<Vec<&String>>()
+                                    )
+                                }
+                            },
+                            match msg.get_reactions(&self.db, &self.reactions) {
+                                Some(rxs) => rxs.iter().map(|m| format!(" Reactions: {:?}", m.variant())).collect::<Vec<String>>().join(" "),
+                                None => String::new(),
+                            }
+                        );
         }
     }
 
@@ -152,10 +159,18 @@ impl<'a> State<'a> {
     }
 
     fn iter_handles(&self) {
-        // 62, 122
         for handle in &self.real_participants {
             let (handle_id, handle_name) = handle;
             println!("{}: {}", handle_id, handle_name,)
+        }
+    }
+
+    fn iter_reactions(&self) {
+        for reaction in &self.reactions {
+            let (message, reactions) = reaction;
+            if reactions.len() > 1 {
+                println!("{}: {:?}", message, reactions)
+            }
         }
     }
 
@@ -238,6 +253,7 @@ impl<'a> State<'a> {
             // Run some app methods
             // self.iter_threads();
             // self.iter_handles();
+            // self.iter_reactions();
             self.iter_messages();
             // self.iter_attachments();
         }
