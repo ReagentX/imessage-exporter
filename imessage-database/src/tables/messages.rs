@@ -1,8 +1,12 @@
+use std::{collections::HashMap, vec};
+
 use chrono::{naive::NaiveDateTime, offset::Local, DateTime, Datelike, TimeZone, Timelike, Utc};
 use rusqlite::{Connection, Result, Row, Statement};
 
 use crate::{
-    tables::table::{Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE, MESSAGE_ATTACHMENT_JOIN},
+    tables::table::{
+        Cacheable, Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE, MESSAGE_ATTACHMENT_JOIN,
+    },
     util::output::processing,
     ApplePay, Reaction, Variant,
 };
@@ -240,6 +244,55 @@ impl Diagnostic for Message {
     }
 }
 
+impl Cacheable for Message {
+    type K = String;
+    type V = Vec<String>;
+    /// Used for reactions that do not exist in a foreign key table
+    fn cache(db: &Connection) -> std::collections::HashMap<Self::K, Self::V> {
+        // Create cache for user IDs
+        let mut map: HashMap<Self::K, Self::V> = HashMap::new();
+
+        // Create query
+        let mut statement = db.prepare(&format!(
+            "SELECT 
+                 m.*, 
+                 c.chat_id, 
+                 (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                 (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
+             FROM 
+                 message as m 
+                 LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
+             WHERE m.associated_message_guid NOT NULL
+            "
+        ))
+        .unwrap();
+
+        // Execute query to build the Handles
+        let messages = statement
+            .query_map([], |row| Ok(Message::from_row(row)))
+            .unwrap();
+
+        // Iterate over the messages and update the map
+        for reaction in messages {
+            let reaction = reaction.unwrap().unwrap();
+            if let Variant::Reaction(_) = reaction.variant() {
+                match reaction.clean_associated_guid() {
+                    Some(reaction_target_guid) => match map.get_mut(&reaction_target_guid) {
+                        Some(reactions) => {
+                            reactions.push(reaction.guid);
+                        }
+                        None => {
+                            map.insert(reaction_target_guid, vec![reaction.guid]);
+                        }
+                    },
+                    None => (),
+                }
+            }
+        }
+        map
+    }
+}
+
 impl Message {
     fn get_local_time(&self, date_stamp: &i64) -> DateTime<Local> {
         let utc_stamp = NaiveDateTime::from_timestamp((date_stamp / 1000000000) + self.offset, 0);
@@ -271,6 +324,64 @@ impl Message {
 
     fn has_replies(&self) -> bool {
         self.num_replies > 0
+    }
+
+    fn clean_associated_guid(&self) -> Option<String> {
+        // TODO: Test that the GUID length is correct!
+        match &self.associated_message_guid {
+            Some(guid) => match guid.split('/').nth(1) {
+                Some(clean) => Some(clean.to_owned()),
+                None => {
+                    if guid.starts_with("bp:") {
+                        Some(guid[3..guid.len()].to_owned())
+                    } else {
+                        Some(guid.to_owned())
+                    }
+                }
+            },
+            None => None,
+        }
+    }
+
+    pub fn get_reactions<'a>(
+        &self,
+        db: &Connection,
+        reactions: &'a HashMap<String, Vec<String>>,
+    ) -> Option<Vec<Self>> {
+        if let Some(rxs) = reactions.get(&self.guid) {
+            let mut out_v = Vec::new();
+            let filter: Vec<String> = rxs.iter().map(|guid| format!("\"{}\"", guid)).collect();
+            // Create query
+            let mut statement = db.prepare(&format!(
+                "SELECT 
+                        m.*, 
+                        c.chat_id, 
+                        (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                        (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
+                    FROM 
+                        message as m 
+                        LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
+                    WHERE m.guid IN ({})
+                    ORDER BY 
+                        m.ROWID;
+                    ",
+                filter.join(",")
+            )).unwrap();
+
+            // Execute query to build the Handles
+            let messages = statement
+                .query_map([], |row| Ok(Message::from_row(row)))
+                .unwrap();
+
+            for message in messages {
+                let msg = message.unwrap().unwrap();
+                out_v.push(msg);
+            }
+
+            Some(out_v)
+        } else {
+            None
+        }
     }
 
     pub fn get_replies(&self, db: &Connection) -> Vec<Self> {
@@ -308,7 +419,7 @@ impl Message {
         out_v
     }
 
-    fn get_variant(&self) -> Variant {
+    pub fn variant(&self) -> Variant {
         match self.associated_message_type {
             // Normal message
             0 => Variant::Normal,
@@ -340,11 +451,11 @@ impl Message {
         // TODO: Messages with reactions are not replies,
         // even though they are categorized as replies if the reaction is to a message that is a reply
         if self.is_reply() {
-            MessageType::Reply(self.get_variant())
+            MessageType::Reply(self.variant())
         } else if self.has_replies() {
-            MessageType::Thread(self.get_variant())
+            MessageType::Thread(self.variant())
         } else {
-            MessageType::Normal(self.get_variant())
+            MessageType::Normal(self.variant())
         }
     }
 }
