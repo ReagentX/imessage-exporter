@@ -277,12 +277,12 @@ impl Cacheable for Message {
             let reaction = reaction.unwrap().unwrap();
             if let Variant::Reaction(_) = reaction.variant() {
                 match reaction.clean_associated_guid() {
-                    Some(reaction_target_guid) => match map.get_mut(&reaction_target_guid) {
+                    Some((_, reaction_target_guid)) => match map.get_mut(reaction_target_guid) {
                         Some(reactions) => {
                             reactions.push(reaction.guid);
                         }
                         None => {
-                            map.insert(reaction_target_guid, vec![reaction.guid]);
+                            map.insert(reaction_target_guid.to_string(), vec![reaction.guid]);
                         }
                     },
                     None => (),
@@ -294,6 +294,13 @@ impl Cacheable for Message {
 }
 
 impl Message {
+    pub fn text(&self) -> &str {
+        match &self.text {
+            Some(text) => text.as_str(),
+            None => "",
+        }
+    }
+
     fn get_local_time(&self, date_stamp: &i64) -> DateTime<Local> {
         let utc_stamp = NaiveDateTime::from_timestamp((date_stamp / 1000000000) + self.offset, 0);
         let local_time = Local.from_utc_datetime(&utc_stamp);
@@ -314,7 +321,7 @@ impl Message {
         self.get_local_time(&self.date_read)
     }
 
-    fn is_reply(&self) -> bool {
+    pub fn is_reply(&self) -> bool {
         self.thread_originator_guid.is_some()
     }
 
@@ -326,20 +333,28 @@ impl Message {
         self.num_replies > 0
     }
 
-    fn clean_associated_guid(&self) -> Option<String> {
+    fn clean_associated_guid(&self) -> Option<(i32, &str)> {
         // TODO: Test that the GUID length is correct!
-        match &self.associated_message_guid {
-            Some(guid) => match guid.split('/').nth(1) {
-                Some(clean) => Some(clean.to_owned()),
-                None => {
-                    if guid.starts_with("bp:") {
-                        Some(guid[3..guid.len()].to_owned())
-                    } else {
-                        Some(guid.to_owned())
-                    }
-                }
-            },
-            None => None,
+        if let Some(guid) = &self.associated_message_guid {
+            if guid.starts_with("p:") {
+                let mut split = guid.split('/');
+                let index_str = split.next();
+                let message_id = split.next();
+                let index = str::parse::<i32>(&index_str.unwrap().replace("p:", "")).unwrap_or(0);
+                return Some((index, message_id.unwrap()));
+            } else if guid.starts_with("bp:") {
+                return Some((0, &guid[3..guid.len()]));
+            } else {
+                return Some((0, guid.as_str()));
+            }
+        }
+        None
+    }
+
+    fn reaction_index(&self) -> i32 {
+        match self.clean_associated_guid() {
+            Some((x, _)) => x,
+            None => 0,
         }
     }
 
@@ -347,9 +362,9 @@ impl Message {
         &self,
         db: &Connection,
         reactions: &'a HashMap<String, Vec<String>>,
-    ) -> Option<Vec<Self>> {
+    ) -> Vec<Self> {
+        let mut out_v = Vec::new();
         if let Some(rxs) = reactions.get(&self.guid) {
-            let mut out_v = Vec::new();
             let filter: Vec<String> = rxs.iter().map(|guid| format!("\"{}\"", guid)).collect();
             // Create query
             let mut statement = db.prepare(&format!(
@@ -377,11 +392,8 @@ impl Message {
                 let msg = message.unwrap().unwrap();
                 out_v.push(msg);
             }
-
-            Some(out_v)
-        } else {
-            None
         }
+        out_v
     }
 
     pub fn get_replies(&self, db: &Connection) -> Vec<Self> {
@@ -421,6 +433,7 @@ impl Message {
 
     pub fn variant(&self) -> Variant {
         match self.associated_message_type {
+            // TODO: reaction index
             // Normal message
             0 => Variant::Normal,
 
@@ -429,18 +442,18 @@ impl Message {
             3 => Variant::ApplePay(ApplePay::Recieve(self.text.as_ref().unwrap().to_owned())),
 
             // Reactions
-            2000 => Variant::Reaction(Reaction::Loved(true)),
-            2001 => Variant::Reaction(Reaction::Liked(true)),
-            2002 => Variant::Reaction(Reaction::Disliked(true)),
-            2003 => Variant::Reaction(Reaction::Laughed(true)),
-            2004 => Variant::Reaction(Reaction::Emphasized(true)),
-            2005 => Variant::Reaction(Reaction::Questioned(true)),
-            3000 => Variant::Reaction(Reaction::Loved(false)),
-            3001 => Variant::Reaction(Reaction::Liked(false)),
-            3002 => Variant::Reaction(Reaction::Disliked(false)),
-            3003 => Variant::Reaction(Reaction::Laughed(false)),
-            3004 => Variant::Reaction(Reaction::Emphasized(false)),
-            3005 => Variant::Reaction(Reaction::Questioned(false)),
+            2000 => Variant::Reaction(Reaction::Loved(self.reaction_index(), true)),
+            2001 => Variant::Reaction(Reaction::Liked(self.reaction_index(), true)),
+            2002 => Variant::Reaction(Reaction::Disliked(self.reaction_index(), true)),
+            2003 => Variant::Reaction(Reaction::Laughed(self.reaction_index(), true)),
+            2004 => Variant::Reaction(Reaction::Emphasized(self.reaction_index(), true)),
+            2005 => Variant::Reaction(Reaction::Questioned(self.reaction_index(), true)),
+            3000 => Variant::Reaction(Reaction::Loved(self.reaction_index(), false)),
+            3001 => Variant::Reaction(Reaction::Liked(self.reaction_index(), false)),
+            3002 => Variant::Reaction(Reaction::Disliked(self.reaction_index(), false)),
+            3003 => Variant::Reaction(Reaction::Laughed(self.reaction_index(), false)),
+            3004 => Variant::Reaction(Reaction::Emphasized(self.reaction_index(), false)),
+            3005 => Variant::Reaction(Reaction::Questioned(self.reaction_index(), false)),
 
             // Unknown
             x => Variant::Unknown(x),
