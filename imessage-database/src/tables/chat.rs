@@ -79,7 +79,8 @@ impl Table for Chat {
 }
 
 impl Cacheable for Chat {
-    type T = Chat;
+    type K = i32;
+    type V = Chat;
     /// Generate a hashmap containing each chatroom's ID pointing to the chatroom's metadata
     /// These chatroom ID's contain duplicates and must be deduped later once we have all of
     /// the participants parsed out. On its own this data is not useful.
@@ -95,8 +96,8 @@ impl Cacheable for Chat {
     /// let conn = get_connection(&db_path);
     /// let chatrooms = Chat::cache(&conn);
     /// ```
-    fn cache(db: &Connection) -> HashMap<i32, Self::T> {
-        let mut map: HashMap<i32, Self::T> = HashMap::new();
+    fn cache(db: &Connection) -> HashMap<Self::K, Self::V> {
+        let mut map = HashMap::new();
 
         let mut statement = Chat::get(db);
 

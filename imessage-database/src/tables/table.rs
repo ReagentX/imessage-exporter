@@ -14,8 +14,9 @@ pub trait Table {
 
 /// Defines behavior for table data that can be cached in memory
 pub trait Cacheable {
-    type T;
-    fn cache(db: &Connection) -> HashMap<i32, Self::T>;
+    type K;
+    type V;
+    fn cache(db: &Connection) -> HashMap<Self::K, Self::V>;
 }
 
 /// Defines behavior for deduplicating data in a table

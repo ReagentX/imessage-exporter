@@ -23,7 +23,8 @@ impl Table for ChatToHandle {
 }
 
 impl Cacheable for ChatToHandle {
-    type T = BTreeSet<i32>;
+    type K = i32;
+    type V = BTreeSet<i32>;
     /// Generate a hashmap containing each chatroom's ID pointing to a HashSet of participant handle IDs
     ///
     /// # Example:
@@ -37,7 +38,7 @@ impl Cacheable for ChatToHandle {
     /// let conn = get_connection(&db_path);
     /// let chatrooms = ChatToHandle::cache(&conn);
     /// ```
-    fn cache(db: &Connection) -> HashMap<i32, BTreeSet<i32>> {
+    fn cache(db: &Connection) -> HashMap<Self::K, Self::V> {
         let mut cache: HashMap<i32, BTreeSet<i32>> = HashMap::new();
 
         let mut rows = ChatToHandle::get(db);
@@ -63,5 +64,4 @@ impl Cacheable for ChatToHandle {
     }
 
     // TODO: Implement Diagnostic, determine how many chats do not exist in the join table
-    
 }
