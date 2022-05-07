@@ -1,4 +1,6 @@
 /// Reactions to iMessages
+/// `bp:` GUID prefix for bubble message reactions (links, apps, etc)
+/// `p:0/` GUID prefix for normal messages (text, attachment)
 #[derive(Debug)]
 pub enum Reaction {
     Loved(bool),
