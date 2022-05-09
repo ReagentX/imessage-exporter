@@ -11,6 +11,10 @@ use crate::{
     ApplePay, Reaction, Variant,
 };
 
+const ATTACHMENT_CHAR: char = '\u{FFFC}';
+const APP_CHAR: char = '\u{FFFD}';
+const REPLACEMENT_CHARS: [char; 2] = [ATTACHMENT_CHAR, APP_CHAR];
+
 #[derive(Debug)]
 pub enum MessageType {
     /// A normal message not associated with any others
@@ -19,6 +23,16 @@ pub enum MessageType {
     Thread(Variant),
     /// A message that is a reply to another message
     Reply(Variant),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum BubbleType<'a> {
+    /// A normal text message
+    Text(&'a str),
+    /// An attachment
+    Attachment,
+    /// An app integration
+    App,
 }
 
 #[derive(Debug)]
@@ -192,6 +206,7 @@ impl Table for Message {
             chat_id: row.get(78)?,
             num_attachments: row.get(79)?,
             num_replies: row.get(80)?,
+            // TODO: Calculate once, not for each object
             offset: Utc.ymd(2001, 1, 1).and_hms(0, 0, 0).timestamp(),
         })
     }
@@ -294,10 +309,48 @@ impl Cacheable for Message {
 }
 
 impl Message {
-    pub fn text(&self) -> &str {
+    /// Get a vector of string slices of the message's components
+    ///
+    /// If the message has attachments, there will be one `U+FFFC` character
+    /// for each attachment and one `\u{FFFD}` for app messages that we need
+    /// to format
+    ///
+    /// https://www.fileformat.info/info/unicode/char/fffc/index.htm
+    /// https://www.fileformat.info/info/unicode/char/fffd/index.htm
+    ///
+    pub fn body(&self) -> Vec<BubbleType> {
         match &self.text {
-            Some(text) => text.as_str(),
-            None => "",
+            // Attachment: "\u{FFFC}"
+            // Replacement: "\u{FFFD}"
+            Some(text) => {
+                let mut out_v = vec![];
+                let mut start: usize = 0;
+                let mut end: usize = 0;
+                for (idx, char) in text.char_indices() {
+                    if REPLACEMENT_CHARS.contains(&char) {
+                        if start < end {
+                            out_v.push(BubbleType::Text(text[start..idx].trim()));
+                        }
+                        start = idx + 1;
+                        end = idx;
+                        match char {
+                            ATTACHMENT_CHAR => out_v.push(BubbleType::Attachment),
+                            APP_CHAR => out_v.push(BubbleType::App),
+                            _ => {}
+                        };
+                    } else {
+                        if start > end {
+                            start = idx;
+                        }
+                        end = idx;
+                    }
+                }
+                if start < end && start < text.len() {
+                    out_v.push(BubbleType::Text(text[start..].trim()));
+                }
+                out_v
+            }
+            None => vec![],
         }
     }
 
@@ -331,6 +384,18 @@ impl Message {
 
     fn has_replies(&self) -> bool {
         self.num_replies > 0
+    }
+
+    /// Get the index of the part of a message a reply is pointing to
+    pub fn get_reply_index(&self) -> i32 {
+        // str::parse::<i32>()
+        if let Some(parts) = &self.thread_originator_part {
+            return match parts.split(':').next() {
+                Some(part) => str::parse::<i32>(part).unwrap(),
+                None => 0,
+            }
+        }
+        0
     }
 
     fn clean_associated_guid(&self) -> Option<(i32, &str)> {
@@ -470,5 +535,165 @@ impl Message {
         } else {
             MessageType::Normal(self.variant())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::tables::messages::{BubbleType, Message};
+
+    fn blank() -> Message {
+        Message {
+            rowid: i32::default(),
+            guid: String::default(),
+            text: None,
+            replace: i32::default(),
+            service_center: None,
+            handle_id: i32::default(),
+            subject: None,
+            country: None,
+            attributedBody: None,
+            version: i32::default(),
+            r#type: i32::default(),
+            service: String::default(),
+            account: None,
+            account_guid: None,
+            error: i32::default(),
+            date: i64::default(),
+            date_read: i64::default(),
+            date_delivered: i64::default(),
+            is_delivered: false,
+            is_finished: false,
+            is_emote: false,
+            is_from_me: false,
+            is_empty: false,
+            is_delayed: false,
+            is_auto_reply: false,
+            is_prepared: false,
+            is_read: false,
+            is_system_message: false,
+            is_sent: false,
+            has_dd_results: i32::default(),
+            is_service_message: false,
+            is_forward: false,
+            was_downgraded: i32::default(),
+            is_archive: false,
+            cache_has_attachments: i32::default(),
+            cache_roomnames: None,
+            was_data_detected: i32::default(),
+            was_deduplicated: i32::default(),
+            is_audio_message: false,
+            is_played: false,
+            date_played: i64::default(),
+            item_type: i32::default(),
+            other_handle: i32::default(),
+            group_title: None,
+            group_action_type: i32::default(),
+            share_status: i32::default(),
+            share_direction: i32::default(),
+            is_expirable: false,
+            expire_state: i32::default(),
+            message_action_type: i32::default(),
+            message_source: i32::default(),
+            associated_message_guid: None,
+            balloon_bundle_id: None,
+            payload_data: None,
+            associated_message_type: i32::default(),
+            expressive_send_style_id: None,
+            associated_message_range_location: i32::default(),
+            associated_message_range_length: i32::default(),
+            time_expressive_send_played: i64::default(),
+            message_summary_info: None,
+            ck_sync_state: i32::default(),
+            ck_record_id: None,
+            ck_record_change_tag: None,
+            destination_caller_id: None,
+            sr_ck_sync_state: i32::default(),
+            sr_ck_record_id: None,
+            sr_ck_record_change_tag: None,
+            is_corrupt: false,
+            reply_to_guid: None,
+            sort_id: i32::default(),
+            is_spam: false,
+            has_unseen_mention: i32::default(),
+            thread_originator_guid: None,
+            thread_originator_part: None,
+            syndication_ranges: None,
+            was_delivered_quietly: i32::default(),
+            did_notify_recipient: i32::default(),
+            synced_syndication_ranges: None,
+            chat_id: None,
+            num_attachments: 0,
+            num_replies: 0,
+            offset: 0,
+        }
+    }
+
+    #[test]
+    fn can_gen_message() {
+        let m = blank();
+    }
+
+    #[test]
+    fn can_get_message_body_text_only() {
+        let mut m = blank();
+        m.text = Some("Hello world".to_string());
+        assert_eq!(m.body(), vec![BubbleType::Text("Hello world")]);
+    }
+
+    #[test]
+    fn can_get_message_body_attachment_text() {
+        let mut m = blank();
+        m.text = Some("\u{FFFC}Hello world".to_string());
+        assert_eq!(
+            m.body(),
+            vec![BubbleType::Attachment, BubbleType::Text("Hello world")]
+        );
+    }
+
+    #[test]
+    fn can_get_message_body_app_text() {
+        let mut m = blank();
+        m.text = Some("\u{FFFD}Hello world".to_string());
+        assert_eq!(
+            m.body(),
+            vec![BubbleType::App, BubbleType::Text("Hello world")]
+        );
+    }
+
+    #[test]
+    fn can_get_message_body_app_attachment_text_mixed_start_text() {
+        let mut m = blank();
+        m.text = Some("One\u{FFFD}\u{FFFC}Two\u{FFFC}Three\u{FFFC}four".to_string());
+        assert_eq!(
+            m.body(),
+            vec![
+                BubbleType::Text("One"),
+                BubbleType::App,
+                BubbleType::Attachment,
+                BubbleType::Text("Two"),
+                BubbleType::Attachment,
+                BubbleType::Text("Three"),
+                BubbleType::Attachment,
+                BubbleType::Text("four")
+            ]
+        );
+    }
+
+    #[test]
+    fn can_get_message_body_app_attachment_text_mixed_start_app() {
+        let mut m = blank();
+        m.text = Some("\u{FFFD}\u{FFFC}Two\u{FFFC}Three\u{FFFC}".to_string());
+        assert_eq!(
+            m.body(),
+            vec![
+                BubbleType::App,
+                BubbleType::Attachment,
+                BubbleType::Text("Two"),
+                BubbleType::Attachment,
+                BubbleType::Text("Three"),
+                BubbleType::Attachment
+            ]
+        );
     }
 }
