@@ -34,7 +34,8 @@ impl Table for Handle {
 }
 
 impl Cacheable for Handle {
-    type T = String;
+    type K = i32;
+    type V = String;
     /// Generate a HashMap for looking up contacts by their IDs, collapsing
     /// duplicate contacts to the same ID String regardless of service
     ///
@@ -49,7 +50,7 @@ impl Cacheable for Handle {
     /// let conn = get_connection(&db_path);
     /// let chatrooms = Handle::cache(&conn);
     /// ```
-    fn cache(db: &Connection) -> HashMap<i32, String> {
+    fn cache(db: &Connection) -> HashMap<Self::K, Self::V> {
         // Create cache for user IDs
         let mut map = HashMap::new();
         // Handle ID 0 is self in group chats

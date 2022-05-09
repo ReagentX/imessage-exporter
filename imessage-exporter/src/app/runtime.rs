@@ -1,22 +1,15 @@
-use std::{
-    collections::{BTreeSet, HashMap, HashSet},
-    fmt::Display,
-};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use rusqlite::Connection;
 
-use crate::app::options::{Options, SUPPORTED_FILE_TYPES};
+use crate::{
+    app::options::{Options, SUPPORTED_FILE_TYPES},
+    Exporter, TXT,
+};
 use imessage_database::{
-    message::variants::get_types_table,
-    tables::{
-        attachment::Attachment,
-        chat::Chat,
-        chat_handle::ChatToHandle,
-        handle::Handle,
-        messages::Message,
-        table::{get_connection, Cacheable, Deduplicate, Diagnostic, Table, ME},
-    },
+    tables::table::{get_connection, Cacheable, Deduplicate, Diagnostic, Table, ME},
     util::dates::format,
+    Attachment, Chat, ChatToHandle, Handle, Message, Variant,
 };
 
 /// Stores the application state and handles application lifecycle
@@ -29,12 +22,12 @@ pub struct State<'a> {
     chatroom_participants: HashMap<i32, BTreeSet<i32>>,
     /// Map of participant ID to contact info
     participants: HashMap<i32, String>,
-    // Map of participant ID to an internal unique participant ID
+    /// Map of participant ID to an internal unique participant ID
     real_participants: HashMap<i32, i32>,
+    /// Messages that are reactions to other messages
+    reactions: HashMap<String, Vec<String>>,
     /// App configuration options
     options: Options<'a>,
-    /// Types of messages we may encounter
-    message_types: HashMap<i32, Box<dyn Display + 'static>>,
     /// The connection we use to query the database
     db: Connection,
 }
@@ -57,17 +50,22 @@ impl<'a> State<'a> {
     pub fn new(options: Options) -> Option<State> {
         let conn = get_connection(&options.db_path);
         // TODO: Implement Try for these cache calls `?`
+        println!("Caching chats...");
         let chatrooms = Chat::cache(&conn);
+        println!("Caching chatrooms...");
         let chatroom_participants = ChatToHandle::cache(&conn);
+        println!("Caching participants...");
         let participants = Handle::cache(&conn);
+        println!("Caching reactions...");
+        let reactions = Message::cache(&conn);
         Some(State {
             chatrooms,
             real_chatrooms: Chat::dedupe(&chatroom_participants),
             chatroom_participants,
             real_participants: Handle::dedupe(&participants),
             participants,
+            reactions,
             options,
-            message_types: get_types_table(),
             db: conn,
         })
     }
@@ -80,14 +78,15 @@ impl<'a> State<'a> {
             .unwrap();
         for message in messages {
             let msg = message.unwrap().unwrap();
-            // Skip messages that are replies, because we would have already rendered them
-            if msg.is_reply() {
+            if msg.is_reply() || matches!(msg.variant(), Variant::Reaction(_)) {
                 continue;
             }
             // Emit message info
+            // TODO: Message attachments come before the message text
             println!(
-                "Time: {:?} | Chat: {:?} {:?} | Sender: {} (deduped: {}) | {:?} |{}",
+                "Time: {:?} | Type: {:?} | Chat: {:?} {:?} | Sender: {} (deduped: {}) | {:?} |{} |{} |{}",
                 format(&msg.date()),
+                msg.case(),
                 msg.chat_id,
                 match msg.chat_id {
                     Some(id) => match self.chatroom_participants.get(&id) {
@@ -115,28 +114,29 @@ impl<'a> State<'a> {
                     true => &-1,
                     false => self.real_participants.get(&msg.handle_id).unwrap(),
                 },
-                match msg.num_attachments {
-                    0 => msg.text.as_ref().unwrap_or(&String::new()).to_owned(),
-                    _ => {
-                        let attachments = Attachment::from_message(msg.rowid, &self.db);
-                        format!(
-                            "Attachments: {:?}",
-                            attachments
-                                .iter()
-                                .map(|a| a.filename.as_ref().unwrap_or(&String::new()).to_owned())
-                                .collect::<Vec<String>>()
-                        )
-                        // String::new()
-                    }
-                },
+                msg.body(),
                 match msg.num_replies {
                     0 => String::new(),
                     _ => {
                         let replies = msg.get_replies(&self.db);
                         format!(
-                            "Replies: {:?}",
-                            replies.iter().map(|m| &m.guid).collect::<Vec<&String>>()
+                            " Replies: {:?}",
+                            replies.iter().map(|m| format!("{}: {}", &m.guid, m.get_reply_index())).collect::<Vec<String>>()
                         )
+                    }
+                },
+                {
+                    let reactions = msg.get_reactions(&self.db, &self.reactions);
+                    match reactions.len() {
+                        0 => String::new(),
+                        _ => format!(" Reactions: {:?}", reactions.iter().map(|m| format!("{:?}", m.variant())).collect::<Vec<String>>())
+                    }
+                },
+                {
+                    let attachments = Attachment::from_message(&self.db, msg.rowid);
+                    match attachments.len() {
+                        0 => String::new(),
+                        _ => format!(" Attachments: {:?}", attachments.iter().map(|a| format!("{:?}", a.filename)).collect::<Vec<String>>())
                     }
                 }
             );
@@ -165,10 +165,18 @@ impl<'a> State<'a> {
     }
 
     fn iter_handles(&self) {
-        // 62, 122
         for handle in &self.real_participants {
             let (handle_id, handle_name) = handle;
             println!("{}: {}", handle_id, handle_name,)
+        }
+    }
+
+    fn iter_reactions(&self) {
+        for reaction in &self.reactions {
+            let (message, reactions) = reaction;
+            if reactions.len() > 1 {
+                println!("{}: {:?}", message, reactions)
+            }
         }
     }
 
@@ -225,13 +233,14 @@ impl<'a> State<'a> {
     /// ```
     pub fn start(&self) {
         if !self.options.valid {
-            //
+            panic!("Invalid options!")
         } else if self.options.diagnostic {
             self.run_diagnostic();
         } else if self.options.export_type.is_some() {
             match self.options.export_type.unwrap() {
                 "txt" => {
                     println!("txt")
+                    // Create exporter, pass it data we care about, then kick it off
                 }
                 "csv" => {
                     println!("csv")
@@ -250,8 +259,10 @@ impl<'a> State<'a> {
             // Run some app methods
             // self.iter_threads();
             // self.iter_handles();
+            // self.iter_reactions();
             self.iter_messages();
             // self.iter_attachments();
+            println!("Done!");
         }
     }
 }

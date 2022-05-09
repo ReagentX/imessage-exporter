@@ -1,10 +1,39 @@
+use std::{collections::HashMap, vec};
+
 use chrono::{naive::NaiveDateTime, offset::Local, DateTime, Datelike, TimeZone, Timelike, Utc};
 use rusqlite::{Connection, Result, Row, Statement};
 
 use crate::{
-    tables::table::{Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE, MESSAGE_ATTACHMENT_JOIN},
+    tables::table::{
+        Cacheable, Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE, MESSAGE_ATTACHMENT_JOIN,
+    },
     util::output::processing,
+    ApplePay, Reaction, Variant,
 };
+
+const ATTACHMENT_CHAR: char = '\u{FFFC}';
+const APP_CHAR: char = '\u{FFFD}';
+const REPLACEMENT_CHARS: [char; 2] = [ATTACHMENT_CHAR, APP_CHAR];
+
+#[derive(Debug)]
+pub enum MessageType {
+    /// A normal message not associated with any others
+    Normal(Variant),
+    /// A message that has replies
+    Thread(Variant),
+    /// A message that is a reply to another message
+    Reply(Variant),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum BubbleType<'a> {
+    /// A normal text message
+    Text(&'a str),
+    /// An attachment
+    Attachment,
+    /// An app integration
+    App,
+}
 
 #[derive(Debug)]
 #[allow(non_snake_case)]
@@ -177,6 +206,7 @@ impl Table for Message {
             chat_id: row.get(78)?,
             num_attachments: row.get(79)?,
             num_replies: row.get(80)?,
+            // TODO: Calculate once, not for each object
             offset: Utc.ymd(2001, 1, 1).and_hms(0, 0, 0).timestamp(),
         })
     }
@@ -229,7 +259,101 @@ impl Diagnostic for Message {
     }
 }
 
+impl Cacheable for Message {
+    type K = String;
+    type V = Vec<String>;
+    /// Used for reactions that do not exist in a foreign key table
+    fn cache(db: &Connection) -> std::collections::HashMap<Self::K, Self::V> {
+        // Create cache for user IDs
+        let mut map: HashMap<Self::K, Self::V> = HashMap::new();
+
+        // Create query
+        let mut statement = db.prepare(&format!(
+            "SELECT 
+                 m.*, 
+                 c.chat_id, 
+                 (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                 (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
+             FROM 
+                 message as m 
+                 LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
+             WHERE m.associated_message_guid NOT NULL
+            "
+        ))
+        .unwrap();
+
+        // Execute query to build the Handles
+        let messages = statement
+            .query_map([], |row| Ok(Message::from_row(row)))
+            .unwrap();
+
+        // Iterate over the messages and update the map
+        for reaction in messages {
+            let reaction = reaction.unwrap().unwrap();
+            if let Variant::Reaction(_) = reaction.variant() {
+                match reaction.clean_associated_guid() {
+                    Some((_, reaction_target_guid)) => match map.get_mut(reaction_target_guid) {
+                        Some(reactions) => {
+                            reactions.push(reaction.guid);
+                        }
+                        None => {
+                            map.insert(reaction_target_guid.to_string(), vec![reaction.guid]);
+                        }
+                    },
+                    None => (),
+                }
+            }
+        }
+        map
+    }
+}
+
 impl Message {
+    /// Get a vector of string slices of the message's components
+    ///
+    /// If the message has attachments, there will be one `U+FFFC` character
+    /// for each attachment and one `\u{FFFD}` for app messages that we need
+    /// to format
+    ///
+    /// https://www.fileformat.info/info/unicode/char/fffc/index.htm
+    /// https://www.fileformat.info/info/unicode/char/fffd/index.htm
+    ///
+    pub fn body(&self) -> Vec<BubbleType> {
+        match &self.text {
+            // Attachment: "\u{FFFC}"
+            // Replacement: "\u{FFFD}"
+            Some(text) => {
+                let mut out_v = vec![];
+                let mut start: usize = 0;
+                let mut end: usize = 0;
+                for (idx, char) in text.char_indices() {
+                    if REPLACEMENT_CHARS.contains(&char) {
+                        if start < end {
+                            out_v.push(BubbleType::Text(text[start..idx].trim()));
+                        }
+                        start = idx + 1;
+                        end = idx;
+                        match char {
+                            ATTACHMENT_CHAR => out_v.push(BubbleType::Attachment),
+                            APP_CHAR => out_v.push(BubbleType::App),
+                            _ => {}
+                        };
+                    } else {
+                        if start > end {
+                            start = idx;
+                        }
+                        end = idx;
+                    }
+                }
+                if start < end && start < text.len() {
+                    out_v.push(BubbleType::Text(text[start..].trim()));
+                }
+                out_v
+            }
+            None => vec![],
+        }
+    }
+
     fn get_local_time(&self, date_stamp: &i64) -> DateTime<Local> {
         let utc_stamp = NaiveDateTime::from_timestamp((date_stamp / 1000000000) + self.offset, 0);
         let local_time = Local.from_utc_datetime(&utc_stamp);
@@ -254,35 +378,322 @@ impl Message {
         self.thread_originator_guid.is_some()
     }
 
+    fn has_attachments(&self) -> bool {
+        self.num_attachments > 0
+    }
+
+    fn has_replies(&self) -> bool {
+        self.num_replies > 0
+    }
+
+    /// Get the index of the part of a message a reply is pointing to
+    pub fn get_reply_index(&self) -> i32 {
+        // str::parse::<i32>()
+        if let Some(parts) = &self.thread_originator_part {
+            return match parts.split(':').next() {
+                Some(part) => str::parse::<i32>(part).unwrap(),
+                None => 0,
+            }
+        }
+        0
+    }
+
+    fn clean_associated_guid(&self) -> Option<(i32, &str)> {
+        // TODO: Test that the GUID length is correct!
+        if let Some(guid) = &self.associated_message_guid {
+            if guid.starts_with("p:") {
+                let mut split = guid.split('/');
+                let index_str = split.next();
+                let message_id = split.next();
+                let index = str::parse::<i32>(&index_str.unwrap().replace("p:", "")).unwrap_or(0);
+                return Some((index, message_id.unwrap()));
+            } else if guid.starts_with("bp:") {
+                return Some((0, &guid[3..guid.len()]));
+            } else {
+                return Some((0, guid.as_str()));
+            }
+        }
+        None
+    }
+
+    fn reaction_index(&self) -> i32 {
+        match self.clean_associated_guid() {
+            Some((x, _)) => x,
+            None => 0,
+        }
+    }
+
+    pub fn get_reactions<'a>(
+        &self,
+        db: &Connection,
+        reactions: &'a HashMap<String, Vec<String>>,
+    ) -> Vec<Self> {
+        let mut out_v = Vec::new();
+        if let Some(rxs) = reactions.get(&self.guid) {
+            let filter: Vec<String> = rxs.iter().map(|guid| format!("\"{}\"", guid)).collect();
+            // Create query
+            let mut statement = db.prepare(&format!(
+                "SELECT 
+                        m.*, 
+                        c.chat_id, 
+                        (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                        (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
+                    FROM 
+                        message as m 
+                        LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
+                    WHERE m.guid IN ({})
+                    ORDER BY 
+                        m.ROWID;
+                    ",
+                filter.join(",")
+            )).unwrap();
+
+            // Execute query to build the Handles
+            let messages = statement
+                .query_map([], |row| Ok(Message::from_row(row)))
+                .unwrap();
+
+            for message in messages {
+                let msg = message.unwrap().unwrap();
+                out_v.push(msg);
+            }
+        }
+        out_v
+    }
+
     pub fn get_replies(&self, db: &Connection) -> Vec<Self> {
         let mut out_v = vec![];
-        // TODO: attachment count + get_attachment_from_message, same as how replies work now
-        // TODO: same as above, but for reactions
-        let mut statement = db.prepare(&format!(
-            "SELECT 
-                 m.*, 
-                 c.chat_id, 
-                 (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
-                 (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
-             FROM 
-                 message as m 
-                 LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id 
-             WHERE m.thread_originator_guid = \"{}\"
-             ORDER BY 
-                 m.ROWID;
-            ", self.guid
-        ))
-        .unwrap();
 
-        let iter = statement
-            .query_map([], |row| Ok(Message::from_row(row)))
+        // No need to hit the DB if we know we don't have replies
+        if self.has_replies() {
+            // TODO: reactions count + get_reactions_from_message, same as how replies work now
+            let mut statement = db.prepare(&format!(
+                "SELECT 
+                     m.*, 
+                     c.chat_id, 
+                     (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                     (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
+                 FROM 
+                     message as m 
+                     LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id 
+                 WHERE m.thread_originator_guid = \"{}\"
+                 ORDER BY 
+                     m.ROWID;
+                ", self.guid
+            ))
             .unwrap();
 
-        for message in iter {
-            let m = message.unwrap().unwrap();
-            out_v.push(m)
+            let iter = statement
+                .query_map([], |row| Ok(Message::from_row(row)))
+                .unwrap();
+
+            for message in iter {
+                let m = message.unwrap().unwrap();
+                out_v.push(m)
+            }
         }
 
         out_v
+    }
+
+    pub fn variant(&self) -> Variant {
+        match self.associated_message_type {
+            // TODO: reaction index
+            // Normal message
+            0 => Variant::Normal,
+
+            // Apple Pay
+            2 => Variant::ApplePay(ApplePay::Send(self.text.as_ref().unwrap().to_owned())),
+            3 => Variant::ApplePay(ApplePay::Recieve(self.text.as_ref().unwrap().to_owned())),
+
+            // Reactions
+            2000 => Variant::Reaction(Reaction::Loved(self.reaction_index(), true)),
+            2001 => Variant::Reaction(Reaction::Liked(self.reaction_index(), true)),
+            2002 => Variant::Reaction(Reaction::Disliked(self.reaction_index(), true)),
+            2003 => Variant::Reaction(Reaction::Laughed(self.reaction_index(), true)),
+            2004 => Variant::Reaction(Reaction::Emphasized(self.reaction_index(), true)),
+            2005 => Variant::Reaction(Reaction::Questioned(self.reaction_index(), true)),
+            3000 => Variant::Reaction(Reaction::Loved(self.reaction_index(), false)),
+            3001 => Variant::Reaction(Reaction::Liked(self.reaction_index(), false)),
+            3002 => Variant::Reaction(Reaction::Disliked(self.reaction_index(), false)),
+            3003 => Variant::Reaction(Reaction::Laughed(self.reaction_index(), false)),
+            3004 => Variant::Reaction(Reaction::Emphasized(self.reaction_index(), false)),
+            3005 => Variant::Reaction(Reaction::Questioned(self.reaction_index(), false)),
+
+            // Unknown
+            x => Variant::Unknown(x),
+        }
+    }
+
+    pub fn case(&self) -> MessageType {
+        // TODO: Messages with reactions are not replies,
+        // even though they are categorized as replies if the reaction is to a message that is a reply
+        if self.is_reply() {
+            MessageType::Reply(self.variant())
+        } else if self.has_replies() {
+            MessageType::Thread(self.variant())
+        } else {
+            MessageType::Normal(self.variant())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::tables::messages::{BubbleType, Message};
+
+    fn blank() -> Message {
+        Message {
+            rowid: i32::default(),
+            guid: String::default(),
+            text: None,
+            replace: i32::default(),
+            service_center: None,
+            handle_id: i32::default(),
+            subject: None,
+            country: None,
+            attributedBody: None,
+            version: i32::default(),
+            r#type: i32::default(),
+            service: String::default(),
+            account: None,
+            account_guid: None,
+            error: i32::default(),
+            date: i64::default(),
+            date_read: i64::default(),
+            date_delivered: i64::default(),
+            is_delivered: false,
+            is_finished: false,
+            is_emote: false,
+            is_from_me: false,
+            is_empty: false,
+            is_delayed: false,
+            is_auto_reply: false,
+            is_prepared: false,
+            is_read: false,
+            is_system_message: false,
+            is_sent: false,
+            has_dd_results: i32::default(),
+            is_service_message: false,
+            is_forward: false,
+            was_downgraded: i32::default(),
+            is_archive: false,
+            cache_has_attachments: i32::default(),
+            cache_roomnames: None,
+            was_data_detected: i32::default(),
+            was_deduplicated: i32::default(),
+            is_audio_message: false,
+            is_played: false,
+            date_played: i64::default(),
+            item_type: i32::default(),
+            other_handle: i32::default(),
+            group_title: None,
+            group_action_type: i32::default(),
+            share_status: i32::default(),
+            share_direction: i32::default(),
+            is_expirable: false,
+            expire_state: i32::default(),
+            message_action_type: i32::default(),
+            message_source: i32::default(),
+            associated_message_guid: None,
+            balloon_bundle_id: None,
+            payload_data: None,
+            associated_message_type: i32::default(),
+            expressive_send_style_id: None,
+            associated_message_range_location: i32::default(),
+            associated_message_range_length: i32::default(),
+            time_expressive_send_played: i64::default(),
+            message_summary_info: None,
+            ck_sync_state: i32::default(),
+            ck_record_id: None,
+            ck_record_change_tag: None,
+            destination_caller_id: None,
+            sr_ck_sync_state: i32::default(),
+            sr_ck_record_id: None,
+            sr_ck_record_change_tag: None,
+            is_corrupt: false,
+            reply_to_guid: None,
+            sort_id: i32::default(),
+            is_spam: false,
+            has_unseen_mention: i32::default(),
+            thread_originator_guid: None,
+            thread_originator_part: None,
+            syndication_ranges: None,
+            was_delivered_quietly: i32::default(),
+            did_notify_recipient: i32::default(),
+            synced_syndication_ranges: None,
+            chat_id: None,
+            num_attachments: 0,
+            num_replies: 0,
+            offset: 0,
+        }
+    }
+
+    #[test]
+    fn can_gen_message() {
+        let m = blank();
+    }
+
+    #[test]
+    fn can_get_message_body_text_only() {
+        let mut m = blank();
+        m.text = Some("Hello world".to_string());
+        assert_eq!(m.body(), vec![BubbleType::Text("Hello world")]);
+    }
+
+    #[test]
+    fn can_get_message_body_attachment_text() {
+        let mut m = blank();
+        m.text = Some("\u{FFFC}Hello world".to_string());
+        assert_eq!(
+            m.body(),
+            vec![BubbleType::Attachment, BubbleType::Text("Hello world")]
+        );
+    }
+
+    #[test]
+    fn can_get_message_body_app_text() {
+        let mut m = blank();
+        m.text = Some("\u{FFFD}Hello world".to_string());
+        assert_eq!(
+            m.body(),
+            vec![BubbleType::App, BubbleType::Text("Hello world")]
+        );
+    }
+
+    #[test]
+    fn can_get_message_body_app_attachment_text_mixed_start_text() {
+        let mut m = blank();
+        m.text = Some("One\u{FFFD}\u{FFFC}Two\u{FFFC}Three\u{FFFC}four".to_string());
+        assert_eq!(
+            m.body(),
+            vec![
+                BubbleType::Text("One"),
+                BubbleType::App,
+                BubbleType::Attachment,
+                BubbleType::Text("Two"),
+                BubbleType::Attachment,
+                BubbleType::Text("Three"),
+                BubbleType::Attachment,
+                BubbleType::Text("four")
+            ]
+        );
+    }
+
+    #[test]
+    fn can_get_message_body_app_attachment_text_mixed_start_app() {
+        let mut m = blank();
+        m.text = Some("\u{FFFD}\u{FFFC}Two\u{FFFC}Three\u{FFFC}".to_string());
+        assert_eq!(
+            m.body(),
+            vec![
+                BubbleType::App,
+                BubbleType::Attachment,
+                BubbleType::Text("Two"),
+                BubbleType::Attachment,
+                BubbleType::Text("Three"),
+                BubbleType::Attachment
+            ]
+        );
     }
 }

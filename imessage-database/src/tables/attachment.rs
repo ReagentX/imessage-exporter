@@ -141,7 +141,7 @@ impl Diagnostic for Attachment {
 }
 
 impl Attachment {
-    pub fn from_message(id: i32, db: &Connection) -> Vec<Attachment> {
+    pub fn from_message(db: &Connection, id: i32) -> Vec<Attachment> {
         let mut out_l = vec![];
         let mut statement = db
             .prepare(&format!(
