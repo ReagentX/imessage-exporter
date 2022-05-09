@@ -84,7 +84,7 @@ impl<'a> State<'a> {
             // Emit message info
             // TODO: Message attachments come before the message text
             println!(
-                "Time: {:?} | Type: {:?} | Chat: {:?} {:?} | Sender: {} (deduped: {}) | {:?} |{} |{}",
+                "Time: {:?} | Type: {:?} | Chat: {:?} {:?} | Sender: {} (deduped: {}) | {:?} |{} |{} |{}",
                 format(&msg.date()),
                 msg.case(),
                 msg.chat_id,
@@ -114,35 +114,29 @@ impl<'a> State<'a> {
                     true => &-1,
                     false => self.real_participants.get(&msg.handle_id).unwrap(),
                 },
-                match msg.num_attachments {
-                    0 => msg.text().to_owned(),
-                    _ => {
-                        let attachments = Attachment::from_message(msg.rowid, &self.db);
-                        format!(
-                            "Attachments: {:?}, Text: {:?}",
-                            attachments
-                                .iter()
-                                .map(|a| a.filename.as_ref().unwrap_or(&String::new()).to_owned())
-                                .collect::<Vec<String>>(),
-                            msg.text()
-                        )
-                    }
-                },
+                msg.body(),
                 match msg.num_replies {
                     0 => String::new(),
                     _ => {
                         let replies = msg.get_replies(&self.db);
                         format!(
                             " Replies: {:?}",
-                            replies.iter().map(|m| &m.guid).collect::<Vec<&String>>()
+                            replies.iter().map(|m| format!("{}: {}", &m.guid, m.get_reply_index())).collect::<Vec<String>>()
                         )
                     }
                 },
                 {
-                    let s = msg.get_reactions(&self.db, &self.reactions);
-                    match s.len() {
+                    let reactions = msg.get_reactions(&self.db, &self.reactions);
+                    match reactions.len() {
                         0 => String::new(),
-                        _ => format!(" Reactions: {:?}", s.iter().map(|m| format!("{:?}", m.variant())).collect::<Vec<String>>())
+                        _ => format!(" Reactions: {:?}", reactions.iter().map(|m| format!("{:?}", m.variant())).collect::<Vec<String>>())
+                    }
+                },
+                {
+                    let attachments = Attachment::from_message(&self.db, msg.rowid);
+                    match attachments.len() {
+                        0 => String::new(),
+                        _ => format!(" Attachments: {:?}", attachments.iter().map(|a| format!("{:?}", a.filename)).collect::<Vec<String>>())
                     }
                 }
             );
