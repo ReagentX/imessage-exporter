@@ -3,10 +3,18 @@ use rusqlite::Connection;
 
 use crate::app::runtime::Config;
 
-pub trait Exporter {
-    fn new(config: &Config) -> Self;
-    fn format_message(msg: &Message) -> String;
-    fn format_attachment(msg: &Message) -> String;
-    fn iter_messages(db: &Connection);
-    fn write_to_file(file: &str, text: &str);
+pub trait Exporter<'a> {
+    /// Create a new exporter with references to the cached data
+    fn new(config: &'a Config) -> Self;
+    /// Begin iterating over the messages table
+    fn iter_messages(&self);
+    /// Get the file handle to write to, otherwise create a new one
+    fn get_or_create_file(&self) -> String;
+}
+
+pub(super) trait Writer {
+    fn format_message(&self, msg: &Message) -> Option<String>;
+    fn format_attachment(&self, msg: &Message) -> String;
+    fn format_reaction(&self, msg: &Message) -> String;
+    fn write_to_file(&self, file: &str, text: &str);
 }

@@ -7,29 +7,28 @@ use crate::{
     Exporter, TXT,
 };
 use imessage_database::{
-    tables::table::{get_connection, Cacheable, Deduplicate, Diagnostic, Table, ME},
-    util::dates::format,
-    Attachment, Chat, ChatToHandle, Handle, Message, Variant,
+    tables::table::{get_connection, Cacheable, Deduplicate, Diagnostic, Table},
+    Attachment, Chat, ChatToHandle, Handle, Message,
 };
 
 /// Stores the application state and handles application lifecycle
 pub struct Config<'a> {
     /// Map of chatroom ID to chatroom information
-    chatrooms: HashMap<i32, Chat>,
+    pub chatrooms: HashMap<i32, Chat>,
     // Map of chatroom ID to an internal unique chatroom ID
-    real_chatrooms: HashMap<i32, i32>,
+    pub real_chatrooms: HashMap<i32, i32>,
     /// Map of chatroom ID to chatroom participants
-    chatroom_participants: HashMap<i32, BTreeSet<i32>>,
+    pub chatroom_participants: HashMap<i32, BTreeSet<i32>>,
     /// Map of participant ID to contact info
-    participants: HashMap<i32, String>,
+    pub participants: HashMap<i32, String>,
     /// Map of participant ID to an internal unique participant ID
-    real_participants: HashMap<i32, i32>,
+    pub real_participants: HashMap<i32, i32>,
     /// Messages that are reactions to other messages
-    reactions: HashMap<String, Vec<String>>,
+    pub reactions: HashMap<String, Vec<String>>,
     /// App configuration options
-    options: Options<'a>,
+    pub options: Options<'a>,
     /// The connection we use to query the database
-    db: Connection,
+    pub db: Connection,
 }
 
 impl<'a> Config<'a> {
@@ -68,78 +67,6 @@ impl<'a> Config<'a> {
             options,
             db: conn,
         })
-    }
-
-    fn iter_messages(&self) {
-        let unk: Vec<&String> = vec![];
-        let mut statement = Message::get(&self.db);
-        let messages = statement
-            .query_map([], |row| Ok(Message::from_row(row)))
-            .unwrap();
-        for message in messages {
-            let msg = message.unwrap().unwrap();
-            if msg.is_reply() || matches!(msg.variant(), Variant::Reaction(_)) {
-                continue;
-            }
-            // Emit message info
-            println!(
-                "Time: {:?} | Type: {:?} | Chat: {:?} {:?} | Sender: {} (deduped: {}) | {:?} |{} |{} |{}",
-                format(&msg.date()),
-                msg.case(),
-                msg.chat_id,
-                match msg.chat_id {
-                    Some(id) => match self.chatroom_participants.get(&id) {
-                        Some(chatroom) => chatroom
-                            .iter()
-                            .map(|x| self.participants.get(x).unwrap())
-                            .collect::<Vec<&String>>(),
-                        None => {
-                            println!("Found error: message chat ID {} has no members!", id);
-                            Vec::new()
-                        }
-                    },
-                    None => {
-                        println!("Found error: message has no chat ID!");
-                        Vec::new()
-                    }
-                },
-                // Get real participant info
-                match msg.is_from_me {
-                    true => ME,
-                    false => self.participants.get(&msg.handle_id).unwrap(),
-                },
-                // Get unique participant info
-                match msg.is_from_me {
-                    true => &-1,
-                    false => self.real_participants.get(&msg.handle_id).unwrap(),
-                },
-                msg.body(),
-                match msg.num_replies {
-                    0 => String::new(),
-                    _ => {
-                        let replies = msg.get_replies(&self.db);
-                        format!(
-                            " Replies: {:?}",
-                            replies.iter().map(|m| format!("{}: {}", &m.guid, m.get_reply_index())).collect::<Vec<String>>()
-                        )
-                    }
-                },
-                {
-                    let reactions = msg.get_reactions(&self.db, &self.reactions);
-                    match reactions.len() {
-                        0 => String::new(),
-                        _ => format!(" Reactions: {:?}", reactions.iter().map(|m| format!("{:?}", m.variant())).collect::<Vec<String>>())
-                    }
-                },
-                {
-                    let attachments = Attachment::from_message(&self.db, msg.rowid);
-                    match attachments.len() {
-                        0 => String::new(),
-                        _ => format!(" Attachments: {:?}", attachments.iter().map(|a| format!("{:?}", a.filename)).collect::<Vec<String>>())
-                    }
-                }
-            );
-        }
     }
 
     fn iter_threads(&self) {
@@ -238,20 +165,20 @@ impl<'a> Config<'a> {
         } else if self.options.export_type.is_some() {
             match self.options.export_type.unwrap() {
                 "txt" => {
-                    println!("txt")
                     // Create exporter, pass it data we care about, then kick it off
+                    TXT::new(self).iter_messages();
                 }
                 "csv" => {
-                    println!("csv")
+                    todo!()
                 }
                 "pdf" => {
-                    println!("pdf")
+                    todo!()
                 }
                 "html" => {
-                    println!("html")
+                    todo!()
                 }
                 other => {
-                    println!("{other} is not a valid export type! Must be one of <{SUPPORTED_FILE_TYPES}>")
+                    panic!("{other} is not a valid export type! Must be one of <{SUPPORTED_FILE_TYPES}>")
                 }
             }
         } else {
@@ -259,7 +186,6 @@ impl<'a> Config<'a> {
             // self.iter_threads();
             // self.iter_handles();
             // self.iter_reactions();
-            self.iter_messages();
             // self.iter_attachments();
             println!("Done!");
         }
