@@ -50,4 +50,5 @@ pub const CHAT_HANDLE_JOIN: &str = "chat_handle_join";
 
 // Default information
 pub const ME: &str = "Me";
+pub const UNKNOWN: &str = "Unknown";
 pub const DEFAULT_PATH: &str = "Library/Messages/chat.db";
