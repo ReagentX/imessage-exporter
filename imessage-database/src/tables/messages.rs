@@ -466,7 +466,6 @@ impl Message {
 
         // No need to hit the DB if we know we don't have replies
         if self.has_replies() {
-            // TODO: reactions count + get_reactions_from_message, same as how replies work now
             let mut statement = db.prepare(&format!(
                 "SELECT 
                      m.*, 
@@ -498,7 +497,6 @@ impl Message {
 
     pub fn variant(&self) -> Variant {
         match self.associated_message_type {
-            // TODO: reaction index
             // Normal message
             0 => Variant::Normal,
 
