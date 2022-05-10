@@ -290,7 +290,7 @@ impl Cacheable for Message {
         // Iterate over the messages and update the map
         for reaction in messages {
             let reaction = reaction.unwrap().unwrap();
-            if let Variant::Reaction(_) = reaction.variant() {
+            if let Variant::Reaction(..) = reaction.variant() {
                 match reaction.clean_associated_guid() {
                     Some((_, reaction_target_guid)) => match map.get_mut(reaction_target_guid) {
                         Some(reactions) => {
@@ -387,25 +387,24 @@ impl Message {
     }
 
     /// Get the index of the part of a message a reply is pointing to
-    pub fn get_reply_index(&self) -> i32 {
-        // str::parse::<i32>()
+    pub fn get_reply_index(&self) -> usize {
         if let Some(parts) = &self.thread_originator_part {
             return match parts.split(':').next() {
-                Some(part) => str::parse::<i32>(part).unwrap(),
+                Some(part) => str::parse::<usize>(part).unwrap(),
                 None => 0,
-            }
+            };
         }
         0
     }
 
-    fn clean_associated_guid(&self) -> Option<(i32, &str)> {
+    fn clean_associated_guid(&self) -> Option<(usize, &str)> {
         // TODO: Test that the GUID length is correct!
         if let Some(guid) = &self.associated_message_guid {
             if guid.starts_with("p:") {
                 let mut split = guid.split('/');
                 let index_str = split.next();
                 let message_id = split.next();
-                let index = str::parse::<i32>(&index_str.unwrap().replace("p:", "")).unwrap_or(0);
+                let index = str::parse::<usize>(&index_str.unwrap().replace("p:", "")).unwrap_or(0);
                 return Some((index, message_id.unwrap()));
             } else if guid.starts_with("bp:") {
                 return Some((0, &guid[3..guid.len()]));
@@ -416,19 +415,21 @@ impl Message {
         None
     }
 
-    fn reaction_index(&self) -> i32 {
+    /// Parse the index of a reaction from it's associated GUID field
+    fn reaction_index(&self) -> usize {
         match self.clean_associated_guid() {
             Some((x, _)) => x,
             None => 0,
         }
     }
 
+    /// Build a HashMap of message component index to messages that react to that component
     pub fn get_reactions<'a>(
         &self,
         db: &Connection,
         reactions: &'a HashMap<String, Vec<String>>,
-    ) -> Vec<Self> {
-        let mut out_v = Vec::new();
+    ) -> HashMap<usize, Vec<Self>> {
+        let mut out_h: HashMap<usize, Vec<Self>> = HashMap::new();
         if let Some(rxs) = reactions.get(&self.guid) {
             let filter: Vec<String> = rxs.iter().map(|guid| format!("\"{}\"", guid)).collect();
             // Create query
@@ -455,14 +456,23 @@ impl Message {
 
             for message in messages {
                 let msg = message.unwrap().unwrap();
-                out_v.push(msg);
+                if let Variant::Reaction(idx, _, _) = msg.variant() {
+                    // out_h.insert(idx, message);
+                    match out_h.get_mut(&idx) {
+                        Some(body_part) => body_part.push(msg),
+                        None => {
+                            out_h.insert(idx, vec![msg]);
+                        }
+                    }
+                }
             }
         }
-        out_v
+        out_h
     }
 
-    pub fn get_replies(&self, db: &Connection) -> Vec<Self> {
-        let mut out_v = vec![];
+    /// Build a HashMap of message component index to messages that reply to that component
+    pub fn get_replies(&self, db: &Connection) -> HashMap<usize, Vec<Self>> {
+        let mut out_h: HashMap<usize, Vec<Self>> = HashMap::new();
 
         // No need to hit the DB if we know we don't have replies
         if self.has_replies() {
@@ -488,11 +498,17 @@ impl Message {
 
             for message in iter {
                 let m = message.unwrap().unwrap();
-                out_v.push(m)
+                let idx = m.get_reply_index();
+                match out_h.get_mut(&idx) {
+                    Some(body_part) => body_part.push(m),
+                    None => {
+                        out_h.insert(idx, vec![m]);
+                    }
+                }
             }
         }
 
-        out_v
+        out_h
     }
 
     pub fn variant(&self) -> Variant {
@@ -505,18 +521,18 @@ impl Message {
             3 => Variant::ApplePay(ApplePay::Recieve(self.text.as_ref().unwrap().to_owned())),
 
             // Reactions
-            2000 => Variant::Reaction(Reaction::Loved(self.reaction_index(), true)),
-            2001 => Variant::Reaction(Reaction::Liked(self.reaction_index(), true)),
-            2002 => Variant::Reaction(Reaction::Disliked(self.reaction_index(), true)),
-            2003 => Variant::Reaction(Reaction::Laughed(self.reaction_index(), true)),
-            2004 => Variant::Reaction(Reaction::Emphasized(self.reaction_index(), true)),
-            2005 => Variant::Reaction(Reaction::Questioned(self.reaction_index(), true)),
-            3000 => Variant::Reaction(Reaction::Loved(self.reaction_index(), false)),
-            3001 => Variant::Reaction(Reaction::Liked(self.reaction_index(), false)),
-            3002 => Variant::Reaction(Reaction::Disliked(self.reaction_index(), false)),
-            3003 => Variant::Reaction(Reaction::Laughed(self.reaction_index(), false)),
-            3004 => Variant::Reaction(Reaction::Emphasized(self.reaction_index(), false)),
-            3005 => Variant::Reaction(Reaction::Questioned(self.reaction_index(), false)),
+            2000 => Variant::Reaction(self.reaction_index(), true, Reaction::Loved),
+            2001 => Variant::Reaction(self.reaction_index(), true, Reaction::Liked),
+            2002 => Variant::Reaction(self.reaction_index(), true, Reaction::Disliked),
+            2003 => Variant::Reaction(self.reaction_index(), true, Reaction::Laughed),
+            2004 => Variant::Reaction(self.reaction_index(), true, Reaction::Emphasized),
+            2005 => Variant::Reaction(self.reaction_index(), true, Reaction::Questioned),
+            3000 => Variant::Reaction(self.reaction_index(), false, Reaction::Loved),
+            3001 => Variant::Reaction(self.reaction_index(), false, Reaction::Liked),
+            3002 => Variant::Reaction(self.reaction_index(), false, Reaction::Disliked),
+            3003 => Variant::Reaction(self.reaction_index(), false, Reaction::Laughed),
+            3004 => Variant::Reaction(self.reaction_index(), false, Reaction::Emphasized),
+            3005 => Variant::Reaction(self.reaction_index(), false, Reaction::Questioned),
 
             // Unknown
             x => Variant::Unknown(x),
@@ -524,8 +540,6 @@ impl Message {
     }
 
     pub fn case(&self) -> MessageType {
-        // TODO: Messages with reactions are not replies,
-        // even though they are categorized as replies if the reaction is to a message that is a reply
         if self.is_reply() {
             MessageType::Reply(self.variant())
         } else if self.has_replies() {
