@@ -13,7 +13,7 @@ use imessage_database::{
 };
 
 /// Stores the application state and handles application lifecycle
-pub struct State<'a> {
+pub struct Config<'a> {
     /// Map of chatroom ID to chatroom information
     chatrooms: HashMap<i32, Chat>,
     // Map of chatroom ID to an internal unique chatroom ID
@@ -32,7 +32,7 @@ pub struct State<'a> {
     db: Connection,
 }
 
-impl<'a> State<'a> {
+impl<'a> Config<'a> {
     /// Create a new instance of the application
     ///
     /// # Example:
@@ -47,7 +47,7 @@ impl<'a> State<'a> {
     /// let options = Options::from_args(&args);
     /// let app = State::new(options).unwrap();
     /// ```
-    pub fn new(options: Options) -> Option<State> {
+    pub fn new(options: Options) -> Option<Config> {
         let conn = get_connection(&options.db_path);
         // TODO: Implement Try for these cache calls `?`
         println!("Caching chats...");
@@ -58,7 +58,7 @@ impl<'a> State<'a> {
         let participants = Handle::cache(&conn);
         println!("Caching reactions...");
         let reactions = Message::cache(&conn);
-        Some(State {
+        Some(Config {
             chatrooms,
             real_chatrooms: Chat::dedupe(&chatroom_participants),
             chatroom_participants,
@@ -82,7 +82,6 @@ impl<'a> State<'a> {
                 continue;
             }
             // Emit message info
-            // TODO: Message attachments come before the message text
             println!(
                 "Time: {:?} | Type: {:?} | Chat: {:?} {:?} | Sender: {} (deduped: {}) | {:?} |{} |{} |{}",
                 format(&msg.date()),

@@ -5,7 +5,7 @@ pub use exporter::{exporter::Exporter, txt::TXT};
 
 use app::{
     options::{from_command_line, Options},
-    runtime::State,
+    runtime::Config,
 };
 
 fn main() {
@@ -15,6 +15,6 @@ fn main() {
     let options = Options::from_args(&args);
 
     // Create app state and start
-    let app = State::new(options).unwrap();
+    let app = Config::new(options).unwrap();
     app.start()
 }
