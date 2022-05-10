@@ -7,7 +7,7 @@ use crate::{
     Exporter, TXT,
 };
 use imessage_database::{
-    tables::table::{get_connection, Cacheable, Deduplicate, Diagnostic, Table},
+    tables::table::{get_connection, Cacheable, Deduplicate, Diagnostic, Table, ME, UNKNOWN},
     Attachment, Chat, ChatToHandle, Handle, Message,
 };
 
@@ -67,6 +67,17 @@ impl<'a> Config<'a> {
             options,
             db: conn,
         })
+    }
+
+    pub fn who(&self, handle_id: &i32, is_from_me: bool) -> &str {
+        if is_from_me {
+            ME
+        } else {
+            match self.participants.get(handle_id) {
+                Some(contact) => contact,
+                None => UNKNOWN,
+            }
+        }
     }
 
     fn iter_threads(&self) {
