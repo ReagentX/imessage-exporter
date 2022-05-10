@@ -9,12 +9,12 @@
 /// So, a Like on `p:2/` is a like on the second message
 #[derive(Debug)]
 pub enum Reaction {
-    Loved(i32, bool),
-    Liked(i32, bool),
-    Disliked(i32, bool),
-    Laughed(i32, bool),
-    Emphasized(i32, bool),
-    Questioned(i32, bool),
+    Loved,
+    Liked,
+    Disliked,
+    Laughed,
+    Emphasized,
+    Questioned,
 }
 
 /// Apple Pay Requests
@@ -28,7 +28,7 @@ pub enum ApplePay {
 #[derive(Debug)]
 pub enum Variant {
     ApplePay(ApplePay),
-    Reaction(Reaction),
+    Reaction(usize, bool, Reaction),
     Unknown(i32),
     Normal,
 }
