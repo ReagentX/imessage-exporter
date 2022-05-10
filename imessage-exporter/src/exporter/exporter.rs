@@ -16,5 +16,6 @@ pub(super) trait Writer {
     fn format_message(&self, msg: &Message) -> Option<String>;
     fn format_attachment(&self, msg: &Message) -> String;
     fn format_reaction(&self, msg: &Message) -> String;
+    fn format_reply(&self, msg: &Message) -> String;
     fn write_to_file(&self, file: &str, text: &str);
 }
