@@ -6,8 +6,10 @@ use crate::{
 };
 
 use imessage_database::{
-    tables::table::ME,
-    util::dates::format,
+    tables::{
+        messages::{BubbleType, MessageType},
+    },
+    util::dates,
     Attachment, {Message, Table, Variant},
 };
 
@@ -38,7 +40,10 @@ impl<'a> Exporter<'a> for TXT<'a> {
                 Ok(message) => match message {
                     Ok(msg) => {
                         let message = self.format_message(&msg);
-                        println!("{message:?}");
+                        match message {
+                            Some(msg) => println!("{msg}"),
+                            None => {}
+                        }
                     }
                     // TODO: When does this occur?
                     Err(why) => panic!("Inner error: {}", why),
@@ -55,78 +60,160 @@ impl<'a> Exporter<'a> for TXT<'a> {
 }
 
 impl<'a> Writer for TXT<'a> {
-    fn format_message(&self, msg: &imessage_database::Message) -> Option<String> {
-        if msg.is_reply() || matches!(msg.variant(), Variant::Reaction(_)) {
+    fn format_message(&self, message: &Message) -> Option<String> {
+        // Message replies and reactions are rendered in context, so no need to render them separately
+        if message.is_reply() || matches!(message.variant(), Variant::Reaction(..)) {
             return None;
         }
 
-        Some(format!(
-            "Time: {:?} | Type: {:?} | Chat: {:?} {:?} | Sender: {} (deduped: {}) | {:?} |{} |{} |{}",
-            format(&msg.date()),
-            msg.case(),
-            msg.chat_id,
-            match msg.chat_id {
-                Some(id) => match self.config.chatroom_participants.get(&id) {
-                    Some(chatroom) => chatroom
-                        .iter()
-                        .map(|x| self.config.participants.get(x).unwrap())
-                        .collect::<Vec<&String>>(),
+        // Data we want to write to a file
+        let mut formatted_message = String::new();
+
+        // Add message date
+        formatted_message.push_str(&dates::format(&message.date()));
+        formatted_message.push('\n');
+
+        // Add message sender
+        formatted_message.push_str(self.config.who(&message.handle_id, message.is_from_me));
+        formatted_message.push('\n');
+
+        // Useful message metadata
+        let message_parts = message.body();
+        let attachments = Attachment::from_message(&self.config.db, message.rowid);
+        let replies = message.get_replies(&self.config.db);
+        let reactions = message.get_reactions(&self.config.db, &self.config.reactions);
+
+        // Iteration context variables
+        let mut attachment_index: usize = 0;
+        for (idx, message_part) in message_parts.iter().enumerate() {
+            match message_part {
+                BubbleType::Text(text) => {
+                    formatted_message.push_str(text);
+                }
+                BubbleType::Attachment => match attachments.get(attachment_index) {
+                    Some(attachment) => match &attachment.filename {
+                        Some(filename) => {
+                            formatted_message.push_str(filename);
+                            attachment_index += 1
+                        }
+                        // Filepath missing!
+                        None => {
+                            formatted_message.push_str("Filepath missing: ");
+                            formatted_message.push_str(&attachment.transfer_name);
+                        }
+                    },
+                    // Attachment does not exist!
                     None => {
-                        // TODO: Orphaned chats!
-                        println!("Found error: message chat ID {} has no members!", id);
-                        Vec::new()
+                        formatted_message.push_str("Attachment missing!");
                     }
                 },
-                None => {
-                    // TODO: Orphaned messages!
-                    println!("Found error: message has no chat ID!");
-                    Vec::new()
-                }
-            },
-            // Get real participant info
-            match msg.is_from_me {
-                true => ME,
-                false => self.config.participants.get(&msg.handle_id).unwrap(),
-            },
-            // Get unique participant info
-            match msg.is_from_me {
-                true => &-1,
-                false => self.config.real_participants.get(&msg.handle_id).unwrap(),
-            },
-            msg.body(),
-            match msg.num_replies {
-                0 => String::new(),
-                _ => {
-                    let replies = msg.get_replies(&self.config.db);
-                    format!(
-                        " Replies: {:?}",
-                        replies.iter().map(|m| format!("{}: {}", &m.guid, m.get_reply_index())).collect::<Vec<String>>()
-                    )
-                }
-            },
-            {
-                let reactions = msg.get_reactions(&self.config.db, &self.config.reactions);
-                match reactions.len() {
-                    0 => String::new(),
-                    _ => format!(" Reactions: {:?}", reactions.iter().map(|m| format!("{:?}", m.variant())).collect::<Vec<String>>())
-                }
-            },
-            {
-                let attachments = Attachment::from_message(&self.config.db, msg.rowid);
-                match attachments.len() {
-                    0 => String::new(),
-                    _ => format!(" Attachments: {:?}", attachments.iter().map(|a| format!("{:?}", a.filename)).collect::<Vec<String>>())
+                BubbleType::App => {
+                    formatted_message.push_str("Attachment missing!");
                 }
             }
-        ))
+            // Handle Reactions
+            if let Some(reactions) = reactions.get(&idx) {
+                formatted_message.push('\n');
+                reactions.iter().for_each(|reaction| {
+                    formatted_message.push_str(&self.format_reaction(reaction));
+                    formatted_message.push('\n');
+                });
+            }
+
+            // Handle Reploes
+            if let Some(replies) = replies.get(&idx) {
+                formatted_message.push('\n');
+                replies.iter().for_each(|reply| {
+                    formatted_message.push_str(&self.format_reply(reply));
+                    formatted_message.push('\n');
+                });
+            }
+            // Add newline for each next message part
+            formatted_message.push('\n');
+        }
+        formatted_message.push('\n');
+        Some(formatted_message)
+
+        // TODO: This is sample code, remove it!
+        // Some(format!(
+        //     "Time: {:?} | Type: {:?} | Chat: {:?} {:?} | Sender: {} (deduped: {}) | {:?} |{} |{} |{}",
+        //     dates::format(&message.date()),
+        //     message.case(),
+        //     message.chat_id,
+        //     match message.chat_id {
+        //         Some(id) => match self.config.chatroom_participants.get(&id) {
+        //             Some(chatroom) => chatroom
+        //                 .iter()
+        //                 .map(|x| self.config.participants.get(x).unwrap())
+        //                 .collect::<Vec<&String>>(),
+        //             None => {
+        //                 // TODO: Orphaned chats!
+        //                 println!("Found error: message chat ID {} has no members!", id);
+        //                 Vec::new()
+        //             }
+        //         },
+        //         None => {
+        //             // TODO: Orphaned messages!
+        //             println!("Found error: message has no chat ID!");
+        //             Vec::new()
+        //         }
+        //     },
+        //     // Get real participant info
+        //     match message.is_from_me {
+        //         true => ME,
+        //         false => self.config.participants.get(&message.handle_id).unwrap(),
+        //     },
+        //     // Get unique participant info
+        //     match message.is_from_me {
+        //         true => &-1,
+        //         false => self.config.real_participants.get(&message.handle_id).unwrap(),
+        //     },
+        //     message.body(),
+        //     match message.num_replies {
+        //         0 => String::new(),
+        //         _ => {
+        //             let replies = message.get_replies(&self.config.db);
+        //             format!(
+        //                 " Replies: {:?}",
+        //                 replies.iter().map(|m| format!("{}: {}", &m.guid, m.get_reply_index())).collect::<Vec<String>>()
+        //             )
+        //         }
+        //     },
+        //     {
+        //         let reactions = message.get_reactions(&self.config.db, &self.config.reactions);
+        //         match reactions.len() {
+        //             0 => String::new(),
+        //             _ => format!(" Reactions: {:?}", reactions.iter().map(|m| format!("{:?}", m.variant())).collect::<Vec<String>>())
+        //         }
+        //     },
+        //     {
+        //         let attachments = Attachment::from_message(&self.config.db, message.rowid);
+        //         match attachments.len() {
+        //             0 => String::new(),
+        //             _ => format!(" Attachments: {:?}", attachments.iter().map(|a| format!("{:?}", a.filename)).collect::<Vec<String>>())
+        //         }
+        //     }
+        // ))
     }
 
-    fn format_attachment(&self, msg: &imessage_database::Message) -> String {
+    fn format_attachment(&self, msg: &Message) -> String {
         todo!()
     }
 
-    fn format_reaction(&self, msg: &imessage_database::Message) -> String {
-        todo!()
+    fn format_reaction(&self, msg: &Message) -> String {
+        format!(
+            "    {}: {:?}",
+            self.config.who(&msg.handle_id, msg.is_from_me),
+            msg.variant()
+        )
+    }
+
+    fn format_reply(&self, msg: &Message) -> String {
+        format!(
+            "    {}: {:?}",
+            self.config.who(&msg.handle_id, msg.is_from_me),
+            msg.body()
+        )
     }
 
     fn write_to_file(&self, file: &str, text: &str) {
