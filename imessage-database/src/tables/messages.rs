@@ -457,7 +457,6 @@ impl Message {
             for message in messages {
                 let msg = message.unwrap().unwrap();
                 if let Variant::Reaction(idx, _, _) = msg.variant() {
-                    // out_h.insert(idx, message);
                     match out_h.get_mut(&idx) {
                         Some(body_part) => body_part.push(msg),
                         None => {
