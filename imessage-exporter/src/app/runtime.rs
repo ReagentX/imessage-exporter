@@ -14,15 +14,15 @@ use imessage_database::{
 /// Stores the application state and handles application lifecycle
 pub struct Config<'a> {
     /// Map of chatroom ID to chatroom information
-    pub chatrooms: HashMap<i32, Chat>,
+    chatrooms: HashMap<i32, Chat>,
     // Map of chatroom ID to an internal unique chatroom ID
-    pub real_chatrooms: HashMap<i32, i32>,
+    real_chatrooms: HashMap<i32, i32>,
     /// Map of chatroom ID to chatroom participants
-    pub chatroom_participants: HashMap<i32, BTreeSet<i32>>,
+    chatroom_participants: HashMap<i32, BTreeSet<i32>>,
     /// Map of participant ID to contact info
-    pub participants: HashMap<i32, String>,
+    participants: HashMap<i32, String>,
     /// Map of participant ID to an internal unique participant ID
-    pub real_participants: HashMap<i32, i32>,
+    real_participants: HashMap<i32, i32>,
     /// Messages that are reactions to other messages
     pub reactions: HashMap<String, Vec<String>>,
     /// App configuration options
