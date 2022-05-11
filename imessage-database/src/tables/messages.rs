@@ -374,6 +374,15 @@ impl Message {
         self.get_local_time(&self.date_read)
     }
 
+    pub fn time_until_read(&self) -> Option<String> {
+        // TODO: Does this work?
+        if self.date_delivered != 0 && self.date_read != 0 {
+            let duration = self.date_read() - self.date();
+            return Some(format!("{}", duration.num_minutes()));
+        }
+        None
+    }
+
     pub fn is_reply(&self) -> bool {
         self.thread_originator_guid.is_some()
     }
