@@ -1,7 +1,7 @@
 use std::{collections::HashMap, vec};
 
 use chrono::{naive::NaiveDateTime, offset::Local, DateTime, Datelike, TimeZone, Timelike, Utc};
-use rusqlite::{Connection, Result, Row, Statement};
+use rusqlite::{Connection, Error, Result, Row, Statement};
 
 use crate::{
     tables::table::{
@@ -289,7 +289,7 @@ impl Cacheable for Message {
 
         // Iterate over the messages and update the map
         for reaction in messages {
-            let reaction = reaction.unwrap().unwrap();
+            let reaction = Self::extract(reaction);
             if let Variant::Reaction(..) = reaction.variant() {
                 match reaction.clean_associated_guid() {
                     Some((_, reaction_target_guid)) => match map.get_mut(reaction_target_guid) {
@@ -554,6 +554,18 @@ impl Message {
             MessageType::Thread(self.variant())
         } else {
             MessageType::Normal(self.variant())
+        }
+    }
+
+    pub fn extract(message: Result<Result<Message, Error>, Error>) -> Message {
+        match message {
+            Ok(message) => match message {
+                Ok(msg) => msg,
+                // TODO: When does this occur?
+                Err(why) => panic!("Inner error: {}", why),
+            },
+            // TODO: When does this occur?
+            Err(why) => panic!("Outer error: {}", why),
         }
     }
 }

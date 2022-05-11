@@ -35,20 +35,11 @@ impl<'a> Exporter<'a> for TXT<'a> {
             .unwrap();
 
         for message in messages {
-            match message {
-                Ok(message) => match message {
-                    Ok(msg) => {
-                        // Message replies and reactions are rendered in context, so no need to render them separately
-                        if !msg.is_reply() && !matches!(msg.variant(), Variant::Reaction(..)) {
-                            let message = self.format_message(&msg, 0);
-                            println!("{message}");
-                        }
-                    }
-                    // TODO: When does this occur?
-                    Err(why) => panic!("Inner error: {}", why),
-                },
-                // TODO: When does this occur?
-                Err(why) => panic!("Outer error: {}", why),
+            let msg = Message::extract(message);
+            // Message replies and reactions are rendered in context, so no need to render them separately
+            if !msg.is_reply() && !matches!(msg.variant(), Variant::Reaction(..)) {
+                let message = self.format_message(&msg, 0);
+                println!("{message}");
             }
         }
     }
