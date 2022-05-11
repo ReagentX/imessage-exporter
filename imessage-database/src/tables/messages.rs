@@ -311,13 +311,9 @@ impl Cacheable for Message {
 impl Message {
     /// Get a vector of string slices of the message's components
     ///
-    /// If the message has attachments, there will be one `U+FFFC` character
-    /// for each attachment and one `\u{FFFD}` for app messages that we need
-    /// to format
-    ///
-    /// https://www.fileformat.info/info/unicode/char/fffc/index.htm
-    /// https://www.fileformat.info/info/unicode/char/fffd/index.htm
-    ///
+    /// If the message has attachments, there will be one [`U+FFFC`]((https://www.fileformat.info/info/unicode/char/fffc/index.htm)) character
+    /// for each attachment and one [`U+FFFD`](https://www.fileformat.info/info/unicode/char/fffd/index.htm) for app messages that we need
+    /// to format.
     pub fn body(&self) -> Vec<BubbleType> {
         match &self.text {
             // Attachment: "\u{FFFC}"

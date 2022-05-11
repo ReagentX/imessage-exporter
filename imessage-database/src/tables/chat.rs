@@ -16,7 +16,7 @@ pub struct Chat {
     pub room_name: Option<String>,
     pub account_login: String,
     pub is_archived: bool,
-    pub last_addressed_handle: String,
+    pub last_addressed_handle: Option<String>,
     pub display_name: Option<String>,
     pub group_id: Option<String>,
     pub is_filtered: bool,
@@ -81,12 +81,13 @@ impl Table for Chat {
 impl Cacheable for Chat {
     type K = i32;
     type V = Chat;
-    /// Generate a hashmap containing each chatroom's ID pointing to the chatroom's metadata
+    /// Generate a hashmap containing each chatroom's ID pointing to the chatroom's metadata.
+    ///
     /// These chatroom ID's contain duplicates and must be deduped later once we have all of
     /// the participants parsed out. On its own this data is not useful.
     ///
     /// # Example:
-    ///
+    /// 
     /// ```
     /// use imessage_database::util::dirs::default_db_path;
     /// use imessage_database::tables::table::{Cacheable, get_connection};
