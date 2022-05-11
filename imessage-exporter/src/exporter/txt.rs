@@ -1,3 +1,4 @@
+use core::panic;
 use std::collections::HashMap;
 
 use crate::{
@@ -6,9 +7,7 @@ use crate::{
 };
 
 use imessage_database::{
-    tables::{
-        messages::{BubbleType, MessageType},
-    },
+    tables::messages::BubbleType,
     util::dates,
     Attachment, {Message, Table, Variant},
 };
@@ -39,10 +38,10 @@ impl<'a> Exporter<'a> for TXT<'a> {
             match message {
                 Ok(message) => match message {
                     Ok(msg) => {
-                        let message = self.format_message(&msg);
-                        match message {
-                            Some(msg) => println!("{msg}"),
-                            None => {}
+                        // Message replies and reactions are rendered in context, so no need to render them separately
+                        if !msg.is_reply() && !matches!(msg.variant(), Variant::Reaction(..)) {
+                            let message = self.format_message(&msg, 0);
+                            println!("{message}");
                         }
                     }
                     // TODO: When does this occur?
@@ -59,23 +58,21 @@ impl<'a> Exporter<'a> for TXT<'a> {
     }
 }
 
-impl<'a> Writer for TXT<'a> {
-    fn format_message(&self, message: &Message) -> Option<String> {
-        // Message replies and reactions are rendered in context, so no need to render them separately
-        if message.is_reply() || matches!(message.variant(), Variant::Reaction(..)) {
-            return None;
-        }
-
+impl<'a> Writer<'a> for TXT<'a> {
+    fn format_message(&self, message: &Message, indent: usize) -> String {
+        let indent = String::from_iter((0..indent).map(|_| " "));
         // Data we want to write to a file
         let mut formatted_message = String::new();
 
         // Add message date
-        formatted_message.push_str(&dates::format(&message.date()));
-        formatted_message.push('\n');
+        self.add_line(&mut formatted_message, &self.get_time(message), &indent);
 
         // Add message sender
-        formatted_message.push_str(self.config.who(&message.handle_id, message.is_from_me));
-        formatted_message.push('\n');
+        self.add_line(
+            &mut formatted_message,
+            self.config.who(&message.handle_id, message.is_from_me),
+            &indent,
+        );
 
         // Useful message metadata
         let message_parts = message.body();
@@ -86,53 +83,48 @@ impl<'a> Writer for TXT<'a> {
         // Iteration context variables
         let mut attachment_index: usize = 0;
         for (idx, message_part) in message_parts.iter().enumerate() {
-            match message_part {
-                BubbleType::Text(text) => {
-                    formatted_message.push_str(text);
-                }
+            let line: &str = match message_part {
+                BubbleType::Text(text) => text,
                 BubbleType::Attachment => match attachments.get(attachment_index) {
-                    Some(attachment) => match &attachment.filename {
-                        Some(filename) => {
-                            formatted_message.push_str(filename);
-                            attachment_index += 1
+                    Some(attachment) => match self.format_attachment(attachment) {
+                        Ok(result) => {
+                            attachment_index += 1;
+                            result
                         }
-                        // Filepath missing!
-                        None => {
-                            formatted_message.push_str("Filepath missing: ");
-                            formatted_message.push_str(&attachment.transfer_name);
-                        }
+                        Err(result) => result,
                     },
                     // Attachment does not exist!
-                    None => {
-                        formatted_message.push_str("Attachment missing!");
-                    }
+                    None => "Attachment missing!",
                 },
-                BubbleType::App => {
-                    formatted_message.push_str("Attachment missing!");
-                }
-            }
+                // TODO: Support app messages
+                BubbleType::App => "App not yet supported!!",
+            };
+
+            self.add_line(&mut formatted_message, line, &indent);
+
             // Handle Reactions
             if let Some(reactions) = reactions.get(&idx) {
-                formatted_message.push('\n');
                 reactions.iter().for_each(|reaction| {
-                    formatted_message.push_str(&self.format_reaction(reaction));
-                    formatted_message.push('\n');
+                    self.add_line(
+                        &mut formatted_message,
+                        &self.format_reaction(reaction),
+                        &indent,
+                    );
                 });
             }
 
-            // Handle Reploes
+            // Handle Replies
             if let Some(replies) = replies.get(&idx) {
-                formatted_message.push('\n');
                 replies.iter().for_each(|reply| {
-                    formatted_message.push_str(&self.format_reply(reply));
-                    formatted_message.push('\n');
+                    self.add_line(
+                        &mut formatted_message,
+                        &self.format_message(reply, 4),
+                        &indent,
+                    );
                 });
             }
-            // Add newline for each next message part
-            formatted_message.push('\n');
         }
-        formatted_message.push('\n');
-        Some(formatted_message)
+        formatted_message
 
         // TODO: This is sample code, remove it!
         // Some(format!(
@@ -196,28 +188,48 @@ impl<'a> Writer for TXT<'a> {
         // ))
     }
 
-    fn format_attachment(&self, msg: &Message) -> String {
-        todo!()
+    // fn format_reply(&self, msg: &Message) -> String {
+    //     format!(
+    //         "    {}: {:?}",
+    //         self.config.who(&msg.handle_id, msg.is_from_me),
+    //         msg.body()
+    //     )
+    // }
+
+    fn format_attachment(&self, attachment: &'a Attachment) -> Result<&'a str, &'a str> {
+        match &attachment.filename {
+            Some(filename) => Ok(filename),
+            // Filepath missing!
+            None => Err(&attachment.transfer_name),
+        }
     }
 
     fn format_reaction(&self, msg: &Message) -> String {
         format!(
-            "    {}: {:?}",
+            "{}: {:?}",
             self.config.who(&msg.handle_id, msg.is_from_me),
             msg.variant()
         )
     }
 
-    fn format_reply(&self, msg: &Message) -> String {
-        format!(
-            "    {}: {:?}",
-            self.config.who(&msg.handle_id, msg.is_from_me),
-            msg.body()
-        )
-    }
-
     fn write_to_file(&self, file: &str, text: &str) {
         todo!()
+    }
+}
+
+impl<'a> TXT<'a> {
+    fn get_time(&self, message: &Message) -> String {
+        let mut date = dates::format(&message.date());
+        if let Some(time) = message.time_until_read() {
+            date.push_str(&format!(" (Read after {} minutes)", time));
+        }
+        date
+    }
+
+    fn add_line(&self, string: &mut String, part: &str, indent: &str) {
+        string.push_str(indent);
+        string.push_str(part);
+        string.push('\n');
     }
 }
 
