@@ -1,5 +1,4 @@
-use imessage_database::Message;
-use rusqlite::Connection;
+use imessage_database::{Message, Attachment};
 
 use crate::app::runtime::Config;
 
@@ -12,10 +11,10 @@ pub trait Exporter<'a> {
     fn get_or_create_file(&self) -> String;
 }
 
-pub(super) trait Writer {
-    fn format_message(&self, msg: &Message) -> Option<String>;
-    fn format_attachment(&self, msg: &Message) -> String;
+pub(super) trait Writer<'a> {
+    fn format_message(&self, msg: &Message, indent: usize) -> String;
+    // fn format_reply(&self, msg: &Message) -> String;
+    fn format_attachment(&self, msg: &'a Attachment) -> Result<&'a str, &'a str>;
     fn format_reaction(&self, msg: &Message) -> String;
-    fn format_reply(&self, msg: &Message) -> String;
     fn write_to_file(&self, file: &str, text: &str);
 }
