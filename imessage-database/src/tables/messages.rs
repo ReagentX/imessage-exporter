@@ -659,7 +659,7 @@ mod tests {
 
     #[test]
     fn can_gen_message() {
-        let m = blank();
+        blank();
     }
 
     #[test]
