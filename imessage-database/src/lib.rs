@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 pub mod message_types;
 pub mod tables;
 pub mod util;
