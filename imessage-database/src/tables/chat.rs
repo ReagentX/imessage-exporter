@@ -77,10 +77,10 @@ impl Table for Chat {
         db.prepare(&format!("SELECT * from {}", CHAT)).unwrap()
     }
 
-    fn extract(message: Result<Result<Self, Error>, Error>) -> Self {
-        match message {
-            Ok(message) => match message {
-                Ok(msg) => msg,
+    fn extract(chat: Result<Result<Self, Error>, Error>) -> Self {
+        match chat {
+            Ok(chat) => match chat {
+                Ok(ch) => ch,
                 // TODO: When does this occur?
                 Err(why) => panic!("Inner error: {}", why),
             },

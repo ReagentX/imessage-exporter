@@ -71,10 +71,10 @@ impl Table for Attachment {
             .unwrap()
     }
 
-    fn extract(message: Result<Result<Self, Error>, Error>) -> Self {
-        match message {
-            Ok(message) => match message {
-                Ok(msg) => msg,
+    fn extract(attachment: Result<Result<Self, Error>, Error>) -> Self {
+        match attachment {
+            Ok(attachment) => match attachment {
+                Ok(att) => att,
                 // TODO: When does this occur?
                 Err(why) => panic!("Inner error: {}", why),
             },

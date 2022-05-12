@@ -21,10 +21,10 @@ impl Table for ChatToHandle {
             .unwrap()
     }
 
-    fn extract(message: Result<Result<Self, Error>, Error>) -> Self {
-        match message {
-            Ok(message) => match message {
-                Ok(msg) => msg,
+    fn extract(chat_to_handle: Result<Result<Self, Error>, Error>) -> Self {
+        match chat_to_handle {
+            Ok(chat_to_handle) => match chat_to_handle {
+                Ok(c2h) => c2h,
                 // TODO: When does this occur?
                 Err(why) => panic!("Inner error: {}", why),
             },

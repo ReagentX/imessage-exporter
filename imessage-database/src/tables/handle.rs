@@ -32,10 +32,10 @@ impl Table for Handle {
         db.prepare(&format!("SELECT * from {}", HANDLE)).unwrap()
     }
 
-    fn extract(message: Result<Result<Self, Error>, Error>) -> Self {
-        match message {
-            Ok(message) => match message {
-                Ok(msg) => msg,
+    fn extract(handle: Result<Result<Self, Error>, Error>) -> Self {
+        match handle {
+            Ok(handle) => match handle {
+                Ok(hdl) => hdl,
                 // TODO: When does this occur?
                 Err(why) => panic!("Inner error: {}", why),
             },
