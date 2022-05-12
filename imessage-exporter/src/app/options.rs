@@ -1,4 +1,4 @@
-use clap::{App, Arg, ArgMatches};
+use clap::{Command, Arg, ArgMatches};
 
 use imessage_database::util::dirs::default_db_path;
 
@@ -79,9 +79,10 @@ impl<'a> Options<'a> {
 }
 
 pub fn from_command_line() -> ArgMatches {
-    let matches = App::new("iMessage Exporter")
+    let matches = Command::new("iMessage Exporter")
         .version("0.0.0")
         .about(ABOUT)
+        .arg_required_else_help(true)
         .arg(
             Arg::new(OPTION_PATH)
                 .short('p')
