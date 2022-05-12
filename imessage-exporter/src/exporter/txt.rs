@@ -88,7 +88,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                     None => "Attachment missing!",
                 },
                 // TODO: Support app messages
-                BubbleType::App => "App not yet supported!!",
+                BubbleType::App => self.format_app(message),
             };
 
             self.add_line(&mut formatted_message, line, &indent);
@@ -193,6 +193,10 @@ impl<'a> Writer<'a> for TXT<'a> {
             // Filepath missing!
             None => Err(&attachment.transfer_name),
         }
+    }
+
+    fn format_app(&self, msg: &'a Message) -> &'a str {
+        "App messages not yet implemented!"
     }
 
     fn format_reaction(&self, msg: &Message) -> String {
