@@ -6,13 +6,12 @@ use crate::{
     util::output::processing,
 };
 
+const COLUMNS: &str = "ROWID, id, person_centric_id";
+
 #[derive(Debug)]
 pub struct Handle {
     pub rowid: i32,
     pub id: String,
-    pub country: String,
-    pub service: String,
-    pub uncanonicalized_id: Option<String>,
     pub person_centric_id: Option<String>,
 }
 
@@ -21,15 +20,12 @@ impl Table for Handle {
         Ok(Handle {
             rowid: row.get(0)?,
             id: row.get(1)?,
-            country: row.get(2)?,
-            service: row.get(3)?,
-            uncanonicalized_id: row.get(4)?,
-            person_centric_id: row.get(5)?,
+            person_centric_id: row.get(2)?,
         })
     }
 
     fn get(db: &Connection) -> Statement {
-        db.prepare(&format!("SELECT * from {}", HANDLE)).unwrap()
+        db.prepare(&format!("SELECT {COLUMNS} from {}", HANDLE)).unwrap()
     }
 
     fn extract(handle: Result<Result<Self, Error>, Error>) -> Self {
