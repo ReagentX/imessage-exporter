@@ -1,9 +1,8 @@
-use core::panic;
 use std::collections::HashMap;
 
 use crate::{
     app::runtime::Config,
-    exporter::exporter::{Exporter, Writer},
+    exporters::exporter::{Exporter, Writer},
 };
 
 use imessage_database::{

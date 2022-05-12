@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 mod app;
-mod exporter;
+mod exporters;
 
-pub use exporter::{exporter::Exporter, txt::TXT};
+pub use exporters::{exporter::Exporter, txt::TXT};
 
 use app::{
     options::{from_command_line, Options},
