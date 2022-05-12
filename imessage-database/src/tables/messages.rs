@@ -227,6 +227,18 @@ impl Table for Message {
         ))
         .unwrap()
     }
+
+    fn extract(message: Result<Result<Self, Error>, Error>) -> Self {
+        match message {
+            Ok(message) => match message {
+                Ok(msg) => msg,
+                // TODO: When does this occur?
+                Err(why) => panic!("Inner error: {}", why),
+            },
+            // TODO: When does this occur?
+            Err(why) => panic!("Outer error: {}", why),
+        }
+    }
 }
 
 impl Diagnostic for Message {
@@ -460,7 +472,7 @@ impl Message {
                 .unwrap();
 
             for message in messages {
-                let msg = message.unwrap().unwrap();
+                let msg = Message::extract(message);
                 if let Variant::Reaction(idx, _, _) = msg.variant() {
                     match out_h.get_mut(&idx) {
                         Some(body_part) => body_part.push(msg),
@@ -501,7 +513,7 @@ impl Message {
                 .unwrap();
 
             for message in iter {
-                let m = message.unwrap().unwrap();
+                let m = Message::extract(message);
                 let idx = m.get_reply_index();
                 match out_h.get_mut(&idx) {
                     Some(body_part) => body_part.push(m),
@@ -550,18 +562,6 @@ impl Message {
             MessageType::Thread(self.variant())
         } else {
             MessageType::Normal(self.variant())
-        }
-    }
-
-    pub fn extract(message: Result<Result<Message, Error>, Error>) -> Message {
-        match message {
-            Ok(message) => match message {
-                Ok(msg) => msg,
-                // TODO: When does this occur?
-                Err(why) => panic!("Inner error: {}", why),
-            },
-            // TODO: When does this occur?
-            Err(why) => panic!("Outer error: {}", why),
         }
     }
 }

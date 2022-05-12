@@ -1,4 +1,4 @@
-use rusqlite::{Connection, Result, Row, Statement};
+use rusqlite::{Connection, Error, Result, Row, Statement};
 use std::collections::{HashMap, HashSet};
 
 use crate::{
@@ -30,6 +30,18 @@ impl Table for Handle {
 
     fn get(db: &Connection) -> Statement {
         db.prepare(&format!("SELECT * from {}", HANDLE)).unwrap()
+    }
+
+    fn extract(message: Result<Result<Self, Error>, Error>) -> Self {
+        match message {
+            Ok(message) => match message {
+                Ok(msg) => msg,
+                // TODO: When does this occur?
+                Err(why) => panic!("Inner error: {}", why),
+            },
+            // TODO: When does this occur?
+            Err(why) => panic!("Outer error: {}", why),
+        }
     }
 }
 
@@ -66,7 +78,7 @@ impl Cacheable for Handle {
 
         // Iterate over the handles and update the map
         for handle in handles {
-            let contact = handle.unwrap().unwrap();
+            let contact = Handle::extract(handle);
             map.insert(contact.rowid, contact.id);
         }
 

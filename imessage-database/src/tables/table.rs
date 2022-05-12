@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use rusqlite::{Connection, OpenFlags, Result, Row, Statement};
+use rusqlite::{Connection, Error, OpenFlags, Result, Row, Statement};
 
 /// Defines behavior for SQL Table data
 pub trait Table {
@@ -10,6 +10,11 @@ pub trait Table {
         Self: Sized;
     /// Gets a statment we can exectue to iterate over the data in the table
     fn get(db: &Connection) -> Statement;
+    
+    /// Extract valid row data while handling both types of query errors
+    fn extract(item: Result<Result<Self, Error>, Error>) -> Self
+    where
+        Self: Sized;
 }
 
 /// Defines behavior for table data that can be cached in memory

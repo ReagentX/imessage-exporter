@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use crate::tables::table::{Cacheable, Table, CHAT_HANDLE_JOIN};
-use rusqlite::{Connection, Result, Row, Statement};
+use rusqlite::{Connection, Error, Result, Row, Statement};
 
 pub struct ChatToHandle {
     chat_id: i32,
@@ -19,6 +19,18 @@ impl Table for ChatToHandle {
     fn get(db: &Connection) -> Statement {
         db.prepare(&format!("SELECT * FROM {}", CHAT_HANDLE_JOIN))
             .unwrap()
+    }
+
+    fn extract(message: Result<Result<Self, Error>, Error>) -> Self {
+        match message {
+            Ok(message) => match message {
+                Ok(msg) => msg,
+                // TODO: When does this occur?
+                Err(why) => panic!("Inner error: {}", why),
+            },
+            // TODO: When does this occur?
+            Err(why) => panic!("Outer error: {}", why),
+        }
     }
 }
 
@@ -47,7 +59,7 @@ impl Cacheable for ChatToHandle {
             .unwrap();
 
         for mapping in mappings {
-            let joiner = mapping.unwrap().unwrap();
+            let joiner = ChatToHandle::extract(mapping);
             match cache.get_mut(&joiner.chat_id) {
                 Some(handles) => {
                     handles.insert(joiner.handle_id);

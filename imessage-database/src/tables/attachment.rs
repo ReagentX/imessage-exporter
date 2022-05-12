@@ -1,4 +1,4 @@
-use rusqlite::{Connection, Error as E, Result, Row, Statement};
+use rusqlite::{Connection, Error, Error as E, Result, Row, Statement};
 use std::path::Path;
 
 use crate::{
@@ -69,6 +69,18 @@ impl Table for Attachment {
     fn get(db: &Connection) -> Statement {
         db.prepare(&format!("SELECT * from {}", ATTACHMENT))
             .unwrap()
+    }
+
+    fn extract(message: Result<Result<Self, Error>, Error>) -> Self {
+        match message {
+            Ok(message) => match message {
+                Ok(msg) => msg,
+                // TODO: When does this occur?
+                Err(why) => panic!("Inner error: {}", why),
+            },
+            // TODO: When does this occur?
+            Err(why) => panic!("Outer error: {}", why),
+        }
     }
 }
 
@@ -158,7 +170,7 @@ impl Attachment {
             .unwrap();
 
         for attachment in iter {
-            let m = attachment.unwrap().unwrap();
+            let m = Attachment::extract(attachment);
             out_l.push(m)
         }
         out_l

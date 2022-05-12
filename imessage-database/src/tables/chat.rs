@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use crate::tables::table::{Cacheable, Deduplicate, Table, CHAT};
-use rusqlite::{Connection, Result, Row, Statement};
+use rusqlite::{Connection, Error, Result, Row, Statement};
 
 #[derive(Debug)]
 pub struct Chat {
@@ -76,6 +76,18 @@ impl Table for Chat {
     fn get(db: &Connection) -> Statement {
         db.prepare(&format!("SELECT * from {}", CHAT)).unwrap()
     }
+
+    fn extract(message: Result<Result<Self, Error>, Error>) -> Self {
+        match message {
+            Ok(message) => match message {
+                Ok(msg) => msg,
+                // TODO: When does this occur?
+                Err(why) => panic!("Inner error: {}", why),
+            },
+            // TODO: When does this occur?
+            Err(why) => panic!("Outer error: {}", why),
+        }
+    }
 }
 
 impl Cacheable for Chat {
@@ -87,7 +99,7 @@ impl Cacheable for Chat {
     /// the participants parsed out. On its own this data is not useful.
     ///
     /// # Example:
-    /// 
+    ///
     /// ```
     /// use imessage_database::util::dirs::default_db_path;
     /// use imessage_database::tables::table::{Cacheable, get_connection};
@@ -107,7 +119,7 @@ impl Cacheable for Chat {
             .unwrap();
 
         for chat in chats {
-            let result = chat.unwrap().unwrap();
+            let result = Chat::extract(chat);
             map.insert(result.rowid, result);
         }
         map

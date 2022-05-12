@@ -125,7 +125,7 @@ impl<'a> Config<'a> {
 
         for attachment in attachments {
             // println!("Attachment: {attachment:?}");
-            let file = attachment.unwrap().unwrap();
+            let file = Attachment::extract(attachment);
             println!("{:?}", file.filename);
         }
     }
