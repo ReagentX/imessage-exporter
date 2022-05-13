@@ -7,7 +7,7 @@ use crate::{
     tables::table::{
         Cacheable, Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE, MESSAGE_ATTACHMENT_JOIN,
     },
-    util::output::processing,
+    util::{dates::readable_diff, output::processing},
     ApplePay, Reaction, Variant,
 };
 
@@ -272,8 +272,7 @@ impl Message {
     pub fn time_until_read(&self) -> Option<String> {
         // TODO: Does this work?
         if self.date_delivered != 0 && self.date_read != 0 {
-            let duration = self.date_read() - self.date();
-            return Some(format!("{}", duration.num_minutes()));
+            return readable_diff(self.date(), self.date_read());
         }
         None
     }

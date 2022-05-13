@@ -214,8 +214,11 @@ impl<'a> Writer<'a> for TXT<'a> {
 impl<'a> TXT<'a> {
     fn get_time(&self, message: &Message) -> String {
         let mut date = dates::format(&message.date());
-        if let Some(time) = message.time_until_read() {
-            date.push_str(&format!(" (Read after {} minutes)", time));
+        let read_after = message.time_until_read();
+        if let Some(time) = read_after {
+            if !time.is_empty() {
+                date.push_str(&format!(" (Read after {})", time));
+            }
         }
         date
     }
