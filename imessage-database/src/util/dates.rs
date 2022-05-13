@@ -18,6 +18,17 @@ pub fn format(date: &DateTime<Local>) -> String {
 }
 
 /// Generate a readable diff from two local timestamps
+///
+/// # Example:
+///
+/// ```
+/// use chrono::prelude::*;
+/// use imessage_database::util::dates::readable_diff;
+///
+/// let start = Local.ymd(2020, 5, 20).and_hms_milli(9, 10, 11, 12);
+/// let end = Local.ymd(2020, 5, 20).and_hms_milli(9, 15, 11, 12);
+/// println!("{}", readable_diff(start, end).unwrap())
+/// ```
 pub fn readable_diff(start: DateTime<Local>, end: DateTime<Local>) -> Option<String> {
     let mut out_s = String::new();
     let diff: Duration = end - start;
@@ -71,7 +82,7 @@ mod tests {
     fn cant_format_diff_backwards() {
         let end = Local.ymd(2020, 5, 20).and_hms_milli(9, 10, 11, 12);
         let start = Local.ymd(2020, 5, 20).and_hms_milli(9, 10, 30, 12);
-        assert_eq!(readable_diff(start, end), Some("".to_owned()))
+        assert_eq!(readable_diff(start, end), None)
     }
 
     #[test]
