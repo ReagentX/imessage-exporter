@@ -1,4 +1,4 @@
-use imessage_database::{Message, Attachment};
+use imessage_database::{Attachment, Message};
 
 use crate::app::runtime::Config;
 
@@ -12,10 +12,13 @@ pub trait Exporter<'a> {
 }
 
 pub(super) trait Writer<'a> {
+    /// Format a message, including its reactions and replies
     fn format_message(&self, msg: &Message, indent: usize) -> String;
-    // fn format_reply(&self, msg: &Message) -> String;
+    /// Format an attachment, possibly by reading the disk
     fn format_attachment(&self, msg: &'a Attachment) -> Result<&'a str, &'a str>;
+    /// Format an app message by parsing some of its fields
     fn format_app(&self, msg: &'a Message) -> &'a str;
+    /// Format a reaction (displayed under a message)
     fn format_reaction(&self, msg: &Message) -> String;
     fn write_to_file(&self, file: &str, text: &str);
 }
