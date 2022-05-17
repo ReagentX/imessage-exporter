@@ -16,6 +16,8 @@ fn main() {
     let options = Options::from_args(&args);
 
     // Create app state and start
-    let app = Config::new(options).unwrap();
-    app.start()
+    match Config::new(options) {
+        Some(app) => app.start(),
+        None => {},
+    }
 }
