@@ -281,6 +281,10 @@ impl Message {
         self.thread_originator_guid.is_some()
     }
 
+    pub fn is_reaction(&self) -> bool {
+        matches!(self.variant(), Variant::Reaction(..))
+    }
+
     fn has_attachments(&self) -> bool {
         self.num_attachments > 0
     }
