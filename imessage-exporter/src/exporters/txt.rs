@@ -36,7 +36,7 @@ impl<'a> Exporter<'a> for TXT<'a> {
         for message in messages {
             let msg = Message::extract(message);
             // Message replies and reactions are rendered in context, so no need to render them separately
-            if !msg.is_reply() && !matches!(msg.variant(), Variant::Reaction(..)) {
+            if !msg.is_reply() && !msg.is_reaction() {
                 let message = self.format_message(&msg, 0);
                 println!("{message}");
             }
@@ -106,11 +106,13 @@ impl<'a> Writer<'a> for TXT<'a> {
             // Handle Replies
             if let Some(replies) = replies.get(&idx) {
                 replies.iter().for_each(|reply| {
-                    self.add_line(
-                        &mut formatted_message,
-                        &self.format_message(reply, 4),
-                        &indent,
-                    );
+                    if !reply.is_reaction() {
+                        self.add_line(
+                            &mut formatted_message,
+                            &self.format_message(reply, 4),
+                            &indent,
+                        );
+                    }
                 });
             }
         }
