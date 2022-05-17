@@ -180,14 +180,6 @@ impl<'a> Writer<'a> for TXT<'a> {
         // ))
     }
 
-    // fn format_reply(&self, msg: &Message) -> String {
-    //     format!(
-    //         "    {}: {:?}",
-    //         self.config.who(&msg.handle_id, msg.is_from_me),
-    //         msg.body()
-    //     )
-    // }
-
     fn format_attachment(&self, attachment: &'a Attachment) -> Result<&'a str, &'a str> {
         match &attachment.filename {
             Some(filename) => Ok(filename),
