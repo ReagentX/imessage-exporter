@@ -47,6 +47,11 @@ impl<'a> Config<'a> {
     /// let app = State::new(options).unwrap();
     /// ```
     pub fn new(options: Options) -> Option<Config> {
+        // Escape early if options are invalid
+        if !options.valid {
+            return None;
+        }
+
         let conn = get_connection(&options.db_path);
         // TODO: Implement Try for these cache calls `?`
         println!("Caching chats...");
@@ -169,9 +174,7 @@ impl<'a> Config<'a> {
     /// app.start();
     /// ```
     pub fn start(&self) {
-        if !self.options.valid {
-            panic!("Invalid options!")
-        } else if self.options.diagnostic {
+        if self.options.diagnostic {
             self.run_diagnostic();
         } else if self.options.export_type.is_some() {
             match self.options.export_type.unwrap() {
