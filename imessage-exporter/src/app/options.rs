@@ -1,4 +1,4 @@
-use clap::{Command, Arg, ArgMatches};
+use clap::{Arg, ArgMatches, Command};
 
 use imessage_database::util::dirs::default_db_path;
 
