@@ -97,7 +97,7 @@ impl Table for Message {
                  message as m 
                  LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id 
              ORDER BY 
-                 m.ROWID;
+                 m.date;
             "
         ))
         .unwrap()
@@ -143,7 +143,7 @@ impl Diagnostic for Message {
             WHERE
                 c.chat_id is NULL
             ORDER BY
-                m.ROWID
+                m.date
             "
             ))
             .unwrap();
@@ -347,7 +347,7 @@ impl Message {
                         LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
                     WHERE m.guid IN ({})
                     ORDER BY 
-                        m.ROWID;
+                        m.date;
                     ",
                 filter.join(",")
             )).unwrap();
@@ -389,7 +389,7 @@ impl Message {
                      LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id 
                  WHERE m.thread_originator_guid = \"{}\"
                  ORDER BY 
-                     m.ROWID;
+                     m.date;
                 ", self.guid
             ))
             .unwrap();
