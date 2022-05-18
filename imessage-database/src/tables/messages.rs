@@ -57,7 +57,7 @@ pub struct Message {
     pub chat_id: Option<i32>,
     pub num_attachments: i32,
     pub num_replies: i32,
-    offset: i64,
+    pub offset: i64,
 }
 
 impl Table for Message {
@@ -550,5 +550,36 @@ mod tests {
                 BubbleType::Attachment
             ]
         );
+    }
+
+    #[test]
+    fn can_get_time_date_read_after_date() {
+        let mut message = blank();
+        // Wed May 18 2022 02:36:24 GMT+0000
+        message.date = 1652841384000000000;
+        // Wed May 18 2022 02:36:24 GMT+0000
+        message.date_delivered = 1652841384000000000;
+        // Wed May 18 2022 02:37:34 GMT+0000
+        message.date_read = 1652841454000000000;
+
+        println!("{:?}", message.time_until_read());
+        assert_eq!(
+            message.time_until_read(),
+            Some("1 minute, 10 seconds".to_string())
+        )
+    }
+
+    #[test]
+    fn can_get_time_date_read_before_date() {
+        let mut message = blank();
+        // Wed May 18 2022 02:37:34 GMT+0000
+        message.date = 1652841454000000000;
+        // Wed May 18 2022 02:37:34 GMT+0000
+        message.date_delivered = 1652841454000000000;
+        // Wed May 18 2022 02:36:24 GMT+0000
+        message.date_read = 1652841384000000000;
+
+        println!("{:?}", message.time_until_read());
+        assert_eq!(message.time_until_read(), None)
     }
 }
