@@ -18,6 +18,6 @@ fn main() {
     // Create app state and start
     match Config::new(options) {
         Some(app) => app.start(),
-        None => {},
+        None => {}
     }
 }
