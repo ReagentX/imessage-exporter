@@ -207,8 +207,8 @@ impl<'a> Writer<'a> for TXT<'a> {
 
 impl<'a> TXT<'a> {
     fn get_time(&self, message: &Message) -> String {
-        let mut date = dates::format(&message.date());
-        let read_after = message.time_until_read();
+        let mut date = dates::format(&message.date(&self.config.offset));
+        let read_after = message.time_until_read(&self.config.offset);
         if let Some(time) = read_after {
             if !time.is_empty() {
                 date.push_str(&format!(" (Read after {})", time));
@@ -249,7 +249,6 @@ mod tests {
             chat_id: None,
             num_attachments: 0,
             num_replies: 0,
-            offset: 0,
         }
     }
 
@@ -281,16 +280,16 @@ mod tests {
 
         // Create fake message
         let mut message = blank();
-        // Wed May 18 2022 02:36:24 GMT+0000
-        message.date = 1652841384000000000;
-        // Wed May 18 2022 02:36:24 GMT+0000
-        message.date_delivered = 1652841384000000000;
-        // Wed May 18 2022 02:37:34 GMT+0000
-        message.date_read = 1652841454000000000;
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        // May 17, 2022  8:29:42 PM
+        message.date_delivered = 674526582885055488;
+        // May 17, 2022  9:30:31 PM
+        message.date_read = 674530231992568192;
 
         assert_eq!(
             exporter.get_time(&message),
-            "May 17, 2022 10:36:24 PM (Read after 1 minute, 10 seconds)"
+            "May 17, 2022  8:29:42 PM (Read after 1 hour, 49 seconds)"
         );
     }
 
@@ -303,14 +302,13 @@ mod tests {
 
         // Create fake message
         let mut message = blank();
-        // Wed May 18 2022 02:37:34 GMT+0000
-        message.date = 1652841454000000000;
-        // Wed May 18 2022 02:37:34 GMT+0000
-        message.date_delivered = 1652841384000000000;
+        // May 17, 2022  9:30:31 PM
+        message.date = 674530231992568192;
+        // May 17, 2022  9:30:31 PM
+        message.date_delivered = 674530231992568192;
         // Wed May 18 2022 02:36:24 GMT+0000
-        message.date_read = 1652841384000000000;
-
-        assert_eq!(exporter.get_time(&message), "May 17, 2022 10:37:34 PM");
+        message.date_read = 674526582885055488;
+        assert_eq!(exporter.get_time(&message), "May 17, 2022  9:30:31 PM");
     }
 
     #[test]

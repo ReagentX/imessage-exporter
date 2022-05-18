@@ -57,7 +57,6 @@ pub struct Message {
     pub chat_id: Option<i32>,
     pub num_attachments: i32,
     pub num_replies: i32,
-    pub offset: i64,
 }
 
 impl Table for Message {
@@ -81,8 +80,6 @@ impl Table for Message {
             chat_id: row.get(15)?,
             num_attachments: row.get(16)?,
             num_replies: row.get(17)?,
-            // TODO: Calculate once, not for each object
-            offset: Utc.ymd(2001, 1, 1).and_hms(0, 0, 0).timestamp(),
         })
     }
 
@@ -249,30 +246,30 @@ impl Message {
         }
     }
 
-    fn get_local_time(&self, date_stamp: &i64) -> DateTime<Local> {
-        let utc_stamp = NaiveDateTime::from_timestamp((date_stamp / 1000000000) + self.offset, 0);
+    fn get_local_time(&self, date_stamp: &i64, offset: &i64) -> DateTime<Local> {
+        let utc_stamp = NaiveDateTime::from_timestamp((date_stamp / 1000000000) + offset, 0);
         let local_time = Local.from_utc_datetime(&utc_stamp);
         Local
             .ymd(local_time.year(), local_time.month(), local_time.day())
             .and_hms(local_time.hour(), local_time.minute(), local_time.second())
     }
 
-    pub fn date(&self) -> DateTime<Local> {
-        self.get_local_time(&self.date)
+    pub fn date(&self, offset: &i64) -> DateTime<Local> {
+        self.get_local_time(&self.date, offset)
     }
 
-    pub fn date_delivered(&self) -> DateTime<Local> {
-        self.get_local_time(&self.date_delivered)
+    pub fn date_delivered(&self, offset: &i64) -> DateTime<Local> {
+        self.get_local_time(&self.date_delivered, offset)
     }
 
-    pub fn date_read(&self) -> DateTime<Local> {
-        self.get_local_time(&self.date_read)
+    pub fn date_read(&self, offset: &i64) -> DateTime<Local> {
+        self.get_local_time(&self.date_read, offset)
     }
 
-    pub fn time_until_read(&self) -> Option<String> {
+    pub fn time_until_read(&self, offset: &i64) -> Option<String> {
         // TODO: Does this work?
         if self.date_delivered != 0 && self.date_read != 0 {
-            return readable_diff(self.date(), self.date_read());
+            return readable_diff(self.date(offset), self.date_read(offset));
         }
         None
     }
@@ -458,7 +455,10 @@ impl Message {
 
 #[cfg(test)]
 mod tests {
-    use crate::tables::messages::{BubbleType, Message};
+    use crate::{
+        tables::messages::{BubbleType, Message},
+        util::dates::get_offset,
+    };
 
     fn blank() -> Message {
         Message {
@@ -480,7 +480,6 @@ mod tests {
             chat_id: None,
             num_attachments: 0,
             num_replies: 0,
-            offset: 0,
         }
     }
 
@@ -554,32 +553,40 @@ mod tests {
 
     #[test]
     fn can_get_time_date_read_after_date() {
-        let mut message = blank();
-        // Wed May 18 2022 02:36:24 GMT+0000
-        message.date = 1652841384000000000;
-        // Wed May 18 2022 02:36:24 GMT+0000
-        message.date_delivered = 1652841384000000000;
-        // Wed May 18 2022 02:37:34 GMT+0000
-        message.date_read = 1652841454000000000;
+        // Get offset
+        let offset = get_offset();
 
-        println!("{:?}", message.time_until_read());
+        // Create message
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        // May 17, 2022  8:29:42 PM
+        message.date_delivered = 674526582885055488;
+        // May 17, 2022  9:30:31 PM
+        message.date_read = 674530231992568192;
+
+        println!("{:?}", message.time_until_read(&offset));
         assert_eq!(
-            message.time_until_read(),
-            Some("1 minute, 10 seconds".to_string())
+            message.time_until_read(&offset),
+            Some("1 hour, 49 seconds".to_string())
         )
     }
 
     #[test]
     fn can_get_time_date_read_before_date() {
-        let mut message = blank();
-        // Wed May 18 2022 02:37:34 GMT+0000
-        message.date = 1652841454000000000;
-        // Wed May 18 2022 02:37:34 GMT+0000
-        message.date_delivered = 1652841454000000000;
-        // Wed May 18 2022 02:36:24 GMT+0000
-        message.date_read = 1652841384000000000;
+        // Get offset
+        let offset = get_offset();
 
-        println!("{:?}", message.time_until_read());
-        assert_eq!(message.time_until_read(), None)
+        // Create message
+        let mut message = blank();
+        // May 17, 2022  9:30:31 PM
+        message.date = 674530231992568192;
+        // May 17, 2022  9:30:31 PM
+        message.date_delivered = 674530231992568192;
+        // May 17, 2022  8:29:42 PM
+        message.date_read = 674526582885055488;
+
+        println!("{:?}", message.time_until_read(&offset));
+        assert_eq!(message.time_until_read(&offset), None)
     }
 }

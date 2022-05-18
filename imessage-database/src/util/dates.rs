@@ -1,6 +1,12 @@
-use chrono::{DateTime, Duration, Local};
+use chrono::{DateTime, Duration, Local, TimeZone, Utc};
 
 const SEPARATOR: &str = ", ";
+
+/// Get the date offset for the iMessage Database
+///
+pub fn get_offset() -> i64 {
+    Utc.ymd(2001, 1, 1).and_hms(0, 0, 0).timestamp()
+}
 
 /// Format a date from the iMessage table for reading
 ///

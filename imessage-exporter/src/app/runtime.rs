@@ -8,6 +8,7 @@ use crate::{
 };
 use imessage_database::{
     tables::table::{get_connection, Cacheable, Deduplicate, Diagnostic, Table, ME, UNKNOWN},
+    util::dates::get_offset,
     Attachment, Chat, ChatToHandle, Handle, Message,
 };
 
@@ -27,6 +28,8 @@ pub struct Config<'a> {
     pub reactions: HashMap<String, Vec<String>>,
     /// App configuration options
     pub options: Options<'a>,
+    /// Global date offset used by the iMessage database:
+    pub offset: i64,
     /// The connection we use to query the database
     pub db: Connection,
 }
@@ -70,6 +73,7 @@ impl<'a> Config<'a> {
             participants,
             reactions,
             options,
+            offset: get_offset(),
             db: conn,
         })
     }
