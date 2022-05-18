@@ -43,6 +43,14 @@ impl<'a> Options<'a> {
         // Validation layer
         let mut valid = true;
 
+        // Ensure export type is allowed
+        if let Some(found_type) = export_type {
+            if !SUPPORTED_FILE_TYPES.split(',').any(|allowed_type| allowed_type.trim() == found_type) {
+                println!("{found_type} is not a valid export type! Must be one of <{SUPPORTED_FILE_TYPES}>");
+                valid = false;
+            }
+        }
+
         // Ensure an export type is speficied if other export options are selected
         if no_copy && export_type.is_none() {
             println!("No export type selected, required by {OPTION_COPY}");

@@ -195,9 +195,7 @@ impl<'a> Config<'a> {
                 "html" => {
                     todo!()
                 }
-                other => {
-                    panic!("{other} is not a valid export type! Must be one of <{SUPPORTED_FILE_TYPES}>")
-                }
+                _ => { unreachable!() }
             }
         } else {
             // Run some app methods
