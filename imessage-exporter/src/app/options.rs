@@ -45,7 +45,10 @@ impl<'a> Options<'a> {
 
         // Ensure export type is allowed
         if let Some(found_type) = export_type {
-            if !SUPPORTED_FILE_TYPES.split(',').any(|allowed_type| allowed_type.trim() == found_type) {
+            if !SUPPORTED_FILE_TYPES
+                .split(',')
+                .any(|allowed_type| allowed_type.trim() == found_type)
+            {
                 println!("{found_type} is not a valid export type! Must be one of <{SUPPORTED_FILE_TYPES}>");
                 valid = false;
             }
