@@ -226,8 +226,32 @@ impl<'a> TXT<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Config, Exporter, Options};
-    use imessage_database::util::dirs::default_db_path;
+    use crate::{Config, Exporter, Options, TXT};
+    use imessage_database::{tables::messages::Message, util::dirs::default_db_path};
+
+    fn blank() -> Message {
+        Message {
+            rowid: i32::default(),
+            guid: String::default(),
+            text: None,
+            handle_id: i32::default(),
+            subject: None,
+            date: i64::default(),
+            date_read: i64::default(),
+            date_delivered: i64::default(),
+            is_from_me: false,
+            is_read: false,
+            associated_message_guid: None,
+            associated_message_type: i32::default(),
+            expressive_send_style_id: None,
+            thread_originator_guid: None,
+            thread_originator_part: None,
+            chat_id: None,
+            num_attachments: 0,
+            num_replies: 0,
+            offset: 0,
+        }
+    }
 
     fn fake_options() -> Options<'static> {
         Options {
@@ -240,12 +264,80 @@ mod tests {
         }
     }
 
-    use super::TXT;
     #[test]
     fn can_create() {
         let options = fake_options();
         let config = Config::new(options).unwrap();
         let exporter = TXT::new(&config);
-        assert_eq!(exporter.files.len(), 0)
+        assert_eq!(exporter.files.len(), 0);
+    }
+
+    #[test]
+    fn can_get_time_valid() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        // Create fake message
+        let mut message = blank();
+        // Wed May 18 2022 02:36:24 GMT+0000
+        message.date = 1652841384000000000;
+        // Wed May 18 2022 02:36:24 GMT+0000
+        message.date_delivered = 1652841384000000000;
+        // Wed May 18 2022 02:37:34 GMT+0000
+        message.date_read = 1652841454000000000;
+
+        assert_eq!(
+            exporter.get_time(&message),
+            "May 17, 2022 10:36:24 PM (Read after 1 minute, 10 seconds)"
+        );
+    }
+
+    #[test]
+    fn can_get_time_invalid() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        // Create fake message
+        let mut message = blank();
+        // Wed May 18 2022 02:37:34 GMT+0000
+        message.date = 1652841454000000000;
+        // Wed May 18 2022 02:37:34 GMT+0000
+        message.date_delivered = 1652841384000000000;
+        // Wed May 18 2022 02:36:24 GMT+0000
+        message.date_read = 1652841384000000000;
+
+        assert_eq!(exporter.get_time(&message), "May 17, 2022 10:37:34 PM");
+    }
+
+    #[test]
+    fn can_add_line_no_indent() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        // Create sample data
+        let mut s = String::new();
+        exporter.add_line(&mut s, "hello world", "");
+
+        assert_eq!(s, "hello world\n".to_string());
+    }
+
+    #[test]
+    fn can_add_line_indent() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        // Create sample data
+        let mut s = String::new();
+        exporter.add_line(&mut s, "hello world", "  ");
+
+        assert_eq!(s, "  hello world\n".to_string());
     }
 }
