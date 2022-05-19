@@ -4,6 +4,7 @@ use std::path::Path;
 use crate::{
     tables::table::{Diagnostic, Table, ATTACHMENT},
     util::{dirs::home, output::processing},
+    Message,
 };
 
 const COLUMNS: &str = "a.ROWID, a.filename, a.mime_type, a.transfer_name, a.total_bytes, a.is_sticker, a.attribution_info, a.hide_attachment";
@@ -121,25 +122,28 @@ impl Diagnostic for Attachment {
 }
 
 impl Attachment {
-    pub fn from_message(db: &Connection, id: i32) -> Vec<Attachment> {
+    pub fn from_message(db: &Connection, msg: &Message) -> Vec<Attachment> {
         let mut out_l = vec![];
-        let mut statement = db
-            .prepare(&format!(
-                "
-                SELECT {COLUMNS} FROM message_attachment_join j 
-                    LEFT JOIN attachment AS a ON j.attachment_id = a.ROWID
-                WHERE j.message_id = {id}
-                "
-            ))
-            .unwrap();
+        if msg.has_attachments() {
+            let mut statement = db
+                .prepare(&format!(
+                    "
+                    SELECT {COLUMNS} FROM message_attachment_join j 
+                        LEFT JOIN attachment AS a ON j.attachment_id = a.ROWID
+                    WHERE j.message_id = {}
+                    ",
+                    msg.rowid
+                ))
+                .unwrap();
 
-        let iter = statement
-            .query_map([], |row| Ok(Attachment::from_row(row)))
-            .unwrap();
+            let iter = statement
+                .query_map([], |row| Ok(Attachment::from_row(row)))
+                .unwrap();
 
-        for attachment in iter {
-            let m = Attachment::extract(attachment);
-            out_l.push(m)
+            for attachment in iter {
+                let m = Attachment::extract(attachment);
+                out_l.push(m)
+            }
         }
         out_l
     }
