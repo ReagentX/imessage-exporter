@@ -8,7 +8,7 @@ use crate::{
 use imessage_database::{
     tables::messages::BubbleType,
     util::dates,
-    Attachment, {Message, Table, Variant},
+    Attachment, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
 };
 
 pub struct TXT<'a> {
@@ -36,7 +36,7 @@ impl<'a> Exporter<'a> for TXT<'a> {
         for message in messages {
             let msg = Message::extract(message);
             // Message replies and reactions are rendered in context, so no need to render them separately
-            if !msg.is_reply() && !msg.is_reaction() {
+            if !msg.is_reaction() {
                 let message = self.format_message(&msg, 0);
                 println!("{message}");
             }
@@ -66,15 +66,17 @@ impl<'a> Writer<'a> for TXT<'a> {
 
         // Useful message metadata
         let message_parts = message.body();
-        let attachments = Attachment::from_message(&self.config.db, message.rowid);
+        let attachments = Attachment::from_message(&self.config.db, message);
         let replies = message.get_replies(&self.config.db);
         let reactions = message.get_reactions(&self.config.db, &self.config.reactions);
 
-        // Iteration context variables
+        // Index of where we are in the attachment Vector
         let mut attachment_index: usize = 0;
+
+        // Generate the message body from it's components
         for (idx, message_part) in message_parts.iter().enumerate() {
             let line: &str = match message_part {
-                BubbleType::Text(text) => text,
+                BubbleType::Text(text) => *text,
                 BubbleType::Attachment => match attachments.get(attachment_index) {
                     Some(attachment) => match self.format_attachment(attachment) {
                         Ok(result) => {
@@ -90,7 +92,17 @@ impl<'a> Writer<'a> for TXT<'a> {
                 BubbleType::App => self.format_app(message),
             };
 
+            // Write the message
             self.add_line(&mut formatted_message, line, &indent);
+
+            // Handle expressives
+            if message.expressive_send_style_id.is_some() {
+                self.add_line(
+                    &mut formatted_message,
+                    self.format_expressive(message),
+                    &indent,
+                );
+            }
 
             // Handle Reactions
             if let Some(reactions) = reactions.get(&idx) {
@@ -116,6 +128,16 @@ impl<'a> Writer<'a> for TXT<'a> {
                 });
             }
         }
+
+        // Add a note if the message is a reply
+        if message.is_reply() {
+            self.add_line(
+                &mut formatted_message,
+                "This message is a reply.",
+                &indent,
+            );
+        }
+
         formatted_message
 
         // TODO: This is sample code, remove it!
@@ -198,6 +220,30 @@ impl<'a> Writer<'a> for TXT<'a> {
             self.config.who(&msg.handle_id, msg.is_from_me),
             msg.variant()
         )
+    }
+
+    fn format_expressive(&self, msg: &'a Message) -> &'a str {
+        match msg.get_expressive() {
+            Expressive::Screen(effect) => match effect {
+                ScreenEffect::Confetti => "Sent with Confetti",
+                ScreenEffect::Echo => "Sent with Echo",
+                ScreenEffect::Fireworks => "Sent with Fireworks",
+                ScreenEffect::Balloons => "Sent with Balloons",
+                ScreenEffect::Heart => "Sent with Heart",
+                ScreenEffect::Lasers => "Sent with Lasers",
+                ScreenEffect::ShootingStar => "Sent with Shooting Start",
+                ScreenEffect::Sparkles => "Sent with Sparkles",
+                ScreenEffect::Spotlight => "Sent with Spotlight",
+            },
+            Expressive::Bubble(effect) => match effect {
+                BubbleEffect::Gentle => "Sent with Gentle",
+                BubbleEffect::Impact => "Sent with Implact",
+                BubbleEffect::InvisibleInk => "Sent with Invisible Ink",
+                BubbleEffect::Loud => "Sent with Loud",
+            },
+            Expressive::Unknown(effect) => effect,
+            Expressive::Normal => "Sent with ",
+        }
     }
 
     fn write_to_file(&self, file: &str, text: &str) {
