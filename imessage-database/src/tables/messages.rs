@@ -1,6 +1,6 @@
 use std::{collections::HashMap, vec};
 
-use chrono::{naive::NaiveDateTime, offset::Local, DateTime, Datelike, TimeZone, Timelike, Utc};
+use chrono::{naive::NaiveDateTime, offset::Local, DateTime, Datelike, TimeZone, Timelike};
 use rusqlite::{Connection, Error, Result, Row, Statement};
 
 use crate::{
@@ -8,7 +8,7 @@ use crate::{
         Cacheable, Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE, MESSAGE_ATTACHMENT_JOIN,
     },
     util::{dates::readable_diff, output::processing},
-    ApplePay, Reaction, Variant,
+    ApplePay, BubbleEffect, Expressive, Reaction, ScreenEffect, Variant,
 };
 
 const ATTACHMENT_CHAR: char = '\u{FFFC}';
@@ -16,16 +16,18 @@ const APP_CHAR: char = '\u{FFFD}';
 const REPLACEMENT_CHARS: [char; 2] = [ATTACHMENT_CHAR, APP_CHAR];
 const COLUMNS: &str = "m.rowid, m.guid, m.text, m.handle_id, m.subject, m.date, m.date_read, m.date_delivered, m.is_from_me, m.is_read, m.associated_message_guid, m.associated_message_type, m.expressive_send_style_id, m.thread_originator_guid, m.thread_originator_part";
 
+/// Metadata for a single message
 #[derive(Debug)]
-pub enum MessageType {
+pub enum MessageType<'a> {
     /// A normal message not associated with any others
-    Normal(Variant),
+    Normal(Variant, Expressive<'a>),
     /// A message that has replies
-    Thread(Variant),
+    Thread(Variant, Expressive<'a>),
     /// A message that is a reply to another message
-    Reply(Variant),
+    Reply(Variant, Expressive<'a>),
 }
 
+/// Defines the parts of a message bubble, i.e. the content that can exist in a single message
 #[derive(Debug, PartialEq)]
 pub enum BubbleType<'a> {
     /// A normal text message
@@ -282,7 +284,11 @@ impl Message {
         matches!(self.variant(), Variant::Reaction(..))
     }
 
-    fn has_attachments(&self) -> bool {
+    pub fn is_expressive(&self) -> bool {
+        self.expressive_send_style_id.is_some()
+    }
+
+    pub fn has_attachments(&self) -> bool {
         self.num_attachments > 0
     }
 
@@ -444,11 +450,55 @@ impl Message {
 
     pub fn case(&self) -> MessageType {
         if self.is_reply() {
-            MessageType::Reply(self.variant())
+            MessageType::Reply(self.variant(), self.get_expressive())
         } else if self.has_replies() {
-            MessageType::Thread(self.variant())
+            MessageType::Thread(self.variant(), self.get_expressive())
         } else {
-            MessageType::Normal(self.variant())
+            MessageType::Normal(self.variant(), self.get_expressive())
+        }
+    }
+
+    pub fn get_expressive(&self) -> Expressive {
+        match &self.expressive_send_style_id {
+            Some(content) => match content.as_str() {
+                "com.apple.MobileSMS.expressivesend.gentle" => {
+                    Expressive::Bubble(BubbleEffect::Gentle)
+                }
+                "com.apple.MobileSMS.expressivesend.impact" => {
+                    Expressive::Bubble(BubbleEffect::Impact)
+                }
+                "com.apple.MobileSMS.expressivesend.invisibleink" => {
+                    Expressive::Bubble(BubbleEffect::InvisibleInk)
+                }
+                "com.apple.MobileSMS.expressivesend.loud" => Expressive::Bubble(BubbleEffect::Loud),
+                "com.apple.messages.effect.CKConfettiEffect" => {
+                    Expressive::Screen(ScreenEffect::Confetti)
+                }
+                "com.apple.messages.effect.CKEchoEffect" => Expressive::Screen(ScreenEffect::Echo),
+                "com.apple.messages.effect.CKFireworksEffect" => {
+                    Expressive::Screen(ScreenEffect::Fireworks)
+                }
+                "com.apple.messages.effect.CKHappyBirthdayEffect" => {
+                    Expressive::Screen(ScreenEffect::Balloons)
+                }
+                "com.apple.messages.effect.CKHeartEffect" => {
+                    Expressive::Screen(ScreenEffect::Heart)
+                }
+                "com.apple.messages.effect.CKLasersEffect" => {
+                    Expressive::Screen(ScreenEffect::Lasers)
+                }
+                "com.apple.messages.effect.CKShootingStarEffect" => {
+                    Expressive::Screen(ScreenEffect::ShootingStar)
+                }
+                "com.apple.messages.effect.CKSparklesEffect" => {
+                    Expressive::Screen(ScreenEffect::Sparkles)
+                }
+                "com.apple.messages.effect.CKSpotlightEffect" => {
+                    Expressive::Screen(ScreenEffect::Spotlight)
+                }
+                _ => Expressive::Unknown(content),
+            },
+            None => Expressive::Normal,
         }
     }
 }
@@ -456,6 +506,7 @@ impl Message {
 #[cfg(test)]
 mod tests {
     use crate::{
+        message_types::expressives,
         tables::messages::{BubbleType, Message},
         util::dates::get_offset,
     };
@@ -588,5 +639,32 @@ mod tests {
 
         println!("{:?}", message.time_until_read(&offset));
         assert_eq!(message.time_until_read(&offset), None)
+    }
+
+    #[test]
+    fn can_get_message_expression_none() {
+        let m = blank();
+        assert_eq!(m.get_expressive(), expressives::Expressive::Normal);
+    }
+
+    #[test]
+    fn can_get_message_expression_bubble() {
+        let mut m = blank();
+        m.expressive_send_style_id = Some("com.apple.MobileSMS.expressivesend.gentle".to_string());
+        assert_eq!(
+            m.get_expressive(),
+            expressives::Expressive::Bubble(expressives::BubbleEffect::Gentle)
+        );
+    }
+
+    #[test]
+    fn can_get_message_expression_screen() {
+        let mut m = blank();
+        m.expressive_send_style_id =
+            Some("com.apple.messages.effect.CKHappyBirthdayEffect".to_string());
+        assert_eq!(
+            m.get_expressive(),
+            expressives::Expressive::Screen(expressives::ScreenEffect::Balloons)
+        );
     }
 }
