@@ -12,7 +12,7 @@ Docs for the app are located [here](/docs/binary/).
 
 The `imessage_database` library provides models that allow us to access iMessage information as native data structures.
 
-Docs for the app are located [here](/docs/app/).
+Docs for the library are located [here](/docs/library/).
 
 ### Supported Features
 
