@@ -1,3 +1,7 @@
+/*!
+ This module represents common (but not all) columns in the `message` table.
+*/
+
 use std::{collections::HashMap, vec};
 
 use chrono::{naive::NaiveDateTime, offset::Local, DateTime, Datelike, TimeZone, Timelike};
@@ -16,7 +20,7 @@ const APP_CHAR: char = '\u{FFFD}';
 const REPLACEMENT_CHARS: [char; 2] = [ATTACHMENT_CHAR, APP_CHAR];
 const COLUMNS: &str = "m.rowid, m.guid, m.text, m.handle_id, m.subject, m.date, m.date_read, m.date_delivered, m.is_from_me, m.is_read, m.associated_message_guid, m.associated_message_type, m.expressive_send_style_id, m.thread_originator_guid, m.thread_originator_part";
 
-/// Metadata for a single message
+/// Represents a broad category of messages: standalone, thread originators, and thread replies.
 #[derive(Debug)]
 pub enum MessageType<'a> {
     /// A normal message not associated with any others
@@ -27,7 +31,7 @@ pub enum MessageType<'a> {
     Reply(Variant, Expressive<'a>),
 }
 
-/// Defines the parts of a message bubble, i.e. the content that can exist in a single message
+/// Defines the parts of a message bubble, i.e. the content that can exist in a single message.
 #[derive(Debug, PartialEq)]
 pub enum BubbleType<'a> {
     /// A normal text message
@@ -38,6 +42,7 @@ pub enum BubbleType<'a> {
     App,
 }
 
+/// Represents a single row in the `message` table.
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct Message {
@@ -214,8 +219,6 @@ impl Message {
     /// to format.
     pub fn body(&self) -> Vec<BubbleType> {
         match &self.text {
-            // Attachment: "\u{FFFC}"
-            // Replacement: "\u{FFFD}"
             Some(text) => {
                 let mut out_v = vec![];
                 let mut start: usize = 0;
@@ -256,42 +259,71 @@ impl Message {
             .and_hms(local_time.hour(), local_time.minute(), local_time.second())
     }
 
+    /// Calculates the date a message was written to the database.
+    ///
+    /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
     pub fn date(&self, offset: &i64) -> DateTime<Local> {
         self.get_local_time(&self.date, offset)
     }
 
+    /// Calculates the date a message was marked as delivered.
+    ///
+    /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
     pub fn date_delivered(&self, offset: &i64) -> DateTime<Local> {
         self.get_local_time(&self.date_delivered, offset)
     }
 
+    /// Calculates the date a message was marked as read.
+    ///
+    /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
     pub fn date_read(&self, offset: &i64) -> DateTime<Local> {
         self.get_local_time(&self.date_read, offset)
     }
 
+    /// Gets the time until the message was read. This can happen in two ways:
+    ///
+    /// - You recieved a message, then waited to read it
+    /// - You sent a message, and the recipient waited to read it
+    ///
+    /// In the former case, this subtracts the date read column (`date_read`) from the date recieved column (`date`).
+    /// In the latter case, this subtracts the date delivered column (`date_delivered`) from the date recieved column (`date`).
+    ///
+    /// Not all messages get tagged with the read properties.
+    /// If more than one message has been sent in a thread before getting read,
+    /// only the most recent message will get the tag.
     pub fn time_until_read(&self, offset: &i64) -> Option<String> {
-        // TODO: Does this work?
-        if self.date_delivered != 0 && self.date_read != 0 {
+        // Message we recieved
+        if !self.is_from_me && self.date_read != 0 && self.date != 0 {
             return readable_diff(self.date(offset), self.date_read(offset));
+        }
+        // Message we sent
+        else if self.is_from_me && self.date_delivered != 0 && self.date != 0 {
+            return readable_diff(self.date(offset), self.date_delivered(offset));
         }
         None
     }
 
+    /// `true` if the message is a response to a thread, else `false`
     pub fn is_reply(&self) -> bool {
         self.thread_originator_guid.is_some()
     }
 
+    /// `true` if the message is a reaction to another message, else `false`
     pub fn is_reaction(&self) -> bool {
         matches!(self.variant(), Variant::Reaction(..))
     }
 
+    /// `true` if the message has an expressive presentation, else `false`
     pub fn is_expressive(&self) -> bool {
         self.expressive_send_style_id.is_some()
     }
 
+    /// `true` if the message has attachments, else `false`
     pub fn has_attachments(&self) -> bool {
         self.num_attachments > 0
     }
 
+    /// `true` if the message begins a thread, else `false`
     fn has_replies(&self) -> bool {
         self.num_replies > 0
     }
@@ -307,6 +339,16 @@ impl Message {
         0
     }
 
+    /// In some special cases, the `guid` is stored with some additional data we need to parse out. There are two prefixes:
+    ///
+    /// - `bp:` GUID prefix for bubble message reactions (links, apps, etc)
+    /// - `p:0/` GUID prefix for normal messages (body text, attachments)
+    ///   - for `p:#/`, the # is the message index, so if a message has 3 attachments:
+    ///     - 0 is the first image
+    ///     - 1 is the second image
+    ///     - 2 is the third image
+    ///     - 3 is the text of the message
+    /// In this example, a Like on `p:2/` is a like on the second message
     fn clean_associated_guid(&self) -> Option<(usize, &str)> {
         // TODO: Test that the GUID length is correct!
         if let Some(guid) = &self.associated_message_guid {
