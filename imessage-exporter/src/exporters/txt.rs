@@ -130,10 +130,10 @@ impl<'a> Writer<'a> for TXT<'a> {
         }
 
         // Add a note if the message is a reply
-        if message.is_reply() {
+        if message.is_reply() && indent.is_empty() {
             self.add_line(
                 &mut formatted_message,
-                "This message is a reply.",
+                "This message responded to an earlier message.",
                 &indent,
             );
         }
@@ -257,7 +257,11 @@ impl<'a> TXT<'a> {
         let read_after = message.time_until_read(&self.config.offset);
         if let Some(time) = read_after {
             if !time.is_empty() {
-                date.push_str(&format!(" (Read after {})", time));
+                let who = match message.is_from_me {
+                    true => "them",
+                    false => "you",
+                };
+                date.push_str(&format!(" (Read by {who} after {time})"));
             }
         }
         date
