@@ -1,8 +1,13 @@
+/*!
+ This module represents the chat to handle join table.
+*/
+
 use std::collections::{BTreeSet, HashMap};
 
 use crate::tables::table::{Cacheable, Table, CHAT_HANDLE_JOIN};
 use rusqlite::{Connection, Error, Result, Row, Statement};
 
+/// Represents a single row in the `chat_handle_join` table.
 pub struct ChatToHandle {
     chat_id: i32,
     handle_id: i32,

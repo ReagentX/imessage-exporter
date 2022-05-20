@@ -1,3 +1,7 @@
+/*!
+ Variants represent the different types of iMessages that exist in the `messages` table.
+*/
+
 /// Reactions to iMessages
 ///
 /// `bp:` GUID prefix for bubble message reactions (links, apps, etc)
@@ -7,7 +11,7 @@
 /// - 1 is the second image
 /// - 2 is the third image
 /// - 3 is the text of the message
-/// So, a Like on `p:2/` is a like on the second message
+/// In this example, a Like on `p:2/` is a like on the second message
 ///
 /// Reactions are normal messages in the database, but only the latest reaction
 /// is stored. For example:
@@ -37,6 +41,7 @@ pub enum ApplePay {
     Recieve(String),
 }
 
+/// Variant container
 #[derive(Debug)]
 pub enum Variant {
     ApplePay(ApplePay),

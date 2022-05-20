@@ -1,3 +1,7 @@
+/*!
+ This module represents common (but not all) columns in the `attachment` table. 
+*/
+
 use rusqlite::{Connection, Error, Error as E, Result, Row, Statement};
 use std::path::Path;
 
@@ -9,6 +13,7 @@ use crate::{
 
 const COLUMNS: &str = "a.ROWID, a.filename, a.mime_type, a.transfer_name, a.total_bytes, a.is_sticker, a.attribution_info, a.hide_attachment";
 
+/// Represents a single row in the `attachment` table.
 #[derive(Debug)]
 pub struct Attachment {
     pub rowid: i32,

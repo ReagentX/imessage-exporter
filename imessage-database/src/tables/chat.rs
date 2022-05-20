@@ -1,3 +1,7 @@
+/*!
+ This module represents common (but not all) columns in the `chat` table. 
+*/
+
 use std::collections::{BTreeSet, HashMap};
 
 use crate::tables::table::{Cacheable, Deduplicate, Table, CHAT};
@@ -5,6 +9,7 @@ use rusqlite::{Connection, Error, Result, Row, Statement};
 
 const COLUMNS: &str = "ROWID, chat_identifier, service_name, display_name";
 
+/// Represents a single row in the `chat` table.
 #[derive(Debug)]
 pub struct Chat {
     pub rowid: i32,

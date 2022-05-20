@@ -1,4 +1,10 @@
-/// Bubble effect variants
+/*!
+ [Expressives](https://support.apple.com/en-us/HT206894) are effects that you can select by tapping and holding the send button.
+*/
+
+/// Bubble effects are effects that alter the display of the chat bubble.
+///
+/// Read more [here](https://www.imore.com/how-to-use-bubble-and-screen-effects-imessage-iphone-ipad).
 #[derive(Debug, PartialEq)]
 pub enum BubbleEffect {
     Gentle,
@@ -7,7 +13,9 @@ pub enum BubbleEffect {
     Loud,
 }
 
-/// Screen effect variants
+/// Screen effects are effects that alter the entire background of the message view.
+///
+/// Read more [here](https://www.imore.com/how-to-use-bubble-and-screen-effects-imessage-iphone-ipad).
 #[derive(Debug, PartialEq)]
 pub enum ScreenEffect {
     Confetti,
@@ -21,7 +29,9 @@ pub enum ScreenEffect {
     Spotlight,
 }
 
-/// Expressive Container
+/// Expressive effect container
+///
+/// Read more about expressive messages [here](https://www.imore.com/how-to-use-bubble-and-screen-effects-imessage-iphone-ipad)
 ///
 /// Bubble:
 /// - com.apple.MobileSMS.expressivesend.gentle

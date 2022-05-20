@@ -1,3 +1,7 @@
+/*!
+ This module represents common (but not all) columns in the `handle` table. 
+*/
+
 use rusqlite::{Connection, Error, Result, Row, Statement};
 use std::collections::{HashMap, HashSet};
 
@@ -8,6 +12,7 @@ use crate::{
 
 const COLUMNS: &str = "ROWID, id, person_centric_id";
 
+/// Represents a single row in the `handle` table.
 #[derive(Debug)]
 pub struct Handle {
     pub rowid: i32,

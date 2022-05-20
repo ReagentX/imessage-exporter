@@ -1,3 +1,7 @@
+/*!
+ This module defines traits for table representations and stores some shared table constants.
+*/
+
 use std::collections::HashMap;
 
 use rusqlite::{Connection, Error, OpenFlags, Result, Row, Statement};
