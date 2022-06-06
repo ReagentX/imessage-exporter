@@ -339,7 +339,7 @@ mod tests {
 
         assert_eq!(
             exporter.get_time(&message),
-            "May 17, 2022  8:29:42 PM (Read after 1 hour, 49 seconds)"
+            "May 17, 2022  8:29:42 PM (Read by you after 1 hour, 49 seconds)"
         );
     }
 

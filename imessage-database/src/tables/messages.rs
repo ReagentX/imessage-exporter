@@ -313,6 +313,11 @@ impl Message {
         matches!(self.variant(), Variant::Reaction(..))
     }
 
+    /// `true` if the message is sticker, else `false`
+    pub fn is_sticker(&self) -> bool {
+        matches!(self.variant(), Variant::Sticker)
+    }
+
     /// `true` if the message has an expressive presentation, else `false`
     pub fn is_expressive(&self) -> bool {
         self.expressive_send_style_id.is_some()
@@ -470,6 +475,9 @@ impl Message {
             // Apple Pay
             2 => Variant::ApplePay(ApplePay::Send(self.text.as_ref().unwrap().to_owned())),
             3 => Variant::ApplePay(ApplePay::Recieve(self.text.as_ref().unwrap().to_owned())),
+
+            // Stickers overlayed on messages
+            1000 => Variant::Sticker,
 
             // Reactions
             2000 => Variant::Reaction(self.reaction_index(), true, Reaction::Loved),
