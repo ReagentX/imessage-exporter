@@ -6,9 +6,9 @@ pub trait Exporter<'a> {
     /// Create a new exporter with references to the cached data
     fn new(config: &'a Config) -> Self;
     /// Begin iterating over the messages table
-    fn iter_messages(&self);
+    fn iter_messages(&mut self);
     /// Get the file handle to write to, otherwise create a new one
-    fn get_or_create_file(&self) -> String;
+    fn get_or_create_file(&mut self, message: &Message) -> Option<&String>;
 }
 
 pub(super) trait Writer<'a> {
