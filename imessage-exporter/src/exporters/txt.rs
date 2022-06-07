@@ -26,7 +26,7 @@ impl<'a> Exporter<'a> for TXT<'a> {
         }
     }
 
-    fn iter_messages(&self) {
+    fn iter_messages(&mut self) {
         let mut statement = Message::get(&self.config.db);
 
         let messages = statement
@@ -35,16 +35,58 @@ impl<'a> Exporter<'a> for TXT<'a> {
 
         for message in messages {
             let msg = Message::extract(message);
+            self.get_or_create_file(&msg);
             // Message replies and reactions are rendered in context, so no need to render them separately
             if !msg.is_reaction() {
                 let message = self.format_message(&msg, 0);
                 println!("{message}");
             }
         }
+        // println!("{:?}", self.files);
     }
 
-    fn get_or_create_file(&self) -> String {
-        todo!()
+    fn get_or_create_file(&mut self, message: &Message) -> Option<&String> {
+        match message.chat_id {
+            Some(chat_id) => match self.config.chatrooms.get(&chat_id) {
+                Some(chatroom) => {
+                    match self.config.real_chatrooms.get(&chat_id) {
+                        Some(id) => {
+                            if !self.files.contains_key(id) {
+                                // Create filename
+                                let filename: String = match &chatroom.display_name() {
+                                    // If there is a display name, use that
+                                    Some(name) => name.to_string(),
+                                    // Fallback if there is no name set
+                                    None => match self.config.chatroom_participants.get(&chat_id) {
+                                        // List of participant names
+                                        Some(participants) => participants
+                                            .iter()
+                                            .map(|participant_id| {
+                                                self.config.who(participant_id, false)
+                                            })
+                                            .collect::<Vec<&str>>()
+                                            .join(", "),
+                                        // Unique chat_identifier
+                                        None => {
+                                            println!(
+                                                "Found error: message chat ID {} has no members!",
+                                                chat_id
+                                            );
+                                            chatroom.name().to_owned()
+                                        }
+                                    },
+                                };
+                                self.files.insert(*id, filename);
+                            }
+                            Some(self.files.get(id).unwrap())
+                        }
+                        None => None,
+                    }
+                }
+                None => None,
+            },
+            None => None,
+        }
     }
 }
 
