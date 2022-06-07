@@ -1,5 +1,5 @@
 /*!
- This module represents common (but not all) columns in the `chat` table. 
+ This module represents common (but not all) columns in the `chat` table.
 */
 
 use std::collections::{BTreeSet, HashMap};
@@ -114,15 +114,21 @@ impl Deduplicate for Chat {
 
 impl Chat {
     pub fn name(&self) -> &str {
+        match &self.display_name() {
+            Some(name) => name,
+            None => &self.chat_identifier,
+        }
+    }
+
+    pub fn display_name(&self) -> Option<&str> {
         match &self.display_name {
             Some(name) => {
-                if name.is_empty() {
-                    &self.chat_identifier
-                } else {
-                    name
+                if !name.is_empty() {
+                    return Some(name.as_str());
                 }
+                None
             }
-            None => &self.chat_identifier,
+            None => None,
         }
     }
 }
