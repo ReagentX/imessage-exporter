@@ -78,6 +78,7 @@ impl<'a> Config<'a> {
         })
     }
 
+    /// Determine who sent a message
     pub fn who(&self, handle_id: &i32, is_from_me: bool) -> &str {
         if is_from_me {
             ME
@@ -86,6 +87,46 @@ impl<'a> Config<'a> {
                 Some(contact) => contact,
                 None => UNKNOWN,
             }
+        }
+    }
+
+    /// Get a deduplicated chat ID or a default value
+    pub fn conversation(&self, chat_id: Option<i32>) -> Option<(&Chat, &i32)> {
+        match chat_id {
+            Some(chat_id) => match self.chatrooms.get(&chat_id) {
+                Some(chatroom) => self.real_chatrooms.get(&chat_id).map(|id| (chatroom, id)),
+                // No chatroom for the given chat_id
+                None => None,
+            },
+            // No chat_id provided
+            None => None,
+        }
+    }
+
+    /// Get a filename for a chat
+    /// 
+    /// If the chat has an assigned name, use that.
+    /// 
+    /// If it does not, first try and make a flat list of its members. Failing that, use the unique `chat_identifier` field.
+    pub fn filename(&self, chatroom: &Chat) -> String {
+        match &chatroom.display_name() {
+            // If there is a display name, use that
+            Some(name) => name.to_string(),
+            // Fallback if there is no name set
+            None => match self.chatroom_participants.get(&chatroom.rowid) {
+                // List of participant names
+                Some(participants) => participants
+                    .iter()
+                    .map(|participant_id| self.who(participant_id, false))
+                    .collect::<Vec<&str>>()
+                    .join(", "),
+                // Unique chat_identifier
+                None => {
+                    println!("Found error: message chat ID {} has no members!", chatroom.rowid);
+                    println!("{:?}", self.chatroom_participants.get(&chatroom.rowid));
+                    chatroom.chat_identifier.to_owned()
+                }
+            },
         }
     }
 
@@ -195,7 +236,9 @@ impl<'a> Config<'a> {
                 "html" => {
                     todo!()
                 }
-                _ => { unreachable!() }
+                _ => {
+                    unreachable!()
+                }
             }
         } else {
             // Run some app methods
