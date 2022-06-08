@@ -8,7 +8,7 @@ pub trait Exporter<'a> {
     /// Begin iterating over the messages table
     fn iter_messages(&mut self);
     /// Get the file handle to write to, otherwise create a new one
-    fn get_or_create_file(&mut self, message: &Message) -> Option<&String>;
+    fn get_or_create_file(&mut self, message: &Message) -> &str;
 }
 
 pub(super) trait Writer<'a> {
@@ -22,5 +22,5 @@ pub(super) trait Writer<'a> {
     fn format_reaction(&self, msg: &Message) -> String;
     /// Format an expressive message
     fn format_expressive(&self, msg: &'a Message) -> &'a str;
-    fn write_to_file(&self, file: &str, text: &str);
+    fn write_to_file(file: &str, text: &str);
 }
