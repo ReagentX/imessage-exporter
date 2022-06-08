@@ -7,10 +7,10 @@
 /// Read more [here](https://www.imore.com/how-to-use-bubble-and-screen-effects-imessage-iphone-ipad).
 #[derive(Debug, PartialEq)]
 pub enum BubbleEffect {
-    Gentle,
-    Impact,
-    InvisibleInk,
+    Slam,
     Loud,
+    Gentle,
+    InvisibleInk,
 }
 
 /// Screen effects are effects that alter the entire background of the message view.

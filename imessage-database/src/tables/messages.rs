@@ -515,7 +515,7 @@ impl Message {
                     Expressive::Bubble(BubbleEffect::Gentle)
                 }
                 "com.apple.MobileSMS.expressivesend.impact" => {
-                    Expressive::Bubble(BubbleEffect::Impact)
+                    Expressive::Bubble(BubbleEffect::Slam)
                 }
                 "com.apple.MobileSMS.expressivesend.invisibleink" => {
                     Expressive::Bubble(BubbleEffect::InvisibleInk)

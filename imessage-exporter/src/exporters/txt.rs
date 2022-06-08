@@ -243,10 +243,10 @@ impl<'a> Writer<'a> for TXT<'a> {
                 ScreenEffect::Spotlight => "Sent with Spotlight",
             },
             Expressive::Bubble(effect) => match effect {
-                BubbleEffect::Gentle => "Sent with Gentle",
-                BubbleEffect::Impact => "Sent with Implact",
-                BubbleEffect::InvisibleInk => "Sent with Invisible Ink",
+                BubbleEffect::Slam => "Sent with Slam",
                 BubbleEffect::Loud => "Sent with Loud",
+                BubbleEffect::Gentle => "Sent with Gentle",
+                BubbleEffect::InvisibleInk => "Sent with Invisible Ink",
             },
             Expressive::Unknown(effect) => effect,
             Expressive::Normal => "Sent with ",
