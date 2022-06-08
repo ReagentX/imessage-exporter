@@ -145,67 +145,6 @@ impl<'a> Writer<'a> for TXT<'a> {
         }
 
         formatted_message
-
-        // TODO: This is sample code, remove it!
-        // Some(format!(
-        //     "Time: {:?} | Type: {:?} | Chat: {:?} {:?} | Sender: {} (deduped: {}) | {:?} |{} |{} |{}",
-        //     dates::format(&message.date()),
-        //     message.case(),
-        //     message.chat_id,
-        //     match message.chat_id {
-        //         Some(id) => match self.config.chatroom_participants.get(&id) {
-        //             Some(chatroom) => chatroom
-        //                 .iter()
-        //                 .map(|x| self.config.participants.get(x).unwrap())
-        //                 .collect::<Vec<&String>>(),
-        //             None => {
-        //                 // TODO: Orphaned chats!
-        //                 println!("Found error: message chat ID {} has no members!", id);
-        //                 Vec::new()
-        //             }
-        //         },
-        //         None => {
-        //             // TODO: Orphaned messages!
-        //             println!("Found error: message has no chat ID!");
-        //             Vec::new()
-        //         }
-        //     },
-        //     // Get real participant info
-        //     match message.is_from_me {
-        //         true => ME,
-        //         false => self.config.participants.get(&message.handle_id).unwrap(),
-        //     },
-        //     // Get unique participant info
-        //     match message.is_from_me {
-        //         true => &-1,
-        //         false => self.config.real_participants.get(&message.handle_id).unwrap(),
-        //     },
-        //     message.body(),
-        //     match message.num_replies {
-        //         0 => String::new(),
-        //         _ => {
-        //             let replies = message.get_replies(&self.config.db);
-        //             format!(
-        //                 " Replies: {:?}",
-        //                 replies.iter().map(|m| format!("{}: {}", &m.guid, m.get_reply_index())).collect::<Vec<String>>()
-        //             )
-        //         }
-        //     },
-        //     {
-        //         let reactions = message.get_reactions(&self.config.db, &self.config.reactions);
-        //         match reactions.len() {
-        //             0 => String::new(),
-        //             _ => format!(" Reactions: {:?}", reactions.iter().map(|m| format!("{:?}", m.variant())).collect::<Vec<String>>())
-        //         }
-        //     },
-        //     {
-        //         let attachments = Attachment::from_message(&self.config.db, message.rowid);
-        //         match attachments.len() {
-        //             0 => String::new(),
-        //             _ => format!(" Attachments: {:?}", attachments.iter().map(|a| format!("{:?}", a.filename)).collect::<Vec<String>>())
-        //         }
-        //     }
-        // ))
     }
 
     fn format_attachment(&self, attachment: &'a Attachment) -> Result<&'a str, &'a str> {
