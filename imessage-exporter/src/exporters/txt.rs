@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fs::File, io::Write};
 
 use crate::{
     app::runtime::Config,
@@ -15,6 +15,7 @@ pub struct TXT<'a> {
     /// Data that is setup from the application's runtime
     pub config: &'a Config<'a>,
     /// Handles to files we want to write messages to
+    /// Map of internal unique chatroom ID to a filename
     pub files: HashMap<i32, String>,
 }
 
@@ -91,7 +92,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                         }
                         Err(result) => result,
                     },
-                    // Attachment does not exist!
+                    // Attachment does not exist in attachments table
                     None => "Attachment missing!",
                 },
                 // TODO: Support app messages
@@ -144,6 +145,12 @@ impl<'a> Writer<'a> for TXT<'a> {
             );
         }
 
+        // TODO: We add 2 newlines for messages that have replies
+        if indent.is_empty() {
+            // Add a newline for top-level messages
+            formatted_message.push('\n');
+        }
+
         formatted_message
     }
 
@@ -157,6 +164,7 @@ impl<'a> Writer<'a> for TXT<'a> {
 
     fn format_app(&self, msg: &'a Message) -> &'a str {
         // TODO: Implement app messages
+        // TODO: Support Apple Pay variants
         "App messages not yet implemented!"
     }
 
@@ -188,13 +196,19 @@ impl<'a> Writer<'a> for TXT<'a> {
                 BubbleEffect::InvisibleInk => "Sent with Invisible Ink",
             },
             Expressive::Unknown(effect) => effect,
-            Expressive::Normal => "Sent with ",
+            Expressive::Normal => "",
         }
     }
 
-    fn write_to_file(file: &str, text: &str) {
-        println!("{file}");
-        println!("{text}");
+    fn write_to_file(filename: &str, text: &str) {
+        // TODO: Store this file in the hashmap instead of the filename
+        // TODO: Get folder from `-o` option in command
+        let mut file = File::options()
+            .append(true)
+            .create(true)
+            .open(format!("/Users/chris/ime/{filename}.txt"))
+            .unwrap();
+        file.write_all(text.as_bytes()).unwrap();
     }
 }
 
@@ -215,9 +229,11 @@ impl<'a> TXT<'a> {
     }
 
     fn add_line(&self, string: &mut String, part: &str, indent: &str) {
-        string.push_str(indent);
-        string.push_str(part);
-        string.push('\n');
+        if !part.is_empty() {
+            string.push_str(indent);
+            string.push_str(part);
+            string.push('\n');
+        }
     }
 }
 
