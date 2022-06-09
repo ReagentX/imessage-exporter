@@ -2,10 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use rusqlite::Connection;
 
-use crate::{
-    app::options::{Options, SUPPORTED_FILE_TYPES},
-    Exporter, TXT,
-};
+use crate::{app::options::Options, Exporter, TXT};
 use imessage_database::{
     tables::table::{get_connection, Cacheable, Deduplicate, Diagnostic, Table, ME, UNKNOWN},
     util::dates::get_offset,
@@ -96,7 +93,10 @@ impl<'a> Config<'a> {
             Some(chat_id) => match self.chatrooms.get(&chat_id) {
                 Some(chatroom) => self.real_chatrooms.get(&chat_id).map(|id| (chatroom, id)),
                 // No chatroom for the given chat_id
-                None => None,
+                None => {
+                    println!("Chat ID {chat_id} does not exist in chat table!");
+                    None
+                }
             },
             // No chat_id provided
             None => None,
@@ -104,9 +104,9 @@ impl<'a> Config<'a> {
     }
 
     /// Get a filename for a chat, possibly using cached data.
-    /// 
+    ///
     /// If the chat has an assigned name, use that.
-    /// 
+    ///
     /// If it does not, first try and make a flat list of its members. Failing that, use the unique `chat_identifier` field.
     pub fn filename(&self, chatroom: &Chat) -> String {
         match &chatroom.display_name() {
@@ -122,60 +122,13 @@ impl<'a> Config<'a> {
                     .join(", "),
                 // Unique chat_identifier
                 None => {
-                    println!("Found error: message chat ID {} has no members!", chatroom.rowid);
+                    println!(
+                        "Found error: message chat ID {} has no members!",
+                        chatroom.rowid
+                    );
                     chatroom.chat_identifier.to_owned()
                 }
             },
-        }
-    }
-
-    fn iter_threads(&self) {
-        for thread in &self.chatroom_participants {
-            let (chat_id, participants) = thread;
-            let chatroom = self.chatrooms.get(chat_id).unwrap();
-            println!(
-                "{} ({}: {}): {}",
-                chatroom.name(),
-                chat_id,
-                self.real_chatrooms.get(chat_id).unwrap(),
-                participants
-                    .iter()
-                    .map(|participant_id| format!(
-                        "{}",
-                        self.real_participants.get(participant_id).unwrap()
-                    ))
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            )
-        }
-    }
-
-    fn iter_handles(&self) {
-        for handle in &self.real_participants {
-            let (handle_id, handle_name) = handle;
-            println!("{}: {}", handle_id, handle_name,)
-        }
-    }
-
-    fn iter_reactions(&self) {
-        for reaction in &self.reactions {
-            let (message, reactions) = reaction;
-            if reactions.len() > 1 {
-                println!("{}: {:?}", message, reactions)
-            }
-        }
-    }
-
-    fn iter_attachments(&self) {
-        let mut statement = Attachment::get(&self.db);
-        let attachments = statement
-            .query_map([], |row| Ok(Attachment::from_row(row)))
-            .unwrap();
-
-        for attachment in attachments {
-            // println!("Attachment: {attachment:?}");
-            let file = Attachment::extract(attachment);
-            println!("{:?}", file.filename);
         }
     }
 
@@ -240,12 +193,8 @@ impl<'a> Config<'a> {
                 }
             }
         } else {
-            // Run some app methods
-            // self.iter_threads();
-            // self.iter_handles();
-            // self.iter_reactions();
-            // self.iter_attachments();
-            println!("Done!");
+            println!("How did you get here?");
         }
+        println!("Done!");
     }
 }
