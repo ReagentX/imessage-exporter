@@ -67,7 +67,7 @@ impl<'a> Config<'a> {
         let reactions = Message::cache(&conn);
         Some(Config {
             chatrooms,
-            real_chatrooms: Chat::dedupe(&chatroom_participants),
+            real_chatrooms: ChatToHandle::dedupe(&chatroom_participants),
             chatroom_participants,
             real_participants: Handle::dedupe(&participants),
             participants,
@@ -103,7 +103,7 @@ impl<'a> Config<'a> {
         }
     }
 
-    /// Get a filename for a chat
+    /// Get a filename for a chat, possibly using cached data.
     /// 
     /// If the chat has an assigned name, use that.
     /// 
@@ -123,7 +123,6 @@ impl<'a> Config<'a> {
                 // Unique chat_identifier
                 None => {
                     println!("Found error: message chat ID {} has no members!", chatroom.rowid);
-                    println!("{:?}", self.chatroom_participants.get(&chatroom.rowid));
                     chatroom.chat_identifier.to_owned()
                 }
             },
