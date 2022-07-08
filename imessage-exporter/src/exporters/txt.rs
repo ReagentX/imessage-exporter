@@ -209,8 +209,6 @@ impl<'a> Writer<'a> for TXT<'a> {
     }
 
     fn write_to_file(file: &Path, text: &str) {
-        // TODO: Store this file in the hashmap instead of the filename
-        // TODO: Get folder from `-o` option in command
         let mut file = File::options()
             .append(true)
             .create(true)
