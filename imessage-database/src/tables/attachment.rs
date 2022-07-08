@@ -1,5 +1,5 @@
 /*!
- This module represents common (but not all) columns in the `attachment` table. 
+ This module represents common (but not all) columns in the `attachment` table.
 */
 
 use rusqlite::{Connection, Error, Error as E, Result, Row, Statement};
@@ -85,14 +85,7 @@ impl Diagnostic for Attachment {
                 "SELECT count(rowid) FROM {ATTACHMENT} WHERE typeof(ck_server_change_token_blob) == 'text'"
             ))
             .unwrap();
-        let num_blank_ck: Option<i32> = statement_ck.query_row([], |r| r.get(0)).unwrap_or(None);
-
-        let mut statement_sr = db
-            .prepare(&format!(
-                "SELECT count(rowid) FROM {ATTACHMENT} WHERE typeof(sr_ck_server_change_token_blob) == 'text'"
-            ))
-            .unwrap();
-        let num_blank_sr: Option<i32> = statement_sr.query_row([], |r| r.get(0)).unwrap_or(None);
+        let num_blank_ck: i32 = statement_ck.query_row([], |r| r.get(0)).unwrap_or(0);
 
         let mut statement_sr = db
             .prepare(&format!("SELECT filename FROM {ATTACHMENT}"))
@@ -111,17 +104,14 @@ impl Diagnostic for Attachment {
             })
             .count();
 
-        if num_blank_ck.is_some() || num_blank_sr.is_some() || missing_files > 0 {
+        if num_blank_ck > 0 || missing_files > 0 {
             println!("\rMissing attachment data:");
         }
         if missing_files > 0 {
             println!("    Missing files: {missing_files:?}");
         }
-        if let Some(ck) = num_blank_ck {
-            println!("    ck_server_change_token_blob: {ck:?}");
-        }
-        if let Some(sr) = num_blank_sr {
-            println!("    ck_server_change_token_blob: {sr:?}");
+        if num_blank_ck > 0 {
+            println!("    ck_server_change_token_blob: {num_blank_ck:?}");
         }
     }
 }
