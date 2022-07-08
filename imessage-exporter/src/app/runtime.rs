@@ -1,11 +1,15 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    fs::create_dir_all,
+    path::PathBuf,
+};
 
 use rusqlite::Connection;
 
 use crate::{app::options::Options, Exporter, TXT};
 use imessage_database::{
     tables::table::{get_connection, Cacheable, Deduplicate, Diagnostic, Table, ME, UNKNOWN},
-    util::dates::get_offset,
+    util::{dates::get_offset, dirs::home},
     Attachment, Chat, ChatToHandle, Handle, Message,
 };
 
@@ -132,6 +136,14 @@ impl<'a> Config<'a> {
         }
     }
 
+    /// Get the export path for the current session
+    pub fn export_path(&self) -> PathBuf {
+        match self.options.export_path {
+            Some(path_str) => PathBuf::from(path_str),
+            None => PathBuf::from(&format!("{}/imessage_export", home())),
+        }
+    }
+
     /// Handles diagnostic tests for database
     fn run_diagnostic(&self) {
         println!("iMessage Database Diagnostics\n");
@@ -174,6 +186,9 @@ impl<'a> Config<'a> {
         if self.options.diagnostic {
             self.run_diagnostic();
         } else if self.options.export_type.is_some() {
+            // Ensure the path we want to export to exists
+            create_dir_all(self.export_path()).unwrap();
+
             match self.options.export_type.unwrap() {
                 "txt" => {
                     // Create exporter, pass it data we care about, then kick it off

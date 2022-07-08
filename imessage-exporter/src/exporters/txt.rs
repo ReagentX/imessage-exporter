@@ -1,4 +1,9 @@
-use std::{collections::HashMap, fs::File, io::Write};
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 use crate::{
     app::runtime::Config,
@@ -16,7 +21,7 @@ pub struct TXT<'a> {
     pub config: &'a Config<'a>,
     /// Handles to files we want to write messages to
     /// Map of internal unique chatroom ID to a filename
-    pub files: HashMap<i32, String>,
+    pub files: HashMap<i32, PathBuf>,
 }
 
 impl<'a> Exporter<'a> for TXT<'a> {
@@ -44,13 +49,16 @@ impl<'a> Exporter<'a> for TXT<'a> {
         }
     }
 
-    fn get_or_create_file(&mut self, message: &Message) -> &str {
+    /// Create a file for the given chat, caching it so we don't need to build it later
+    fn get_or_create_file(&mut self, message: &Message) -> &Path {
         match self.config.conversation(message.chat_id) {
-            Some((chatroom, id)) => self
-                .files
-                .entry(*id)
-                .or_insert_with(|| self.config.filename(chatroom)),
-            None => ORPHANED,
+            Some((chatroom, id)) => self.files.entry(*id).or_insert_with(|| {
+                let mut path = self.config.export_path();
+                path.push(self.config.filename(chatroom));
+                path.set_extension("txt");
+                path
+            }),
+            None => Path::new(ORPHANED),
         }
     }
 }
@@ -200,13 +208,13 @@ impl<'a> Writer<'a> for TXT<'a> {
         }
     }
 
-    fn write_to_file(filename: &str, text: &str) {
+    fn write_to_file(file: &Path, text: &str) {
         // TODO: Store this file in the hashmap instead of the filename
         // TODO: Get folder from `-o` option in command
         let mut file = File::options()
             .append(true)
             .create(true)
-            .open(format!("/Users/chris/ime/{filename}.txt"))
+            .open(file)
             .unwrap();
         file.write_all(text.as_bytes()).unwrap();
     }

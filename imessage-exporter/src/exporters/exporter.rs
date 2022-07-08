@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use imessage_database::{Attachment, Message};
 
 use crate::app::runtime::Config;
@@ -8,7 +10,7 @@ pub trait Exporter<'a> {
     /// Begin iterating over the messages table
     fn iter_messages(&mut self);
     /// Get the file handle to write to, otherwise create a new one
-    fn get_or_create_file(&mut self, message: &Message) -> &str;
+    fn get_or_create_file(&mut self, message: &Message) -> &Path;
 }
 
 pub(super) trait Writer<'a> {
@@ -22,5 +24,5 @@ pub(super) trait Writer<'a> {
     fn format_reaction(&self, msg: &Message) -> String;
     /// Format an expressive message
     fn format_expressive(&self, msg: &'a Message) -> &'a str;
-    fn write_to_file(file: &str, text: &str);
+    fn write_to_file(file: &Path, text: &str);
 }
