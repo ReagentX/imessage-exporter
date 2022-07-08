@@ -3,3 +3,6 @@
 
 # Generated files
 /target
+
+# OS Files
+.DS_Store
