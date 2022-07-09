@@ -193,7 +193,7 @@ impl Cacheable for Message {
         // Iterate over the messages and update the map
         for reaction in messages {
             let reaction = Self::extract(reaction);
-            if let Variant::Reaction(..) = reaction.variant() {
+            if reaction.is_reaction() {
                 match reaction.clean_associated_guid() {
                     Some((_, reaction_target_guid)) => match map.get_mut(reaction_target_guid) {
                         Some(reactions) => {
@@ -311,11 +311,12 @@ impl Message {
     /// `true` if the message is a reaction to another message, else `false`
     pub fn is_reaction(&self) -> bool {
         matches!(self.variant(), Variant::Reaction(..))
+            | (self.is_sticker() && self.associated_message_guid.is_some())
     }
 
     /// `true` if the message is sticker, else `false`
     pub fn is_sticker(&self) -> bool {
-        matches!(self.variant(), Variant::Sticker)
+        matches!(self.variant(), Variant::Sticker(_))
     }
 
     /// `true` if the message has an expressive presentation, else `false`
@@ -435,7 +436,7 @@ impl Message {
 
             for message in messages {
                 let msg = Message::extract(message);
-                if let Variant::Reaction(idx, _, _) = msg.variant() {
+                if let Variant::Reaction(idx, _, _) | Variant::Sticker(idx) = msg.variant() {
                     match out_h.get_mut(&idx) {
                         Some(body_part) => body_part.push(msg),
                         None => {
@@ -499,7 +500,7 @@ impl Message {
             3 => Variant::ApplePay(ApplePay::Recieve(self.text.as_ref().unwrap().to_owned())),
 
             // Stickers overlayed on messages
-            1000 => Variant::Sticker,
+            1000 => Variant::Sticker(self.reaction_index()),
 
             // Reactions
             2000 => Variant::Reaction(self.reaction_index(), true, Reaction::Loved),
