@@ -1,7 +1,7 @@
 [workspace]
 members = [
-    "imessage-database",
-    "imessage-exporter",
+  "imessage-database",
+  "imessage-exporter",
 ]
 
 [profile.release]
