@@ -129,6 +129,7 @@ impl<'a> Writer<'a> for TXT<'a> {
 
             // Handle Reactions
             if let Some(reactions) = reactions.get(&idx) {
+                self.add_line(&mut formatted_message, "Reactions:", &indent);
                 reactions.iter().for_each(|reaction| {
                     self.add_line(
                         &mut formatted_message,
@@ -178,18 +179,37 @@ impl<'a> Writer<'a> for TXT<'a> {
         }
     }
 
-    fn format_app(&self, msg: &'a Message) -> &'a str {
+    fn format_app(&self, _: &'a Message) -> &'a str {
         // TODO: Implement app messages
         // TODO: Support Apple Pay variants
         "App messages not yet implemented!"
     }
 
     fn format_reaction(&self, msg: &Message) -> String {
-        format!(
-            "{}: {:?}",
-            self.config.who(&msg.handle_id, msg.is_from_me),
-            msg.variant()
-        )
+        match msg.variant() {
+            imessage_database::Variant::Reaction(_, added, reaction) => {
+                if !added {
+                    return "".to_string();
+                }
+                format!(
+                    "{:?} by {}",
+                    reaction,
+                    self.config.who(&msg.handle_id, msg.is_from_me),
+                )
+            }
+            imessage_database::Variant::Sticker(_) => {
+                let paths = Attachment::from_message(&self.config.db, msg);
+                format!(
+                    "Sticker from {}: {}",
+                    self.config.who(&msg.handle_id, msg.is_from_me),
+                    match paths.get(0) {
+                        Some(sticker) => &sticker.filename.as_ref().unwrap(),
+                        None => "Sticker not found!",
+                    },
+                )
+            }
+            _ => unreachable!(),
+        }
     }
 
     fn format_expressive(&self, msg: &'a Message) -> &'a str {
