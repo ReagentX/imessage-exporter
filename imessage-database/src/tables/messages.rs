@@ -344,6 +344,28 @@ impl Message {
         0
     }
 
+    /// Build a HashMap of message component index to messages that react to that component
+    ///
+    /// # Example:
+    ///
+    /// ```
+    /// use imessage_database::util::dirs::default_db_path;
+    /// use imessage_database::tables::table::{Diagnostic, get_connection};
+    /// use imessage_database::tables::messages::Message;
+    ///
+    /// let db_path = default_db_path();
+    /// let conn = get_connection(&db_path);
+    /// Message::get_count(&conn);
+    /// ```
+    pub fn get_count(db: &Connection) -> u64 {
+        let mut statement = db
+            .prepare(&format!("SELECT COUNT(*) FROM {}", MESSAGE))
+            .unwrap();
+        // Execute query to build the Handles
+        let count: u64 = statement.query_row([], |r| r.get(0)).unwrap_or(0);
+        count
+    }
+
     /// In some special cases, the `guid` is stored with some additional data we need to parse out. There are two prefixes:
     ///
     /// - `bp:` GUID prefix for bubble message reactions (links, apps, etc)
