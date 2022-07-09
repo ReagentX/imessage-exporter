@@ -8,7 +8,9 @@ use rusqlite::Connection;
 
 use crate::{app::options::Options, Exporter, TXT};
 use imessage_database::{
-    tables::table::{get_connection, Cacheable, Deduplicate, Diagnostic, ME, UNKNOWN},
+    tables::table::{
+        get_connection, Cacheable, Deduplicate, Diagnostic, DEFAULT_OUTPUT_DIR, ME, UNKNOWN,
+    },
     util::{dates::get_offset, dirs::home},
     Attachment, Chat, ChatToHandle, Handle, Message,
 };
@@ -142,7 +144,7 @@ impl<'a> Config<'a> {
     pub fn export_path(&self) -> PathBuf {
         match self.options.export_path {
             Some(path_str) => PathBuf::from(path_str),
-            None => PathBuf::from(&format!("{}/imessage_export", home())),
+            None => PathBuf::from(&format!("{}/{DEFAULT_OUTPUT_DIR}", home())),
         }
     }
 

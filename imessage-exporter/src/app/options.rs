@@ -1,6 +1,9 @@
-use clap::{Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgMatches, Command};
 
-use imessage_database::util::dirs::default_db_path;
+use imessage_database::{
+    tables::table::DEFAULT_OUTPUT_DIR,
+    util::dirs::{default_db_path, home},
+};
 
 // CLI Arg Names
 pub const OPTION_PATH: &str = "db-path";
@@ -91,14 +94,14 @@ impl<'a> Options<'a> {
 
 pub fn from_command_line() -> ArgMatches {
     let matches = Command::new("iMessage Exporter")
-        .version("0.0.0")
+        .version(crate_version!())
         .about(ABOUT)
         .arg_required_else_help(true)
         .arg(
             Arg::new(OPTION_PATH)
                 .short('p')
                 .long(OPTION_PATH)
-                .help("Specify a custom path for the iMessage database file")
+                .help(&*format!("Specify a custom path for the iMessage database file\nIf omitted, the defaut directory is {}", default_db_path()))
                 .takes_value(true)
                 .value_name("path/to/chat.db"),
         )
@@ -126,7 +129,7 @@ pub fn from_command_line() -> ArgMatches {
             Arg::new(OPTION_EXPORT_PATH)
                 .short('o')
                 .long(OPTION_EXPORT_PATH)
-                .help("Specify a custom directory for outputting exported data")
+                .help(&*format!("Specify a custom directory for outputting exported data\nIf omitted, the defaut directory is {}/{DEFAULT_OUTPUT_DIR}", home()))
                 .takes_value(true)
                 .value_name("path/to/save/files"),
         )

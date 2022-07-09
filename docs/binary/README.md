@@ -30,9 +30,11 @@ The `imessage_exporter` binary exports iMessage data to `txt`, `csv`, `pdf`, or 
 
 -o, --export-path <path/to/save/files>
         Specify a custom directory for outputting exported data
+        If omitted, the defaut directory is /Users/chris/imessage_export
 
 -p, --db-path <path/to/chat.db>
         Specify a custom path for the iMessage database file
+        If omitted, the defaut directory is /Users/chris/Library/Messages/chat.db
 
 -V, --version
         Print version information
