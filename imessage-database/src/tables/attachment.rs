@@ -7,7 +7,10 @@ use std::path::Path;
 
 use crate::{
     tables::table::{Diagnostic, Table, ATTACHMENT},
-    util::{dirs::home, output::processing},
+    util::{
+        dirs::home,
+        output::{done_processing, processing},
+    },
     Message,
 };
 
@@ -105,7 +108,9 @@ impl Diagnostic for Attachment {
             .count();
 
         if num_blank_ck > 0 || missing_files > 0 {
-            println!("\rMissing attachment data:");
+            println!("Missing attachment data:");
+        } else {
+            done_processing();
         }
         if missing_files > 0 {
             println!("    Missing files: {missing_files:?}");
