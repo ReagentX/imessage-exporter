@@ -9,7 +9,7 @@ use imessage_database::{
 pub const OPTION_PATH: &str = "db-path";
 pub const OPTION_COPY: &str = "no-copy";
 pub const OPTION_DIAGNOSTIC: &str = "diagnostics";
-pub const OPTION_EXPORT_TYPE: &str = "export";
+pub const OPTION_EXPORT_TYPE: &str = "format";
 pub const OPTION_EXPORT_PATH: &str = "export-path";
 
 // Other CLI Text
@@ -119,7 +119,7 @@ pub fn from_command_line() -> ArgMatches {
         )
         .arg(
             Arg::new(OPTION_EXPORT_TYPE)
-                .short('e')
+                .short('f')
                 .long(OPTION_EXPORT_TYPE)
                 .help("Specify a single file format to export messages into")
                 .takes_value(true)
