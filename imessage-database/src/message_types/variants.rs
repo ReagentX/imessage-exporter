@@ -46,7 +46,7 @@ pub enum ApplePay {
 pub enum Variant {
     ApplePay(ApplePay),
     Reaction(usize, bool, Reaction),
-    Sticker,
+    Sticker(usize),
     Unknown(i32),
     Normal,
 }
