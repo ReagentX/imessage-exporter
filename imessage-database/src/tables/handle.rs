@@ -1,4 +1,8 @@
-use rusqlite::{Connection, Result, Row, Statement};
+/*!
+ This module represents common (but not all) columns in the `handle` table. 
+*/
+
+use rusqlite::{Connection, Error, Result, Row, Statement};
 use std::collections::{HashMap, HashSet};
 
 use crate::{
@@ -6,13 +10,13 @@ use crate::{
     util::output::processing,
 };
 
+const COLUMNS: &str = "ROWID, id, person_centric_id";
+
+/// Represents a single row in the `handle` table.
 #[derive(Debug)]
 pub struct Handle {
     pub rowid: i32,
     pub id: String,
-    pub country: String,
-    pub service: String,
-    pub uncanonicalized_id: Option<String>,
     pub person_centric_id: Option<String>,
 }
 
@@ -21,15 +25,24 @@ impl Table for Handle {
         Ok(Handle {
             rowid: row.get(0)?,
             id: row.get(1)?,
-            country: row.get(2)?,
-            service: row.get(3)?,
-            uncanonicalized_id: row.get(4)?,
-            person_centric_id: row.get(5)?,
+            person_centric_id: row.get(2)?,
         })
     }
 
     fn get(db: &Connection) -> Statement {
-        db.prepare(&format!("SELECT * from {}", HANDLE)).unwrap()
+        db.prepare(&format!("SELECT {COLUMNS} from {}", HANDLE)).unwrap()
+    }
+
+    fn extract(handle: Result<Result<Self, Error>, Error>) -> Self {
+        match handle {
+            Ok(handle) => match handle {
+                Ok(hdl) => hdl,
+                // TODO: When does this occur?
+                Err(why) => panic!("Inner error: {}", why),
+            },
+            // TODO: When does this occur?
+            Err(why) => panic!("Outer error: {}", why),
+        }
     }
 }
 
@@ -66,7 +79,7 @@ impl Cacheable for Handle {
 
         // Iterate over the handles and update the map
         for handle in handles {
-            let contact = handle.unwrap().unwrap();
+            let contact = Handle::extract(handle);
             map.insert(contact.rowid, contact.id);
         }
 

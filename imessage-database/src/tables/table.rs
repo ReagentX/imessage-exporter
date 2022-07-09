@@ -1,6 +1,10 @@
+/*!
+ This module defines traits for table representations and stores some shared table constants.
+*/
+
 use std::collections::HashMap;
 
-use rusqlite::{Connection, OpenFlags, Result, Row, Statement};
+use rusqlite::{Connection, Error, OpenFlags, Result, Row, Statement};
 
 /// Defines behavior for SQL Table data
 pub trait Table {
@@ -10,6 +14,11 @@ pub trait Table {
         Self: Sized;
     /// Gets a statment we can exectue to iterate over the data in the table
     fn get(db: &Connection) -> Statement;
+
+    /// Extract valid row data while handling both types of query errors
+    fn extract(item: Result<Result<Self, Error>, Error>) -> Self
+    where
+        Self: Sized;
 }
 
 /// Defines behavior for table data that can be cached in memory
@@ -50,4 +59,6 @@ pub const CHAT_HANDLE_JOIN: &str = "chat_handle_join";
 
 // Default information
 pub const ME: &str = "Me";
+pub const UNKNOWN: &str = "Unknown";
 pub const DEFAULT_PATH: &str = "Library/Messages/chat.db";
+pub const ORPHANED: &str = "orphaned";
