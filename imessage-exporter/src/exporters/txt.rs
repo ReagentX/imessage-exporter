@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    app::{progress::build_progress_bar, runtime::Config},
+    app::{progress::build_progress_bar_export, runtime::Config},
     exporters::exporter::{Exporter, Writer},
 };
 
@@ -33,10 +33,16 @@ impl<'a> Exporter<'a> for TXT<'a> {
     }
 
     fn iter_messages(&mut self) {
+        // Tell the user what we are doing
+        eprintln!(
+            "Exporting to {} as txt...",
+            self.config.export_path().display()
+        );
+
         // Set up progress bar
         let mut current_message = 0;
         let total_messages = Message::get_count(&self.config.db);
-        let pb = build_progress_bar(total_messages);
+        let pb = build_progress_bar_export(total_messages);
 
         let mut statement = Message::get(&self.config.db);
 

@@ -58,14 +58,16 @@ impl<'a> Config<'a> {
 
         let conn = get_connection(&options.db_path);
         // TODO: Implement Try for these cache calls `?`
-        println!("Caching chats...");
+        eprintln!("Building cache...");
+        eprintln!("[1/4] Caching chats...");
         let chatrooms = Chat::cache(&conn);
-        println!("Caching chatrooms...");
+        eprintln!("[2/4] Caching chatrooms...");
         let chatroom_participants = ChatToHandle::cache(&conn);
-        println!("Caching participants...");
+        eprintln!("[3/4] Caching participants...");
         let participants = Handle::cache(&conn);
-        println!("Caching reactions...");
+        eprintln!("[4/4] Caching reactions...");
         let reactions = Message::cache(&conn);
+        eprintln!("Cache built!");
         Some(Config {
             chatrooms,
             real_chatrooms: ChatToHandle::dedupe(&chatroom_participants),
@@ -146,7 +148,7 @@ impl<'a> Config<'a> {
 
     /// Handles diagnostic tests for database
     fn run_diagnostic(&self) {
-        println!("iMessage Database Diagnostics\n");
+        println!("\niMessage Database Diagnostics\n");
         Handle::run_diagnostic(&self.db);
         Message::run_diagnostic(&self.db);
         Attachment::run_diagnostic(&self.db);
