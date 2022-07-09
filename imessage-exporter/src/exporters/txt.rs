@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    app::runtime::Config,
+    app::{progress::build_progress_bar, runtime::Config},
     exporters::exporter::{Exporter, Writer},
 };
 
@@ -33,6 +33,11 @@ impl<'a> Exporter<'a> for TXT<'a> {
     }
 
     fn iter_messages(&mut self) {
+        // Set up progress bar
+        let mut current_message = 0;
+        let total_messages = Message::get_count(&self.config.db);
+        let pb = build_progress_bar(total_messages);
+
         let mut statement = Message::get(&self.config.db);
 
         let messages = statement
@@ -46,7 +51,10 @@ impl<'a> Exporter<'a> for TXT<'a> {
                 let message = self.format_message(&msg, 0);
                 TXT::write_to_file(self.get_or_create_file(&msg), &message);
             }
+            current_message += 1;
+            pb.set_position(current_message);
         }
+        pb.finish_at_current_pos();
     }
 
     /// Create a file for the given chat, caching it so we don't need to build it later
