@@ -2,9 +2,9 @@
  This module represents common (but not all) columns in the `chat` table.
 */
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{HashMap};
 
-use crate::tables::table::{Cacheable, Deduplicate, Table, CHAT};
+use crate::tables::table::{Cacheable, Table, CHAT};
 use rusqlite::{Connection, Error, Result, Row, Statement};
 
 const COLUMNS: &str = "ROWID, chat_identifier, service_name, display_name";
