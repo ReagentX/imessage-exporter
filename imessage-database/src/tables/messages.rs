@@ -242,7 +242,7 @@ impl Message {
                         end = idx;
                     }
                 }
-                if start < end && start < text.len() {
+                if start <= end && start < text.len() {
                     out_v.push(BubbleType::Text(text[start..].trim()));
                 }
                 out_v
@@ -610,6 +610,20 @@ mod tests {
     #[test]
     fn can_gen_message() {
         blank();
+    }
+
+    #[test]
+    fn can_get_message_body_single_emoji() {
+        let mut m = blank();
+        m.text = Some("🙈".to_string());
+        assert_eq!(m.body(), vec![BubbleType::Text("🙈")]);
+    }
+
+    #[test]
+    fn can_get_message_body_multiple_emoji() {
+        let mut m = blank();
+        m.text = Some("🙈🙈🙈".to_string());
+        assert_eq!(m.body(), vec![BubbleType::Text("🙈🙈🙈")]);
     }
 
     #[test]
