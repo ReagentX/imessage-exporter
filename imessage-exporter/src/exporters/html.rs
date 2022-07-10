@@ -146,10 +146,10 @@ impl<'a> Writer<'a> for HTML<'a> {
                                 result.replace("~", &home())
                             )
                         }
-                        Err(result) => format!("<span class=\"attachment_error\">{result}</span>"),
+                        Err(result) => format!("<span class=\"attachment_error\">Missing attachment filepath: {result}</span>"),
                     },
                     // Attachment does not exist in attachments table
-                    None => "Attachment missing!".to_owned(),
+                    None => "Attachment does not exist!".to_owned(),
                 },
                 // TODO: Support app messages
                 BubbleType::App => format!(
