@@ -6,7 +6,7 @@ use std::{
 
 use rusqlite::Connection;
 
-use crate::{app::options::Options, Exporter, TXT};
+use crate::{app::options::Options, Exporter, HTML, TXT};
 use imessage_database::{
     tables::table::{
         get_connection, Cacheable, Deduplicate, Diagnostic, DEFAULT_OUTPUT_DIR, ME, UNKNOWN,
@@ -205,7 +205,7 @@ impl<'a> Config<'a> {
                     todo!()
                 }
                 "html" => {
-                    todo!()
+                    HTML::new(self).iter_messages();
                 }
                 _ => {
                     unreachable!()
