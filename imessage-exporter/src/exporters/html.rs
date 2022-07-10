@@ -116,14 +116,6 @@ impl<'a> Writer<'a> for HTML<'a> {
             "</span>",
         );
 
-        // Add message date
-        self.add_line(
-            &mut formatted_message,
-            &message.guid,
-            "<p><span class=\"timestamp\">",
-            "</span>",
-        );
-
         // Add message sender
         self.add_line(
             &mut formatted_message,
