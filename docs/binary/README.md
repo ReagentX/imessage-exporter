@@ -39,3 +39,11 @@ The `imessage_exporter` binary exports iMessage data to `txt`, `csv`, `pdf`, or 
 -V, --version
         Print version information
 ```
+
+## Caveats
+
+In HTML exports in Safari, when referencing files in-place, you must permit Safari to read from the local file system in the Develop menu:
+
+![](/docs/binary/img/safari_local_file_restrictions.png)
+
+Further, since the files are stored in `~/Library`, you will need to grant your browser Full Disk Access in System Preferences.
