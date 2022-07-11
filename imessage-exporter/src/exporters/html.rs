@@ -85,9 +85,9 @@ impl<'a> Exporter<'a> for HTML<'a> {
                 HTML::write_to_file(&path, HEADER);
 
                 // Write CSS
-                HTML::write_to_file(&path, "<style>");
+                HTML::write_to_file(&path, "<style>\n");
                 HTML::write_to_file(&path, STYLE);
-                HTML::write_to_file(&path, "</style>");
+                HTML::write_to_file(&path, "\n</style>");
 
                 path
             }),
@@ -100,6 +100,9 @@ impl<'a> Writer<'a> for HTML<'a> {
     fn format_message(&self, message: &Message, indent: usize) -> String {
         // Data we want to write to a file
         let mut formatted_message = String::new();
+
+        // Message div
+        self.add_line(&mut formatted_message, "<div class=\"message\">", "", "");
 
         // Start message div
         if message.is_from_me {
@@ -197,6 +200,7 @@ impl<'a> Writer<'a> for HTML<'a> {
 
             // Handle Replies
             if let Some(replies) = replies.get(&idx) {
+                self.add_line(&mut formatted_message, "<div class=\"replies\">", "", "");
                 replies.iter().for_each(|reply| {
                     if !reply.is_reaction() {
                         // Set indent to 1 so we know this is a recursive call
@@ -208,6 +212,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                         );
                     }
                 });
+                self.add_line(&mut formatted_message, "</div>", "", "")
             }
         }
 
@@ -221,8 +226,12 @@ impl<'a> Writer<'a> for HTML<'a> {
             );
         }
 
+        // End message type div
+        self.add_line(&mut formatted_message, "</div>", "", "");
+
         // End message div
         self.add_line(&mut formatted_message, "</div>", "", "");
+
         formatted_message
     }
 
