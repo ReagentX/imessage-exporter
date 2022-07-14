@@ -1,6 +1,5 @@
 body {
 	font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-	background: white;
 }
 
 p {
@@ -8,9 +7,6 @@ p {
 }
 
 .message {
-	/* border-style: solid;
-	border-width: 2px; */
-	/* border-color: white; */
 	margin: 1%;
 }
 
@@ -34,8 +30,29 @@ p {
 	width: fit-content;
 }
 
-.message .replies {
-	background: white;
+.message .sent .replies .reply .message .sent {
+	border-style: solid;
+	border-color: white;
+	border-width: thin;
+}
+
+.message .received .replies .reply .message .received {
+	border-style: solid;
+	border-color: darkgray;
+	border-width: thin;
+}
+
+
+.message .received .replies {
+	border-left: dotted dimgray;
+	border-bottom: dotted dimgray;
+	border-bottom-left-radius: 15px;
+}
+
+.message .sent .replies {
+	border-left: dotted white;
+	border-bottom: dotted white;
+	border-bottom-left-radius: 15px;
 }
 
 .received .replies {
@@ -50,10 +67,12 @@ p {
 
 .reply .received {
 	min-width: 90%;
+	padding: 1vh;
 }
 
 .reply .sent {
 	min-width: 90%;
+	padding: 1vh;
 }
 
 div.message_part {}
@@ -72,15 +91,15 @@ span.bubble {
 }
 
 span.reply_context {
-	opacity: 80%;
+	opacity: 60%;
 }
 
 span.expressive {
-	opacity: 80%;
+	opacity: 60%;
 }
 
 span.reactions {
-	opacity: 80%;
+	opacity: 60%;
 }
 
 span.reaction {}
