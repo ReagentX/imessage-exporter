@@ -21,10 +21,10 @@ p {
 .message .sent {
 	color: white;
 	border-radius: 25px;
-	padding: 2vh;
+	padding: 1vh;
 	margin-left: auto;
 	margin-right: 0;
-	max-width: 50%;
+	max-width: 60%;
 	width: fit-content;
 }
 
@@ -32,10 +32,10 @@ p {
 	background-color: #d8d8d8;
 	color: black;
 	border-radius: 25px;
-	padding: 2vh;
+	padding: 1vh;
 	margin-right: auto;
 	margin-left: 0;
-	max-width: 50%;
+	max-width: 60%;
 	width: fit-content;
 }
 
@@ -65,13 +65,15 @@ p {
 }
 
 .received .replies {
-	margin-top: 2%;
-	padding: 1%;
+	margin-top: 1%;
+	padding-left: 1vh;
+	padding-right: 1vh;
 }
 
 .sent .replies {
-	margin-top: 2%;
-	padding: 1%;
+	margin-top: 1%;
+	padding-left: 1vh;
+	padding-right: 1vh;
 }
 
 .reply .received {
@@ -114,13 +116,9 @@ span.reactions {
 span.reaction {}
 
 @media (prefers-color-scheme: dark) {
-	body {
-		background: black;
-	}
+  body {background: black;}
 }
 
 @media (prefers-color-scheme: light) {
-	body {
-		background: transparent;
-	}
+  body {background: transparent;}
 }
