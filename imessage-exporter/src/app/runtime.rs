@@ -39,63 +39,6 @@ pub struct Config<'a> {
 }
 
 impl<'a> Config<'a> {
-    /// Create a new instance of the application
-    ///
-    /// # Example:
-    ///
-    /// ```
-    /// use crate::app::{
-    ///    options::{from_command_line, Options},
-    ///    runtime::State,
-    /// };
-    ///
-    /// let args = from_command_line();
-    /// let options = Options::from_args(&args);
-    /// let app = State::new(options).unwrap();
-    /// ```
-    pub fn new(options: Options) -> Option<Config> {
-        // Escape early if options are invalid
-        if !options.valid {
-            return None;
-        }
-
-        let conn = get_connection(&options.db_path);
-        // TODO: Implement Try for these cache calls `?`
-        eprintln!("Building cache...");
-        eprintln!("[1/4] Caching chats...");
-        let chatrooms = Chat::cache(&conn);
-        eprintln!("[2/4] Caching chatrooms...");
-        let chatroom_participants = ChatToHandle::cache(&conn);
-        eprintln!("[3/4] Caching participants...");
-        let participants = Handle::cache(&conn);
-        eprintln!("[4/4] Caching reactions...");
-        let reactions = Message::cache(&conn);
-        eprintln!("Cache built!");
-        Some(Config {
-            chatrooms,
-            real_chatrooms: ChatToHandle::dedupe(&chatroom_participants),
-            chatroom_participants,
-            real_participants: Handle::dedupe(&participants),
-            participants,
-            reactions,
-            options,
-            offset: get_offset(),
-            db: conn,
-        })
-    }
-
-    /// Determine who sent a message
-    pub fn who(&self, handle_id: &i32, is_from_me: bool) -> &str {
-        if is_from_me {
-            ME
-        } else {
-            match self.participants.get(handle_id) {
-                Some(contact) => contact,
-                None => UNKNOWN,
-            }
-        }
-    }
-
     /// Get a deduplicated chat ID or a default value
     pub fn conversation(&self, chat_id: Option<i32>) -> Option<(&Chat, &i32)> {
         match chat_id {
@@ -109,6 +52,14 @@ impl<'a> Config<'a> {
             },
             // No chat_id provided
             None => None,
+        }
+    }
+
+    /// Get the export path for the current session
+    pub fn export_path(&self) -> PathBuf {
+        match self.options.export_path {
+            Some(path_str) => PathBuf::from(path_str),
+            None => PathBuf::from(&format!("{}/{DEFAULT_OUTPUT_DIR}", home())),
         }
     }
 
@@ -167,12 +118,49 @@ impl<'a> Config<'a> {
         out_s
     }
 
-    /// Get the export path for the current session
-    pub fn export_path(&self) -> PathBuf {
-        match self.options.export_path {
-            Some(path_str) => PathBuf::from(path_str),
-            None => PathBuf::from(&format!("{}/{DEFAULT_OUTPUT_DIR}", home())),
+    /// Create a new instance of the application
+    ///
+    /// # Example:
+    ///
+    /// ```
+    /// use crate::app::{
+    ///    options::{from_command_line, Options},
+    ///    runtime::State,
+    /// };
+    ///
+    /// let args = from_command_line();
+    /// let options = Options::from_args(&args);
+    /// let app = State::new(options).unwrap();
+    /// ```
+    pub fn new(options: Options) -> Option<Config> {
+        // Escape early if options are invalid
+        if !options.valid {
+            return None;
         }
+
+        let conn = get_connection(&options.db_path);
+        // TODO: Implement Try for these cache calls `?`
+        eprintln!("Building cache...");
+        eprintln!("[1/4] Caching chats...");
+        let chatrooms = Chat::cache(&conn);
+        eprintln!("[2/4] Caching chatrooms...");
+        let chatroom_participants = ChatToHandle::cache(&conn);
+        eprintln!("[3/4] Caching participants...");
+        let participants = Handle::cache(&conn);
+        eprintln!("[4/4] Caching reactions...");
+        let reactions = Message::cache(&conn);
+        eprintln!("Cache built!");
+        Some(Config {
+            chatrooms,
+            real_chatrooms: ChatToHandle::dedupe(&chatroom_participants),
+            chatroom_participants,
+            real_participants: Handle::dedupe(&participants),
+            participants,
+            reactions,
+            options,
+            offset: get_offset(),
+            db: conn,
+        })
     }
 
     /// Handles diagnostic tests for database
@@ -242,6 +230,18 @@ impl<'a> Config<'a> {
             println!("How did you get here?");
         }
         println!("Done!");
+    }
+
+    /// Determine who sent a message
+    pub fn who(&self, handle_id: &i32, is_from_me: bool) -> &str {
+        if is_from_me {
+            ME
+        } else {
+            match self.participants.get(handle_id) {
+                Some(contact) => contact,
+                None => UNKNOWN,
+            }
+        }
     }
 }
 
