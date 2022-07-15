@@ -42,7 +42,7 @@ pub enum BubbleType<'a> {
     App,
 }
 
-/// Defines the parts of a message bubble, i.e. the content that can exist in a single message.
+/// Defines different types of services we can recieve messages from.
 #[derive(Debug)]
 pub enum Service {
     /// An iMessage
