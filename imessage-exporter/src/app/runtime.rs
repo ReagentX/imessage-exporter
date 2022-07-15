@@ -248,7 +248,10 @@ impl<'a> Config<'a> {
 #[cfg(test)]
 mod tests {
     use crate::{Config, Options};
-    use imessage_database::{tables::table::{get_connection, MAX_LENGTH}, util::dirs::default_db_path};
+    use imessage_database::{
+        tables::table::{get_connection, MAX_LENGTH},
+        util::dirs::default_db_path,
+    };
     use std::collections::{BTreeSet, HashMap};
 
     fn fake_options<'a>() -> Options<'a> {
@@ -292,7 +295,7 @@ mod tests {
         app.participants.insert(10, "Person 10".to_string());
         app.participants.insert(11, "Person 11".to_string());
 
-        // add 2 people to chatroom 1
+        // Add participants
         let mut people = BTreeSet::new();
         people.insert(10);
         people.insert(11);
@@ -342,7 +345,7 @@ mod tests {
             "Person With An Extremely and Excessively Long Name 17".to_string(),
         );
 
-        // add 2 people to chatroom 1
+        // Add participants
         let mut people = BTreeSet::new();
         people.insert(10);
         people.insert(11);
@@ -367,7 +370,7 @@ mod tests {
         // Create participant data
         app.participants.insert(10, "He slipped his key into the lock, and we all very quietly entered the cell. The sleeper half turned, and then settled down once more into a deep slumber. Holmes stooped to the water-jug, moistened his sponge, and then rubbed it twice vigorously across and down the prisoner's face.".to_string());
 
-        // add 2 people to chatroom 1
+        // Add 1 person
         let mut people = BTreeSet::new();
         people.insert(10);
 
