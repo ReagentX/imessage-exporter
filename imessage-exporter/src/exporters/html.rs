@@ -444,7 +444,7 @@ mod tests {
     }
 
     #[test]
-    fn can_add_line_indent() {
+    fn can_add_line() {
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -455,5 +455,19 @@ mod tests {
         exporter.add_line(&mut s, "hello world", "  ", "");
 
         assert_eq!(s, "  hello world\n".to_string());
+    }
+
+    #[test]
+    fn can_add_line_pre_post() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        // Create sample data
+        let mut s = String::new();
+        exporter.add_line(&mut s, "hello world", "<div>", "</div>");
+
+        assert_eq!(s, "<div>hello world</div>\n".to_string());
     }
 }
