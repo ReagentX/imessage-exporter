@@ -10,8 +10,16 @@ p {
 	margin: 1%;
 }
 
-.message .sent {
+.message .sent.imessage {
 	background-color: #1982FC;
+}
+
+.message .sent.sms {
+	background-color: #65c466
+}
+
+.message .sent {
+	color: white;
 	border-radius: 15px;
 	padding: 2vh;
 	margin-left: auto;
@@ -22,6 +30,7 @@ p {
 
 .message .received {
 	background-color: #d8d8d8;
+	color: black;
 	border-radius: 15px;
 	padding: 2vh;
 	margin-right: auto;
@@ -46,13 +55,13 @@ p {
 .message .received .replies {
 	border-left: dotted dimgray;
 	border-bottom: dotted dimgray;
-	border-bottom-left-radius: 15px;
+	border-bottom-left-radius: 25px;
 }
 
 .message .sent .replies {
 	border-left: dotted white;
 	border-bottom: dotted white;
-	border-bottom-left-radius: 15px;
+	border-bottom-left-radius: 25px;
 }
 
 .received .replies {
@@ -66,12 +75,12 @@ p {
 }
 
 .reply .received {
-	min-width: 90%;
+	min-width: 85%;
 	padding: 1vh;
 }
 
 .reply .sent {
-	min-width: 90%;
+	min-width: 85%;
 	padding: 1vh;
 }
 
@@ -103,3 +112,15 @@ span.reactions {
 }
 
 span.reaction {}
+
+@media (prefers-color-scheme: dark) {
+	body {
+		background: black;
+	}
+}
+
+@media (prefers-color-scheme: light) {
+	body {
+		background: transparent;
+	}
+}
