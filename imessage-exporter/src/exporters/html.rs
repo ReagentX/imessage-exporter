@@ -351,6 +351,7 @@ mod tests {
             rowid: i32::default(),
             guid: String::default(),
             text: None,
+            service: Some("iMessage".to_string()),
             handle_id: i32::default(),
             subject: None,
             date: i64::default(),
