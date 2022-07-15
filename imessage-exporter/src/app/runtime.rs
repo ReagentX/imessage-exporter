@@ -9,7 +9,8 @@ use rusqlite::Connection;
 use crate::{app::options::Options, Exporter, HTML, TXT};
 use imessage_database::{
     tables::table::{
-        get_connection, Cacheable, Deduplicate, Diagnostic, DEFAULT_OUTPUT_DIR, ME, UNKNOWN,
+        get_connection, Cacheable, Deduplicate, Diagnostic, DEFAULT_OUTPUT_DIR, MAX_LENGTH, ME,
+        UNKNOWN,
     },
     util::{dates::get_offset, dirs::home},
     Attachment, Chat, ChatToHandle, Handle, Message,
@@ -123,11 +124,7 @@ impl<'a> Config<'a> {
             // Fallback if there is no name set
             None => match self.chatroom_participants.get(&chatroom.rowid) {
                 // List of participant names
-                Some(participants) => participants
-                    .iter()
-                    .map(|participant_id| self.who(participant_id, false))
-                    .collect::<Vec<&str>>()
-                    .join(", "),
+                Some(participants) => self.filename_from_participants(participants),
                 // Unique chat_identifier
                 None => {
                     println!(
@@ -138,6 +135,36 @@ impl<'a> Config<'a> {
                 }
             },
         }
+    }
+
+    /// Generate a filename from a set of participants, truncating if the name is too long
+    fn filename_from_participants(&self, participants: &BTreeSet<i32>) -> String {
+        let mut added = 0;
+        let mut out_s = String::with_capacity(MAX_LENGTH as usize);
+        for participant_id in participants.iter() {
+            let participant = self.who(participant_id, false);
+            if participant.len() + out_s.len() < MAX_LENGTH {
+                if !out_s.is_empty() {
+                    out_s.push_str(", ")
+                }
+                out_s.push_str(participant);
+                added += 1;
+            } else {
+                let extra = format!(", and {} others", participants.len() - added);
+                let space_remaining = extra.len() + out_s.len();
+                if space_remaining >= MAX_LENGTH {
+                    out_s.replace_range((MAX_LENGTH - extra.len()).., &extra);
+                } else {
+                    if out_s.is_empty() {
+                        out_s.push_str(&participant[..MAX_LENGTH])
+                    } else {
+                        out_s.push_str(&extra);
+                    }
+                }
+                break;
+            }
+        }
+        out_s
     }
 
     /// Get the export path for the current session
@@ -215,5 +242,138 @@ impl<'a> Config<'a> {
             println!("How did you get here?");
         }
         println!("Done!");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{Config, Options};
+    use imessage_database::{tables::table::{get_connection, MAX_LENGTH}, util::dirs::default_db_path};
+    use std::collections::{BTreeSet, HashMap};
+
+    fn fake_options<'a>() -> Options<'a> {
+        Options {
+            db_path: default_db_path(),
+            no_copy: false,
+            diagnostic: false,
+            export_type: None,
+            export_path: None,
+            valid: true,
+        }
+    }
+    fn dummy<'a>(options: Options<'a>) -> Config<'a> {
+        let connection = get_connection(&options.db_path);
+        Config {
+            chatrooms: HashMap::new(),
+            real_chatrooms: HashMap::new(),
+            chatroom_participants: HashMap::new(),
+            participants: HashMap::new(),
+            real_participants: HashMap::new(),
+            reactions: HashMap::new(),
+            options: options,
+            offset: 0,
+            db: connection,
+        }
+    }
+
+    #[test]
+    fn can_create() {
+        let options = fake_options();
+        let app = dummy(options);
+        app.start();
+    }
+
+    #[test]
+    fn can_get_filename_good() {
+        let options = fake_options();
+        let mut app = dummy(options);
+
+        // Create participant data
+        app.participants.insert(10, "Person 10".to_string());
+        app.participants.insert(11, "Person 11".to_string());
+
+        // add 2 people to chatroom 1
+        let mut people = BTreeSet::new();
+        people.insert(10);
+        people.insert(11);
+
+        // Get filename
+        let filename = app.filename_from_participants(&people);
+        assert_eq!(filename, "Person 10, Person 11".to_string());
+        assert!(filename.len() <= MAX_LENGTH);
+    }
+
+    #[test]
+    fn can_get_filename_long_multiple() {
+        let options = fake_options();
+        let mut app = dummy(options);
+
+        // Create participant data
+        app.participants.insert(
+            10,
+            "Person With An Extremely and Excessively Long Name 10".to_string(),
+        );
+        app.participants.insert(
+            11,
+            "Person With An Extremely and Excessively Long Name 11".to_string(),
+        );
+        app.participants.insert(
+            12,
+            "Person With An Extremely and Excessively Long Name 12".to_string(),
+        );
+        app.participants.insert(
+            13,
+            "Person With An Extremely and Excessively Long Name 13".to_string(),
+        );
+        app.participants.insert(
+            14,
+            "Person With An Extremely and Excessively Long Name 14".to_string(),
+        );
+        app.participants.insert(
+            15,
+            "Person With An Extremely and Excessively Long Name 15".to_string(),
+        );
+        app.participants.insert(
+            16,
+            "Person With An Extremely and Excessively Long Name 16".to_string(),
+        );
+        app.participants.insert(
+            17,
+            "Person With An Extremely and Excessively Long Name 17".to_string(),
+        );
+
+        // add 2 people to chatroom 1
+        let mut people = BTreeSet::new();
+        people.insert(10);
+        people.insert(11);
+        people.insert(12);
+        people.insert(13);
+        people.insert(14);
+        people.insert(15);
+        people.insert(16);
+        people.insert(17);
+
+        // Get filename
+        let filename = app.filename_from_participants(&people);
+        assert_eq!(filename, "Person With An Extremely and Excessively Long Name 10, Person With An Extremely and Excessively Long Name 11, Person With An Extremely and Excessively Long Name 12, Person With An Extremely and Excessively Long Name 13, and 4 others".to_string());
+        assert!(filename.len() <= MAX_LENGTH);
+    }
+
+    #[test]
+    fn can_get_filename_single_long() {
+        let options = fake_options();
+        let mut app = dummy(options);
+
+        // Create participant data
+        app.participants.insert(10, "He slipped his key into the lock, and we all very quietly entered the cell. The sleeper half turned, and then settled down once more into a deep slumber. Holmes stooped to the water-jug, moistened his sponge, and then rubbed it twice vigorously across and down the prisoner's face.".to_string());
+
+        // add 2 people to chatroom 1
+        let mut people = BTreeSet::new();
+        people.insert(10);
+
+        // Get filename
+        let filename = app.filename_from_participants(&people);
+        assert_eq!(filename, "He slipped his key into the lock, and we all very quietly entered the cell. The sleeper half turned, and then settled down once more into a deep slumber. Holmes stooped to the water-jug, moistened his sponge, and then rubbed it twice vigoro".to_string());
+        assert!(filename.len() <= MAX_LENGTH);
     }
 }
