@@ -20,7 +20,7 @@ p {
 
 .message .sent {
 	color: white;
-	border-radius: 15px;
+	border-radius: 25px;
 	padding: 2vh;
 	margin-left: auto;
 	margin-right: 0;
@@ -31,7 +31,7 @@ p {
 .message .received {
 	background-color: #d8d8d8;
 	color: black;
-	border-radius: 15px;
+	border-radius: 25px;
 	padding: 2vh;
 	margin-right: auto;
 	margin-left: 0;
