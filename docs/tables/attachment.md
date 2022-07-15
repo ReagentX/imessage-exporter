@@ -2,7 +2,6 @@
 
 | Column | Type | Effect |
 | -- | -- | -- |
-
 | ROWID |  INTEGER | PRIMARY KEY AUTOINCREMENT |
 | guid |  TEXT | UNIQUE NOT NULL |
 | created_date |  INTEGER | DEFAULT 0 |
