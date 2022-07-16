@@ -17,7 +17,7 @@ pub(super) trait Writer<'a> {
     /// Format a message, including its reactions and replies
     fn format_message(&self, msg: &Message, indent: usize) -> String;
     /// Format an attachment, possibly by reading the disk
-    fn format_attachment(&self, msg: &'a Attachment) -> Result<&'a str, &'a str>;
+    fn format_attachment(&self, msg: &'a mut Attachment) -> Result<&'a str, &'a str>;
     /// Format an app message by parsing some of its fields
     fn format_app(&self, msg: &'a Message) -> &'a str;
     /// Format a reaction (displayed under a message)
