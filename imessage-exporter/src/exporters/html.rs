@@ -52,6 +52,9 @@ impl<'a> Exporter<'a> for HTML<'a> {
             self.config.export_path().display()
         );
 
+        // Write orphaned file headers
+        HTML::write_headers(&self.orphaned);
+
         // Set up progress bar
         let mut current_message = 0;
         let total_messages = Message::get_count(&self.config.db);
@@ -80,10 +83,10 @@ impl<'a> Exporter<'a> for HTML<'a> {
         pb.finish_at_current_pos();
 
         eprintln!("Writing HTML footers...");
-        // TODO: Write all footer data
         self.files
             .iter()
             .for_each(|(_, path)| HTML::write_to_file(path, FOOTER));
+        HTML::write_to_file(&self.orphaned, FOOTER);
     }
 
     /// Create a file for the given chat, caching it so we don't need to build it later
@@ -94,13 +97,8 @@ impl<'a> Exporter<'a> for HTML<'a> {
                 path.push(self.config.filename(chatroom));
                 path.set_extension("html");
 
-                // Write file header
-                HTML::write_to_file(&path, HEADER);
-
-                // Write CSS
-                HTML::write_to_file(&path, "<style>\n");
-                HTML::write_to_file(&path, STYLE);
-                HTML::write_to_file(&path, "\n</style>");
+                // Write headers
+                HTML::write_headers(&path);
 
                 path
             }),
@@ -363,6 +361,16 @@ impl<'a> HTML<'a> {
             string.push_str(post);
             string.push('\n');
         }
+    }
+
+    fn write_headers(path: &Path) {
+        // Write file header
+        HTML::write_to_file(path, HEADER);
+
+        // Write CSS
+        HTML::write_to_file(path, "<style>\n");
+        HTML::write_to_file(path, STYLE);
+        HTML::write_to_file(path, "\n</style>");
     }
 }
 
