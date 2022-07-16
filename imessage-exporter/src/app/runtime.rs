@@ -213,9 +213,6 @@ impl<'a> Config<'a> {
                     // Create exporter, pass it data we care about, then kick it off
                     TXT::new(self).iter_messages();
                 }
-                "csv" => {
-                    todo!()
-                }
                 "pdf" => {
                     todo!()
                 }
