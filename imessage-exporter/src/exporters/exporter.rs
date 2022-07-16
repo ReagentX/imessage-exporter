@@ -24,5 +24,7 @@ pub(super) trait Writer<'a> {
     fn format_reaction(&self, msg: &Message) -> String;
     /// Format an expressive message
     fn format_expressive(&self, msg: &'a Message) -> &'a str;
+    /// Format an annoucement message
+    fn format_annoucement(&self, msg: &'a Message) -> String;
     fn write_to_file(file: &Path, text: &str);
 }

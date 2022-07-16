@@ -11,7 +11,10 @@ use crate::{
 };
 
 use imessage_database::{
-    tables::{messages::BubbleType, table::ORPHANED},
+    tables::{
+        messages::BubbleType,
+        table::{ME, ORPHANED, UNKNOWN},
+    },
     util::{dates, dirs::home},
     Attachment, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
 };
@@ -26,13 +29,19 @@ pub struct HTML<'a> {
     /// Handles to files we want to write messages to
     /// Map of internal unique chatroom ID to a filename
     pub files: HashMap<i32, PathBuf>,
+    /// Path to file for orphaned messages
+    pub orphaned: PathBuf,
 }
 
 impl<'a> Exporter<'a> for HTML<'a> {
     fn new(config: &'a Config) -> Self {
+        let mut orphaned = config.export_path();
+        orphaned.push(ORPHANED);
+        orphaned.set_extension("html");
         HTML {
             config,
             files: HashMap::new(),
+            orphaned,
         }
     }
 
@@ -42,6 +51,9 @@ impl<'a> Exporter<'a> for HTML<'a> {
             "Exporting to {} as html...",
             self.config.export_path().display()
         );
+
+        // Write orphaned file headers
+        HTML::write_headers(&self.orphaned);
 
         // Set up progress bar
         let mut current_message = 0;
@@ -56,8 +68,12 @@ impl<'a> Exporter<'a> for HTML<'a> {
 
         for message in messages {
             let msg = Message::extract(message);
+            if msg.is_annoucement() {
+                let annoucement = self.format_annoucement(&msg);
+                HTML::write_to_file(self.get_or_create_file(&msg), &annoucement);
+            }
             // Message replies and reactions are rendered in context, so no need to render them separately
-            if !msg.is_reaction() {
+            else if !msg.is_reaction() {
                 let message = self.format_message(&msg, 0);
                 HTML::write_to_file(self.get_or_create_file(&msg), &message);
             }
@@ -67,10 +83,10 @@ impl<'a> Exporter<'a> for HTML<'a> {
         pb.finish_at_current_pos();
 
         eprintln!("Writing HTML footers...");
-        // TODO: Write all footer data
         self.files
             .iter()
             .for_each(|(_, path)| HTML::write_to_file(path, FOOTER));
+        HTML::write_to_file(&self.orphaned, FOOTER);
     }
 
     /// Create a file for the given chat, caching it so we don't need to build it later
@@ -81,17 +97,12 @@ impl<'a> Exporter<'a> for HTML<'a> {
                 path.push(self.config.filename(chatroom));
                 path.set_extension("html");
 
-                // Write file header
-                HTML::write_to_file(&path, HEADER);
-
-                // Write CSS
-                HTML::write_to_file(&path, "<style>\n");
-                HTML::write_to_file(&path, STYLE);
-                HTML::write_to_file(&path, "\n</style>");
+                // Write headers
+                HTML::write_headers(&path);
 
                 path
             }),
-            None => Path::new(ORPHANED),
+            None => &self.orphaned,
         }
     }
 }
@@ -305,6 +316,18 @@ impl<'a> Writer<'a> for HTML<'a> {
         }
     }
 
+    fn format_annoucement(&self, msg: &'a Message) -> String {
+        let mut who = self.config.who(&msg.handle_id, msg.is_from_me);
+        // Rename yourself so we render the proper grammar here
+        if who == ME {
+            who = "You"
+        }
+        let timestamp = dates::format(&msg.date(&self.config.offset));
+        format!(
+            "\n<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} named the conversation <b>{}</b></p></div>\n",
+            msg.group_title.as_deref().unwrap_or(UNKNOWN)
+        )
+    }
     fn write_to_file(file: &Path, text: &str) {
         let mut file = File::options()
             .append(true)
@@ -339,6 +362,16 @@ impl<'a> HTML<'a> {
             string.push('\n');
         }
     }
+
+    fn write_headers(path: &Path) {
+        // Write file header
+        HTML::write_to_file(path, HEADER);
+
+        // Write CSS
+        HTML::write_to_file(path, "<style>\n");
+        HTML::write_to_file(path, STYLE);
+        HTML::write_to_file(path, "\n</style>");
+    }
 }
 
 #[cfg(test)]
@@ -359,6 +392,7 @@ mod tests {
             date_delivered: i64::default(),
             is_from_me: false,
             is_read: false,
+            group_title: None,
             associated_message_guid: None,
             associated_message_type: i32::default(),
             expressive_send_style_id: None,
@@ -375,7 +409,7 @@ mod tests {
             db_path: default_db_path(),
             no_copy: true,
             diagnostic: false,
-            export_type: Some("txt"),
+            export_type: Some("html"),
             export_path: None,
             valid: true,
         }

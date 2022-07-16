@@ -18,7 +18,7 @@ use crate::{
 const ATTACHMENT_CHAR: char = '\u{FFFC}';
 const APP_CHAR: char = '\u{FFFD}';
 const REPLACEMENT_CHARS: [char; 2] = [ATTACHMENT_CHAR, APP_CHAR];
-const COLUMNS: &str = "m.rowid, m.guid, m.text, m.service, m.handle_id, m.subject, m.date, m.date_read, m.date_delivered, m.is_from_me, m.is_read, m.associated_message_guid, m.associated_message_type, m.expressive_send_style_id, m.thread_originator_guid, m.thread_originator_part";
+const COLUMNS: &str = "m.rowid, m.guid, m.text, m.service, m.handle_id, m.subject, m.date, m.date_read, m.date_delivered, m.is_from_me, m.is_read, m.group_title, m.associated_message_guid, m.associated_message_type, m.expressive_send_style_id, m.thread_originator_guid, m.thread_originator_part";
 
 /// Represents a broad category of messages: standalone, thread originators, and thread replies.
 #[derive(Debug)]
@@ -55,7 +55,6 @@ pub enum Service {
 }
 
 /// Represents a single row in the `message` table.
-// TODO: Support service column
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct Message {
@@ -70,6 +69,7 @@ pub struct Message {
     pub date_delivered: i64,
     pub is_from_me: bool,
     pub is_read: bool,
+    pub group_title: Option<String>,
     pub associated_message_guid: Option<String>,
     pub associated_message_type: i32,
     pub expressive_send_style_id: Option<String>,
@@ -94,14 +94,15 @@ impl Table for Message {
             date_delivered: row.get(8)?,
             is_from_me: row.get(9)?,
             is_read: row.get(10)?,
-            associated_message_guid: row.get(11)?,
-            associated_message_type: row.get(12)?,
-            expressive_send_style_id: row.get(13)?,
-            thread_originator_guid: row.get(14)?,
-            thread_originator_part: row.get(15)?,
-            chat_id: row.get(16)?,
-            num_attachments: row.get(17)?,
-            num_replies: row.get(18)?,
+            group_title: row.get(11)?,
+            associated_message_guid: row.get(12)?,
+            associated_message_type: row.get(13)?,
+            expressive_send_style_id: row.get(14)?,
+            thread_originator_guid: row.get(15)?,
+            thread_originator_part: row.get(16)?,
+            chat_id: row.get(17)?,
+            num_attachments: row.get(18)?,
+            num_replies: row.get(19)?,
         })
     }
 
@@ -321,6 +322,11 @@ impl Message {
     /// `true` if the message is a response to a thread, else `false`
     pub fn is_reply(&self) -> bool {
         self.thread_originator_guid.is_some()
+    }
+
+    /// `true` if the message renames a thread, else `false`
+    pub fn is_annoucement(&self) -> bool {
+        self.group_title.is_some()
     }
 
     /// `true` if the message is a reaction to another message, else `false`
@@ -620,6 +626,7 @@ mod tests {
             date_delivered: i64::default(),
             is_from_me: false,
             is_read: false,
+            group_title: None,
             associated_message_guid: None,
             associated_message_type: i32::default(),
             expressive_send_style_id: None,
