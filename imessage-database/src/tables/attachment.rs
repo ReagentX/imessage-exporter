@@ -27,6 +27,7 @@ pub struct Attachment {
     pub is_sticker: i32,
     pub attribution_info: Option<Vec<u8>>,
     pub hide_attachment: i32,
+    pub copied_path: Option<String>,
 }
 
 impl Table for Attachment {
@@ -40,6 +41,7 @@ impl Table for Attachment {
             is_sticker: row.get(5)?,
             attribution_info: row.get(6)?,
             hide_attachment: row.get(7)?,
+            copied_path: None,
         })
     }
 
