@@ -109,7 +109,7 @@ impl<'a> Writer<'a> for TXT<'a> {
 
         // Useful message metadata
         let message_parts = message.body();
-        let attachments = Attachment::from_message(&self.config.db, message);
+        let mut attachments = Attachment::from_message(&self.config.db, message);
         let replies = message.get_replies(&self.config.db);
         let reactions = message.get_reactions(&self.config.db, &self.config.reactions);
 
@@ -120,7 +120,7 @@ impl<'a> Writer<'a> for TXT<'a> {
         for (idx, message_part) in message_parts.iter().enumerate() {
             let line: &str = match message_part {
                 BubbleType::Text(text) => *text,
-                BubbleType::Attachment => match attachments.get(attachment_index) {
+                BubbleType::Attachment => match attachments.get_mut(attachment_index) {
                     Some(attachment) => match self.format_attachment(attachment) {
                         Ok(result) => {
                             attachment_index += 1;
@@ -191,7 +191,7 @@ impl<'a> Writer<'a> for TXT<'a> {
         formatted_message
     }
 
-    fn format_attachment(&self, attachment: &'a Attachment) -> Result<&'a str, &'a str> {
+    fn format_attachment(&self, attachment: &'a mut Attachment) -> Result<&'a str, &'a str> {
         match &attachment.filename {
             Some(filename) => Ok(filename),
             // Filepath missing!

@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    fs::File,
+    fs::{copy, File},
     io::Write,
     path::{Path, PathBuf},
 };
@@ -18,6 +18,7 @@ use imessage_database::{
     util::{dates, dirs::home},
     Attachment, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
 };
+use uuid::Uuid;
 
 const HEADER: &str = "<html>\n<meta charset=\"UTF-8\">";
 const FOOTER: &str = "</html>";
@@ -149,7 +150,7 @@ impl<'a> Writer<'a> for HTML<'a> {
 
         // Useful message metadata
         let message_parts = message.body();
-        let attachments = Attachment::from_message(&self.config.db, message);
+        let mut attachments = Attachment::from_message(&self.config.db, message);
         let replies = message.get_replies(&self.config.db);
         let reactions = message.get_reactions(&self.config.db, &self.config.reactions);
 
@@ -160,7 +161,7 @@ impl<'a> Writer<'a> for HTML<'a> {
         for (idx, message_part) in message_parts.iter().enumerate() {
             let line: String = match message_part {
                 BubbleType::Text(text) => format!("<span class=\"bubble\">{text}</span>"),
-                BubbleType::Attachment => match attachments.get(attachment_index) {
+                BubbleType::Attachment => match attachments.get_mut(attachment_index) {
                     Some(attachment) => match self.format_attachment(attachment) {
                         Ok(result) => {
                             attachment_index += 1;
@@ -169,7 +170,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                 result.replace("~", &home())
                             )
                         }
-                        Err(result) => format!("<span class=\"attachment_error\">Missing attachment filepath: {result}</span>"),
+                        Err(result) => format!("<span class=\"attachment_error\">Attachment not found at location: {result}</span>"),
                     },
                     // Attachment does not exist in attachments table
                     None => "Attachment does not exist!".to_owned(),
@@ -255,9 +256,26 @@ impl<'a> Writer<'a> for HTML<'a> {
         formatted_message
     }
 
-    fn format_attachment(&self, attachment: &'a Attachment) -> Result<&'a str, &'a str> {
+    fn format_attachment(&self, attachment: &'a mut Attachment) -> Result<&'a str, &'a str> {
         match &attachment.filename {
-            Some(filename) => Ok(filename),
+            Some(filename) => {
+                if self.config.options.no_copy {
+                    Ok(filename)
+                } else {
+                    let resolved_attachment_path = filename.replace("~", &home());
+                    let attachment_path = PathBuf::from(resolved_attachment_path);
+                    if attachment_path.exists() && attachment_path.extension().is_some() {
+                        let mut copy_path = self.config.attachment_path();
+                        copy_path.push(Uuid::new_v4().to_string());
+                        copy_path.set_extension(attachment_path.extension().unwrap());
+                        copy(attachment_path, &copy_path).unwrap();
+                        attachment.copied_path = Some(copy_path.to_string_lossy().to_string());
+                        Ok(&attachment.copied_path.as_ref().unwrap())
+                    } else {
+                        Err(filename)
+                    }
+                }
+            }
             // Filepath missing!
             None => Err(&attachment.transfer_name),
         }
