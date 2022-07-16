@@ -4,7 +4,7 @@ This crate provides both a library to interact with iMessage data as well as a b
 
 ## Runtime
 
-The `imessage_exporter` binary exports iMessage data to `txt`, `html`, or `pdf` formats. It can also run diagnostics to find problems with the iMessage database.
+The `imessage_exporter` binary exports iMessage data to `txt` or `html` formats. It can also run diagnostics to find problems with the iMessage database.
 
 Docs for the app are located [here](/docs/binary/).
 

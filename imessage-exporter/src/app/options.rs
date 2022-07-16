@@ -13,10 +13,10 @@ pub const OPTION_EXPORT_TYPE: &str = "format";
 pub const OPTION_EXPORT_PATH: &str = "export-path";
 
 // Other CLI Text
-pub const SUPPORTED_FILE_TYPES: &str = "txt, html, pdf";
+pub const SUPPORTED_FILE_TYPES: &str = "txt, html";
 pub const ABOUT: &str = concat!(
     "The `imessage_exporter` binary exports iMessage data to\n",
-    "`txt`, `html`, or `pdf` formats. It can also run\n",
+    "`txt` or `html` formats. It can also run\n",
     "diagnostics to find problems with the iMessage database."
 );
 

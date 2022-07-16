@@ -1,6 +1,6 @@
 # Binary Documentation
 
-The `imessage_exporter` binary exports iMessage data to `txt`, `html`, or `pdf` formats. It can also run diagnostics to find problems with the iMessage database.
+The `imessage_exporter` binary exports iMessage data to `txt`, or `html` formats. It can also run diagnostics to find problems with the iMessage database.
 
 ## Installation
 
@@ -19,7 +19,7 @@ The `imessage_exporter` binary exports iMessage data to `txt`, `html`, or `pdf` 
 -d, --diagnostics
         Print diagnostic information and exit
 
--f, --format <txt, html, pdf>
+-f, --format <txt, html>
         Specify a single file format to export messages into
 
 -h, --help
