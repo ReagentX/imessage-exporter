@@ -25,13 +25,19 @@ pub struct TXT<'a> {
     /// Handles to files we want to write messages to
     /// Map of internal unique chatroom ID to a filename
     pub files: HashMap<i32, PathBuf>,
+    /// Path to file for orphaned messages
+    pub orphaned: PathBuf,
 }
 
 impl<'a> Exporter<'a> for TXT<'a> {
     fn new(config: &'a Config) -> Self {
+        let mut orphaned = config.export_path();
+        orphaned.push(ORPHANED);
+        orphaned.set_extension("txt");
         TXT {
             config,
             files: HashMap::new(),
+            orphaned,
         }
     }
 
@@ -80,7 +86,7 @@ impl<'a> Exporter<'a> for TXT<'a> {
                 path.set_extension("txt");
                 path
             }),
-            None => Path::new(ORPHANED),
+            None => &self.orphaned,
         }
     }
 }
