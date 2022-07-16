@@ -21,7 +21,7 @@ p {
 .message .sent {
 	color: white;
 	border-radius: 25px;
-	padding: 1%;
+	padding: 15px;
 	margin-left: auto;
 	margin-right: 0;
 	max-width: 60%;
@@ -32,7 +32,7 @@ p {
 	background-color: #d8d8d8;
 	color: black;
 	border-radius: 25px;
-	padding: 1%;
+	padding: 15px;
 	margin-right: auto;
 	margin-left: 0;
 	max-width: 60%;
@@ -78,12 +78,12 @@ p {
 
 .reply .received {
 	min-width: 85%;
-	padding: 2%;
+	padding: 15px;
 }
 
 .reply .sent {
 	min-width: 85%;
-	padding: 2%;
+	padding: 15px;
 }
 
 div.message_part {}
