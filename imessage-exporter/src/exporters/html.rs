@@ -97,8 +97,12 @@ impl<'a> Exporter<'a> for HTML<'a> {
                 path.push(self.config.filename(chatroom));
                 path.set_extension("html");
 
-                // Write headers
-                HTML::write_headers(&path);
+                // If the file already exists , don't write the headers again
+                // This can happen if a group chat was deduplicated but resolves to the same name
+                if !path.exists() {
+                    // Write headers if the file does not exist
+                    HTML::write_headers(&path);
+                }
 
                 path
             }),
