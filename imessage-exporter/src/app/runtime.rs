@@ -63,11 +63,19 @@ impl<'a> Config<'a> {
         }
     }
 
+    /// Get the attachment path for the current session
+    pub fn attachment_path(&self) -> PathBuf {
+        let mut path = self.export_path();
+        path.push("attachments");
+        path
+    }
+
     /// Get a filename for a chat, possibly using cached data.
     ///
     /// If the chat has an assigned name, use that.
     ///
     /// If it does not, first try and make a flat list of its members. Failing that, use the unique `chat_identifier` field.
+    // TODO: Include chat ID in filename to prevent duplciate custom names from getting routed to the same file
     pub fn filename(&self, chatroom: &Chat) -> String {
         match &chatroom.display_name() {
             // If there is a display name, use that
@@ -207,6 +215,9 @@ impl<'a> Config<'a> {
         } else if self.options.export_type.is_some() {
             // Ensure the path we want to export to exists
             create_dir_all(self.export_path()).unwrap();
+            if !self.options.no_copy {
+                create_dir_all(self.attachment_path()).unwrap();
+            }
 
             match self.options.export_type.unwrap() {
                 "txt" => {
