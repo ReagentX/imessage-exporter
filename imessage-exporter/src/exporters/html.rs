@@ -37,7 +37,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
     fn new(config: &'a Config) -> Self {
         let mut orphaned = config.export_path();
         orphaned.push(ORPHANED);
-        orphaned.set_extension("txt");
+        orphaned.set_extension("html");
         HTML {
             config,
             files: HashMap::new(),
@@ -401,7 +401,7 @@ mod tests {
             db_path: default_db_path(),
             no_copy: true,
             diagnostic: false,
-            export_type: Some("txt"),
+            export_type: Some("html"),
             export_path: None,
             valid: true,
         }
