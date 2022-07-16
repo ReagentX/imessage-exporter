@@ -18,7 +18,7 @@ use crate::{
 const ATTACHMENT_CHAR: char = '\u{FFFC}';
 const APP_CHAR: char = '\u{FFFD}';
 const REPLACEMENT_CHARS: [char; 2] = [ATTACHMENT_CHAR, APP_CHAR];
-const COLUMNS: &str = "m.rowid, m.guid, m.text, m.handle_id, m.subject, m.date, m.date_read, m.date_delivered, m.is_from_me, m.is_read, m.associated_message_guid, m.associated_message_type, m.expressive_send_style_id, m.thread_originator_guid, m.thread_originator_part";
+const COLUMNS: &str = "m.rowid, m.guid, m.text, m.service, m.handle_id, m.subject, m.date, m.date_read, m.date_delivered, m.is_from_me, m.is_read, m.associated_message_guid, m.associated_message_type, m.expressive_send_style_id, m.thread_originator_guid, m.thread_originator_part";
 
 /// Represents a broad category of messages: standalone, thread originators, and thread replies.
 #[derive(Debug)]
@@ -42,13 +42,27 @@ pub enum BubbleType<'a> {
     App,
 }
 
+/// Defines different types of services we can recieve messages from.
+#[derive(Debug)]
+pub enum Service {
+    /// An iMessage
+    #[allow(non_camel_case_types)]
+    iMessage,
+    /// A message sent as SMS
+    SMS,
+    /// Any other type of message
+    Other,
+}
+
 /// Represents a single row in the `message` table.
+// TODO: Support service column
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct Message {
     pub rowid: i32,
     pub guid: String,
     pub text: Option<String>,
+    pub service: Option<String>,
     pub handle_id: i32,
     pub subject: Option<String>,
     pub date: i64,
@@ -72,21 +86,22 @@ impl Table for Message {
             rowid: row.get(0)?,
             guid: row.get(1)?,
             text: row.get(2)?,
-            handle_id: row.get(3)?,
-            subject: row.get(4)?,
-            date: row.get(5)?,
-            date_read: row.get(6)?,
-            date_delivered: row.get(7)?,
-            is_from_me: row.get(8)?,
-            is_read: row.get(9)?,
-            associated_message_guid: row.get(10)?,
-            associated_message_type: row.get(11)?,
-            expressive_send_style_id: row.get(12)?,
-            thread_originator_guid: row.get(13)?,
-            thread_originator_part: row.get(14)?,
-            chat_id: row.get(15)?,
-            num_attachments: row.get(16)?,
-            num_replies: row.get(17)?,
+            service: row.get(3)?,
+            handle_id: row.get(4)?,
+            subject: row.get(5)?,
+            date: row.get(6)?,
+            date_read: row.get(7)?,
+            date_delivered: row.get(8)?,
+            is_from_me: row.get(9)?,
+            is_read: row.get(10)?,
+            associated_message_guid: row.get(11)?,
+            associated_message_type: row.get(12)?,
+            expressive_send_style_id: row.get(13)?,
+            thread_originator_guid: row.get(14)?,
+            thread_originator_part: row.get(15)?,
+            chat_id: row.get(16)?,
+            num_attachments: row.get(17)?,
+            num_replies: row.get(18)?,
         })
     }
 
@@ -242,7 +257,7 @@ impl Message {
                         end = idx;
                     }
                 }
-                if start < end && start < text.len() {
+                if start <= end && start < text.len() {
                     out_v.push(BubbleType::Text(text[start..].trim()));
                 }
                 out_v
@@ -521,6 +536,14 @@ impl Message {
         }
     }
 
+    pub fn service(&self) -> Service {
+        match self.service.as_deref() {
+            Some("iMessage") => Service::iMessage,
+            Some("SMS") => Service::SMS,
+            _ => Service::Other,
+        }
+    }
+
     pub fn case(&self) -> MessageType {
         if self.is_reply() {
             MessageType::Reply(self.variant(), self.get_expressive())
@@ -589,6 +612,7 @@ mod tests {
             rowid: i32::default(),
             guid: String::default(),
             text: None,
+            service: Some("iMessage".to_string()),
             handle_id: i32::default(),
             subject: None,
             date: i64::default(),
@@ -610,6 +634,20 @@ mod tests {
     #[test]
     fn can_gen_message() {
         blank();
+    }
+
+    #[test]
+    fn can_get_message_body_single_emoji() {
+        let mut m = blank();
+        m.text = Some("🙈".to_string());
+        assert_eq!(m.body(), vec![BubbleType::Text("🙈")]);
+    }
+
+    #[test]
+    fn can_get_message_body_multiple_emoji() {
+        let mut m = blank();
+        m.text = Some("🙈🙈🙈".to_string());
+        assert_eq!(m.body(), vec![BubbleType::Text("🙈🙈🙈")]);
     }
 
     #[test]

@@ -12,11 +12,15 @@ use crate::{
 
 use imessage_database::{
     tables::{messages::BubbleType, table::ORPHANED},
-    util::dates,
+    util::{dates, dirs::home},
     Attachment, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
 };
 
-pub struct TXT<'a> {
+const HEADER: &str = "<html>\n<meta charset=\"UTF-8\">";
+const FOOTER: &str = "</html>";
+const STYLE: &str = include_str!("resources/style.css");
+
+pub struct HTML<'a> {
     /// Data that is setup from the application's runtime
     pub config: &'a Config<'a>,
     /// Handles to files we want to write messages to
@@ -24,9 +28,9 @@ pub struct TXT<'a> {
     pub files: HashMap<i32, PathBuf>,
 }
 
-impl<'a> Exporter<'a> for TXT<'a> {
+impl<'a> Exporter<'a> for HTML<'a> {
     fn new(config: &'a Config) -> Self {
-        TXT {
+        HTML {
             config,
             files: HashMap::new(),
         }
@@ -35,7 +39,7 @@ impl<'a> Exporter<'a> for TXT<'a> {
     fn iter_messages(&mut self) {
         // Tell the user what we are doing
         eprintln!(
-            "Exporting to {} as txt...",
+            "Exporting to {} as html...",
             self.config.export_path().display()
         );
 
@@ -55,12 +59,18 @@ impl<'a> Exporter<'a> for TXT<'a> {
             // Message replies and reactions are rendered in context, so no need to render them separately
             if !msg.is_reaction() {
                 let message = self.format_message(&msg, 0);
-                TXT::write_to_file(self.get_or_create_file(&msg), &message);
+                HTML::write_to_file(self.get_or_create_file(&msg), &message);
             }
             current_message += 1;
             pb.set_position(current_message);
         }
         pb.finish_at_current_pos();
+
+        eprintln!("Writing HTML footers...");
+        // TODO: Write all footer data
+        self.files
+            .iter()
+            .for_each(|(_, path)| HTML::write_to_file(path, FOOTER));
     }
 
     /// Create a file for the given chat, caching it so we don't need to build it later
@@ -69,7 +79,16 @@ impl<'a> Exporter<'a> for TXT<'a> {
             Some((chatroom, id)) => self.files.entry(*id).or_insert_with(|| {
                 let mut path = self.config.export_path();
                 path.push(self.config.filename(chatroom));
-                path.set_extension("txt");
+                path.set_extension("html");
+
+                // Write file header
+                HTML::write_to_file(&path, HEADER);
+
+                // Write CSS
+                HTML::write_to_file(&path, "<style>\n");
+                HTML::write_to_file(&path, STYLE);
+                HTML::write_to_file(&path, "\n</style>");
+
                 path
             }),
             None => Path::new(ORPHANED),
@@ -77,20 +96,40 @@ impl<'a> Exporter<'a> for TXT<'a> {
     }
 }
 
-impl<'a> Writer<'a> for TXT<'a> {
+impl<'a> Writer<'a> for HTML<'a> {
     fn format_message(&self, message: &Message, indent: usize) -> String {
-        let indent = String::from_iter((0..indent).map(|_| " "));
         // Data we want to write to a file
         let mut formatted_message = String::new();
 
+        // Message div
+        self.add_line(&mut formatted_message, "<div class=\"message\">", "", "");
+
+        // Start message div
+        if message.is_from_me {
+            self.add_line(
+                &mut formatted_message,
+                &format!("<div class=\"sent {:?}\">", message.service()),
+                "",
+                "",
+            );
+        } else {
+            self.add_line(&mut formatted_message, "<div class=\"received\">", "", "");
+        }
+
         // Add message date
-        self.add_line(&mut formatted_message, &self.get_time(message), &indent);
+        self.add_line(
+            &mut formatted_message,
+            &self.get_time(message),
+            "<p><span class=\"timestamp\">",
+            "</span>",
+        );
 
         // Add message sender
         self.add_line(
             &mut formatted_message,
             self.config.who(&message.handle_id, message.is_from_me),
-            &indent,
+            "<span class=\"sender\">",
+            "</span></p>",
         );
 
         // Useful message metadata
@@ -104,75 +143,99 @@ impl<'a> Writer<'a> for TXT<'a> {
 
         // Generate the message body from it's components
         for (idx, message_part) in message_parts.iter().enumerate() {
-            let line: &str = match message_part {
-                BubbleType::Text(text) => *text,
+            let line: String = match message_part {
+                BubbleType::Text(text) => format!("<span class=\"bubble\">{text}</span>"),
                 BubbleType::Attachment => match attachments.get(attachment_index) {
                     Some(attachment) => match self.format_attachment(attachment) {
                         Ok(result) => {
                             attachment_index += 1;
-                            result
+                            format!(
+                                "<img src=\"{}\" loading=\"lazy\">",
+                                result.replace("~", &home())
+                            )
                         }
-                        Err(result) => result,
+                        Err(result) => format!("<span class=\"attachment_error\">Missing attachment filepath: {result}</span>"),
                     },
                     // Attachment does not exist in attachments table
-                    None => "Attachment missing!",
+                    None => "Attachment does not exist!".to_owned(),
                 },
                 // TODO: Support app messages
-                BubbleType::App => self.format_app(message),
+                BubbleType::App => format!(
+                    "<span class=\"attachment_error\">{}</span>",
+                    self.format_app(message)
+                ),
             };
 
             // Write the message
-            self.add_line(&mut formatted_message, line, &indent);
+            self.add_line(
+                &mut formatted_message,
+                &line,
+                "<hr><div class=\"message_part\">",
+                "</div>",
+            );
 
             // Handle expressives
             if message.expressive_send_style_id.is_some() {
                 self.add_line(
                     &mut formatted_message,
                     self.format_expressive(message),
-                    &indent,
+                    "<span class=\"expressive\">",
+                    "</span>",
                 );
             }
 
             // Handle Reactions
             if let Some(reactions) = reactions.get(&idx) {
-                self.add_line(&mut formatted_message, "Reactions:", &indent);
+                self.add_line(
+                    &mut formatted_message,
+                    "<hr><p>Reactions:</p>",
+                    "<div class=\"reactions\">",
+                    "",
+                );
                 reactions.iter().for_each(|reaction| {
                     self.add_line(
                         &mut formatted_message,
                         &self.format_reaction(reaction),
-                        &indent,
+                        "<p><span class=\"reaction\">",
+                        "</span></p>",
                     );
                 });
+                self.add_line(&mut formatted_message, "</div>", "", "")
             }
 
             // Handle Replies
             if let Some(replies) = replies.get(&idx) {
+                self.add_line(&mut formatted_message, "<div class=\"replies\">", "", "");
                 replies.iter().for_each(|reply| {
                     if !reply.is_reaction() {
+                        // Set indent to 1 so we know this is a recursive call
                         self.add_line(
                             &mut formatted_message,
-                            &self.format_message(reply, 4),
-                            &indent,
+                            &self.format_message(reply, 1),
+                            "<div class=\"reply\">",
+                            "</div>",
                         );
                     }
                 });
+                self.add_line(&mut formatted_message, "</div>", "", "")
             }
         }
 
-        // Add a note if the message is a reply
-        if message.is_reply() && indent.is_empty() {
+        // Add a note if the message is a reply and not rendered in a thread
+        if message.is_reply() && indent == 0 {
             self.add_line(
                 &mut formatted_message,
                 "This message responded to an earlier message.",
-                &indent,
+                "<span class=\"reply_context\">",
+                "</span>",
             );
         }
 
-        // TODO: We add 2 newlines for messages that have replies
-        if indent.is_empty() {
-            // Add a newline for top-level messages
-            formatted_message.push('\n');
-        }
+        // End message type div
+        self.add_line(&mut formatted_message, "</div>", "", "");
+
+        // End message div
+        self.add_line(&mut formatted_message, "</div>", "", "");
 
         formatted_message
     }
@@ -198,7 +261,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                     return "".to_string();
                 }
                 format!(
-                    "{:?} by {}",
+                    "<b>{:?}</b> by {}",
                     reaction,
                     self.config.who(&msg.handle_id, msg.is_from_me),
                 )
@@ -206,7 +269,7 @@ impl<'a> Writer<'a> for TXT<'a> {
             imessage_database::Variant::Sticker(_) => {
                 let paths = Attachment::from_message(&self.config.db, msg);
                 format!(
-                    "Sticker from {}: {}",
+                    "Sticker from {}: <img src=\"{}\" loading=\"lazy\">",
                     self.config.who(&msg.handle_id, msg.is_from_me),
                     match paths.get(0) {
                         Some(sticker) => &sticker.filename.as_ref().unwrap(),
@@ -252,7 +315,7 @@ impl<'a> Writer<'a> for TXT<'a> {
     }
 }
 
-impl<'a> TXT<'a> {
+impl<'a> HTML<'a> {
     fn get_time(&self, message: &Message) -> String {
         let mut date = dates::format(&message.date(&self.config.offset));
         let read_after = message.time_until_read(&self.config.offset);
@@ -268,10 +331,11 @@ impl<'a> TXT<'a> {
         date
     }
 
-    fn add_line(&self, string: &mut String, part: &str, indent: &str) {
+    fn add_line(&self, string: &mut String, part: &str, pre: &str, post: &str) {
         if !part.is_empty() {
-            string.push_str(indent);
+            string.push_str(pre);
             string.push_str(part);
+            string.push_str(post);
             string.push('\n');
         }
     }
@@ -279,7 +343,7 @@ impl<'a> TXT<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Config, Exporter, Options, TXT};
+    use crate::{Config, Exporter, Options, HTML};
     use imessage_database::{tables::messages::Message, util::dirs::default_db_path};
 
     fn blank() -> Message {
@@ -321,7 +385,7 @@ mod tests {
     fn can_create() {
         let options = fake_options();
         let config = Config::new(options).unwrap();
-        let exporter = TXT::new(&config);
+        let exporter = HTML::new(&config);
         assert_eq!(exporter.files.len(), 0);
     }
 
@@ -330,7 +394,7 @@ mod tests {
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
-        let exporter = TXT::new(&config);
+        let exporter = HTML::new(&config);
 
         // Create fake message
         let mut message = blank();
@@ -352,7 +416,7 @@ mod tests {
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
-        let exporter = TXT::new(&config);
+        let exporter = HTML::new(&config);
 
         // Create fake message
         let mut message = blank();
@@ -370,26 +434,40 @@ mod tests {
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
-        let exporter = TXT::new(&config);
+        let exporter = HTML::new(&config);
 
         // Create sample data
         let mut s = String::new();
-        exporter.add_line(&mut s, "hello world", "");
+        exporter.add_line(&mut s, "hello world", "", "");
 
         assert_eq!(s, "hello world\n".to_string());
     }
 
     #[test]
-    fn can_add_line_indent() {
+    fn can_add_line() {
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
-        let exporter = TXT::new(&config);
+        let exporter = HTML::new(&config);
 
         // Create sample data
         let mut s = String::new();
-        exporter.add_line(&mut s, "hello world", "  ");
+        exporter.add_line(&mut s, "hello world", "  ", "");
 
         assert_eq!(s, "  hello world\n".to_string());
+    }
+
+    #[test]
+    fn can_add_line_pre_post() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        // Create sample data
+        let mut s = String::new();
+        exporter.add_line(&mut s, "hello world", "<div>", "</div>");
+
+        assert_eq!(s, "<div>hello world</div>\n".to_string());
     }
 }
