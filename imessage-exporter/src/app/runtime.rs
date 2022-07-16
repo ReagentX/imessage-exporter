@@ -249,7 +249,10 @@ impl<'a> Config<'a> {
 mod tests {
     use crate::{Config, Options};
     use imessage_database::{
-        tables::table::{get_connection, MAX_LENGTH},
+        tables::{
+            chat::Chat,
+            table::{get_connection, MAX_LENGTH},
+        },
         util::dirs::default_db_path,
     };
     use std::collections::{BTreeSet, HashMap};
@@ -264,7 +267,17 @@ mod tests {
             valid: true,
         }
     }
-    fn dummy<'a>(options: Options<'a>) -> Config<'a> {
+
+    fn fake_chat() -> Chat {
+        Chat {
+            rowid: 0,
+            chat_identifier: "Default".to_string(),
+            service_name: "".to_string(),
+            display_name: None,
+        }
+    }
+
+    fn fake_app<'a>(options: Options<'a>) -> Config<'a> {
         let connection = get_connection(&options.db_path);
         Config {
             chatrooms: HashMap::new(),
@@ -282,14 +295,14 @@ mod tests {
     #[test]
     fn can_create() {
         let options = fake_options();
-        let app = dummy(options);
+        let app = fake_app(options);
         app.start();
     }
 
     #[test]
     fn can_get_filename_good() {
         let options = fake_options();
-        let mut app = dummy(options);
+        let mut app = fake_app(options);
 
         // Create participant data
         app.participants.insert(10, "Person 10".to_string());
@@ -309,7 +322,7 @@ mod tests {
     #[test]
     fn can_get_filename_long_multiple() {
         let options = fake_options();
-        let mut app = dummy(options);
+        let mut app = fake_app(options);
 
         // Create participant data
         app.participants.insert(
@@ -365,7 +378,7 @@ mod tests {
     #[test]
     fn can_get_filename_single_long() {
         let options = fake_options();
-        let mut app = dummy(options);
+        let mut app = fake_app(options);
 
         // Create participant data
         app.participants.insert(10, "He slipped his key into the lock, and we all very quietly entered the cell. The sleeper half turned, and then settled down once more into a deep slumber. Holmes stooped to the water-jug, moistened his sponge, and then rubbed it twice vigorously across and down the prisoner's face.".to_string());
@@ -378,5 +391,133 @@ mod tests {
         let filename = app.filename_from_participants(&people);
         assert_eq!(filename, "He slipped his key into the lock, and we all very quietly entered the cell. The sleeper half turned, and then settled down once more into a deep slumber. Holmes stooped to the water-jug, moistened his sponge, and then rubbed it twice vigoro".to_string());
         assert!(filename.len() <= MAX_LENGTH);
+    }
+
+    #[test]
+    fn can_get_filename_chat_display_name() {
+        let options = fake_options();
+        let app = fake_app(options);
+
+        // Create chat
+        let mut chat = fake_chat();
+        chat.display_name = Some("Test Chat Name".to_string());
+
+        // Get filename
+        let filename = app.filename(&chat);
+        assert_eq!(filename, "Test Chat Name");
+    }
+
+    #[test]
+    fn can_get_filename_chat_participants() {
+        let options = fake_options();
+        let mut app = fake_app(options);
+
+        // Create chat
+        let chat = fake_chat();
+
+        // Create participant data
+        app.participants.insert(10, "Person 10".to_string());
+        app.participants.insert(11, "Person 11".to_string());
+
+        // Add participants
+        let mut people = BTreeSet::new();
+        people.insert(10);
+        people.insert(11);
+        app.chatroom_participants.insert(chat.rowid, people);
+
+        // Get filename
+        let filename = app.filename(&chat);
+        assert_eq!(filename, "Person 10, Person 11");
+    }
+
+    #[test]
+    fn can_get_filename_chat_no_participants() {
+        let options = fake_options();
+        let app = fake_app(options);
+
+        // Create chat
+        let chat = fake_chat();
+
+        // Get filename
+        let filename = app.filename(&chat);
+        assert_eq!(filename, "Default");
+    }
+
+    #[test]
+    fn can_get_who_them() {
+        let options = fake_options();
+        let mut app = fake_app(options);
+
+        // Create participant data
+        app.participants.insert(10, "Person 10".to_string());
+
+        // Get filename
+        let who = app.who(&10, false);
+        assert_eq!(who, "Person 10".to_string());
+    }
+
+    #[test]
+    fn can_get_who_them_missing() {
+        let options = fake_options();
+        let app = fake_app(options);
+
+        // Get filename
+        let who = app.who(&10, false);
+        assert_eq!(who, "Unknown".to_string());
+    }
+
+    #[test]
+    fn can_get_who_me() {
+        let options = fake_options();
+        let app = fake_app(options);
+
+        // Get filename
+        let who = app.who(&0, true);
+        assert_eq!(who, "Me".to_string());
+    }
+
+    #[test]
+    fn can_get_chat_valid() {
+        let options = fake_options();
+        let mut app = fake_app(options);
+
+        // Create chat
+        let chat = fake_chat();
+        app.chatrooms.insert(chat.rowid, chat);
+        app.real_chatrooms.insert(0, 0);
+
+        // Get filename
+        let (_, id) = app.conversation(Some(0)).unwrap();
+        assert_eq!(id, &0);
+    }
+
+    #[test]
+    fn can_get_chat_ivalid() {
+        let options = fake_options();
+        let mut app = fake_app(options);
+
+        // Create chat
+        let chat = fake_chat();
+        app.chatrooms.insert(chat.rowid, chat);
+        app.real_chatrooms.insert(0, 0);
+
+        // Get filename
+        let room = app.conversation(Some(1));
+        assert!(room.is_none());
+    }
+
+    #[test]
+    fn can_get_chat_none() {
+        let options = fake_options();
+        let mut app = fake_app(options);
+
+        // Create chat
+        let chat = fake_chat();
+        app.chatrooms.insert(chat.rowid, chat);
+        app.real_chatrooms.insert(0, 0);
+
+        // Get filename
+        let room = app.conversation(None);
+        assert!(room.is_none());
     }
 }
