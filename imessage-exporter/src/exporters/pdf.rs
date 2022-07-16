@@ -49,6 +49,10 @@ impl<'a> Writer<'a> for PDF<'a> {
         todo!()
     }
 
+    fn format_annoucement(&self, msg: &'a Message) -> String {
+        todo!()
+    }
+
     fn write_to_file(file: &std::path::Path, text: &str) {
         todo!()
     }

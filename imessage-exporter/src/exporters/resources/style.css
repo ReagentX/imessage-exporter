@@ -51,7 +51,6 @@ p {
 	border-width: thin;
 }
 
-
 .message .received .replies {
 	border-left: dotted dimgray;
 	border-bottom: dotted dimgray;
@@ -115,10 +114,23 @@ span.reactions {
 
 span.reaction {}
 
+.announcement {
+	text-align: center;
+}
+
 @media (prefers-color-scheme: dark) {
-  body {background: black;}
+	body {
+		background: black;
+	}
+
+	.announcement {
+		color: lightgray;
+	}
 }
 
 @media (prefers-color-scheme: light) {
-  body {background: transparent;}
+	body {
+		background: transparent;
+	}
+
 }

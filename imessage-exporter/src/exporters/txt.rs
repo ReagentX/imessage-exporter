@@ -11,7 +11,10 @@ use crate::{
 };
 
 use imessage_database::{
-    tables::{messages::BubbleType, table::ORPHANED},
+    tables::{
+        messages::BubbleType,
+        table::{ME, ORPHANED, UNKNOWN},
+    },
     util::dates,
     Attachment, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
 };
@@ -52,8 +55,13 @@ impl<'a> Exporter<'a> for TXT<'a> {
 
         for message in messages {
             let msg = Message::extract(message);
+            // Render the annoucement in-line
+            if msg.is_annoucement() {
+                let annoucement = self.format_annoucement(&msg);
+                TXT::write_to_file(self.get_or_create_file(&msg), &annoucement);
+            }
             // Message replies and reactions are rendered in context, so no need to render them separately
-            if !msg.is_reaction() {
+            else if !msg.is_reaction() {
                 let message = self.format_message(&msg, 0);
                 TXT::write_to_file(self.get_or_create_file(&msg), &message);
             }
@@ -218,6 +226,20 @@ impl<'a> Writer<'a> for TXT<'a> {
         }
     }
 
+    fn format_annoucement(&self, msg: &'a Message) -> String {
+        let mut who = self.config.who(&msg.handle_id, msg.is_from_me);
+        // Rename yourself so we render the proper grammar here
+        if who == ME {
+            who = "You"
+        }
+
+        let timestamp = dates::format(&msg.date(&self.config.offset));
+        format!(
+            "\n\n{timestamp} {who} renamed the conversation to {}\n\n",
+            msg.group_title.as_deref().unwrap_or(UNKNOWN)
+        )
+    }
+
     fn format_expressive(&self, msg: &'a Message) -> &'a str {
         match msg.get_expressive() {
             Expressive::Screen(effect) => match effect {
@@ -295,6 +317,7 @@ mod tests {
             date_delivered: i64::default(),
             is_from_me: false,
             is_read: false,
+            group_title: None,
             associated_message_guid: None,
             associated_message_type: i32::default(),
             expressive_send_style_id: None,
