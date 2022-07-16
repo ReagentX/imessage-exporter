@@ -116,6 +116,7 @@ span.reaction {}
 
 .announcement {
 	text-align: center;
+	padding: 2vh 1vw 2vh 1vw;
 }
 
 @media (prefers-color-scheme: dark) {
