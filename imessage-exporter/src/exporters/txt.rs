@@ -235,7 +235,7 @@ impl<'a> Writer<'a> for TXT<'a> {
 
         let timestamp = dates::format(&msg.date(&self.config.offset));
         format!(
-            "\n\n{timestamp} {who} renamed the conversation to {}\n\n",
+            "\n{timestamp} {who} renamed the conversation to {}\n\n",
             msg.group_title.as_deref().unwrap_or(UNKNOWN)
         )
     }
