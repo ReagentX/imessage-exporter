@@ -320,7 +320,7 @@ impl<'a> Writer<'a> for HTML<'a> {
         }
         let timestamp = dates::format(&msg.date(&self.config.offset));
         format!(
-            "\n<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} renamed the conversation to <b>{}</b></p></div>\n",
+            "\n<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} named the conversation <b>{}</b></p></div>\n",
             msg.group_title.as_deref().unwrap_or(UNKNOWN)
         )
     }
