@@ -16,6 +16,17 @@ use crate::{
 
 const COLUMNS: &str = "a.ROWID, a.filename, a.mime_type, a.transfer_name, a.total_bytes, a.is_sticker, a.attribution_info, a.hide_attachment";
 
+#[derive(Debug)]
+pub enum AttachmentType<'a> {
+    Image(&'a str),
+    Video(&'a str),
+    Audio(&'a str),
+    Text(&'a str),
+    Application(&'a str),
+    Other(&'a str),
+    Unknown,
+}
+
 /// Represents a single row in the `attachment` table.
 #[derive(Debug)]
 pub struct Attachment {
@@ -148,5 +159,45 @@ impl Attachment {
             }
         }
         out_l
+    }
+
+    /// Get the media type of an attachment
+    pub fn mime_type<'a>(&'a self) -> AttachmentType<'a> {
+        match &self.mime_type {
+            Some(mime) => {
+                if let Some(mime_str) = mime.split('/').into_iter().next() {
+                    match mime_str {
+                        "image" => AttachmentType::Image(&mime),
+                        "video" => AttachmentType::Video(&mime),
+                        "audio" => AttachmentType::Audio(&mime),
+                        "text" => AttachmentType::Text(&mime),
+                        "application" => AttachmentType::Application(&mime),
+                        _ => AttachmentType::Other(&mime),
+                    }
+                } else {
+                    AttachmentType::Other(&mime)
+                }
+            }
+            None => AttachmentType::Unknown,
+        }
+    }
+
+    /// Get the path to an attachment, if it exists
+    pub fn path(&self) -> Option<&Path> {
+        match &self.filename {
+            Some(name) => Some(&Path::new(name)),
+            None => None,
+        }
+    }
+
+    /// Get the extension of an attachment, if it exists
+    pub fn extension(&self) -> Option<&str> {
+        match self.path() {
+            Some(path) => match path.extension() {
+                Some(ext) => ext.to_str(),
+                None => None,
+            },
+            None => None,
+        }
     }
 }
