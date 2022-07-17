@@ -91,7 +91,11 @@ span.timestamp {
 }
 
 span.sender {
-	opacity: 80%;
+	opacity: 100%;
+}
+
+span.subject {
+	font-weight: 600;
 }
 
 span.bubble {
