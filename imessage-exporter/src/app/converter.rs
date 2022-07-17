@@ -1,5 +1,5 @@
 use std::{
-    path::PathBuf,
+    path::Path,
     process::{Command, Stdio},
 };
 
@@ -7,16 +7,16 @@ use std::{
 ///
 /// This uses the MacOS builtin `sips` program
 /// Docs: https://www.unix.com/man-page/osx/1/sips/ (or `man sips`)
-pub fn heic_to_jpeg(from: &PathBuf, to: &PathBuf) -> Option<()> {
+pub fn heic_to_jpeg(from: &Path, to: &Path) -> Option<()> {
     // Get the path we want to copy from
-    let from_path = if let Some(from_path) = from.as_path().to_str() {
+    let from_path = if let Some(from_path) = from.to_str() {
         from_path
     } else {
         return None;
     };
 
     // Get the path we want to write to
-    let to_path = if let Some(to_path) = to.as_path().to_str() {
+    let to_path = if let Some(to_path) = to.to_str() {
         to_path
     } else {
         return None;
