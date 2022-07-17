@@ -116,6 +116,10 @@ impl<'a> Writer<'a> for TXT<'a> {
         // Index of where we are in the attachment Vector
         let mut attachment_index: usize = 0;
 
+        if let Some(subject) = &message.subject {
+            self.add_line(&mut formatted_message, subject, &indent);
+        }
+
         // Generate the message body from it's components
         for (idx, message_part) in message_parts.iter().enumerate() {
             let line: String = match message_part {

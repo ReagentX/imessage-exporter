@@ -158,6 +158,16 @@ impl<'a> Writer<'a> for HTML<'a> {
         // Index of where we are in the attachment Vector
         let mut attachment_index: usize = 0;
 
+        if let Some(subject) = &message.subject {
+            // Add message sender
+            self.add_line(
+                &mut formatted_message,
+                subject,
+                "<span class=\"subject\">",
+                "</span>",
+            );
+        }
+
         // Generate the message body from it's components
         for (idx, message_part) in message_parts.iter().enumerate() {
             let line: String = match message_part {
@@ -371,7 +381,9 @@ impl<'a> Writer<'a> for HTML<'a> {
                     },
                     None => None,
                 }
-                .unwrap_or(format!("<span class=\"reaction\">Sticker not found!</span>"))
+                .unwrap_or(format!(
+                    "<span class=\"reaction\">Sticker not found!</span>"
+                ))
             }
             _ => unreachable!(),
         }
