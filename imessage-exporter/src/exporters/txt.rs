@@ -118,25 +118,25 @@ impl<'a> Writer<'a> for TXT<'a> {
 
         // Generate the message body from it's components
         for (idx, message_part) in message_parts.iter().enumerate() {
-            let line: &str = match message_part {
-                BubbleType::Text(text) => *text,
+            let line: String = match message_part {
+                BubbleType::Text(text) => text.to_string(),
                 BubbleType::Attachment => match attachments.get_mut(attachment_index) {
                     Some(attachment) => match self.format_attachment(attachment) {
                         Ok(result) => {
                             attachment_index += 1;
                             result
                         }
-                        Err(result) => result,
+                        Err(result) => result.to_string(),
                     },
                     // Attachment does not exist in attachments table
-                    None => "Attachment missing!",
+                    None => "Attachment missing!".to_string(),
                 },
                 // TODO: Support app messages
-                BubbleType::App => self.format_app(message),
+                BubbleType::App => self.format_app(message).to_string(),
             };
 
             // Write the message
-            self.add_line(&mut formatted_message, line, &indent);
+            self.add_line(&mut formatted_message, &line, &indent);
 
             // Handle expressives
             if message.expressive_send_style_id.is_some() {
@@ -191,9 +191,9 @@ impl<'a> Writer<'a> for TXT<'a> {
         formatted_message
     }
 
-    fn format_attachment(&self, attachment: &'a mut Attachment) -> Result<&'a str, &'a str> {
+    fn format_attachment(&self, attachment: &'a mut Attachment) -> Result<String, &'a str> {
         match &attachment.filename {
-            Some(filename) => Ok(filename),
+            Some(filename) => Ok(filename.to_owned()),
             // Filepath missing!
             None => Err(&attachment.transfer_name),
         }
@@ -241,7 +241,7 @@ impl<'a> Writer<'a> for TXT<'a> {
 
         let timestamp = dates::format(&msg.date(&self.config.offset));
         format!(
-            "\n{timestamp} {who} renamed the conversation to {}\n\n",
+            "{timestamp} {who} renamed the conversation to {}\n\n",
             msg.group_title.as_deref().unwrap_or(UNKNOWN)
         )
     }
