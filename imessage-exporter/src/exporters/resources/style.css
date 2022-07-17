@@ -86,8 +86,6 @@ p {
 	padding: 15px;
 }
 
-div.message_part {}
-
 span.timestamp {
 	opacity: 60%;
 }
@@ -113,7 +111,14 @@ span.reactions {
 	opacity: 60%;
 }
 
-span.reaction {}
+div.reactions img {
+	max-width: 5em;
+}
+
+div.reaction {
+	display: flex;
+	align-items: center;
+}
 
 .announcement {
 	text-align: center;
@@ -122,17 +127,16 @@ span.reaction {}
 
 img {
 	max-width: 100%;
-	max-height: 100%;
+	max-height: 90vh;
 }
 
 video {
 	max-width: 100%;
-	max-height: 100%;
+	max-height: 90vh;
 }
 
 audio {
 	max-width: 100%;
-	max-height: 100%;
 }
 
 @media (prefers-color-scheme: dark) {
