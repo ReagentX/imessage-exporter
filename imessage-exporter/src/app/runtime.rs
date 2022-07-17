@@ -215,9 +215,6 @@ impl<'a> Config<'a> {
         } else if self.options.export_type.is_some() {
             // Ensure the path we want to export to exists
             create_dir_all(self.export_path()).unwrap();
-            if !self.options.no_copy {
-                create_dir_all(self.attachment_path()).unwrap();
-            }
 
             match self.options.export_type.unwrap() {
                 "txt" => {
@@ -225,6 +222,9 @@ impl<'a> Config<'a> {
                     TXT::new(self).iter_messages();
                 }
                 "html" => {
+                    if !self.options.no_copy {
+                        create_dir_all(self.attachment_path()).unwrap();
+                    }
                     HTML::new(self).iter_messages();
                 }
                 _ => {
