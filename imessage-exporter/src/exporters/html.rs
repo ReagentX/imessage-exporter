@@ -12,6 +12,7 @@ use crate::{
 
 use imessage_database::{
     tables::{
+        attachment::AttachmentType,
         messages::BubbleType,
         table::{ME, ORPHANED, UNKNOWN},
     },
@@ -165,12 +166,11 @@ impl<'a> Writer<'a> for HTML<'a> {
                     Some(attachment) => match self.format_attachment(attachment) {
                         Ok(result) => {
                             attachment_index += 1;
-                            format!(
-                                "<img src=\"{}\" loading=\"lazy\">",
-                                result.replace("~", &home())
-                            )
+                            result
                         }
-                        Err(result) => format!("<span class=\"attachment_error\">Attachment not found at location: {result}</span>"),
+                        Err(result) => format!(
+                            "<span class=\"attachment_error\">Unable to locate attachment: {result}</span>"
+                        ),
                     },
                     // Attachment does not exist in attachments table
                     None => "Attachment does not exist!".to_owned(),
@@ -212,8 +212,8 @@ impl<'a> Writer<'a> for HTML<'a> {
                     self.add_line(
                         &mut formatted_message,
                         &self.format_reaction(reaction),
-                        "<p><span class=\"reaction\">",
-                        "</span></p>",
+                        "<div class=\"reaction\">",
+                        "</div>",
                     );
                 });
                 self.add_line(&mut formatted_message, "</div>", "", "")
@@ -256,46 +256,85 @@ impl<'a> Writer<'a> for HTML<'a> {
         formatted_message
     }
 
-    fn format_attachment(&self, attachment: &'a mut Attachment) -> Result<&'a str, &'a str> {
-        // Early escape if we have seen this attachment before
-        if attachment.copied_path.is_some() {
-            return Ok(&attachment.copied_path.as_ref().unwrap());
-        }
+    fn format_attachment(&self, attachment: &'a mut Attachment) -> Result<String, &'a str> {
+        match attachment.path() {
+            Some(path) => {
+                if let Some(path_str) = path.as_os_str().to_str() {
+                    // Resolve the attachment path if necessary
+                    // TODO: can we avoid copying the path here?
+                    let resolved_attachment_path = match path.starts_with("~") {
+                        true => path_str.replace("~", &home()),
+                        false => path_str.to_owned(),
+                    };
 
-        match &attachment.filename {
-            Some(filename) => {
-                if self.config.options.no_copy {
-                    Ok(filename)
-                } else {
-                    // Create fully qualified path
-                    let resolved_attachment_path = filename.replace("~", &home());
-                    let attachment_path = PathBuf::from(resolved_attachment_path);
-
-                    // Validation so we can just unwrap these values
-                    if attachment_path.exists() && attachment_path.extension().is_some() {
-                        let extension = attachment_path.extension().unwrap();
-                        // Creat a path we can copy the attachment to
-                        let mut copy_path = self.config.attachment_path();
-                        copy_path.push(Uuid::new_v4().to_string());
-
-                        // If the image is a HEIC, convert it to PNG, otherwise perform the copy
-                        if extension == "heic" || extension == "HEIC" {
-                            copy_path.set_extension("jpg");
-                            heic_to_jpeg(&attachment_path, &copy_path);
-                        } else {
-                            copy_path.set_extension(extension);
-                            copy(attachment_path, &copy_path).unwrap();
+                    // Perform optional copy + convert
+                    if !self.config.options.no_copy {
+                        let qualified_attachment_path = Path::new(&resolved_attachment_path);
+                        match attachment.extension() {
+                            Some(ext) => {
+                                // Create a path to copy the file to
+                                let mut copy_path = self.config.attachment_path();
+                                copy_path.push(Uuid::new_v4().to_string());
+                                // If the image is a HEIC, convert it to PNG, otherwise perform the copy
+                                if ext == "heic" || ext == "HEIC" {
+                                    // Write the converted file
+                                    copy_path.set_extension("jpg");
+                                    heic_to_jpeg(qualified_attachment_path, &copy_path);
+                                } else {
+                                    // Just copy the file
+                                    copy_path.set_extension(ext);
+                                    if qualified_attachment_path.exists() {
+                                        copy(qualified_attachment_path, &copy_path).unwrap();
+                                    } else {
+                                        return Err(&attachment.transfer_name);
+                                    }
+                                }
+                                // Update the attachment
+                                attachment.copied_path =
+                                    Some(copy_path.to_string_lossy().to_string());
+                            }
+                            None => {
+                                return Err(&attachment.transfer_name);
+                            }
                         }
-
-                        // Update the attachment so we know to not copy more than once
-                        attachment.copied_path = Some(copy_path.to_string_lossy().to_string());
-                        Ok(&attachment.copied_path.as_ref().unwrap())
-                    } else {
-                        Err(filename)
                     }
+
+                    let embed_path = match &attachment.copied_path {
+                        Some(path) => &path,
+                        None => &resolved_attachment_path,
+                    };
+
+                    Ok(match attachment.mime_type() {
+                        AttachmentType::Image(_) => {
+                            format!("<img src=\"{embed_path}\" loading=\"lazy\">")
+                        }
+                        AttachmentType::Video(media_type) => {
+                            format!("<video controls> <source src=\"{embed_path}\" type=\"{media_type}\"> </video>")
+                        }
+                        AttachmentType::Audio(media_type) => {
+                            format!("<audio controls src=\"{embed_path}\" type=\"{media_type}\" </audio>")
+                        }
+                        AttachmentType::Text(_) => {
+                            format!(
+                                "<a href=\"file://{embed_path}\">Click to download {}</a>",
+                                attachment.transfer_name
+                            )
+                        }
+                        AttachmentType::Application(_) => format!(
+                            "<a href=\"file://{embed_path}\">Click to download {}</a>",
+                            attachment.transfer_name
+                        ),
+                        AttachmentType::Unknown => {
+                            format!("<p>Unknown attachment type: {embed_path}</p>")
+                        }
+                        AttachmentType::Other(media_type) => {
+                            format!("<p>Unable to embed {media_type} attachments: {embed_path}</p>")
+                        }
+                    })
+                } else {
+                    return Err(&attachment.transfer_name);
                 }
             }
-            // Filepath missing!
             None => Err(&attachment.transfer_name),
         }
     }
@@ -313,21 +352,26 @@ impl<'a> Writer<'a> for HTML<'a> {
                     return "".to_string();
                 }
                 format!(
-                    "<b>{:?}</b> by {}",
+                    "<span class=\"reaction\"><b>{:?}</b> by {}</span>",
                     reaction,
                     self.config.who(&msg.handle_id, msg.is_from_me),
                 )
             }
             imessage_database::Variant::Sticker(_) => {
-                let paths = Attachment::from_message(&self.config.db, msg);
-                format!(
-                    "Sticker from {}: <img src=\"{}\" loading=\"lazy\">",
-                    self.config.who(&msg.handle_id, msg.is_from_me),
-                    match paths.get(0) {
-                        Some(sticker) => &sticker.filename.as_ref().unwrap(),
-                        None => "Sticker not found!",
+                let mut paths = Attachment::from_message(&self.config.db, msg);
+                // Sticker messages have only one attachment, the sticker image
+                match paths.get_mut(0) {
+                    // TODO: Add who sent the sticker, restrict its size
+                    Some(sticker) => match self.format_attachment(sticker) {
+                        Ok(img) => {
+                            let who = self.config.who(&msg.handle_id, msg.is_from_me);
+                            Some(format!("{img}<span class=\"reaction\"> from {who}</span>"))
+                        }
+                        Err(_) => None,
                     },
-                )
+                    None => None,
+                }
+                .unwrap_or(format!("<span class=\"reaction\">Sticker not found!</span>"))
             }
             _ => unreachable!(),
         }
