@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    app::{progress::build_progress_bar_export, runtime::Config},
+    app::{converter::heic_to_jpeg, progress::build_progress_bar_export, runtime::Config},
     exporters::exporter::{Exporter, Writer},
 };
 
@@ -257,18 +257,37 @@ impl<'a> Writer<'a> for HTML<'a> {
     }
 
     fn format_attachment(&self, attachment: &'a mut Attachment) -> Result<&'a str, &'a str> {
+        // Early escape if we have seen this attachment before
+        if attachment.copied_path.is_some() {
+            return Ok(&attachment.copied_path.as_ref().unwrap());
+        }
+
         match &attachment.filename {
             Some(filename) => {
                 if self.config.options.no_copy {
                     Ok(filename)
                 } else {
+                    // Create fully qualified path
                     let resolved_attachment_path = filename.replace("~", &home());
                     let attachment_path = PathBuf::from(resolved_attachment_path);
+
+                    // Validation so we can just unwrap these values
                     if attachment_path.exists() && attachment_path.extension().is_some() {
+                        let extension = attachment_path.extension().unwrap();
+                        // Creat a path we can copy the attachment to
                         let mut copy_path = self.config.attachment_path();
                         copy_path.push(Uuid::new_v4().to_string());
-                        copy_path.set_extension(attachment_path.extension().unwrap());
-                        copy(attachment_path, &copy_path).unwrap();
+
+                        // If the image is a HEIC, convert it to PNG, otherwise perform the copy
+                        if extension == "heic" || extension == "HEIC" {
+                            copy_path.set_extension("jpg");
+                            heic_to_jpeg(&attachment_path, &copy_path);
+                        } else {
+                            copy_path.set_extension(extension);
+                            copy(attachment_path, &copy_path).unwrap();
+                        }
+
+                        // Update the attachment so we know to not copy more than once
                         attachment.copied_path = Some(copy_path.to_string_lossy().to_string());
                         Ok(&attachment.copied_path.as_ref().unwrap())
                     } else {
