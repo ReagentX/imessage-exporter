@@ -12,7 +12,7 @@ use crate::{
 
 use imessage_database::{
     tables::{
-        attachment::AttachmentType,
+        attachment::MediaType,
         messages::BubbleType,
         table::{ME, ORPHANED, UNKNOWN},
     },
@@ -289,6 +289,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                 if ext == "heic" || ext == "HEIC" {
                                     // Write the converted file
                                     copy_path.set_extension("jpg");
+                                    // TODO: Handle Option
                                     heic_to_jpeg(qualified_attachment_path, &copy_path);
                                 } else {
                                     // Just copy the file
@@ -315,29 +316,29 @@ impl<'a> Writer<'a> for HTML<'a> {
                     };
 
                     Ok(match attachment.mime_type() {
-                        AttachmentType::Image(_) => {
+                        MediaType::Image(_) => {
                             format!("<img src=\"{embed_path}\" loading=\"lazy\">")
                         }
-                        AttachmentType::Video(media_type) => {
+                        MediaType::Video(media_type) => {
                             format!("<video controls> <source src=\"{embed_path}\" type=\"{media_type}\"> </video>")
                         }
-                        AttachmentType::Audio(media_type) => {
+                        MediaType::Audio(media_type) => {
                             format!("<audio controls src=\"{embed_path}\" type=\"{media_type}\" </audio>")
                         }
-                        AttachmentType::Text(_) => {
+                        MediaType::Text(_) => {
                             format!(
                                 "<a href=\"file://{embed_path}\">Click to download {}</a>",
                                 attachment.transfer_name
                             )
                         }
-                        AttachmentType::Application(_) => format!(
+                        MediaType::Application(_) => format!(
                             "<a href=\"file://{embed_path}\">Click to download {}</a>",
                             attachment.transfer_name
                         ),
-                        AttachmentType::Unknown => {
+                        MediaType::Unknown => {
                             format!("<p>Unknown attachment type: {embed_path}</p>")
                         }
-                        AttachmentType::Other(media_type) => {
+                        MediaType::Other(media_type) => {
                             format!("<p>Unable to embed {media_type} attachments: {embed_path}</p>")
                         }
                     })
