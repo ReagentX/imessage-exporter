@@ -32,9 +32,15 @@ pub fn heic_to_jpeg(from: &Path, to: &Path) -> Option<()> {
     {
         // TODO: make this log stuff
         Ok(mut sips) => match sips.wait() {
-            Ok(success) => Some(()),
-            Err(why) => None,
+            Ok(_) => Some(()),
+            Err(why) => {
+                eprintln!("Conversion failed: {why}");
+                None
+            }
         },
-        Err(why) => None,
+        Err(why) => {
+            eprintln!("Conversion failed: {why}");
+            None
+        }
     }
 }
