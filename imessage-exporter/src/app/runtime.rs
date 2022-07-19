@@ -76,7 +76,6 @@ impl<'a> Config<'a> {
     /// If the chat has an assigned name, use that.
     ///
     /// If it does not, first try and make a flat list of its members. Failing that, use the unique `chat_identifier` field.
-    // TODO: Include chat ID in filename to prevent duplciate custom names from getting routed to the same file
     pub fn filename(&self, chatroom: &Chat) -> String {
         match &chatroom.display_name() {
             // If there is a display name, use that

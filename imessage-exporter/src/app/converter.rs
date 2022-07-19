@@ -30,7 +30,6 @@ pub fn heic_to_jpeg(from: &Path, to: &Path) -> Option<()> {
         .stdin(Stdio::null())
         .spawn()
     {
-        // TODO: make this log stuff
         Ok(mut sips) => match sips.wait() {
             Ok(_) => Some(()),
             Err(why) => {
