@@ -1,4 +1,5 @@
 use std::{
+    cmp::min,
     collections::{BTreeSet, HashMap, HashSet},
     fs::create_dir_all,
     path::PathBuf,
@@ -79,7 +80,13 @@ impl<'a> Config<'a> {
     pub fn filename(&self, chatroom: &Chat) -> String {
         match &chatroom.display_name() {
             // If there is a display name, use that
-            Some(name) => name.to_string(),
+            Some(name) => {
+                let name = name.to_string();
+                let unique = format!(" - {}", chatroom.rowid);
+                let mut usable_name = name[..min(MAX_LENGTH, name.len())].to_string();
+                usable_name.push_str(&unique);
+                usable_name
+            }
             // Fallback if there is no name set
             None => match self.chatroom_participants.get(&chatroom.rowid) {
                 // List of participant names
