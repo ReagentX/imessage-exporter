@@ -122,25 +122,24 @@ impl<'a> Writer<'a> for TXT<'a> {
 
         // Generate the message body from it's components
         for (idx, message_part) in message_parts.iter().enumerate() {
-            let line: String = match message_part {
-                BubbleType::Text(text) => text.to_string(),
+            match message_part {
+                BubbleType::Text(text) => self.add_line(&mut formatted_message, text, &indent),
                 BubbleType::Attachment => match attachments.get_mut(attachment_index) {
                     Some(attachment) => match self.format_attachment(attachment) {
                         Ok(result) => {
                             attachment_index += 1;
-                            result
+                            self.add_line(&mut formatted_message, &result, &indent);
                         }
-                        Err(result) => result.to_string(),
+                        Err(result) => self.add_line(&mut formatted_message, &result, &indent),
                     },
                     // Attachment does not exist in attachments table
-                    None => "Attachment missing!".to_string(),
+                    None => self.add_line(&mut formatted_message, "Attachment missing!", &indent),
                 },
                 // TODO: Support app messages
-                BubbleType::App => self.format_app(message).to_string(),
+                BubbleType::App => {
+                    self.add_line(&mut formatted_message, self.format_app(message), &indent)
+                }
             };
-
-            // Write the message
-            self.add_line(&mut formatted_message, &line, &indent);
 
             // Handle expressives
             if message.expressive_send_style_id.is_some() {

@@ -170,35 +170,59 @@ impl<'a> Writer<'a> for HTML<'a> {
 
         // Generate the message body from it's components
         for (idx, message_part) in message_parts.iter().enumerate() {
-            let line: String = match message_part {
-                BubbleType::Text(text) => format!("<span class=\"bubble\">{text}</span>"),
-                BubbleType::Attachment => match attachments.get_mut(attachment_index) {
-                    Some(attachment) => match self.format_attachment(attachment) {
-                        Ok(result) => {
-                            attachment_index += 1;
-                            result
-                        }
-                        Err(result) => format!(
-                            "<span class=\"attachment_error\">Unable to locate attachment: {result}</span>"
+            // Write the part div start
+            self.add_line(
+                &mut formatted_message,
+                "<hr><div class=\"message_part\">",
+                "",
+                "",
+            );
+
+            match message_part {
+                BubbleType::Text(text) => {
+                    self.add_line(
+                        &mut formatted_message,
+                        *text,
+                        "<span class=\"bubble\">",
+                        "</span>",
+                    );
+                }
+                BubbleType::Attachment => {
+                    match attachments.get_mut(attachment_index) {
+                        Some(attachment) => match self.format_attachment(attachment) {
+                            Ok(result) => {
+                                attachment_index += 1;
+                                self.add_line(&mut formatted_message, &result, "", "");
+                            }
+                            Err(result) => {
+                                self.add_line(
+                                    &mut formatted_message,
+                                    &result,
+                                    "<span class=\"attachment_error\">Unable to locate attachment:",
+                                    "</span>",
+                                );
+                            }
+                        },
+                        // Attachment does not exist in attachments table
+                        None => self.add_line(
+                            &mut formatted_message,
+                            "Attachment does not exist!",
+                            "",
+                            "",
                         ),
-                    },
-                    // Attachment does not exist in attachments table
-                    None => "Attachment does not exist!".to_owned(),
-                },
+                    }
+                }
                 // TODO: Support app messages
-                BubbleType::App => format!(
-                    "<span class=\"attachment_error\">{}</span>",
-                    self.format_app(message)
+                BubbleType::App => self.add_line(
+                    &mut formatted_message,
+                    self.format_app(message),
+                    "<span class=\"attachment_error\">",
+                    "</span>",
                 ),
             };
 
-            // Write the message
-            self.add_line(
-                &mut formatted_message,
-                &line,
-                "<hr><div class=\"message_part\">",
-                "</div>",
-            );
+            // Write the part div end
+            self.add_line(&mut formatted_message, "</div>", "", "");
 
             // Handle expressives
             if message.expressive_send_style_id.is_some() {
@@ -289,7 +313,6 @@ impl<'a> Writer<'a> for HTML<'a> {
                                 if ext == "heic" || ext == "HEIC" {
                                     // Write the converted file
                                     copy_path.set_extension("jpg");
-                                    // TODO: Handle Option
                                     heic_to_jpeg(qualified_attachment_path, &copy_path);
                                 } else {
                                     // Just copy the file
