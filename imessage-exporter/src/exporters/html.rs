@@ -323,7 +323,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                             return Ok(format!(
                                                 "Unable to convert and display file: {}",
                                                 &attachment.transfer_name
-                                            ))
+                                            ));
                                         }
                                     }
                                 } else {
