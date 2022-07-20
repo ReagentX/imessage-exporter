@@ -313,7 +313,19 @@ impl<'a> Writer<'a> for HTML<'a> {
                                 if ext == "heic" || ext == "HEIC" {
                                     // Write the converted file
                                     copy_path.set_extension("jpg");
-                                    heic_to_jpeg(qualified_attachment_path, &copy_path);
+                                    match heic_to_jpeg(qualified_attachment_path, &copy_path) {
+                                        Some(_) => {}
+                                        None => {
+                                            // It is kind of odd to use Ok() on the failure here, but the Err()
+                                            // this function returns is used for when files are missing, not when
+                                            // conversion fails. Perhaps this should be a Result<String, Enum>
+                                            // of some kind, but this conversion failure is quite rare.
+                                            return Ok(format!(
+                                                "Unable to convert and display file: {}",
+                                                &attachment.transfer_name
+                                            ))
+                                        }
+                                    }
                                 } else {
                                     // Just copy the file
                                     copy_path.set_extension(ext);
