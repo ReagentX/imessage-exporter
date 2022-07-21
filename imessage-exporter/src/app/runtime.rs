@@ -415,7 +415,7 @@ mod tests {
 
         // Get filename
         let filename = app.filename(&chat);
-        assert_eq!(filename, "Test Chat Name");
+        assert_eq!(filename, "Test Chat Name - 0");
     }
 
     #[test]
