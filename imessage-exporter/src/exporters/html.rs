@@ -100,7 +100,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
                 path.set_extension("html");
 
                 // If the file already exists , don't write the headers again
-                // This can happen if a group chat was deduplicated but resolves to the same name
+                // This can happen if multiple chats use the same group name
                 if !path.exists() {
                     // Write headers if the file does not exist
                     HTML::write_headers(&path);
