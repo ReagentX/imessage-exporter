@@ -82,7 +82,8 @@ impl<'a> Config<'a> {
             Some(name) => {
                 let name = name.to_string();
                 let unique = format!(" - {}", chatroom.rowid);
-                let mut usable_name = name[..min(MAX_LENGTH, name.len())].to_string();
+                let mut usable_name =
+                    name[..min(MAX_LENGTH, name.len() - unique.len())].to_string();
                 usable_name.push_str(&unique);
                 usable_name
             }
