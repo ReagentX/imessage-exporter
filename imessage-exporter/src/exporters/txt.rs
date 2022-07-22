@@ -109,34 +109,37 @@ impl<'a> Writer<'a> for TXT<'a> {
 
         // Useful message metadata
         let message_parts = message.body();
-        let attachments = Attachment::from_message(&self.config.db, message);
+        let mut attachments = Attachment::from_message(&self.config.db, message);
         let replies = message.get_replies(&self.config.db);
         let reactions = message.get_reactions(&self.config.db, &self.config.reactions);
 
         // Index of where we are in the attachment Vector
         let mut attachment_index: usize = 0;
 
+        if let Some(subject) = &message.subject {
+            self.add_line(&mut formatted_message, subject, &indent);
+        }
+
         // Generate the message body from it's components
         for (idx, message_part) in message_parts.iter().enumerate() {
-            let line: &str = match message_part {
-                BubbleType::Text(text) => *text,
-                BubbleType::Attachment => match attachments.get(attachment_index) {
+            match message_part {
+                BubbleType::Text(text) => self.add_line(&mut formatted_message, text, &indent),
+                BubbleType::Attachment => match attachments.get_mut(attachment_index) {
                     Some(attachment) => match self.format_attachment(attachment) {
                         Ok(result) => {
                             attachment_index += 1;
-                            result
+                            self.add_line(&mut formatted_message, &result, &indent);
                         }
-                        Err(result) => result,
+                        Err(result) => self.add_line(&mut formatted_message, &result, &indent),
                     },
                     // Attachment does not exist in attachments table
-                    None => "Attachment missing!",
+                    None => self.add_line(&mut formatted_message, "Attachment missing!", &indent),
                 },
                 // TODO: Support app messages
-                BubbleType::App => self.format_app(message),
+                BubbleType::App => {
+                    self.add_line(&mut formatted_message, self.format_app(message), &indent)
+                }
             };
-
-            // Write the message
-            self.add_line(&mut formatted_message, line, &indent);
 
             // Handle expressives
             if message.expressive_send_style_id.is_some() {
@@ -191,9 +194,9 @@ impl<'a> Writer<'a> for TXT<'a> {
         formatted_message
     }
 
-    fn format_attachment(&self, attachment: &'a Attachment) -> Result<&'a str, &'a str> {
+    fn format_attachment(&self, attachment: &'a mut Attachment) -> Result<String, &'a str> {
         match &attachment.filename {
-            Some(filename) => Ok(filename),
+            Some(filename) => Ok(filename.to_owned()),
             // Filepath missing!
             None => Err(&attachment.transfer_name),
         }
@@ -241,7 +244,7 @@ impl<'a> Writer<'a> for TXT<'a> {
 
         let timestamp = dates::format(&msg.date(&self.config.offset));
         format!(
-            "\n{timestamp} {who} renamed the conversation to {}\n\n",
+            "{timestamp} {who} renamed the conversation to {}\n\n",
             msg.group_title.as_deref().unwrap_or(UNKNOWN)
         )
     }

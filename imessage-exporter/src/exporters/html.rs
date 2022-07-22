@@ -1,23 +1,25 @@
 use std::{
     collections::HashMap,
-    fs::File,
+    fs::{copy, File},
     io::Write,
     path::{Path, PathBuf},
 };
 
 use crate::{
-    app::{progress::build_progress_bar_export, runtime::Config},
+    app::{converter::heic_to_jpeg, progress::build_progress_bar_export, runtime::Config},
     exporters::exporter::{Exporter, Writer},
 };
 
 use imessage_database::{
     tables::{
+        attachment::MediaType,
         messages::BubbleType,
         table::{ME, ORPHANED, UNKNOWN},
     },
     util::{dates, dirs::home},
     Attachment, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
 };
+use uuid::Uuid;
 
 const HEADER: &str = "<html>\n<meta charset=\"UTF-8\">";
 const FOOTER: &str = "</html>";
@@ -97,8 +99,12 @@ impl<'a> Exporter<'a> for HTML<'a> {
                 path.push(self.config.filename(chatroom));
                 path.set_extension("html");
 
-                // Write headers
-                HTML::write_headers(&path);
+                // If the file already exists , don't write the headers again
+                // This can happen if multiple chats use the same group name
+                if !path.exists() {
+                    // Write headers if the file does not exist
+                    HTML::write_headers(&path);
+                }
 
                 path
             }),
@@ -145,45 +151,78 @@ impl<'a> Writer<'a> for HTML<'a> {
 
         // Useful message metadata
         let message_parts = message.body();
-        let attachments = Attachment::from_message(&self.config.db, message);
+        let mut attachments = Attachment::from_message(&self.config.db, message);
         let replies = message.get_replies(&self.config.db);
         let reactions = message.get_reactions(&self.config.db, &self.config.reactions);
 
         // Index of where we are in the attachment Vector
         let mut attachment_index: usize = 0;
 
+        if let Some(subject) = &message.subject {
+            // Add message sender
+            self.add_line(
+                &mut formatted_message,
+                subject,
+                "<span class=\"subject\">",
+                "</span>",
+            );
+        }
+
         // Generate the message body from it's components
         for (idx, message_part) in message_parts.iter().enumerate() {
-            let line: String = match message_part {
-                BubbleType::Text(text) => format!("<span class=\"bubble\">{text}</span>"),
-                BubbleType::Attachment => match attachments.get(attachment_index) {
-                    Some(attachment) => match self.format_attachment(attachment) {
-                        Ok(result) => {
-                            attachment_index += 1;
-                            format!(
-                                "<img src=\"{}\" loading=\"lazy\">",
-                                result.replace("~", &home())
-                            )
-                        }
-                        Err(result) => format!("<span class=\"attachment_error\">Missing attachment filepath: {result}</span>"),
-                    },
-                    // Attachment does not exist in attachments table
-                    None => "Attachment does not exist!".to_owned(),
-                },
+            // Write the part div start
+            self.add_line(
+                &mut formatted_message,
+                "<hr><div class=\"message_part\">",
+                "",
+                "",
+            );
+
+            match message_part {
+                BubbleType::Text(text) => {
+                    self.add_line(
+                        &mut formatted_message,
+                        *text,
+                        "<span class=\"bubble\">",
+                        "</span>",
+                    );
+                }
+                BubbleType::Attachment => {
+                    match attachments.get_mut(attachment_index) {
+                        Some(attachment) => match self.format_attachment(attachment) {
+                            Ok(result) => {
+                                attachment_index += 1;
+                                self.add_line(&mut formatted_message, &result, "", "");
+                            }
+                            Err(result) => {
+                                self.add_line(
+                                    &mut formatted_message,
+                                    &result,
+                                    "<span class=\"attachment_error\">Unable to locate attachment:",
+                                    "</span>",
+                                );
+                            }
+                        },
+                        // Attachment does not exist in attachments table
+                        None => self.add_line(
+                            &mut formatted_message,
+                            "Attachment does not exist!",
+                            "",
+                            "",
+                        ),
+                    }
+                }
                 // TODO: Support app messages
-                BubbleType::App => format!(
-                    "<span class=\"attachment_error\">{}</span>",
-                    self.format_app(message)
+                BubbleType::App => self.add_line(
+                    &mut formatted_message,
+                    self.format_app(message),
+                    "<span class=\"attachment_error\">",
+                    "</span>",
                 ),
             };
 
-            // Write the message
-            self.add_line(
-                &mut formatted_message,
-                &line,
-                "<hr><div class=\"message_part\">",
-                "</div>",
-            );
+            // Write the part div end
+            self.add_line(&mut formatted_message, "</div>", "", "");
 
             // Handle expressives
             if message.expressive_send_style_id.is_some() {
@@ -207,8 +246,8 @@ impl<'a> Writer<'a> for HTML<'a> {
                     self.add_line(
                         &mut formatted_message,
                         &self.format_reaction(reaction),
-                        "<p><span class=\"reaction\">",
-                        "</span></p>",
+                        "<div class=\"reaction\">",
+                        "</div>",
                     );
                 });
                 self.add_line(&mut formatted_message, "</div>", "", "")
@@ -251,10 +290,97 @@ impl<'a> Writer<'a> for HTML<'a> {
         formatted_message
     }
 
-    fn format_attachment(&self, attachment: &'a Attachment) -> Result<&'a str, &'a str> {
-        match &attachment.filename {
-            Some(filename) => Ok(filename),
-            // Filepath missing!
+    fn format_attachment(&self, attachment: &'a mut Attachment) -> Result<String, &'a str> {
+        match attachment.path() {
+            Some(path) => {
+                if let Some(path_str) = path.as_os_str().to_str() {
+                    // Resolve the attachment path if necessary
+                    // TODO: can we avoid copying the path here?
+                    let resolved_attachment_path = match path.starts_with("~") {
+                        true => path_str.replace("~", &home()),
+                        false => path_str.to_owned(),
+                    };
+
+                    // Perform optional copy + convert
+                    if !self.config.options.no_copy {
+                        let qualified_attachment_path = Path::new(&resolved_attachment_path);
+                        match attachment.extension() {
+                            Some(ext) => {
+                                // Create a path to copy the file to
+                                let mut copy_path = self.config.attachment_path();
+                                copy_path.push(Uuid::new_v4().to_string());
+                                // If the image is a HEIC, convert it to PNG, otherwise perform the copy
+                                if ext == "heic" || ext == "HEIC" {
+                                    // Write the converted file
+                                    copy_path.set_extension("jpg");
+                                    match heic_to_jpeg(qualified_attachment_path, &copy_path) {
+                                        Some(_) => {}
+                                        None => {
+                                            // It is kind of odd to use Ok() on the failure here, but the Err()
+                                            // this function returns is used for when files are missing, not when
+                                            // conversion fails. Perhaps this should be a Result<String, Enum>
+                                            // of some kind, but this conversion failure is quite rare.
+                                            return Ok(format!(
+                                                "Unable to convert and display file: {}",
+                                                &attachment.transfer_name
+                                            ));
+                                        }
+                                    }
+                                } else {
+                                    // Just copy the file
+                                    copy_path.set_extension(ext);
+                                    if qualified_attachment_path.exists() {
+                                        copy(qualified_attachment_path, &copy_path).unwrap();
+                                    } else {
+                                        return Err(&attachment.transfer_name);
+                                    }
+                                }
+                                // Update the attachment
+                                attachment.copied_path =
+                                    Some(copy_path.to_string_lossy().to_string());
+                            }
+                            None => {
+                                return Err(&attachment.transfer_name);
+                            }
+                        }
+                    }
+
+                    let embed_path = match &attachment.copied_path {
+                        Some(path) => &path,
+                        None => &resolved_attachment_path,
+                    };
+
+                    Ok(match attachment.mime_type() {
+                        MediaType::Image(_) => {
+                            format!("<img src=\"{embed_path}\" loading=\"lazy\">")
+                        }
+                        MediaType::Video(media_type) => {
+                            format!("<video controls> <source src=\"{embed_path}\" type=\"{media_type}\"> </video>")
+                        }
+                        MediaType::Audio(media_type) => {
+                            format!("<audio controls src=\"{embed_path}\" type=\"{media_type}\" </audio>")
+                        }
+                        MediaType::Text(_) => {
+                            format!(
+                                "<a href=\"file://{embed_path}\">Click to download {}</a>",
+                                attachment.transfer_name
+                            )
+                        }
+                        MediaType::Application(_) => format!(
+                            "<a href=\"file://{embed_path}\">Click to download {}</a>",
+                            attachment.transfer_name
+                        ),
+                        MediaType::Unknown => {
+                            format!("<p>Unknown attachment type: {embed_path}</p>")
+                        }
+                        MediaType::Other(media_type) => {
+                            format!("<p>Unable to embed {media_type} attachments: {embed_path}</p>")
+                        }
+                    })
+                } else {
+                    return Err(&attachment.transfer_name);
+                }
+            }
             None => Err(&attachment.transfer_name),
         }
     }
@@ -272,21 +398,28 @@ impl<'a> Writer<'a> for HTML<'a> {
                     return "".to_string();
                 }
                 format!(
-                    "<b>{:?}</b> by {}",
+                    "<span class=\"reaction\"><b>{:?}</b> by {}</span>",
                     reaction,
                     self.config.who(&msg.handle_id, msg.is_from_me),
                 )
             }
             imessage_database::Variant::Sticker(_) => {
-                let paths = Attachment::from_message(&self.config.db, msg);
-                format!(
-                    "Sticker from {}: <img src=\"{}\" loading=\"lazy\">",
-                    self.config.who(&msg.handle_id, msg.is_from_me),
-                    match paths.get(0) {
-                        Some(sticker) => &sticker.filename.as_ref().unwrap(),
-                        None => "Sticker not found!",
+                let mut paths = Attachment::from_message(&self.config.db, msg);
+                // Sticker messages have only one attachment, the sticker image
+                match paths.get_mut(0) {
+                    // TODO: Add who sent the sticker, restrict its size
+                    Some(sticker) => match self.format_attachment(sticker) {
+                        Ok(img) => {
+                            let who = self.config.who(&msg.handle_id, msg.is_from_me);
+                            Some(format!("{img}<span class=\"reaction\"> from {who}</span>"))
+                        }
+                        Err(_) => None,
                     },
-                )
+                    None => None,
+                }
+                .unwrap_or(format!(
+                    "<span class=\"reaction\">Sticker not found!</span>"
+                ))
             }
             _ => unreachable!(),
         }

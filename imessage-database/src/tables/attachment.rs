@@ -16,6 +16,17 @@ use crate::{
 
 const COLUMNS: &str = "a.ROWID, a.filename, a.mime_type, a.transfer_name, a.total_bytes, a.is_sticker, a.attribution_info, a.hide_attachment";
 
+#[derive(Debug)]
+pub enum MediaType<'a> {
+    Image(&'a str),
+    Video(&'a str),
+    Audio(&'a str),
+    Text(&'a str),
+    Application(&'a str),
+    Other(&'a str),
+    Unknown,
+}
+
 /// Represents a single row in the `attachment` table.
 #[derive(Debug)]
 pub struct Attachment {
@@ -27,6 +38,7 @@ pub struct Attachment {
     pub is_sticker: i32,
     pub attribution_info: Option<Vec<u8>>,
     pub hide_attachment: i32,
+    pub copied_path: Option<String>,
 }
 
 impl Table for Attachment {
@@ -40,6 +52,7 @@ impl Table for Attachment {
             is_sticker: row.get(5)?,
             attribution_info: row.get(6)?,
             hide_attachment: row.get(7)?,
+            copied_path: None,
         })
     }
 
@@ -146,5 +159,45 @@ impl Attachment {
             }
         }
         out_l
+    }
+
+    /// Get the media type of an attachment
+    pub fn mime_type<'a>(&'a self) -> MediaType<'a> {
+        match &self.mime_type {
+            Some(mime) => {
+                if let Some(mime_str) = mime.split('/').into_iter().next() {
+                    match mime_str {
+                        "image" => MediaType::Image(&mime),
+                        "video" => MediaType::Video(&mime),
+                        "audio" => MediaType::Audio(&mime),
+                        "text" => MediaType::Text(&mime),
+                        "application" => MediaType::Application(&mime),
+                        _ => MediaType::Other(&mime),
+                    }
+                } else {
+                    MediaType::Other(&mime)
+                }
+            }
+            None => MediaType::Unknown,
+        }
+    }
+
+    /// Get the path to an attachment, if it exists
+    pub fn path(&self) -> Option<&Path> {
+        match &self.filename {
+            Some(name) => Some(&Path::new(name)),
+            None => None,
+        }
+    }
+
+    /// Get the extension of an attachment, if it exists
+    pub fn extension(&self) -> Option<&str> {
+        match self.path() {
+            Some(path) => match path.extension() {
+                Some(ext) => ext.to_str(),
+                None => None,
+            },
+            None => None,
+        }
     }
 }

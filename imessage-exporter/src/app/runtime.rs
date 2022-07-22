@@ -1,4 +1,5 @@
 use std::{
+    cmp::min,
     collections::{BTreeSet, HashMap, HashSet},
     fs::create_dir_all,
     path::PathBuf,
@@ -63,6 +64,13 @@ impl<'a> Config<'a> {
         }
     }
 
+    /// Get the attachment path for the current session
+    pub fn attachment_path(&self) -> PathBuf {
+        let mut path = self.export_path();
+        path.push("attachments");
+        path
+    }
+
     /// Get a filename for a chat, possibly using cached data.
     ///
     /// If the chat has an assigned name, use that.
@@ -71,7 +79,14 @@ impl<'a> Config<'a> {
     pub fn filename(&self, chatroom: &Chat) -> String {
         match &chatroom.display_name() {
             // If there is a display name, use that
-            Some(name) => name.to_string(),
+            Some(name) => {
+                let name = name.to_string();
+                let unique = format!(" - {}", chatroom.rowid);
+                let mut usable_name =
+                    name[..min(MAX_LENGTH, name.len() - unique.len())].to_string();
+                usable_name.push_str(&unique);
+                usable_name
+            }
             // Fallback if there is no name set
             None => match self.chatroom_participants.get(&chatroom.rowid) {
                 // List of participant names
@@ -214,6 +229,9 @@ impl<'a> Config<'a> {
                     TXT::new(self).iter_messages();
                 }
                 "html" => {
+                    if !self.options.no_copy {
+                        create_dir_all(self.attachment_path()).unwrap();
+                    }
                     HTML::new(self).iter_messages();
                 }
                 _ => {
@@ -398,7 +416,7 @@ mod tests {
 
         // Get filename
         let filename = app.filename(&chat);
-        assert_eq!(filename, "Test Chat Name");
+        assert_eq!(filename, "Test Chat Name - 0");
     }
 
     #[test]
