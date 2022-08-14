@@ -407,7 +407,6 @@ impl<'a> Writer<'a> for HTML<'a> {
                 let mut paths = Attachment::from_message(&self.config.db, msg);
                 // Sticker messages have only one attachment, the sticker image
                 match paths.get_mut(0) {
-                    // TODO: Add who sent the sticker, restrict its size
                     Some(sticker) => match self.format_attachment(sticker) {
                         Ok(img) => {
                             let who = self.config.who(&msg.handle_id, msg.is_from_me);
