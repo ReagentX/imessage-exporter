@@ -82,8 +82,7 @@ impl<'a> Config<'a> {
             Some(name) => {
                 let name = name.to_string();
                 let unique = format!(" - {}", chatroom.rowid);
-                let mut usable_name =
-                    name[..min(MAX_LENGTH, name.len() - unique.len())].to_string();
+                let mut usable_name = name[..min(MAX_LENGTH, name.len())].to_string();
                 usable_name.push_str(&unique);
                 usable_name
             }
@@ -406,7 +405,21 @@ mod tests {
     }
 
     #[test]
-    fn can_get_filename_chat_display_name() {
+    fn can_get_filename_chat_display_name_long() {
+        let options = fake_options();
+        let app = fake_app(options);
+
+        // Create chat
+        let mut chat = fake_chat();
+        chat.display_name = Some("Life is infinitely stranger than anything which the mind of man could invent. We would not dare to conceive the things which are really mere commonplaces of existence. If we could fly out of that window hand in hand, hover over this great city, gently remove the roofs".to_string());
+
+        // Get filename
+        let filename = app.filename(&chat);
+        assert_eq!(filename, "Life is infinitely stranger than anything which the mind of man could invent. We would not dare to conceive the things which are really mere commonplaces of existence. If we could fly out of that window hand in hand, hover over this great c - 0");
+    }
+
+    #[test]
+    fn can_get_filename_chat_display_name_normal() {
         let options = fake_options();
         let app = fake_app(options);
 
@@ -417,6 +430,20 @@ mod tests {
         // Get filename
         let filename = app.filename(&chat);
         assert_eq!(filename, "Test Chat Name - 0");
+    }
+
+    #[test]
+    fn can_get_filename_chat_display_name_short() {
+        let options = fake_options();
+        let app = fake_app(options);
+
+        // Create chat
+        let mut chat = fake_chat();
+        chat.display_name = Some("🤠".to_string());
+
+        // Get filename
+        let filename = app.filename(&chat);
+        assert_eq!(filename, "🤠 - 0");
     }
 
     #[test]
