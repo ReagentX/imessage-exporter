@@ -419,7 +419,7 @@ mod tests {
     }
 
     #[test]
-    fn can_get_filename_chat_display_name_short() {
+    fn can_get_filename_chat_display_name_normal() {
         let options = fake_options();
         let app = fake_app(options);
 
@@ -430,6 +430,20 @@ mod tests {
         // Get filename
         let filename = app.filename(&chat);
         assert_eq!(filename, "Test Chat Name - 0");
+    }
+
+    #[test]
+    fn can_get_filename_chat_display_name_short() {
+        let options = fake_options();
+        let app = fake_app(options);
+
+        // Create chat
+        let mut chat = fake_chat();
+        chat.display_name = Some("🤠".to_string());
+
+        // Get filename
+        let filename = app.filename(&chat);
+        assert_eq!(filename, "🤠 - 0");
     }
 
     #[test]
