@@ -375,7 +375,7 @@ mod tests {
 
         assert_eq!(
             exporter.get_time(&message),
-            "May 17, 2022  8:29:42 PM (Read by you after 1 hour, 49 seconds)"
+            "May 17, 2022  5:29:42 PM (Read by you after 1 hour, 49 seconds)"
         );
     }
 
@@ -394,7 +394,7 @@ mod tests {
         message.date_delivered = 674530231992568192;
         // Wed May 18 2022 02:36:24 GMT+0000
         message.date_read = 674526582885055488;
-        assert_eq!(exporter.get_time(&message), "May 17, 2022  9:30:31 PM");
+        assert_eq!(exporter.get_time(&message), "May 17, 2022  6:30:31 PM");
     }
 
     #[test]
