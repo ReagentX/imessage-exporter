@@ -288,7 +288,7 @@ mod tests {
         }
     }
 
-    fn fake_app<'a>(options: Options<'a>) -> Config<'a> {
+    fn fake_app<'a>(options: Options) -> Config {
         let connection = get_connection(&options.db_path);
         Config {
             chatrooms: HashMap::new(),
