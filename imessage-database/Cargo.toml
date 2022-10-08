@@ -5,4 +5,4 @@ version = "0.0.0"
 
 [dependencies]
 chrono = "0.4"
-rusqlite = {version = "0.26.3", features = ["blob"]}
+rusqlite = {version = "0.28.0", features = ["blob"]}
