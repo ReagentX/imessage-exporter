@@ -74,7 +74,7 @@ impl<'a> Exporter<'a> for TXT<'a> {
             current_message += 1;
             pb.set_position(current_message);
         }
-        pb.finish_at_current_pos();
+        pb.finish();
     }
 
     /// Create a file for the given chat, caching it so we don't need to build it later

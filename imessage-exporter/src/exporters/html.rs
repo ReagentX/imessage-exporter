@@ -82,7 +82,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
             current_message += 1;
             pb.set_position(current_message);
         }
-        pb.finish_at_current_pos();
+        pb.finish();
 
         eprintln!("Writing HTML footers...");
         self.files
