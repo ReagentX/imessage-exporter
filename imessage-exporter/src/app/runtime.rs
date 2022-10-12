@@ -183,6 +183,7 @@ impl<'a> Config<'a> {
         Handle::run_diagnostic(&self.db);
         Message::run_diagnostic(&self.db);
         Attachment::run_diagnostic(&self.db);
+        ChatToHandle::run_diagnostic(&self.db);
 
         // Global Diagnostics
         let unique_handles: HashSet<i32> =
