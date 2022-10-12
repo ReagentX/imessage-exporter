@@ -26,15 +26,15 @@ impl Table for ChatToHandle {
             .unwrap()
     }
 
-    fn extract(chat_to_handle: Result<Result<Self, Error>, Error>) -> Self {
+    fn extract(chat_to_handle: Result<Result<Self, Error>, Error>) -> Result<Self, String> {
         match chat_to_handle {
             Ok(chat_to_handle) => match chat_to_handle {
-                Ok(c2h) => c2h,
+                Ok(c2h) => Ok(c2h),
                 // TODO: When does this occur?
-                Err(why) => panic!("Inner error: {}", why),
+                Err(why) => Err(format!("Chat to Handle query error: {why}")),
             },
             // TODO: When does this occur?
-            Err(why) => panic!("Outer error: {}", why),
+            Err(why) => Err(format!("Chat to Handle query error: {why}")),
         }
     }
 }
@@ -55,7 +55,7 @@ impl Cacheable for ChatToHandle {
     /// let conn = get_connection(&db_path);
     /// let chatrooms = ChatToHandle::cache(&conn);
     /// ```
-    fn cache(db: &Connection) -> HashMap<Self::K, Self::V> {
+    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, String> {
         let mut cache: HashMap<i32, BTreeSet<i32>> = HashMap::new();
 
         let mut rows = ChatToHandle::get(db);
@@ -64,7 +64,7 @@ impl Cacheable for ChatToHandle {
             .unwrap();
 
         for mapping in mappings {
-            let joiner = ChatToHandle::extract(mapping);
+            let joiner = ChatToHandle::extract(mapping)?;
             match cache.get_mut(&joiner.chat_id) {
                 Some(handles) => {
                     handles.insert(joiner.handle_id);
@@ -77,7 +77,7 @@ impl Cacheable for ChatToHandle {
             }
         }
 
-        cache
+        Ok(cache)
     }
 }
 

@@ -123,15 +123,15 @@ impl Table for Message {
         .unwrap()
     }
 
-    fn extract(message: Result<Result<Self, Error>, Error>) -> Self {
+    fn extract(message: Result<Result<Self, Error>, Error>) -> Result<Self, String> {
         match message {
             Ok(message) => match message {
-                Ok(msg) => msg,
+                Ok(msg) => Ok(msg),
                 // TODO: When does this occur?
-                Err(why) => panic!("Inner error: {}", why),
+                Err(why) => Err(format!("Message query error: {why}")),
             },
             // TODO: When does this occur?
-            Err(why) => panic!("Outer error: {}", why),
+            Err(why) => Err(format!("Message query error: {why}")),
         }
     }
 }
@@ -182,7 +182,7 @@ impl Cacheable for Message {
     type K = String;
     type V = Vec<String>;
     /// Used for reactions that do not exist in a foreign key table
-    fn cache(db: &Connection) -> std::collections::HashMap<Self::K, Self::V> {
+    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, String> {
         // Create cache for user IDs
         let mut map: HashMap<Self::K, Self::V> = HashMap::new();
 
@@ -208,7 +208,7 @@ impl Cacheable for Message {
 
         // Iterate over the messages and update the map
         for reaction in messages {
-            let reaction = Self::extract(reaction);
+            let reaction = Self::extract(reaction)?;
             if reaction.is_reaction() {
                 match reaction.clean_associated_guid() {
                     Some((_, reaction_target_guid)) => match map.get_mut(reaction_target_guid) {
@@ -223,7 +223,7 @@ impl Cacheable for Message {
                 }
             }
         }
-        map
+        Ok(map)
     }
 }
 
@@ -429,7 +429,7 @@ impl Message {
         &self,
         db: &Connection,
         reactions: &'a HashMap<String, Vec<String>>,
-    ) -> HashMap<usize, Vec<Self>> {
+    ) -> Result<HashMap<usize, Vec<Self>>, String> {
         let mut out_h: HashMap<usize, Vec<Self>> = HashMap::new();
         if let Some(rxs) = reactions.get(&self.guid) {
             let filter: Vec<String> = rxs.iter().map(|guid| format!("\"{}\"", guid)).collect();
@@ -456,7 +456,7 @@ impl Message {
                 .unwrap();
 
             for message in messages {
-                let msg = Message::extract(message);
+                let msg = Message::extract(message)?;
                 if let Variant::Reaction(idx, _, _) | Variant::Sticker(idx) = msg.variant() {
                     match out_h.get_mut(&idx) {
                         Some(body_part) => body_part.push(msg),
@@ -467,11 +467,11 @@ impl Message {
                 }
             }
         }
-        out_h
+        Ok(out_h)
     }
 
     /// Build a HashMap of message component index to messages that reply to that component
-    pub fn get_replies(&self, db: &Connection) -> HashMap<usize, Vec<Self>> {
+    pub fn get_replies(&self, db: &Connection) -> Result<HashMap<usize, Vec<Self>>, String> {
         let mut out_h: HashMap<usize, Vec<Self>> = HashMap::new();
 
         // No need to hit the DB if we know we don't have replies
@@ -497,7 +497,7 @@ impl Message {
                 .unwrap();
 
             for message in iter {
-                let m = Message::extract(message);
+                let m = Message::extract(message)?;
                 let idx = m.get_reply_index();
                 match out_h.get_mut(&idx) {
                     Some(body_part) => body_part.push(m),
@@ -508,7 +508,7 @@ impl Message {
             }
         }
 
-        out_h
+        Ok(out_h)
     }
 
     pub fn variant(&self) -> Variant {
