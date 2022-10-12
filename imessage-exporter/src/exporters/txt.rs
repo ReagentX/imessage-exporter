@@ -41,7 +41,7 @@ impl<'a> Exporter<'a> for TXT<'a> {
         }
     }
 
-    fn iter_messages(&mut self) {
+    fn iter_messages(&mut self) -> Result<(), String> {
         // Tell the user what we are doing
         eprintln!(
             "Exporting to {} as txt...",
@@ -60,7 +60,7 @@ impl<'a> Exporter<'a> for TXT<'a> {
             .unwrap();
 
         for message in messages {
-            let msg = Message::extract(message);
+            let msg = Message::extract(message)?;
             // Render the annoucement in-line
             if msg.is_annoucement() {
                 let annoucement = self.format_annoucement(&msg);
@@ -68,13 +68,14 @@ impl<'a> Exporter<'a> for TXT<'a> {
             }
             // Message replies and reactions are rendered in context, so no need to render them separately
             else if !msg.is_reaction() {
-                let message = self.format_message(&msg, 0);
+                let message = self.format_message(&msg, 0)?;
                 TXT::write_to_file(self.get_or_create_file(&msg), &message);
             }
             current_message += 1;
             pb.set_position(current_message);
         }
         pb.finish();
+        Ok(())
     }
 
     /// Create a file for the given chat, caching it so we don't need to build it later
@@ -92,7 +93,7 @@ impl<'a> Exporter<'a> for TXT<'a> {
 }
 
 impl<'a> Writer<'a> for TXT<'a> {
-    fn format_message(&self, message: &Message, indent: usize) -> String {
+    fn format_message(&self, message: &Message, indent: usize) -> Result<String, String> {
         let indent = String::from_iter((0..indent).map(|_| " "));
         // Data we want to write to a file
         let mut formatted_message = String::new();
@@ -109,9 +110,9 @@ impl<'a> Writer<'a> for TXT<'a> {
 
         // Useful message metadata
         let message_parts = message.body();
-        let mut attachments = Attachment::from_message(&self.config.db, message);
-        let replies = message.get_replies(&self.config.db);
-        let reactions = message.get_reactions(&self.config.db, &self.config.reactions);
+        let mut attachments = Attachment::from_message(&self.config.db, message)?;
+        let replies = message.get_replies(&self.config.db)?;
+        let reactions = message.get_reactions(&self.config.db, &self.config.reactions)?;
 
         // Index of where we are in the attachment Vector
         let mut attachment_index: usize = 0;
@@ -153,26 +154,30 @@ impl<'a> Writer<'a> for TXT<'a> {
             // Handle Reactions
             if let Some(reactions) = reactions.get(&idx) {
                 self.add_line(&mut formatted_message, "Reactions:", &indent);
-                reactions.iter().for_each(|reaction| {
-                    self.add_line(
-                        &mut formatted_message,
-                        &self.format_reaction(reaction),
-                        &indent,
-                    );
-                });
+                reactions
+                    .iter()
+                    .try_for_each(|reaction| -> Result<(), String> {
+                        self.add_line(
+                            &mut formatted_message,
+                            &self.format_reaction(reaction)?,
+                            &indent,
+                        );
+                        Ok(())
+                    })?;
             }
 
             // Handle Replies
             if let Some(replies) = replies.get(&idx) {
-                replies.iter().for_each(|reply| {
+                replies.iter().try_for_each(|reply| -> Result<(), String> {
                     if !reply.is_reaction() {
                         self.add_line(
                             &mut formatted_message,
-                            &self.format_message(reply, 4),
+                            &self.format_message(reply, 4)?,
                             &indent,
                         );
                     }
-                });
+                    Ok(())
+                })?;
             }
         }
 
@@ -191,7 +196,7 @@ impl<'a> Writer<'a> for TXT<'a> {
             formatted_message.push('\n');
         }
 
-        formatted_message
+        Ok(formatted_message)
     }
 
     fn format_attachment(&self, attachment: &'a mut Attachment) -> Result<String, &'a str> {
@@ -208,28 +213,28 @@ impl<'a> Writer<'a> for TXT<'a> {
         "App messages not yet implemented!"
     }
 
-    fn format_reaction(&self, msg: &Message) -> String {
+    fn format_reaction(&self, msg: &Message) -> Result<std::string::String, std::string::String> {
         match msg.variant() {
             imessage_database::Variant::Reaction(_, added, reaction) => {
                 if !added {
-                    return "".to_string();
+                    return Ok("".to_string());
                 }
-                format!(
+                Ok(format!(
                     "{:?} by {}",
                     reaction,
                     self.config.who(&msg.handle_id, msg.is_from_me),
-                )
+                ))
             }
             imessage_database::Variant::Sticker(_) => {
-                let paths = Attachment::from_message(&self.config.db, msg);
-                format!(
+                let paths = Attachment::from_message(&self.config.db, msg)?;
+                Ok(format!(
                     "Sticker from {}: {}",
                     self.config.who(&msg.handle_id, msg.is_from_me),
                     match paths.get(0) {
                         Some(sticker) => &sticker.filename.as_ref().unwrap(),
                         None => "Sticker not found!",
                     },
-                )
+                ))
             }
             _ => unreachable!(),
         }
