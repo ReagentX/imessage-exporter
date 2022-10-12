@@ -2,9 +2,11 @@
  This module represents the chat to handle join table.
 */
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
-use crate::tables::table::{Cacheable, Deduplicate, Table, CHAT_HANDLE_JOIN};
+use crate::tables::table::{
+    Cacheable, Deduplicate, Diagnostic, Table, CHAT_HANDLE_JOIN, CHAT_MESSAGE_JOIN,
+};
 use rusqlite::{Connection, Error, Result, Row, Statement};
 
 /// Represents a single row in the `chat_handle_join` table.
@@ -111,4 +113,53 @@ impl Deduplicate for ChatToHandle {
     }
 }
 
-// TODO: Implement Diagnostic, determine how many chats do not exist in the join table
+impl Diagnostic for ChatToHandle {
+    /// Emit diagnotsic data for the Chat to Handle join table
+    ///
+    /// Get the number of chats referenced in the messages table
+    /// that do not exist in this join table:
+    /// # Example:
+    ///
+    /// ```
+    /// use imessage_database::util::dirs::default_db_path;
+    /// use imessage_database::tables::table::{Diagnostic, get_connection};
+    /// use imessage_database::tables::chat_handle::ChatToHandle;
+    ///
+    /// let db_path = default_db_path();
+    /// let conn = get_connection(&db_path);
+    /// ChatToHandle::run_diagnostic(&conn);
+    /// ```
+    fn run_diagnostic(db: &Connection) {
+        // Get the Chat IDs that are associated with messages
+        let mut statement_message_chats = db
+            .prepare(&format!("SELECT DISTINCT chat_id from {CHAT_MESSAGE_JOIN}"))
+            .unwrap();
+        let statement_message_chat_rows = statement_message_chats
+            .query_map([], |row: &Row| -> Result<i32> { Ok(row.get(0)?) })
+            .unwrap();
+        let mut unique_chats_from_messages: HashSet<i32> = HashSet::new();
+        statement_message_chat_rows.into_iter().for_each(|row| {
+            unique_chats_from_messages.insert(row.unwrap());
+        });
+
+        // Get the Chat IDs that are associated with handles
+        let mut statement_handle_chats = db
+            .prepare(&format!("SELECT DISTINCT chat_id from {CHAT_HANDLE_JOIN}"))
+            .unwrap();
+        let statement_handle_chat_rows = statement_handle_chats
+            .query_map([], |row: &Row| -> Result<i32> { Ok(row.get(0)?) })
+            .unwrap();
+        let mut unique_chats_from_handles: HashSet<i32> = HashSet::new();
+        statement_handle_chat_rows.into_iter().for_each(|row| {
+            unique_chats_from_handles.insert(row.unwrap());
+        });
+
+        // Find the set difference and emit
+        let chats_with_no_handles = unique_chats_from_messages
+            .difference(&unique_chats_from_handles)
+            .count();
+        if chats_with_no_handles > 0 {
+            println!("\rChats with no handles: {chats_with_no_handles:?}");
+        }
+    }
+}
