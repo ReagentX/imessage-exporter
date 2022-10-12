@@ -11,7 +11,10 @@ use crate::{
     tables::table::{
         Cacheable, Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE, MESSAGE_ATTACHMENT_JOIN,
     },
-    util::{dates::readable_diff, output::processing},
+    util::{
+        dates::readable_diff,
+        output::{done_processing, processing},
+    },
     ApplePay, BubbleEffect, Expressive, Reaction, ScreenEffect, Variant,
 };
 
@@ -172,8 +175,12 @@ impl Diagnostic for Message {
             .query_row([], |r| r.get(0))
             .unwrap_or(None);
 
+        done_processing();
+
         if let Some(dangling) = num_dangling {
-            println!("\rMessages not associated with a chat: {dangling}");
+            if dangling > 0 {
+                println!("\rMessages not associated with a chat: {dangling}");
+            }
         }
     }
 }
