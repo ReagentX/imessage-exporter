@@ -2,7 +2,7 @@
 
 This crate provides both a library to interact with iMessage data as well as a binary that can perform some useful read-only operations using that data.
 
-![](/docs/hero.png)
+![HTML Export Sample](/docs/hero.png)
 
 ## Runtime
 
