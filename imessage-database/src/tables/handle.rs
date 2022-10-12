@@ -1,5 +1,5 @@
 /*!
- This module represents common (but not all) columns in the `handle` table. 
+ This module represents common (but not all) columns in the `handle` table.
 */
 
 use rusqlite::{Connection, Error, Result, Row, Statement};
@@ -30,7 +30,8 @@ impl Table for Handle {
     }
 
     fn get(db: &Connection) -> Statement {
-        db.prepare(&format!("SELECT {COLUMNS} from {}", HANDLE)).unwrap()
+        db.prepare(&format!("SELECT {COLUMNS} from {}", HANDLE))
+            .unwrap()
     }
 
     fn extract(handle: Result<Result<Self, Error>, Error>) -> Result<Self, String> {
@@ -156,7 +157,9 @@ impl Diagnostic for Handle {
         let count_dupes: Option<i32> = rows.query_row([], |r| r.get(0)).unwrap_or(None);
 
         if let Some(dupes) = count_dupes {
-            println!("\rContacts with more than one ID: {dupes}");
+            if dupes > 0 {
+                println!("\rContacts with more than one ID: {dupes}");
+            }
         }
     }
 }
