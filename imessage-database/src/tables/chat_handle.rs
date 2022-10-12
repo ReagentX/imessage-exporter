@@ -4,8 +4,11 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use crate::tables::table::{
-    Cacheable, Deduplicate, Diagnostic, Table, CHAT_HANDLE_JOIN, CHAT_MESSAGE_JOIN,
+use crate::{
+    tables::table::{
+        Cacheable, Deduplicate, Diagnostic, Table, CHAT_HANDLE_JOIN, CHAT_MESSAGE_JOIN,
+    },
+    util::output::{done_processing, processing},
 };
 use rusqlite::{Connection, Error, Result, Row, Statement};
 
@@ -130,6 +133,8 @@ impl Diagnostic for ChatToHandle {
     /// ChatToHandle::run_diagnostic(&conn);
     /// ```
     fn run_diagnostic(db: &Connection) {
+        processing();
+
         // Get the Chat IDs that are associated with messages
         let mut statement_message_chats = db
             .prepare(&format!("SELECT DISTINCT chat_id from {CHAT_MESSAGE_JOIN}"))
@@ -153,6 +158,8 @@ impl Diagnostic for ChatToHandle {
         statement_handle_chat_rows.into_iter().for_each(|row| {
             unique_chats_from_handles.insert(row.unwrap());
         });
+
+        done_processing();
 
         // Find the set difference and emit
         let chats_with_no_handles = unique_chats_from_messages

@@ -189,13 +189,13 @@ impl<'a> Config<'a> {
         let unique_handles: HashSet<i32> =
             HashSet::from_iter(self.real_participants.values().cloned());
         let duplicated_handles = self.participants.len() - unique_handles.len();
-        if duplicated_handles > 1 {
+        if duplicated_handles > 0 {
             println!("Duplicated contacts: {duplicated_handles}");
         }
 
         let unique_chats: HashSet<i32> = HashSet::from_iter(self.real_chatrooms.values().cloned());
         let duplicated_chats = self.chatrooms.len() - unique_chats.len();
-        if duplicated_chats > 1 {
+        if duplicated_chats > 0 {
             println!("Duplicated chats: {duplicated_chats}");
         }
     }

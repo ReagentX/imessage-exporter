@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     tables::table::{Cacheable, Deduplicate, Diagnostic, Table, HANDLE, ME},
-    util::output::processing,
+    util::output::{done_processing, processing},
 };
 
 const COLUMNS: &str = "ROWID, id, person_centric_id";
@@ -155,6 +155,8 @@ impl Diagnostic for Handle {
         );
         let mut rows = db.prepare(query).unwrap();
         let count_dupes: Option<i32> = rows.query_row([], |r| r.get(0)).unwrap_or(None);
+
+        done_processing();
 
         if let Some(dupes) = count_dupes {
             if dupes > 0 {
