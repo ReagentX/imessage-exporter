@@ -3,7 +3,7 @@
 mod app;
 mod exporters;
 
-pub use exporters::{exporter::Exporter, txt::TXT, html::HTML};
+pub use exporters::{exporter::Exporter, html::HTML, txt::TXT};
 
 use app::{
     options::{from_command_line, Options},
@@ -18,7 +18,12 @@ fn main() {
 
     // Create app state and start
     match Config::new(options) {
-        Some(app) => app.start(),
-        None => {}
+        Ok(app) => match app.start() {
+            Ok(()) => (),
+            Err(why) => eprintln!("Unable to launch: {why}"),
+        },
+        Err(why) => {
+            eprintln!("Unable to launch: {why}")
+        }
     }
 }
