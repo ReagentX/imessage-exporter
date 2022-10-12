@@ -47,7 +47,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
         }
     }
 
-    fn iter_messages(&mut self) {
+    fn iter_messages(&mut self) -> Result<(), String> {
         // Tell the user what we are doing
         eprintln!(
             "Exporting to {} as html...",
@@ -69,14 +69,14 @@ impl<'a> Exporter<'a> for HTML<'a> {
             .unwrap();
 
         for message in messages {
-            let msg = Message::extract(message);
+            let msg = Message::extract(message)?;
             if msg.is_annoucement() {
                 let annoucement = self.format_annoucement(&msg);
                 HTML::write_to_file(self.get_or_create_file(&msg), &annoucement);
             }
             // Message replies and reactions are rendered in context, so no need to render them separately
             else if !msg.is_reaction() {
-                let message = self.format_message(&msg, 0);
+                let message = self.format_message(&msg, 0)?;
                 HTML::write_to_file(self.get_or_create_file(&msg), &message);
             }
             current_message += 1;
@@ -89,6 +89,8 @@ impl<'a> Exporter<'a> for HTML<'a> {
             .iter()
             .for_each(|(_, path)| HTML::write_to_file(path, FOOTER));
         HTML::write_to_file(&self.orphaned, FOOTER);
+
+        Ok(())
     }
 
     /// Create a file for the given chat, caching it so we don't need to build it later
@@ -114,7 +116,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
 }
 
 impl<'a> Writer<'a> for HTML<'a> {
-    fn format_message(&self, message: &Message, indent: usize) -> String {
+    fn format_message(&self, message: &Message, indent: usize) -> Result<String, String> {
         // Data we want to write to a file
         let mut formatted_message = String::new();
 
@@ -151,9 +153,9 @@ impl<'a> Writer<'a> for HTML<'a> {
 
         // Useful message metadata
         let message_parts = message.body();
-        let mut attachments = Attachment::from_message(&self.config.db, message);
-        let replies = message.get_replies(&self.config.db);
-        let reactions = message.get_reactions(&self.config.db, &self.config.reactions);
+        let mut attachments = Attachment::from_message(&self.config.db, message)?;
+        let replies = message.get_replies(&self.config.db)?;
+        let reactions = message.get_reactions(&self.config.db, &self.config.reactions)?;
 
         // Index of where we are in the attachment Vector
         let mut attachment_index: usize = 0;
@@ -242,31 +244,35 @@ impl<'a> Writer<'a> for HTML<'a> {
                     "<div class=\"reactions\">",
                     "",
                 );
-                reactions.iter().for_each(|reaction| {
-                    self.add_line(
-                        &mut formatted_message,
-                        &self.format_reaction(reaction),
-                        "<div class=\"reaction\">",
-                        "</div>",
-                    );
-                });
+                reactions
+                    .iter()
+                    .try_for_each(|reaction| -> Result<(), String> {
+                        self.add_line(
+                            &mut formatted_message,
+                            &self.format_reaction(reaction)?,
+                            "<div class=\"reaction\">",
+                            "</div>",
+                        );
+                        Ok(())
+                    })?;
                 self.add_line(&mut formatted_message, "</div>", "", "")
             }
 
             // Handle Replies
             if let Some(replies) = replies.get(&idx) {
                 self.add_line(&mut formatted_message, "<div class=\"replies\">", "", "");
-                replies.iter().for_each(|reply| {
+                replies.iter().try_for_each(|reply| -> Result<(), String> {
                     if !reply.is_reaction() {
                         // Set indent to 1 so we know this is a recursive call
                         self.add_line(
                             &mut formatted_message,
-                            &self.format_message(reply, 1),
+                            &self.format_message(reply, 1)?,
                             "<div class=\"reply\">",
                             "</div>",
                         );
                     }
-                });
+                    Ok(())
+                })?;
                 self.add_line(&mut formatted_message, "</div>", "", "")
             }
         }
@@ -287,7 +293,7 @@ impl<'a> Writer<'a> for HTML<'a> {
         // End message div
         self.add_line(&mut formatted_message, "</div>", "", "");
 
-        formatted_message
+        Ok(formatted_message)
     }
 
     fn format_attachment(&self, attachment: &'a mut Attachment) -> Result<String, &'a str> {
@@ -391,22 +397,22 @@ impl<'a> Writer<'a> for HTML<'a> {
         "App messages not yet implemented!"
     }
 
-    fn format_reaction(&self, msg: &Message) -> String {
+    fn format_reaction(&self, msg: &Message) -> Result<String, String> {
         match msg.variant() {
             imessage_database::Variant::Reaction(_, added, reaction) => {
                 if !added {
-                    return "".to_string();
+                    return Ok("".to_string());
                 }
-                format!(
+                Ok(format!(
                     "<span class=\"reaction\"><b>{:?}</b> by {}</span>",
                     reaction,
                     self.config.who(&msg.handle_id, msg.is_from_me),
-                )
+                ))
             }
             imessage_database::Variant::Sticker(_) => {
-                let mut paths = Attachment::from_message(&self.config.db, msg);
+                let mut paths = Attachment::from_message(&self.config.db, msg)?;
                 // Sticker messages have only one attachment, the sticker image
-                match paths.get_mut(0) {
+                Ok(match paths.get_mut(0) {
                     Some(sticker) => match self.format_attachment(sticker) {
                         Ok(img) => {
                             let who = self.config.who(&msg.handle_id, msg.is_from_me);
@@ -418,7 +424,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                 }
                 .unwrap_or(format!(
                     "<span class=\"reaction\">Sticker not found!</span>"
-                ))
+                )))
             }
             _ => unreachable!(),
         }

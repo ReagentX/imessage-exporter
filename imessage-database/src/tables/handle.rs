@@ -33,15 +33,15 @@ impl Table for Handle {
         db.prepare(&format!("SELECT {COLUMNS} from {}", HANDLE)).unwrap()
     }
 
-    fn extract(handle: Result<Result<Self, Error>, Error>) -> Self {
+    fn extract(handle: Result<Result<Self, Error>, Error>) -> Result<Self, String> {
         match handle {
             Ok(handle) => match handle {
-                Ok(hdl) => hdl,
+                Ok(hdl) => Ok(hdl),
                 // TODO: When does this occur?
-                Err(why) => panic!("Inner error: {}", why),
+                Err(why) => Err(format!("Handle query error: {why}")),
             },
             // TODO: When does this occur?
-            Err(why) => panic!("Outer error: {}", why),
+            Err(why) => Err(format!("Handle query error: {why}")),
         }
     }
 }
@@ -63,7 +63,7 @@ impl Cacheable for Handle {
     /// let conn = get_connection(&db_path);
     /// let chatrooms = Handle::cache(&conn);
     /// ```
-    fn cache(db: &Connection) -> HashMap<Self::K, Self::V> {
+    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, String> {
         // Create cache for user IDs
         let mut map = HashMap::new();
         // Handle ID 0 is self in group chats
@@ -79,7 +79,7 @@ impl Cacheable for Handle {
 
         // Iterate over the handles and update the map
         for handle in handles {
-            let contact = Handle::extract(handle);
+            let contact = Handle::extract(handle)?;
             map.insert(contact.rowid, contact.id);
         }
 
@@ -91,7 +91,7 @@ impl Cacheable for Handle {
         }
 
         // Done!
-        map
+        Ok(map)
     }
 }
 

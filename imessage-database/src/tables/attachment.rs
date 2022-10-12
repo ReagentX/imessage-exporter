@@ -61,15 +61,15 @@ impl Table for Attachment {
             .unwrap()
     }
 
-    fn extract(attachment: Result<Result<Self, Error>, Error>) -> Self {
+    fn extract(attachment: Result<Result<Self, Error>, Error>) -> Result<Self, String> {
         match attachment {
             Ok(attachment) => match attachment {
-                Ok(att) => att,
+                Ok(att) => Ok(att),
                 // TODO: When does this occur?
-                Err(why) => panic!("Inner error: {}", why),
+                Err(why) => Err(format!("Attachment query error: {why}")),
             },
             // TODO: When does this occur?
-            Err(why) => panic!("Outer error: {}", why),
+            Err(why) => Err(format!("Attachment query error: {why}")),
         }
     }
 }
@@ -121,7 +121,7 @@ impl Diagnostic for Attachment {
             .count();
 
         if num_blank_ck > 0 || missing_files > 0 {
-            println!("Missing attachment data:");
+            println!("\rMissing attachment data:");
         } else {
             done_processing();
         }
@@ -135,7 +135,7 @@ impl Diagnostic for Attachment {
 }
 
 impl Attachment {
-    pub fn from_message(db: &Connection, msg: &Message) -> Vec<Attachment> {
+    pub fn from_message(db: &Connection, msg: &Message) -> Result<Vec<Attachment>, String> {
         let mut out_l = vec![];
         if msg.has_attachments() {
             let mut statement = db
@@ -154,11 +154,11 @@ impl Attachment {
                 .unwrap();
 
             for attachment in iter {
-                let m = Attachment::extract(attachment);
+                let m = Attachment::extract(attachment)?;
                 out_l.push(m)
             }
         }
-        out_l
+        Ok(out_l)
     }
 
     /// Get the media type of an attachment

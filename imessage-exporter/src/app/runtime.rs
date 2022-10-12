@@ -146,25 +146,25 @@ impl<'a> Config<'a> {
     /// let options = Options::from_args(&args);
     /// let app = State::new(options).unwrap();
     /// ```
-    pub fn new(options: Options) -> Option<Config> {
+    pub fn new(options: Options) -> Result<Config, String> {
         // Escape early if options are invalid
         if !options.valid {
-            return None;
+            return Err(String::from("Invalid options!"));
         }
 
         let conn = get_connection(&options.db_path);
         // TODO: Implement Try for these cache calls `?`
         eprintln!("Building cache...");
         eprintln!("[1/4] Caching chats...");
-        let chatrooms = Chat::cache(&conn);
+        let chatrooms = Chat::cache(&conn).unwrap();
         eprintln!("[2/4] Caching chatrooms...");
-        let chatroom_participants = ChatToHandle::cache(&conn);
+        let chatroom_participants = ChatToHandle::cache(&conn).unwrap();
         eprintln!("[3/4] Caching participants...");
-        let participants = Handle::cache(&conn);
+        let participants = Handle::cache(&conn).unwrap();
         eprintln!("[4/4] Caching reactions...");
-        let reactions = Message::cache(&conn);
+        let reactions = Message::cache(&conn).unwrap();
         eprintln!("Cache built!");
-        Some(Config {
+        Ok(Config {
             chatrooms,
             real_chatrooms: ChatToHandle::dedupe(&chatroom_participants),
             chatroom_participants,
@@ -215,7 +215,7 @@ impl<'a> Config<'a> {
     /// let app = State::new(options).unwrap();
     /// app.start();
     /// ```
-    pub fn start(&self) {
+    pub fn start(&self) -> Result<(), String> {
         if self.options.diagnostic {
             self.run_diagnostic();
         } else if self.options.export_type.is_some() {
@@ -225,13 +225,13 @@ impl<'a> Config<'a> {
             match self.options.export_type.unwrap() {
                 "txt" => {
                     // Create exporter, pass it data we care about, then kick it off
-                    TXT::new(self).iter_messages();
+                    TXT::new(self).iter_messages()?;
                 }
                 "html" => {
                     if !self.options.no_copy {
                         create_dir_all(self.attachment_path()).unwrap();
                     }
-                    HTML::new(self).iter_messages();
+                    HTML::new(self).iter_messages()?;
                 }
                 _ => {
                     unreachable!()
@@ -241,6 +241,7 @@ impl<'a> Config<'a> {
             println!("How did you get here?");
         }
         println!("Done!");
+        Ok(())
     }
 
     /// Determine who sent a message
@@ -307,7 +308,7 @@ mod tests {
     fn can_create() {
         let options = fake_options();
         let app = fake_app(options);
-        app.start();
+        app.start().unwrap();
     }
 
     #[test]

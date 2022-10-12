@@ -16,7 +16,7 @@ pub trait Table {
     fn get(db: &Connection) -> Statement;
 
     /// Extract valid row data while handling both types of query errors
-    fn extract(item: Result<Result<Self, Error>, Error>) -> Self
+    fn extract(item: Result<Result<Self, Error>, Error>) -> Result<Self, String>
     where
         Self: Sized;
 }
@@ -25,7 +25,7 @@ pub trait Table {
 pub trait Cacheable {
     type K;
     type V;
-    fn cache(db: &Connection) -> HashMap<Self::K, Self::V>;
+    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, String>;
 }
 
 /// Defines behavior for deduplicating data in a table

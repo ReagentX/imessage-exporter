@@ -2,7 +2,7 @@
  This module represents common (but not all) columns in the `chat` table.
 */
 
-use std::collections::{HashMap};
+use std::collections::HashMap;
 
 use crate::tables::table::{Cacheable, Table, CHAT};
 use rusqlite::{Connection, Error, Result, Row, Statement};
@@ -33,15 +33,15 @@ impl Table for Chat {
             .unwrap()
     }
 
-    fn extract(chat: Result<Result<Self, Error>, Error>) -> Self {
+    fn extract(chat: Result<Result<Self, Error>, Error>) -> Result<Self, String> {
         match chat {
             Ok(chat) => match chat {
-                Ok(ch) => ch,
+                Ok(ch) => Ok(ch),
                 // TODO: When does this occur?
-                Err(why) => panic!("Inner error: {}", why),
+                Err(why) => Err(format!("Chat query error: {why}")),
             },
             // TODO: When does this occur?
-            Err(why) => panic!("Outer error: {}", why),
+            Err(why) => Err(format!("Chat query error: {why}")),
         }
     }
 }
@@ -65,7 +65,7 @@ impl Cacheable for Chat {
     /// let conn = get_connection(&db_path);
     /// let chatrooms = Chat::cache(&conn);
     /// ```
-    fn cache(db: &Connection) -> HashMap<Self::K, Self::V> {
+    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, String> {
         let mut map = HashMap::new();
 
         let mut statement = Chat::get(db);
@@ -75,10 +75,10 @@ impl Cacheable for Chat {
             .unwrap();
 
         for chat in chats {
-            let result = Chat::extract(chat);
+            let result = Chat::extract(chat)?;
             map.insert(result.rowid, result);
         }
-        map
+        Ok(map)
     }
 }
 

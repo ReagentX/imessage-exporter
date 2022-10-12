@@ -5,7 +5,7 @@ pub fn build_progress_bar_export(total_messages: u64) -> ProgressBar {
     pb.set_style(
         ProgressStyle::default_bar()
             .template(
-                "{spinner:.green} [{elapsed}] [{bar:.blue}] {pos}/{len} ({per_sec:i}, ETA: {eta})",
+                "{spinner:.green} [{elapsed}] [{bar:.blue}] {pos}/{len} ({per_sec}, ETA: {eta})",
             )
             .unwrap()
             .progress_chars("#>-"),
