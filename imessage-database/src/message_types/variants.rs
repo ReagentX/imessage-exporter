@@ -48,5 +48,6 @@ pub enum Variant {
     Reaction(usize, bool, Reaction),
     Sticker(usize),
     Unknown(i32),
+    Application,
     Normal,
 }
