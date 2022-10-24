@@ -56,6 +56,7 @@ pub const ATTACHMENT: &str = "attachment";
 pub const CHAT_MESSAGE_JOIN: &str = "chat_message_join";
 pub const MESSAGE_ATTACHMENT_JOIN: &str = "message_attachment_join";
 pub const CHAT_HANDLE_JOIN: &str = "chat_handle_join";
+pub const MESSAGE_PAYLOAD: &str = "payload_data";
 
 // Default information
 pub const ME: &str = "Me";
