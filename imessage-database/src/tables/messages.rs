@@ -5,11 +5,13 @@
 use std::{collections::HashMap, vec};
 
 use chrono::{naive::NaiveDateTime, offset::Local, DateTime, Datelike, TimeZone, Timelike};
+use plist::Value;
 use rusqlite::{Connection, Error, Result, Row, Statement};
 
 use crate::{
     tables::table::{
         Cacheable, Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE, MESSAGE_ATTACHMENT_JOIN,
+        MESSAGE_PAYLOAD,
     },
     util::{
         dates::readable_diff,
@@ -21,7 +23,7 @@ use crate::{
 const ATTACHMENT_CHAR: char = '\u{FFFC}';
 const APP_CHAR: char = '\u{FFFD}';
 const REPLACEMENT_CHARS: [char; 2] = [ATTACHMENT_CHAR, APP_CHAR];
-const COLUMNS: &str = "m.rowid, m.guid, m.text, m.service, m.handle_id, m.subject, m.date, m.date_read, m.date_delivered, m.is_from_me, m.is_read, m.group_title, m.associated_message_guid, m.associated_message_type, m.expressive_send_style_id, m.thread_originator_guid, m.thread_originator_part";
+const COLUMNS: &str = "m.rowid, m.guid, m.text, m.service, m.handle_id, m.subject, m.date, m.date_read, m.date_delivered, m.is_from_me, m.is_read, m.group_title, m.associated_message_guid, m.associated_message_type, m.balloon_bundle_id, m.expressive_send_style_id, m.thread_originator_guid, m.thread_originator_part";
 
 /// Represents a broad category of messages: standalone, thread originators, and thread replies.
 #[derive(Debug)]
@@ -75,6 +77,7 @@ pub struct Message {
     pub group_title: Option<String>,
     pub associated_message_guid: Option<String>,
     pub associated_message_type: i32,
+    pub balloon_bundle_id: Option<String>,
     pub expressive_send_style_id: Option<String>,
     pub thread_originator_guid: Option<String>,
     pub thread_originator_part: Option<String>,
@@ -100,12 +103,13 @@ impl Table for Message {
             group_title: row.get(11)?,
             associated_message_guid: row.get(12)?,
             associated_message_type: row.get(13)?,
-            expressive_send_style_id: row.get(14)?,
-            thread_originator_guid: row.get(15)?,
-            thread_originator_part: row.get(16)?,
-            chat_id: row.get(17)?,
-            num_attachments: row.get(18)?,
-            num_replies: row.get(19)?,
+            balloon_bundle_id: row.get(14)?,
+            expressive_send_style_id: row.get(15)?,
+            thread_originator_guid: row.get(16)?,
+            thread_originator_part: row.get(17)?,
+            chat_id: row.get(18)?,
+            num_attachments: row.get(19)?,
+            num_replies: row.get(20)?,
         })
     }
 
@@ -518,7 +522,24 @@ impl Message {
         Ok(out_h)
     }
 
+    /// Parse the name out of the Balloon Bundle ID
+    fn parse_balloon_bundle_id(&self) -> Option<&str> {
+        // URL: com.apple.messages.URLBalloonProvider
+        // HandWriting: com.apple.Handwriting.HandwritingProvider
+        // First party apps: `com.apple.messages.MSMessageExtensionBalloonPlugin:0000000000:com.apple.ActivityMessagesApp.MessagesExtension`
+        //     Note the `0000000000`
+        // Third party apps: `com.apple.messages.MSMessageExtensionBalloonPlugin:EWFNLB79LQ:com.gamerdelights.gamepigeon.ext`
+        if let Some(bundle_id) = &self.balloon_bundle_id {
+            Some(&bundle_id[2..10])
+        } else {
+            None
+        }
+    }
+
+    /// Get the variant of a message, see [crate::message_types::variants] for detail.
     pub fn variant(&self) -> Variant {
+        // TODO: Use balloon_bundle_id + payload_data
+
         match self.associated_message_type {
             // Normal message
             0 => Variant::Normal,
@@ -549,12 +570,27 @@ impl Message {
         }
     }
 
+    /// Determine the service the message was sent from, i.e. iMessage, SMS, IRC, etc.
     pub fn service(&self) -> Service {
         match self.service.as_deref() {
             Some("iMessage") => Service::iMessage,
             Some("SMS") => Service::SMS,
             _ => Service::Other,
         }
+    }
+
+    /// Get a message's plist from the `payload_data` BLOB column
+    pub fn payload_data(&self, db: &Connection) -> Option<Value> {
+        let payload = db
+            .blob_open(
+                rusqlite::DatabaseName::Main,
+                MESSAGE,
+                MESSAGE_PAYLOAD,
+                self.rowid as i64,
+                true,
+            )
+            .unwrap();
+        Some(Value::from_reader(payload).unwrap())
     }
 
     pub fn case(&self) -> MessageType {
@@ -636,6 +672,7 @@ mod tests {
             group_title: None,
             associated_message_guid: None,
             associated_message_type: i32::default(),
+            balloon_bundle_id: None,
             expressive_send_style_id: None,
             thread_originator_guid: None,
             thread_originator_part: None,
@@ -791,5 +828,11 @@ mod tests {
             m.get_expressive(),
             expressives::Expressive::Screen(expressives::ScreenEffect::Balloons)
         );
+    }
+
+    #[test]
+    fn can_get_no_balloon_bundle_id() {
+        let m = blank();
+        assert_eq!(m.parse_balloon_bundle_id(), None)
     }
 }
