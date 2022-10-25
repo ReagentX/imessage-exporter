@@ -2,11 +2,18 @@
   App messages are a specific type of message that developers can generate with their apps.
   Some built-in functionality also uses App Messages, like Apple Pay or Handwriting.
 */
+
 use std::collections::HashMap;
 
 use plist::Value;
 
+use crate::{
+    error::plist::PlistParseError, message_types::variants::BalloonProvider,
+    util::plist::extract_parsed_str,
+};
+
 /// This struct represents Apple's [`MSMessageTemplateLayout`](https://developer.apple.com/documentation/messages/msmessagetemplatelayout).
+#[derive(Debug, PartialEq, Eq)]
 struct AppMessage<'a> {
     /// An image used to represent the message in the transcript
     image: Option<&'a str>,
@@ -26,52 +33,63 @@ struct AppMessage<'a> {
     trailing_subcaption: Option<&'a str>,
     /// The name of the app that created this message
     app_name: Option<&'a str>,
+    /// This property is set only for Apple Pay system messages
+    /// It represents the text that displays in the center of the bubble
+    ldtext: Option<&'a str>,
 }
 
-/// This struct is not documented by Apple, but represents messages created by
-/// `com.apple.messages.URLBalloonProvider`. These are the link previews that
-/// iMessage generates when sending links and can contain metadata even if the
-/// webpage the link points to no longer exists on the internet.
-struct URLMessage<'a> {
-    /// The webpage's `<title>` attribute
-    title: Option<&'a str>,
-    /// The URL that ended up serving content, after all redirects
-    url: Option<&'a str>,
-    ///The original url, before any redirects
-    original_url: Option<&'a str>,
-    /// The type of image preview to render, sometiems this is the favicon
-    mime_type: Option<&'a str>,
-    image_type: Option<&'a u64>,
-    placeholder: bool,
-    /// The name of the app that created this message
-    app_name: Option<&'a str>,
-}
-
-/// Defines behavior for different types of messages that have custom balloons
-// TODO: Implement this for the two above message types
-trait BalloonProvider {
-    fn from_map(payload: HashMap<&str, &Value>) -> Self;
+impl<'a> BalloonProvider<'a> for AppMessage<'a> {
+    fn from_map(payload: &'a HashMap<&'a str, &'a Value>) -> Result<Self, PlistParseError<'a>> {
+        Ok(AppMessage {
+            image: extract_parsed_str(payload, "image"),
+            url: extract_parsed_str(payload, "URL"),
+            title: extract_parsed_str(payload, "image-title"),
+            subtitle: extract_parsed_str(payload, "image-subtitle"),
+            caption: extract_parsed_str(payload, "caption"),
+            subcaption: extract_parsed_str(payload, "subcaption"),
+            trailing_caption: extract_parsed_str(payload, "secondary-subcaption"),
+            trailing_subcaption: extract_parsed_str(payload, "tertiary-subcaption"),
+            app_name: extract_parsed_str(payload, "an"),
+            ldtext: extract_parsed_str(payload, "ldtext"),
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::util::plist::parse_plist;
+    use crate::{
+        message_types::{app::AppMessage, variants::BalloonProvider},
+        util::plist::parse_plist,
+    };
     use plist::Value;
     use std::env::current_dir;
     use std::fs::File;
 
     #[test]
-    fn test_parse_apple_pay_pay_1_dollar() {
+    fn test_parse_apple_pay_sent_265() {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/Pay1.plist");
+            .join("test_data/Sent265.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
-
-        // TODO: real tests for all of these methods
         let parsed = parse_plist(&plist).unwrap();
-        println!("{:?}", parse_plist(&plist).unwrap());
+
+        let balloon = AppMessage::from_map(&parsed).unwrap();
+        let expected = AppMessage {
+            image: None,
+            url: Some("data:application/vnd.apple.pkppm;base64,FAKE_BASE64_DATA="),
+            title: None,
+            subtitle: None,
+            caption: Some("Apple\u{a0}Cash"),
+            subcaption: Some("$265\u{a0}Payment"),
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Apple\u{a0}Pay"),
+            ldtext: Some("Sent $265 with Apple\u{a0}Pay."),
+        };
+
+        assert_eq!(balloon, expected);
     }
 
     #[test]
@@ -80,14 +98,6 @@ mod tests {
             .unwrap()
             .as_path()
             .join("test_data/OpenTableInvited.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
-        println!("{:?}", parse_plist(&plist).unwrap());
-    }
-
-    #[test]
-    fn test_parse_url() {
-        let plist_path = current_dir().unwrap().as_path().join("test_data/URL.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         println!("{:?}", parse_plist(&plist).unwrap());
