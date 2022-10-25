@@ -183,3 +183,13 @@ pub fn parse_plist(plist: &Value) -> Result<HashMap<&str, &Value>, PlistParseErr
 
     Ok(possible_data)
 }
+
+pub fn extract_parsed_str<'a>(
+    payload: &'a HashMap<&'a str, &'a Value>,
+    key: &str,
+) -> Option<&'a str> {
+    payload
+        .get(key)
+        .and_then(|item| item.as_string())
+        .filter(|s| !s.is_empty())
+}
