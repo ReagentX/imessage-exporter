@@ -2,6 +2,12 @@
  Variants represent the different types of iMessages that exist in the `messages` table.
 */
 
+use std::collections::HashMap;
+
+use plist::Value;
+
+use crate::error::plist::PlistParseError;
+
 /// Reactions to iMessages
 ///
 /// `bp:` GUID prefix for bubble message reactions (links, apps, etc)
@@ -50,4 +56,12 @@ pub enum Variant {
     Unknown(i32),
     Application,
     Normal,
+}
+
+/// Defines behavior for different types of messages that have custom balloons
+pub trait BalloonProvider<'a> {
+    /// Creates the object from a HashMap of item attributes
+    fn from_map(payload: &'a HashMap<&'a str, &'a Value>) -> Result<Self, PlistParseError<'a>>
+    where
+        Self: Sized;
 }
