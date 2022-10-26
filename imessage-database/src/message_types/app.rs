@@ -14,7 +14,7 @@ use crate::{
 
 /// This struct represents Apple's [`MSMessageTemplateLayout`](https://developer.apple.com/documentation/messages/msmessagetemplatelayout).
 #[derive(Debug, PartialEq, Eq)]
-struct AppMessage<'a> {
+pub struct AppMessage<'a> {
     /// An image used to represent the message in the transcript
     image: Option<&'a str>,
     /// A media file used to represent the message in the transcript

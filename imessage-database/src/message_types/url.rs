@@ -15,7 +15,7 @@ use crate::{
 /// This struct is not documented by Apple, but represents messages created by
 /// `com.apple.messages.URLBalloonProvider`.
 #[derive(Debug, PartialEq, Eq)]
-struct URLMessage<'a> {
+pub struct URLMessage<'a> {
     /// The webpage's `<title>` attribute
     title: Option<&'a str>,
     /// The URL that ended up serving content, after all redirects
