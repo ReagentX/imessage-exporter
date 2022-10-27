@@ -16,26 +16,26 @@ use crate::{
 #[derive(Debug, PartialEq, Eq)]
 pub struct AppMessage<'a> {
     /// An image used to represent the message in the transcript
-    image: Option<&'a str>,
+    pub image: Option<&'a str>,
     /// A media file used to represent the message in the transcript
-    url: Option<&'a str>,
+    pub url: Option<&'a str>,
     /// The title for the image or media file
-    title: Option<&'a str>,
+    pub title: Option<&'a str>,
     /// The subtitle for the image or media file
-    subtitle: Option<&'a str>,
+    pub subtitle: Option<&'a str>,
     /// A left-aligned caption for the message bubble
-    caption: Option<&'a str>,
+    pub caption: Option<&'a str>,
     /// A left-aligned subcaption for the message bubble
-    subcaption: Option<&'a str>,
+    pub subcaption: Option<&'a str>,
     /// A right-aligned caption for the message bubble
-    trailing_caption: Option<&'a str>,
+    pub trailing_caption: Option<&'a str>,
     /// A right-aligned subcaption for the message bubble
-    trailing_subcaption: Option<&'a str>,
+    pub trailing_subcaption: Option<&'a str>,
     /// The name of the app that created this message
-    app_name: Option<&'a str>,
+    pub app_name: Option<&'a str>,
     /// This property is set only for Apple Pay system messages
     /// It represents the text that displays in the center of the bubble
-    ldtext: Option<&'a str>,
+    pub ldtext: Option<&'a str>,
 }
 
 impl<'a> BalloonProvider<'a> for AppMessage<'a> {
