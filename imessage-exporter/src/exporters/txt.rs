@@ -11,12 +11,18 @@ use crate::{
 };
 
 use imessage_database::{
+    error::plist::PlistParseError,
+    message_types::{
+        app::AppMessage,
+        url::URLMessage,
+        variants::{BalloonProvider, CustomBalloon},
+    },
     tables::{
         messages::BubbleType,
         table::{ME, ORPHANED, UNKNOWN},
     },
-    util::dates,
-    Attachment, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
+    util::{dates, plist::parse_plist},
+    Attachment, Variant, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
 };
 
 pub struct TXT<'a> {
@@ -136,10 +142,14 @@ impl<'a> Writer<'a> for TXT<'a> {
                     // Attachment does not exist in attachments table
                     None => self.add_line(&mut formatted_message, "Attachment missing!", &indent),
                 },
-                // TODO: Support app messages
-                BubbleType::App => {
-                    self.add_line(&mut formatted_message, self.format_app(message), &indent)
-                }
+                BubbleType::App => match self.format_app(message) {
+                    Ok(ok_bubble) => self.add_line(&mut formatted_message, &ok_bubble, &indent),
+                    Err(why) => self.add_line(
+                        &mut formatted_message,
+                        &format!("Unable to format app message: {why}"),
+                        &indent,
+                    ),
+                },
             };
 
             // Handle expressives
@@ -207,15 +217,70 @@ impl<'a> Writer<'a> for TXT<'a> {
         }
     }
 
-    fn format_app(&self, _: &'a Message) -> &'a str {
-        // TODO: Implement app messages
-        // TODO: Support Apple Pay variants
-        "App messages not yet implemented!"
+    fn format_app(&self, message: &'a Message) -> Result<String, PlistParseError> {
+        if let Variant::App(balloon) = message.variant() {
+            let mut app_bubble = String::new();
+
+            match message.payload_data(&self.config.db) {
+                Some(payload) => {
+                    let parsed = parse_plist(&payload)?;
+
+                    let res = if matches!(balloon, CustomBalloon::URL) {
+                        // Handle the URL case
+                        match URLMessage::from_map(&parsed) {
+                            Ok(bubble) => {
+                                format!("{:?}\n{:?}\n{:?}", bubble.title, bubble.summary, bubble.url)
+                            }
+                            Err(why) => {
+                                return Err(PlistParseError::ParseError(format!("{why}")));
+                            }
+                        }
+                    } else {
+                        // Handle the app case
+                        match AppMessage::from_map(&parsed) {
+                            Ok(bubble) => match balloon {
+                                CustomBalloon::Application(bundle_id) => bundle_id.to_string(),
+                                CustomBalloon::Handwriting => {
+                                    "Handwritten messages are not yet supported!".to_string()
+                                }
+                                CustomBalloon::ApplePay => {
+                                    format!("{:?} transaction: {:?}", bubble.caption, bubble.ldtext)
+                                }
+                                CustomBalloon::Workout => {
+                                    format!("{:?} message: {:?}", bubble.app_name, bubble.ldtext)
+                                }
+                                CustomBalloon::Slideshow => {
+                                    format!("Photo album: {:?}: {:?}", bubble.ldtext, bubble.url)
+                                }
+                                CustomBalloon::URL => {
+                                    unreachable!()
+                                }
+                            },
+                            Err(why) => return Err(PlistParseError::ParseError(format!("{why}"))),
+                        }
+                    };
+                    app_bubble.push_str(&res);
+                    // panic!("{}, {:?}", message.rowid, app_bubble);
+                }
+                None => {
+                    // Sometimes, URL messages are missing their payloads
+                    if matches!(balloon, CustomBalloon::URL) {
+                        if let Some(text) = &message.text {
+                            return Ok(text.to_string());
+                        }
+                    }
+                    return Err(PlistParseError::NoPayload);
+                }
+            };
+            Ok(app_bubble)
+        } else {
+            Err(PlistParseError::WrongMessageType)
+        }
     }
 
-    fn format_reaction(&self, msg: &Message) -> Result<std::string::String, std::string::String> {
+    fn format_reaction(&self, msg: &Message) -> Result<String, String> {
         match msg.variant() {
-            imessage_database::Variant::Reaction(_, added, reaction) => {
+            Variant::Reaction(_, added, reaction) => {
                 if !added {
                     return Ok("".to_string());
                 }
@@ -225,7 +290,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                     self.config.who(&msg.handle_id, msg.is_from_me),
                 ))
             }
-            imessage_database::Variant::Sticker(_) => {
+            Variant::Sticker(_) => {
                 let paths = Attachment::from_message(&self.config.db, msg)?;
                 Ok(format!(
                     "Sticker from {}: {}",
@@ -238,20 +303,6 @@ impl<'a> Writer<'a> for TXT<'a> {
             }
             _ => unreachable!(),
         }
-    }
-
-    fn format_annoucement(&self, msg: &'a Message) -> String {
-        let mut who = self.config.who(&msg.handle_id, msg.is_from_me);
-        // Rename yourself so we render the proper grammar here
-        if who == ME {
-            who = "You"
-        }
-
-        let timestamp = dates::format(&msg.date(&self.config.offset));
-        format!(
-            "{timestamp} {who} renamed the conversation to {}\n\n",
-            msg.group_title.as_deref().unwrap_or(UNKNOWN)
-        )
     }
 
     fn format_expressive(&self, msg: &'a Message) -> &'a str {
@@ -276,6 +327,20 @@ impl<'a> Writer<'a> for TXT<'a> {
             Expressive::Unknown(effect) => effect,
             Expressive::Normal => "",
         }
+    }
+
+    fn format_annoucement(&self, msg: &'a Message) -> String {
+        let mut who = self.config.who(&msg.handle_id, msg.is_from_me);
+        // Rename yourself so we render the proper grammar here
+        if who == ME {
+            who = "You"
+        }
+
+        let timestamp = dates::format(&msg.date(&self.config.offset));
+        format!(
+            "{timestamp} {who} renamed the conversation to {}\n\n",
+            msg.group_title.as_deref().unwrap_or(UNKNOWN)
+        )
     }
 
     fn write_to_file(file: &Path, text: &str) {
@@ -334,6 +399,7 @@ mod tests {
             group_title: None,
             associated_message_guid: None,
             associated_message_type: i32::default(),
+            balloon_bundle_id: None,
             expressive_send_style_id: None,
             thread_originator_guid: None,
             thread_originator_part: None,
