@@ -39,22 +39,29 @@ pub enum Reaction {
     Questioned,
 }
 
-/// Apple Pay Requests
 #[derive(Debug)]
-pub enum ApplePay {
-    Request(String), // Unused currently since this uses associated_message_type == 0
-    Send(String),
-    Recieve(String),
+pub enum CustomBalloon<'a> {
+    /// Generic third party applications
+    Application(&'a str),
+    /// URL previews
+    URL,
+    /// Handwritten animated messages
+    Handwriting,
+    /// Apple Pay (one of Sent, Requested, Received)
+    ApplePay,
+    /// Fitness.app messages
+    Workout,
+    /// Photos.app slideshow messages
+    Slideshow,
 }
 
 /// Variant container
 #[derive(Debug)]
-pub enum Variant {
-    ApplePay(ApplePay),
+pub enum Variant<'a> {
     Reaction(usize, bool, Reaction),
     Sticker(usize),
     Unknown(i32),
-    Application,
+    App(CustomBalloon<'a>),
     Normal,
 }
 

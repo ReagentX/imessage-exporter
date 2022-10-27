@@ -9,7 +9,7 @@ pub mod util;
 pub use {
     message_types::{
         expressives::{BubbleEffect, Expressive, ScreenEffect},
-        variants::{ApplePay, Reaction, Variant},
+        variants::{Reaction, Variant},
     },
     tables::{
         attachment::Attachment, chat::Chat, chat_handle::ChatToHandle, handle::Handle,
