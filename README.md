@@ -26,9 +26,16 @@ This crate supports every iMessage feature as of MacOS 12.6 (21G115):
 - Expressives
 - Reactions
 - Stickers
-- Apps
-  - Apple Pay
+- Apple Pay
+- Custom App Integrations
+- URL Previews
 
 ## Documentation
 
 Documentation is available [here](/docs/).
+
+## Special Thanks
+
+- All of my friends, for putting up with me sending them random messages to test things
+- [SQLiteFlow](https://www.sqliteflow.com), the SQL viewer I used to explore and reverse engineer the iMessage database
+- [Xplist](https://github.com/ic005k/Xplist), an invaluable tool for reverse engineering the `payload_data` plist format
