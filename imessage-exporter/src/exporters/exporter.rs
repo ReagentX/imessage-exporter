@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use imessage_database::{Attachment, Message};
+use imessage_database::{Attachment, Message, error::plist::PlistParseError};
 
 use crate::app::runtime::Config;
 
@@ -19,7 +19,7 @@ pub(super) trait Writer<'a> {
     /// Format an attachment, possibly by reading the disk
     fn format_attachment(&self, msg: &'a mut Attachment) -> Result<String, &'a str>;
     /// Format an app message by parsing some of its fields
-    fn format_app(&self, msg: &'a Message) -> &'a str;
+    fn format_app(&self, msg: &'a Message) -> Result<String, PlistParseError>;
     /// Format a reaction (displayed under a message)
     fn format_reaction(&self, msg: &Message) -> Result<String, String>;
     /// Format an expressive message
