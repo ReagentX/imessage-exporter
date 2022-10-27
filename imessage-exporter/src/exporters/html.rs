@@ -17,7 +17,7 @@ use imessage_database::{
         table::{ME, ORPHANED, UNKNOWN},
     },
     util::{dates, dirs::home},
-    Attachment, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
+    Attachment, {BubbleEffect, Expressive, Message, ScreenEffect, Table}, error::plist::PlistParseError,
 };
 use uuid::Uuid;
 
@@ -215,12 +215,20 @@ impl<'a> Writer<'a> for HTML<'a> {
                     }
                 }
                 // TODO: Support app messages
-                BubbleType::App => self.add_line(
-                    &mut formatted_message,
-                    self.format_app(message),
-                    "<span class=\"attachment_error\">",
-                    "</span>",
-                ),
+                BubbleType::App => match self.format_app(message) {
+                    Ok(ok_bubble) => self.add_line(
+                        &mut formatted_message,
+                        &ok_bubble,
+                        "<span class=\"app\">",
+                        "</span>",
+                    ),
+                    Err(why) => self.add_line(
+                        &mut formatted_message,
+                        &format!("Unable to format app message: {why}"),
+                        "<span class=\"app_error\">",
+                        "</span>",
+                    ),
+                },
             };
 
             // Write the part div end
@@ -391,10 +399,10 @@ impl<'a> Writer<'a> for HTML<'a> {
         }
     }
 
-    fn format_app(&self, _: &'a Message) -> &'a str {
+    fn format_app(&self, _: &'a Message) -> Result<String, PlistParseError> {
         // TODO: Implement app messages
         // TODO: Support Apple Pay variants
-        "App messages not yet implemented!"
+        Ok("App messages not yet implemented!".to_string())
     }
 
     fn format_reaction(&self, msg: &Message) -> Result<String, String> {
@@ -533,6 +541,7 @@ mod tests {
             group_title: None,
             associated_message_guid: None,
             associated_message_type: i32::default(),
+            balloon_bundle_id: None,
             expressive_send_style_id: None,
             thread_originator_guid: None,
             thread_originator_part: None,
