@@ -9,6 +9,7 @@ use plist::Value;
 use rusqlite::{Connection, Error, Result, Row, Statement};
 
 use crate::{
+    message_types::variants::{CustomBalloon, Reaction, Variant},
     tables::table::{
         Cacheable, Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE, MESSAGE_ATTACHMENT_JOIN,
         MESSAGE_PAYLOAD,
@@ -17,7 +18,7 @@ use crate::{
         dates::readable_diff,
         output::{done_processing, processing},
     },
-    ApplePay, BubbleEffect, Expressive, Reaction, ScreenEffect, Variant,
+    BubbleEffect, Expressive, ScreenEffect,
 };
 
 const ATTACHMENT_CHAR: char = '\u{FFFC}';
@@ -29,11 +30,11 @@ const COLUMNS: &str = "m.rowid, m.guid, m.text, m.service, m.handle_id, m.subjec
 #[derive(Debug)]
 pub enum MessageType<'a> {
     /// A normal message not associated with any others
-    Normal(Variant, Expressive<'a>),
+    Normal(Variant<'a>, Expressive<'a>),
     /// A message that has replies
-    Thread(Variant, Expressive<'a>),
+    Thread(Variant<'a>, Expressive<'a>),
     /// A message that is a reply to another message
-    Reply(Variant, Expressive<'a>),
+    Reply(Variant<'a>, Expressive<'a>),
 }
 
 /// Defines the parts of a message bubble, i.e. the content that can exist in a single message.
@@ -251,6 +252,11 @@ impl Message {
                 let mut start: usize = 0;
                 let mut end: usize = 0;
                 for (idx, char) in text.char_indices() {
+                    // If the message is a URL prevuew then we render it as an app
+                    if self.is_url() {
+                        out_v.push(BubbleType::App);
+                        return out_v;
+                    }
                     if REPLACEMENT_CHARS.contains(&char) {
                         if start < end {
                             out_v.push(BubbleType::Text(text[start..idx].trim()));
@@ -356,6 +362,10 @@ impl Message {
         self.expressive_send_style_id.is_some()
     }
 
+    pub fn is_url(&self) -> bool {
+        matches!(self.variant(), Variant::App(CustomBalloon::URL))
+    }
+
     /// `true` if the message has attachments, else `false`
     pub fn has_attachments(&self) -> bool {
         self.num_attachments > 0
@@ -377,7 +387,7 @@ impl Message {
         0
     }
 
-    /// Build a HashMap of message component index to messages that react to that component
+    /// Get the number of messages in the database
     ///
     /// # Example:
     ///
@@ -522,15 +532,18 @@ impl Message {
         Ok(out_h)
     }
 
-    /// Parse the name out of the Balloon Bundle ID
+    /// Parse the App's Bundle ID out of the Balloon's Bundle ID
     fn parse_balloon_bundle_id(&self) -> Option<&str> {
-        // URL: com.apple.messages.URLBalloonProvider
-        // HandWriting: com.apple.Handwriting.HandwritingProvider
-        // First party apps: `com.apple.messages.MSMessageExtensionBalloonPlugin:0000000000:com.apple.ActivityMessagesApp.MessagesExtension`
-        //     Note the `0000000000`
-        // Third party apps: `com.apple.messages.MSMessageExtensionBalloonPlugin:EWFNLB79LQ:com.gamerdelights.gamepigeon.ext`
         if let Some(bundle_id) = &self.balloon_bundle_id {
-            Some(&bundle_id[2..10])
+            let mut parts = bundle_id.split(":").into_iter();
+            let bundle_id = parts.next();
+            // If there is only one part, use that, otherwise get the third part
+            if parts.next().is_none() {
+                return bundle_id;
+            } else {
+                // Will be None if there is no third part
+                return parts.next();
+            }
         } else {
             None
         }
@@ -538,15 +551,28 @@ impl Message {
 
     /// Get the variant of a message, see [crate::message_types::variants] for detail.
     pub fn variant(&self) -> Variant {
-        // TODO: Use balloon_bundle_id + payload_data
-
         match self.associated_message_type {
-            // Normal message
-            0 => Variant::Normal,
-
-            // Apple Pay
-            2 => Variant::ApplePay(ApplePay::Send(self.text.as_ref().unwrap().to_owned())),
-            3 => Variant::ApplePay(ApplePay::Recieve(self.text.as_ref().unwrap().to_owned())),
+            // Standard iMessages with either text or a message payload
+            0 | 2 | 3 => match self.parse_balloon_bundle_id() {
+                Some(bundle_id) => match bundle_id {
+                    "com.apple.messages.URLBalloonProvider" => Variant::App(CustomBalloon::URL),
+                    "com.apple.Handwriting.HandwritingProvider" => {
+                        Variant::App(CustomBalloon::Handwriting)
+                    }
+                    "com.apple.PassbookUIService.PeerPaymentMessagesExtension" => {
+                        Variant::App(CustomBalloon::ApplePay)
+                    }
+                    "com.apple.ActivityMessagesApp.MessagesExtension" => {
+                        Variant::App(CustomBalloon::Workout)
+                    }
+                    "com.apple.mobileslideshow.PhotosMessagesApp" => {
+                        Variant::App(CustomBalloon::Slideshow)
+                    }
+                    _ => Variant::App(CustomBalloon::Application(bundle_id)),
+                },
+                // This is the most common case
+                None => Variant::Normal,
+            },
 
             // Stickers overlayed on messages
             1000 => Variant::Sticker(self.reaction_index()),
@@ -580,17 +606,19 @@ impl Message {
     }
 
     /// Get a message's plist from the `payload_data` BLOB column
+    /// Calling this hits the database, so it is expensive and should
+    /// only get invoked when needed
     pub fn payload_data(&self, db: &Connection) -> Option<Value> {
-        let payload = db
-            .blob_open(
-                rusqlite::DatabaseName::Main,
-                MESSAGE,
-                MESSAGE_PAYLOAD,
-                self.rowid as i64,
-                true,
-            )
-            .unwrap();
-        Some(Value::from_reader(payload).unwrap())
+        match db.blob_open(
+            rusqlite::DatabaseName::Main,
+            MESSAGE,
+            MESSAGE_PAYLOAD,
+            self.rowid as i64,
+            true,
+        ) {
+            Ok(payload) => Some(Value::from_reader(payload).unwrap()),
+            Err(_) => None,
+        }
     }
 
     pub fn case(&self) -> MessageType {
@@ -834,5 +862,45 @@ mod tests {
     fn can_get_no_balloon_bundle_id() {
         let m = blank();
         assert_eq!(m.parse_balloon_bundle_id(), None)
+    }
+
+    #[test]
+    fn can_get_balloon_bundle_id_os() {
+        let mut m = blank();
+        m.balloon_bundle_id = Some("com.apple.Handwriting.HandwritingProvider".to_owned());
+        assert_eq!(
+            m.parse_balloon_bundle_id(),
+            Some("com.apple.Handwriting.HandwritingProvider")
+        )
+    }
+
+    #[test]
+    fn can_get_balloon_bundle_id_url() {
+        let mut m = blank();
+        m.balloon_bundle_id = Some("com.apple.messages.URLBalloonProvider".to_owned());
+        assert_eq!(
+            m.parse_balloon_bundle_id(),
+            Some("com.apple.messages.URLBalloonProvider")
+        )
+    }
+
+    #[test]
+    fn can_get_balloon_bundle_id_apple() {
+        let mut m = blank();
+        m.balloon_bundle_id = Some("com.apple.messages.MSMessageExtensionBalloonPlugin:0000000000:com.apple.PassbookUIService.PeerPaymentMessagesExtension".to_owned());
+        assert_eq!(
+            m.parse_balloon_bundle_id(),
+            Some("com.apple.PassbookUIService.PeerPaymentMessagesExtension")
+        )
+    }
+
+    #[test]
+    fn can_get_balloon_bundle_id_third_party() {
+        let mut m = blank();
+        m.balloon_bundle_id = Some("com.apple.messages.MSMessageExtensionBalloonPlugin:QPU8QS3E62:com.contextoptional.OpenTable.Messages".to_owned());
+        assert_eq!(
+            m.parse_balloon_bundle_id(),
+            Some("com.contextoptional.OpenTable.Messages")
+        )
     }
 }
