@@ -8,6 +8,9 @@ pub enum PlistParseError<'a> {
     InvalidType(&'a str, &'a str),
     InvalidTypeIndex(usize, &'a str),
     InvalidDictionarySize(usize, usize),
+    NoPayload,
+    WrongMessageType,
+    ParseError(String),
 }
 
 impl<'a> Display for PlistParseError<'a> {
@@ -34,6 +37,9 @@ impl<'a> Display for PlistParseError<'a> {
                 "Invalid dictionary size, found {} keys and {} values",
                 a, b
             ),
+            PlistParseError::NoPayload => write!(fmt, "Unable to acquire payload data!"),
+            PlistParseError::WrongMessageType => write!(fmt, "Message is not an app message!"),
+            PlistParseError::ParseError(why) => write!(fmt, "{why}"),
         }
     }
 }
