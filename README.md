@@ -18,7 +18,7 @@ Docs for the library are located [here](/docs/library/).
 
 ### Supported Features
 
-This crate supports every iMessage feature as of MacOS 12.6 (21G115):
+This crate supports every iMessage feature as of MacOS 12.6.1 (21G217):
 
 - Multi-part messages
 - Replies/Threads
