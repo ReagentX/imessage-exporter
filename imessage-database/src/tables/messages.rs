@@ -50,14 +50,16 @@ pub enum BubbleType<'a> {
 
 /// Defines different types of services we can recieve messages from.
 #[derive(Debug)]
-pub enum Service {
+pub enum Service<'a> {
     /// An iMessage
     #[allow(non_camel_case_types)]
     iMessage,
     /// A message sent as SMS
     SMS,
     /// Any other type of message
-    Other,
+    Other(&'a str),
+    /// Used when service field is not set
+    Unknown,
 }
 
 /// Represents a single row in the `message` table.
@@ -601,7 +603,8 @@ impl Message {
         match self.service.as_deref() {
             Some("iMessage") => Service::iMessage,
             Some("SMS") => Service::SMS,
-            _ => Service::Other,
+            Some(service_name) => Service::Other(service_name),
+            None => Service::Unknown,
         }
     }
 
