@@ -128,7 +128,24 @@ mod tests {
             .join("test_data/Slideshow.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
-        println!("{:?}", parse_plist(&plist).unwrap());
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = AppMessage::from_map(&parsed).unwrap();
+        let expected = AppMessage {
+            image: None,
+            url: Some("https://share.icloud.com/photos/1337h4x0r_jk#Home"),
+            title: None,
+            subtitle: None,
+            caption: Some("Home"),
+            subcaption: Some("37 Photos"),
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Photos"),
+            ldtext: Some("Home - 37 Photos"),
+        };
+        println!("{:?}", balloon);
+
+        assert_eq!(balloon, expected);
     }
 
     #[test]
