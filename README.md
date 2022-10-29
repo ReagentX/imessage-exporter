@@ -27,8 +27,8 @@ This crate supports every iMessage feature as of MacOS 12.6 (21G115):
 - Reactions
 - Stickers
 - Apple Pay
-- Custom App Integrations
 - URL Previews
+- App Integrations
 
 ## Documentation
 
