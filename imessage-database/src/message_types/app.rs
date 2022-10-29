@@ -100,7 +100,24 @@ mod tests {
             .join("test_data/OpenTableInvited.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
-        println!("{:?}", parse_plist(&plist).unwrap());
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = AppMessage::from_map(&parsed).unwrap();
+        let expected = AppMessage {
+            image: None,
+            url: Some("https://www.opentable.com/book/view?rid=0000000&confnumber=00000&invitationId=1234567890-abcd-def-ghij-4u5t1sv3ryc00l"),
+            title: Some("Rusty Grill - Boise"),
+            subtitle: Some("Reservation Confirmed"),
+            caption: Some("Table for 4 people\nSunday, October 17 at 7:45 PM"),
+            subcaption: Some("You're invited! Tap to accept."),
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("OpenTable"),
+            ldtext: None,
+        };
+        println!("{:?}", balloon);
+
+        assert_eq!(balloon, expected);
     }
 
     #[test]
