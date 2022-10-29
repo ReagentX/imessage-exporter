@@ -184,6 +184,23 @@ mod tests {
             .join("test_data/Business.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
-        println!("{:?}", parse_plist(&plist).unwrap());
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = AppMessage::from_map(&parsed).unwrap();
+        let expected = AppMessage {
+            image: None,
+            url: Some("?receivedMessage=33c309ab520bc2c76e99c493157ed578&replyMessage=6a991da615f2e75d4aa0de334e529024"),
+            title: None,
+            subtitle: None,
+            caption: Some("Yes, connect me with Goldman Sachs."),
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Business"),
+            ldtext: Some("Yes, connect me with Goldman Sachs."),
+        };
+        println!("{:?}", balloon);
+
+        assert_eq!(balloon, expected);
     }
 }
