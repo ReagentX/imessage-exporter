@@ -156,7 +156,24 @@ mod tests {
             .join("test_data/Game.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
-        println!("{:?}", parse_plist(&plist).unwrap());
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = AppMessage::from_map(&parsed).unwrap();
+        let expected = AppMessage {
+            image: None,
+            url: Some("data:?ver=48&data=pr3t3ndth3r3154b10b0fd4t4h3re=3"),
+            title: None,
+            subtitle: None,
+            caption: Some("Your move."),
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("GamePigeon"),
+            ldtext: Some("Dots & Boxes"),
+        };
+        println!("{:?}", balloon);
+
+        assert_eq!(balloon, expected);
     }
 
     #[test]
