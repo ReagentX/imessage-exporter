@@ -3,8 +3,6 @@ These are the link previews that iMessage generates when sending links and can
 contain metadata even if the webpage the link points to no longer exists on the internet.
 */
 
-use std::collections::HashMap;
-
 use plist::Value;
 
 use crate::{
@@ -36,14 +34,7 @@ pub struct URLMessage<'a> {
 
 impl<'a> BalloonProvider<'a> for URLMessage<'a> {
     fn from_map(payload: &'a Value) -> Result<Self, PlistParseError> {
-        let url_metadata = payload
-            .as_dictionary()
-            .ok_or(PlistParseError::InvalidType(
-                "root".to_string(),
-                "dictionary".to_string(),
-            ))?
-            .get("richLinkMetadata")
-            .ok_or(PlistParseError::MissingKey("richLinkMetadata".to_string()))?;
+        let url_metadata = URLMessage::get_body(payload)?;
         Ok(URLMessage {
             title: get_string_from_dict(url_metadata, "title"),
             summary: get_string_from_dict(url_metadata, "summary"),
@@ -59,6 +50,26 @@ impl<'a> BalloonProvider<'a> for URLMessage<'a> {
 }
 
 impl<'a> URLMessage<'a> {
+    /// Extract the main dictionary of data from the body of the payload
+    ///
+    /// There are two known ways this data is stored: the more recent `richLinkMetadata` style,
+    /// or some kind of social integration stored under a `metadata` key
+    fn get_body(payload: &'a Value) -> Result<&'a Value, PlistParseError> {
+        let root_dict = payload.as_dictionary().ok_or(PlistParseError::InvalidType(
+            "root".to_string(),
+            "dictionary".to_string(),
+        ))?;
+
+        if root_dict.contains_key("richLinkMetadata") {
+            // Unwrap is safe here because we validate the key
+            return Ok(root_dict.get("richLinkMetadata").unwrap());
+        } else if root_dict.contains_key("metadata") {
+            return Ok(root_dict.get("metadata").unwrap());
+        };
+        Err(PlistParseError::MissingKey(
+            "richLinkMetadata or metadata".to_string(),
+        ))
+    }
     /// Extract the array of image URLs from a URL message payload.
     ///
     /// The array consists of dictionaries that look like this:
@@ -113,6 +124,35 @@ mod tests {
             item_type: None,
             images: vec![],
             icons: vec!["https://chrissardegna.com/favicon.ico"],
+            placeholder: false,
+        };
+
+        assert_eq!(balloon, expected);
+    }
+
+    #[test]
+    fn test_parse_url_me_metadata() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/MalformedURL.plist");
+        let plist_data = File::open(plist_path).unwrap();
+        let plist = Value::from_reader(plist_data).unwrap();
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = URLMessage::from_map(&parsed).unwrap();
+        let expected = URLMessage {
+            title: Some("Christopher Sardegna"),
+            summary: Some("Sample page description"),
+            url: Some("https://chrissardegna.com"),
+            original_url: Some("https://chrissardegna.com"),
+            item_type: Some("article"),
+            images: vec!["https://chrissardegna.com/ddc-facebook-icon.png"],
+            icons: vec![
+                "https://chrissardegna.com/apple-touch-icon-180x180.png",
+                "https://chrissardegna.com/ddc-icon-32x32.png",
+                "https://chrissardegna.com/ddc-icon-16x16.png"
+            ],
             placeholder: false,
         };
 
