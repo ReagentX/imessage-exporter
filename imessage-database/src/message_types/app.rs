@@ -16,7 +16,7 @@ use crate::{
 pub struct AppMessage<'a> {
     /// An image used to represent the message in the transcript
     pub image: Option<&'a str>,
-    /// A media file used to represent the message in the transcript
+    /// A URL pointing to a media file used to represent the message in the transcript
     pub url: Option<&'a str>,
     /// The title for the image or media file
     pub title: Option<&'a str>,
@@ -32,8 +32,8 @@ pub struct AppMessage<'a> {
     pub trailing_subcaption: Option<&'a str>,
     /// The name of the app that created this message
     pub app_name: Option<&'a str>,
-    /// This property is set only for Apple Pay system messages
-    /// It represents the text that displays in the center of the bubble
+    /// This property is set only for Apple Pay system messages,
+    /// it represents the text that displays in the center of the bubble
     pub ldtext: Option<&'a str>,
 }
 
