@@ -121,13 +121,19 @@ fn follow_uid<'a>(
                     .get("NS.keys")
                     .ok_or(PlistParseError::MissingKey("NS.keys".to_string()))?
                     .as_array()
-                    .ok_or(PlistParseError::InvalidType("NS.keys".to_string(), "array".to_string()))?;
+                    .ok_or(PlistParseError::InvalidType(
+                        "NS.keys".to_string(),
+                        "array".to_string(),
+                    ))?;
                 // These are the values in the objects list
                 let values = dict
                     .get("NS.objects")
                     .ok_or(PlistParseError::MissingKey("NS.objects".to_string()))?
                     .as_array()
-                    .ok_or(PlistParseError::InvalidType("NS.objects".to_string(), "array".to_string()))?;
+                    .ok_or(PlistParseError::InvalidType(
+                        "NS.objects".to_string(),
+                        "array".to_string(),
+                    ))?;
                 // Die here if the data is invalid
                 if keys.len() != values.len() {
                     return Err(PlistParseError::InvalidDictionarySize(
@@ -154,10 +160,10 @@ fn follow_uid<'a>(
                         .get(key_index)
                         .ok_or(PlistParseError::NoValueAtIndex(key_index))?
                         .as_string()
-                        .ok_or(PlistParseError::InvalidTypeIndex(key_index, "string".to_string()))?;
-                    let value = objects
-                        .get(value_index)
-                        .ok_or(PlistParseError::NoValueAtIndex(value_index))?;
+                        .ok_or(PlistParseError::InvalidTypeIndex(
+                            key_index,
+                            "string".to_string(),
+                        ))?;
 
                     dictionary.insert(
                         key.to_string(),
@@ -195,10 +201,9 @@ fn follow_uid<'a>(
         Value::Uid(uid) => {
             return follow_uid(objects, uid.get() as usize, None, None);
         }
-        Value::Boolean(_) | Value::Integer(_) | Value::String(_) => return Ok(item.to_owned()),
-        _ => {}
-    };
-    Ok(objects.get(root).unwrap().to_owned())
+        Value::Boolean(_) | Value::Integer(_) | Value::String(_) => Ok(item.to_owned()),
+        _ => Ok(item.to_owned()),
+    }
 }
 
 pub fn extract_parsed_str<'a>(
@@ -222,10 +227,7 @@ pub fn get_string_from_dict<'a>(payload: &'a Value, key: &'a str) -> Option<&'a 
 
 /// Extract a bool from a key-value pair that looks like {key: true}
 pub fn get_bool_from_dict<'a>(payload: &'a Value, key: &'a str) -> Option<bool> {
-    payload
-        .as_dictionary()?
-        .get(key)?
-        .as_boolean()
+    payload.as_dictionary()?.get(key)?.as_boolean()
 }
 
 /// Extract a string from a key-value pair that looks like {key: {key: String("value")}}
