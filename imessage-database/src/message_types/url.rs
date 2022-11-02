@@ -135,7 +135,7 @@ mod tests {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/MalformedURL.plist");
+            .join("test_data/MetadataURL.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = parse_plist(&plist).unwrap();
