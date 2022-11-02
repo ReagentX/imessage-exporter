@@ -3,13 +3,12 @@
   Some built-in functionality also uses App Messages, like Apple Pay or Handwriting.
 */
 
-use std::collections::HashMap;
-
 use plist::Value;
 
 use crate::{
-    error::plist::PlistParseError, message_types::variants::BalloonProvider,
-    util::plist::extract_parsed_str,
+    error::plist::PlistParseError,
+    message_types::variants::BalloonProvider,
+    util::plist::{get_string_from_dict, get_string_from_nested_dict},
 };
 
 /// This struct represents Apple's [`MSMessageTemplateLayout`](https://developer.apple.com/documentation/messages/msmessagetemplatelayout).
@@ -39,18 +38,26 @@ pub struct AppMessage<'a> {
 }
 
 impl<'a> BalloonProvider<'a> for AppMessage<'a> {
-    fn from_map(payload: &'a HashMap<&'a str, &'a Value>) -> Result<Self, PlistParseError<'a>> {
+    fn from_map(payload: &'a Value) -> Result<Self, PlistParseError> {
+        let user_info = payload
+            .as_dictionary()
+            .ok_or(PlistParseError::InvalidType(
+                "root".to_string(),
+                "dictionary".to_string(),
+            ))?
+            .get("userInfo")
+            .ok_or(PlistParseError::MissingKey("userInfo".to_string()))?;
         Ok(AppMessage {
-            image: extract_parsed_str(payload, "image"),
-            url: extract_parsed_str(payload, "URL"),
-            title: extract_parsed_str(payload, "image-title"),
-            subtitle: extract_parsed_str(payload, "image-subtitle"),
-            caption: extract_parsed_str(payload, "caption"),
-            subcaption: extract_parsed_str(payload, "subcaption"),
-            trailing_caption: extract_parsed_str(payload, "secondary-subcaption"),
-            trailing_subcaption: extract_parsed_str(payload, "tertiary-subcaption"),
-            app_name: extract_parsed_str(payload, "an"),
-            ldtext: extract_parsed_str(payload, "ldtext"),
+            image: get_string_from_dict(payload, "image"),
+            url: get_string_from_nested_dict(payload, "URL"),
+            title: get_string_from_dict(user_info, "image-title"),
+            subtitle: get_string_from_dict(user_info, "image-subtitle"),
+            caption: get_string_from_dict(user_info, "caption"),
+            subcaption: get_string_from_dict(user_info, "subcaption"),
+            trailing_caption: get_string_from_dict(user_info, "secondary-subcaption"),
+            trailing_subcaption: get_string_from_dict(user_info, "tertiary-subcaption"),
+            app_name: get_string_from_dict(payload, "an"),
+            ldtext: get_string_from_dict(payload, "ldtext"),
         })
     }
 }
