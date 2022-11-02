@@ -8,8 +8,9 @@ use std::collections::HashMap;
 use plist::Value;
 
 use crate::{
-    error::plist::PlistParseError, message_types::variants::BalloonProvider,
-    util::plist::extract_parsed_str,
+    error::plist::PlistParseError,
+    message_types::variants::BalloonProvider,
+    util::plist::{get_bool_from_dict, get_string_from_dict, get_string_from_nested_dict},
 };
 
 /// This struct is not documented by Apple, but represents messages created by
@@ -24,31 +25,62 @@ pub struct URLMessage<'a> {
     pub url: Option<&'a str>,
     /// The original url, before any redirects
     pub original_url: Option<&'a str>,
-    /// The type of image preview to render, sometiems this is the favicon
-    pub mime_type: Option<&'a str>,
     /// The type of webpage Apple thinks the link represents
     pub item_type: Option<&'a str>,
-    pub image_type: Option<u64>,
+    /// Up to 4 image previews displayed in the background of the bubble
+    pub images: Vec<&'a str>,
+    /// Icons that represent the websute, generally the favicon or apple-touch-icon
+    pub icons: Vec<&'a str>,
     pub placeholder: bool,
 }
 
 impl<'a> BalloonProvider<'a> for URLMessage<'a> {
-    fn from_map(payload: &'a HashMap<&'a str, &'a Value>) -> Result<Self, PlistParseError<'a>> {
+    fn from_map(payload: &'a Value) -> Result<Self, PlistParseError> {
+        let url_metadata = payload
+            .as_dictionary()
+            .unwrap()
+            .get("richLinkMetadata")
+            .ok_or(PlistParseError::MissingKey("richLinkMetadata".to_string()))?;
         Ok(URLMessage {
-            title: extract_parsed_str(payload, "title"),
-            summary: extract_parsed_str(payload, "summary"),
-            url: extract_parsed_str(payload, "URL"),
-            original_url: extract_parsed_str(payload, "originalURL"),
-            mime_type: extract_parsed_str(payload, "MIMEType"),
-            item_type: extract_parsed_str(payload, "itemType"),
-            image_type: payload
-                .get("imageType")
-                .and_then(|item| item.as_unsigned_integer()),
-            placeholder: payload
-                .get("richLinkIsPlaceholder")
-                .and_then(|item| item.as_boolean())
-                .unwrap_or(false),
+            title: get_string_from_dict(url_metadata, "title"),
+            summary: get_string_from_dict(url_metadata, "summary"),
+            url: get_string_from_nested_dict(url_metadata, "URL"),
+            original_url: get_string_from_nested_dict(url_metadata, "originalURL"),
+            item_type: get_string_from_dict(url_metadata, "itemType"),
+            images: URLMessage::get_array_from_nested_dict(url_metadata, "images")
+                .unwrap_or(vec![]),
+            icons: URLMessage::get_array_from_nested_dict(url_metadata, "icons").unwrap_or(vec![]),
+            placeholder: get_bool_from_dict(url_metadata, "richLinkIsPlaceholder").unwrap_or(false),
         })
+    }
+}
+
+impl<'a> URLMessage<'a> {
+    /// Extract the array of image URLs from a URL message payload.
+    ///
+    /// The array consists of dictionaries that look like this:
+    /// ```json
+    /// [
+    ///     {
+    ///         "size": String("{0, 0}"),
+    ///         "URL": {
+    ///              "URL": String("https://chrissardegna.com/example.png")
+    ///          },
+    ///         "images": Integer(1)
+    ///     },
+    ///     ...
+    /// ]
+    /// ```
+    fn get_array_from_nested_dict(payload: &'a Value, key: &str) -> Option<Vec<&'a str>> {
+        payload
+            .as_dictionary()?
+            .get(key)?
+            .as_dictionary()?
+            .get(key)?
+            .as_array()?
+            .iter()
+            .map(|item| get_string_from_nested_dict(item, "URL"))
+            .collect()
     }
 }
 
@@ -75,9 +107,9 @@ mod tests {
             summary: None,
             url: Some("https://chrissardegna.com/"),
             original_url: Some("https://chrissardegna.com"),
-            mime_type: Some("image/vnd.microsoft.icon"),
             item_type: None,
-            image_type: Some(0),
+            images: vec![],
+            icons: vec!["https://chrissardegna.com/favicon.ico"],
             placeholder: false,
         };
 
@@ -93,17 +125,24 @@ mod tests {
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = parse_plist(&plist).unwrap();
-        println!("{parsed:?}");
 
         let balloon = URLMessage::from_map(&parsed).unwrap();
+        println!("{balloon:?}\n");
         let expected = URLMessage {
             title: Some("Christopher Sardegna on Twitter"),
             summary: Some("“Hello Twitter, meet Bella”"),
             url: Some("https://twitter.com/rxcs/status/1175874352946077696"),
             original_url: Some("https://twitter.com/rxcs/status/1175874352946077696"),
-            mime_type: Some("image/png"),
             item_type: Some("article"),
-            image_type: Some(0),
+            images: vec![
+                "https://pbs.twimg.com/media/EFGLfR2X4AE8ItK.jpg:large",
+                "https://pbs.twimg.com/media/EFGLfRmX4AMnwqW.jpg:large",
+                "https://pbs.twimg.com/media/EFGLfRlXYAYn9Ce.jpg:large",
+            ],
+            icons: vec![
+                "https://abs.twimg.com/icons/apple-touch-icon-192x192.png",
+                "https://abs.twimg.com/favicons/favicon.ico",
+            ],
             placeholder: false,
         };
 
