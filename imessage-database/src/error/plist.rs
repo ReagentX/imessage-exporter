@@ -2,18 +2,18 @@ use std::fmt::{Display, Formatter, Result};
 
 /// Errors that can happen when parsing the plist data stored in the `payload_data` field
 #[derive(Debug)]
-pub enum PlistParseError<'a> {
-    MissingKey(&'a str),
+pub enum PlistParseError {
+    MissingKey(String),
     NoValueAtIndex(usize),
-    InvalidType(&'a str, &'a str),
-    InvalidTypeIndex(usize, &'a str),
+    InvalidType(String, String),
+    InvalidTypeIndex(usize, String),
     InvalidDictionarySize(usize, usize),
     NoPayload,
     WrongMessageType,
     ParseError(String),
 }
 
-impl<'a> Display for PlistParseError<'a> {
+impl<'a> Display for PlistParseError {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result {
         match self {
             PlistParseError::MissingKey(key) => write!(fmt, "Expected key {}, found nothing!", key),
