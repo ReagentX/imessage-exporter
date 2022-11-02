@@ -38,7 +38,10 @@ impl<'a> BalloonProvider<'a> for URLMessage<'a> {
     fn from_map(payload: &'a Value) -> Result<Self, PlistParseError> {
         let url_metadata = payload
             .as_dictionary()
-            .unwrap()
+            .ok_or(PlistParseError::InvalidType(
+                "root".to_string(),
+                "dictionary".to_string(),
+            ))?
             .get("richLinkMetadata")
             .ok_or(PlistParseError::MissingKey("richLinkMetadata".to_string()))?;
         Ok(URLMessage {
