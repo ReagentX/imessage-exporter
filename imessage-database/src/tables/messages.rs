@@ -254,11 +254,16 @@ impl Message {
                 let mut start: usize = 0;
                 let mut end: usize = 0;
                 for (idx, char) in text.char_indices() {
-                    // If the message is a URL prevuew then we render it as an app
-                    if self.is_url() {
+
+                    // If the message is an app, add the app to the body first
+                    // if the message is a URL or a Workout, we don't care about the rest of the body
+                    if let Variant::App(balloon) = self.variant() {
                         out_v.push(BubbleType::App);
-                        return out_v;
+                        if matches!(balloon, CustomBalloon::URL | CustomBalloon::Workout) {
+                            return out_v;
+                        }
                     }
+
                     if REPLACEMENT_CHARS.contains(&char) {
                         if start < end {
                             out_v.push(BubbleType::Text(text[start..idx].trim()));
@@ -682,9 +687,10 @@ impl Message {
 #[cfg(test)]
 mod tests {
     use crate::{
-        message_types::expressives,
+        message_types::{expressives, variants::CustomBalloon},
         tables::messages::{BubbleType, Message},
         util::dates::get_offset,
+        Variant,
     };
 
     fn blank() -> Message {
@@ -904,6 +910,12 @@ mod tests {
         assert_eq!(
             m.parse_balloon_bundle_id(),
             Some("com.contextoptional.OpenTable.Messages")
-        )
+        );
+        assert!(matches!(
+            m.variant(),
+            Variant::App(CustomBalloon::Application(
+                "com.contextoptional.OpenTable.Messages"
+            ))
+        ));
     }
 }
