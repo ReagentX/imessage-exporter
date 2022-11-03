@@ -66,9 +66,7 @@ impl<'a> URLMessage<'a> {
         } else if root_dict.contains_key("metadata") {
             return Ok(root_dict.get("metadata").unwrap());
         };
-        Err(PlistParseError::MissingKey(
-            "richLinkMetadata or metadata".to_string(),
-        ))
+        Err(PlistParseError::NoPayload)
     }
     /// Extract the array of image URLs from a URL message payload.
     ///
@@ -151,7 +149,7 @@ mod tests {
             icons: vec![
                 "https://chrissardegna.com/apple-touch-icon-180x180.png",
                 "https://chrissardegna.com/ddc-icon-32x32.png",
-                "https://chrissardegna.com/ddc-icon-16x16.png"
+                "https://chrissardegna.com/ddc-icon-16x16.png",
             ],
             placeholder: false,
         };
