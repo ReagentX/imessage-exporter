@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     app::{progress::build_progress_bar_export, runtime::Config},
-    exporters::exporter::{Exporter, Writer},
+    exporters::exporter::{BalloonFormatter, Exporter, Writer},
 };
 
 use imessage_database::{
@@ -19,7 +19,7 @@ use imessage_database::{
     },
     tables::{
         messages::BubbleType,
-        table::{ME, ORPHANED, UNKNOWN},
+        table::{FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN},
     },
     util::{dates, plist::parse_plist},
     Attachment, Variant, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
@@ -106,6 +106,12 @@ impl<'a> Writer<'a> for TXT<'a> {
 
         // Add message date
         self.add_line(&mut formatted_message, &self.get_time(message), &indent);
+        // TODO: Remove
+        self.add_line(
+            &mut formatted_message,
+            &format!("{}", message.guid),
+            &indent,
+        );
 
         // Add message sender
         self.add_line(
@@ -130,7 +136,15 @@ impl<'a> Writer<'a> for TXT<'a> {
         // Generate the message body from it's components
         for (idx, message_part) in message_parts.iter().enumerate() {
             match message_part {
-                BubbleType::Text(text) => self.add_line(&mut formatted_message, text, &indent),
+                // Fitness messages have a prefix that we need to replace with the opposite if who sent the message
+                BubbleType::Text(text) => match text.starts_with(FITNESS_RECEIVER) {
+                    true => self.add_line(
+                        &mut formatted_message,
+                        &text.replace(FITNESS_RECEIVER, "You"),
+                        &indent,
+                    ),
+                    false => self.add_line(&mut formatted_message, text, &indent),
+                },
                 BubbleType::Attachment => match attachments.get_mut(attachment_index) {
                     Some(attachment) => match self.format_attachment(attachment) {
                         Ok(result) => {
@@ -200,7 +214,7 @@ impl<'a> Writer<'a> for TXT<'a> {
             );
         }
 
-        // TODO: We add 2 newlines for messages that have replies
+        // TODO: We add 2 newlines for messages that have replies with `has_replies`
         if indent.is_empty() {
             // Add a newline for top-level messages
             formatted_message.push('\n');
@@ -225,13 +239,16 @@ impl<'a> Writer<'a> for TXT<'a> {
                 Some(payload) => {
                     let parsed = parse_plist(&payload)?;
 
+                    // Handle URL messages separately since they are a special case
                     let res = if matches!(balloon, CustomBalloon::URL) {
                         // Handle the URL case
                         match URLMessage::from_map(&parsed) {
-                            Ok(bubble) => {
-                                format!("{:?}\n{:?}\n{:?}", bubble.title, bubble.summary, bubble.url)
-                            }
+                            Ok(bubble) => self.format_url(&bubble),
                             Err(why) => {
+                                // If we didn't parse the URL blob, try and get the message text, which may contain the URL
+                                if let Some(txt) = &message.text {
+                                    return Ok(txt.to_string());
+                                }
                                 return Err(PlistParseError::ParseError(format!("{why}")));
                             }
                         }
@@ -239,28 +256,19 @@ impl<'a> Writer<'a> for TXT<'a> {
                         // Handle the app case
                         match AppMessage::from_map(&parsed) {
                             Ok(bubble) => match balloon {
-                                CustomBalloon::Application(bundle_id) => bundle_id.to_string(),
-                                CustomBalloon::Handwriting => {
-                                    "Handwritten messages are not yet supported!".to_string()
+                                CustomBalloon::Application(bundle_id) => {
+                                    self.format_generic_app(&bubble, bundle_id)
                                 }
-                                CustomBalloon::ApplePay => {
-                                    format!("{:?} transaction: {:?}", bubble.caption, bubble.ldtext)
-                                }
-                                CustomBalloon::Workout => {
-                                    format!("{:?} message: {:?}", bubble.app_name, bubble.ldtext)
-                                }
-                                CustomBalloon::Slideshow => {
-                                    format!("Photo album: {:?}: {:?}", bubble.ldtext, bubble.url)
-                                }
-                                CustomBalloon::URL => {
-                                    unreachable!()
-                                }
+                                CustomBalloon::Handwriting => self.format_handwriting(&bubble),
+                                CustomBalloon::ApplePay => self.format_apple_pay(&bubble),
+                                CustomBalloon::Fitness => self.format_fitness(&bubble),
+                                CustomBalloon::Slideshow => self.format_slideshow(&bubble),
+                                CustomBalloon::URL => unreachable!(),
                             },
                             Err(why) => return Err(PlistParseError::ParseError(format!("{why}"))),
                         }
                     };
                     app_bubble.push_str(&res);
-                    // panic!("{}, {:?}", message.rowid, app_bubble);
                 }
                 None => {
                     // Sometimes, URL messages are missing their payloads
@@ -350,6 +358,123 @@ impl<'a> Writer<'a> for TXT<'a> {
             .open(file)
             .unwrap();
         file.write_all(text.as_bytes()).unwrap();
+    }
+}
+
+impl<'a> BalloonFormatter for TXT<'a> {
+    fn format_url(&self, balloon: &URLMessage) -> String {
+        let mut out_s = String::new();
+
+        if let Some(url) = balloon.url {
+            out_s.push_str(url);
+            out_s.push_str("\n");
+        }
+
+        if let Some(title) = balloon.title {
+            out_s.push_str(title);
+            out_s.push_str("\n");
+        }
+
+        if let Some(summary) = balloon.summary {
+            out_s.push_str(summary);
+            out_s.push_str("\n");
+        }
+
+        // We want to keep the newlines between blocks, but the last one should be removed
+        out_s.strip_suffix('\n').unwrap_or(&out_s).to_string()
+    }
+
+    fn format_handwriting(&self, _: &AppMessage) -> String {
+        String::from("Handwritten messages are not yet supported!")
+    }
+
+    fn format_apple_pay(&self, balloon: &AppMessage) -> String {
+        let mut out_s = String::new();
+        if let Some(caption) = balloon.caption {
+            out_s.push_str(caption);
+            out_s.push_str(" transaction: ");
+        }
+
+        if let Some(ldtext) = balloon.ldtext {
+            out_s.push_str(ldtext);
+        } else {
+            out_s.push_str("unknown amount");
+        }
+
+        out_s
+    }
+
+    fn format_fitness(&self, balloon: &AppMessage) -> String {
+        let mut out_s = String::new();
+        if let Some(app_name) = balloon.app_name {
+            out_s.push_str(app_name);
+            out_s.push_str(" message: ");
+        }
+        if let Some(ldtext) = balloon.ldtext {
+            out_s.push_str(ldtext);
+        } else {
+            out_s.push_str("unknown workout");
+        }
+        out_s
+    }
+
+    fn format_slideshow(&self, balloon: &AppMessage) -> String {
+        let mut out_s = String::new();
+        if let Some(ldtext) = balloon.ldtext {
+            out_s.push_str("Photo album: ");
+            out_s.push_str(ldtext);
+        }
+
+        if let Some(url) = balloon.url {
+            out_s.push(' ');
+            out_s.push_str(url);
+        }
+
+        out_s
+    }
+
+    fn format_generic_app(&self, balloon: &AppMessage, bundle_id: &str) -> String {
+        let mut out_s = String::new();
+
+        if let Some(name) = balloon.app_name {
+            out_s.push_str(name);
+        } else {
+            out_s.push_str(bundle_id);
+        }
+
+        out_s.push_str(" message:\n");
+        if let Some(title) = balloon.title {
+            out_s.push_str(title);
+            out_s.push_str("\n");
+        }
+
+        if let Some(subtitle) = balloon.subtitle {
+            out_s.push_str(subtitle);
+            out_s.push_str("\n");
+        }
+
+        if let Some(caption) = balloon.caption {
+            out_s.push_str(caption);
+            out_s.push_str("\n");
+        }
+
+        if let Some(subcaption) = balloon.subcaption {
+            out_s.push_str(subcaption);
+            out_s.push_str("\n");
+        }
+
+        if let Some(trailing_caption) = balloon.trailing_caption {
+            out_s.push_str(trailing_caption);
+            out_s.push_str("\n");
+        }
+
+        if let Some(trailing_subcaption) = balloon.trailing_subcaption {
+            out_s.push_str(trailing_subcaption);
+            out_s.push_str("\n");
+        }
+
+        // We want to keep the newlines between blocks, but the last one should be removed
+        out_s.strip_suffix('\n').unwrap_or(&out_s).to_string()
     }
 }
 
