@@ -258,8 +258,8 @@ impl Message {
                     // If the message is an app, add the app to the body first
                     // if the message is a URL or a Workout, we don't care about the rest of the body
                     if let Variant::App(balloon) = self.variant() {
-                        out_v.push(BubbleType::App);
-                        if matches!(balloon, CustomBalloon::URL | CustomBalloon::Workout) {
+                        if matches!(balloon, CustomBalloon::URL | CustomBalloon::Fitness) {
+                            out_v.push(BubbleType::App);
                             return out_v;
                         }
                     }
@@ -570,7 +570,7 @@ impl Message {
                         Variant::App(CustomBalloon::ApplePay)
                     }
                     "com.apple.ActivityMessagesApp.MessagesExtension" => {
-                        Variant::App(CustomBalloon::Workout)
+                        Variant::App(CustomBalloon::Fitness)
                     }
                     "com.apple.mobileslideshow.PhotosMessagesApp" => {
                         Variant::App(CustomBalloon::Slideshow)
