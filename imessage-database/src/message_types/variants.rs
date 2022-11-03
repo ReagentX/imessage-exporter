@@ -48,7 +48,7 @@ pub enum CustomBalloon<'a> {
     /// Apple Pay (one of Sent, Requested, Received)
     ApplePay,
     /// Fitness.app messages
-    Workout,
+    Fitness,
     /// Photos.app slideshow messages
     Slideshow,
 }
