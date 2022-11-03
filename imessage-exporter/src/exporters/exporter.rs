@@ -1,6 +1,10 @@
 use std::path::Path;
 
-use imessage_database::{Attachment, Message, error::plist::PlistParseError};
+use imessage_database::{
+    error::plist::PlistParseError,
+    message_types::{app::AppMessage, url::URLMessage},
+    Attachment, Message,
+};
 
 use crate::app::runtime::Config;
 
@@ -27,4 +31,19 @@ pub(super) trait Writer<'a> {
     /// Format an annoucement message
     fn format_annoucement(&self, msg: &'a Message) -> String;
     fn write_to_file(file: &Path, text: &str);
+}
+
+pub(super) trait BalloonFormatter {
+    /// Format a URL message
+    fn format_url(&self, balloon: &URLMessage) -> String;
+    /// Format a handwritten note message
+    fn format_handwriting(&self, balloon: &AppMessage) -> String;
+    /// Format an Apple Pay message
+    fn format_apple_pay(&self, balloon: &AppMessage) -> String;
+    /// Format a Fitness message
+    fn format_fitness(&self, balloon: &AppMessage) -> String;
+    /// Format a Photo Slideshow message
+    fn format_slideshow(&self, balloon: &AppMessage) -> String;
+    /// Format a generic app, generally third party
+    fn format_generic_app(&self, balloon: &AppMessage, bundle_id: &str) -> String;
 }
