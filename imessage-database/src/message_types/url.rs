@@ -189,4 +189,29 @@ mod tests {
 
         assert_eq!(balloon, expected);
     }
+
+    #[test]
+    fn test_parse_url_reminder() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/Reminder.plist");
+        let plist_data = File::open(plist_path).unwrap();
+        let plist = Value::from_reader(plist_data).unwrap();
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = URLMessage::from_map(&parsed).unwrap();
+        let expected = URLMessage {
+            title: None,
+            summary: None,
+            url: None,
+            original_url: Some("https://www.icloud.com/reminders/ZmFrZXVybF9mb3JfcmVtaW5kZXI#TestList"),
+            item_type: None,
+            images: vec![],
+            icons: vec![],
+            placeholder: false,
+        };
+
+        assert_eq!(balloon, expected);
+    }
 }

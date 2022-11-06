@@ -362,6 +362,9 @@ impl<'a> BalloonFormatter for TXT<'a> {
         if let Some(url) = balloon.url {
             out_s.push_str(url);
             out_s.push_str("\n");
+        } else if let Some(original_url) = balloon.original_url {
+            out_s.push_str(original_url);
+            out_s.push_str("\n");
         }
 
         if let Some(title) = balloon.title {
