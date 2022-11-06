@@ -30,7 +30,7 @@ This crate supports every iMessage feature as of MacOS 12.6.1 (21G217):
 - URL Previews
 - App Integrations
 
-See more detail about supported features [here](/docs/binary/features.md)
+See more detail about supported features [here](/docs/binary/features.md).
 
 ## Documentation
 
