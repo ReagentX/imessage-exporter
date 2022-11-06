@@ -234,14 +234,14 @@ impl<'a> Writer<'a> for TXT<'a> {
                     let parsed = parse_plist(&payload)?;
 
                     // Handle URL messages separately since they are a special case
-                    let res = if matches!(balloon, CustomBalloon::URL) {
+                    let res = if message.is_url() {
                         // Handle the URL case
                         match URLMessage::from_map(&parsed) {
                             Ok(bubble) => self.format_url(&bubble),
                             Err(why) => {
                                 // If we didn't parse the URL blob, try and get the message text, which may contain the URL
-                                if let Some(txt) = &message.text {
-                                    return Ok(txt.to_string());
+                                if let Some(text) = &message.text {
+                                    return Ok(text.to_string());
                                 }
                                 return Err(PlistParseError::ParseError(format!("{why}")));
                             }
@@ -266,7 +266,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                 }
                 None => {
                     // Sometimes, URL messages are missing their payloads
-                    if matches!(balloon, CustomBalloon::URL) {
+                    if message.is_url() {
                         if let Some(text) = &message.text {
                             return Ok(text.to_string());
                         }
