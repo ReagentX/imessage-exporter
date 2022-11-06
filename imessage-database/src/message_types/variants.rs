@@ -37,6 +37,10 @@ pub enum Reaction {
     Questioned,
 }
 
+/// Application Messages
+/// 
+/// Messages sent via an app's iMessage integration will send in a special balloon instead of a normal
+/// text balloon. This represents the different variants of message balloon.
 #[derive(Debug)]
 pub enum CustomBalloon<'a> {
     /// Generic third party applications
@@ -53,7 +57,10 @@ pub enum CustomBalloon<'a> {
     Slideshow,
 }
 
-/// Variant container
+/// Message variant container
+/// 
+/// Messages can exist as one of many different variants, this encapsulates
+/// all of the possibilities.
 #[derive(Debug)]
 pub enum Variant<'a> {
     Reaction(usize, bool, Reaction),

@@ -9,7 +9,10 @@ use plist::Value;
 use rusqlite::{Connection, Error, Result, Row, Statement};
 
 use crate::{
-    message_types::variants::{CustomBalloon, Reaction, Variant},
+    message_types::{
+        expressives::{BubbleEffect, Expressive, ScreenEffect},
+        variants::{CustomBalloon, Reaction, Variant},
+    },
     tables::table::{
         Cacheable, Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE, MESSAGE_ATTACHMENT_JOIN,
         MESSAGE_PAYLOAD,
@@ -18,7 +21,6 @@ use crate::{
         dates::readable_diff,
         output::{done_processing, processing},
     },
-    BubbleEffect, Expressive, ScreenEffect,
 };
 
 const ATTACHMENT_CHAR: char = '\u{FFFC}';
@@ -253,8 +255,8 @@ impl Message {
                 let mut out_v = vec![];
                 let mut start: usize = 0;
                 let mut end: usize = 0;
-                for (idx, char) in text.char_indices() {
 
+                for (idx, char) in text.char_indices() {
                     // If the message is an app, add the app to the body first
                     // if the message is a URL or a Workout, we don't care about the rest of the body
                     if let Variant::App(balloon) = self.variant() {
@@ -369,6 +371,7 @@ impl Message {
         self.expressive_send_style_id.is_some()
     }
 
+    /// `true` if the message has a URL preview, else `false`
     pub fn is_url(&self) -> bool {
         matches!(self.variant(), Variant::App(CustomBalloon::URL))
     }
@@ -629,16 +632,7 @@ impl Message {
         }
     }
 
-    pub fn case(&self) -> MessageType {
-        if self.is_reply() {
-            MessageType::Reply(self.variant(), self.get_expressive())
-        } else if self.has_replies() {
-            MessageType::Thread(self.variant(), self.get_expressive())
-        } else {
-            MessageType::Normal(self.variant(), self.get_expressive())
-        }
-    }
-
+    /// Determine which expressive the message was sent with
     pub fn get_expressive(&self) -> Expressive {
         match &self.expressive_send_style_id {
             Some(content) => match content.as_str() {
