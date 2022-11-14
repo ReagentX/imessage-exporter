@@ -27,7 +27,7 @@ pub struct URLMessage<'a> {
     pub item_type: Option<&'a str>,
     /// Up to 4 image previews displayed in the background of the bubble
     pub images: Vec<&'a str>,
-    /// Icons that represent the websute, generally the favicon or apple-touch-icon
+    /// Icons that represent the website, generally the favicon or apple-touch-icon
     pub icons: Vec<&'a str>,
     pub placeholder: bool,
 }
@@ -205,7 +205,9 @@ mod tests {
             title: None,
             summary: None,
             url: None,
-            original_url: Some("https://www.icloud.com/reminders/ZmFrZXVybF9mb3JfcmVtaW5kZXI#TestList"),
+            original_url: Some(
+                "https://www.icloud.com/reminders/ZmFrZXVybF9mb3JfcmVtaW5kZXI#TestList",
+            ),
             item_type: None,
             images: vec![],
             icons: vec![],
