@@ -150,7 +150,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                     // Attachment does not exist in attachments table
                     None => self.add_line(&mut formatted_message, "Attachment missing!", &indent),
                 },
-                BubbleType::App => match self.format_app(message) {
+                BubbleType::App => match self.format_app(message, &mut attachments) {
                     Ok(ok_bubble) => self.add_line(&mut formatted_message, &ok_bubble, &indent),
                     Err(why) => self.add_line(
                         &mut formatted_message,
@@ -225,7 +225,7 @@ impl<'a> Writer<'a> for TXT<'a> {
         }
     }
 
-    fn format_app(&self, message: &'a Message) -> Result<String, PlistParseError> {
+    fn format_app(&self, message: &'a Message, attachments: &mut Vec<Attachment>) -> Result<String, PlistParseError> {
         if let Variant::App(balloon) = message.variant() {
             let mut app_bubble = String::new();
 
@@ -251,7 +251,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                         match AppMessage::from_map(&parsed) {
                             Ok(bubble) => match balloon {
                                 CustomBalloon::Application(bundle_id) => {
-                                    self.format_generic_app(&bubble, bundle_id)
+                                    self.format_generic_app(&bubble, bundle_id, attachments)
                                 }
                                 CustomBalloon::Handwriting => self.format_handwriting(&bubble),
                                 CustomBalloon::ApplePay => self.format_apple_pay(&bubble),
@@ -430,7 +430,7 @@ impl<'a> BalloonFormatter for TXT<'a> {
         out_s
     }
 
-    fn format_generic_app(&self, balloon: &AppMessage, bundle_id: &str) -> String {
+    fn format_generic_app(&self, balloon: &AppMessage, bundle_id: &str, _: &mut Vec<Attachment>) -> String {
         let mut out_s = String::new();
 
         if let Some(name) = balloon.app_name {
