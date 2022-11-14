@@ -26,7 +26,7 @@ use crate::error::plist::PlistParseError;
 ///   - but that like message will get dropped when the unlike message arrives
 ///   - When messages drop the ROWIDs become non-sequential: the ID of the dropped message row is not reused
 ///   - This means unliking an old message will make it look like the reaction was applied/removed at the
-///   - time of latest change; the history of reaction statuses is not kept
+///   time of latest change; the history of reaction statuses is not kept
 #[derive(Debug)]
 pub enum Reaction {
     Loved,
@@ -38,7 +38,7 @@ pub enum Reaction {
 }
 
 /// Application Messages
-/// 
+///
 /// Messages sent via an app's iMessage integration will send in a special balloon instead of a normal
 /// text balloon. This represents the different variants of message balloon.
 #[derive(Debug)]
@@ -58,7 +58,7 @@ pub enum CustomBalloon<'a> {
 }
 
 /// Message variant container
-/// 
+///
 /// Messages can exist as one of many different variants, this encapsulates
 /// all of the possibilities.
 #[derive(Debug)]
