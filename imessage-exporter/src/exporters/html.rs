@@ -11,15 +11,23 @@ use crate::{
 };
 
 use imessage_database::{
+    error::plist::PlistParseError,
+    message_types::{
+        app::AppMessage,
+        url::URLMessage,
+        variants::{BalloonProvider, CustomBalloon},
+    },
     tables::{
         attachment::MediaType,
         messages::BubbleType,
         table::{ME, ORPHANED, UNKNOWN},
     },
-    util::{dates, dirs::home},
-    Attachment, {BubbleEffect, Expressive, Message, ScreenEffect, Table}, error::plist::PlistParseError,
+    util::{dates, dirs::home, plist::parse_plist},
+    Attachment, Variant, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
 };
 use uuid::Uuid;
+
+use super::exporter::BalloonFormatter;
 
 const HEADER: &str = "<html>\n<meta charset=\"UTF-8\">";
 const FOOTER: &str = "</html>";
@@ -157,7 +165,7 @@ impl<'a> Writer<'a> for HTML<'a> {
         let replies = message.get_replies(&self.config.db)?;
         let reactions = message.get_reactions(&self.config.db, &self.config.reactions)?;
 
-        // Index of where we are in the attachment Vector
+        // Index of where we are in the attachment Vectorddddfgfgfdfdd
         let mut attachment_index: usize = 0;
 
         if let Some(subject) = &message.subject {
@@ -165,8 +173,8 @@ impl<'a> Writer<'a> for HTML<'a> {
             self.add_line(
                 &mut formatted_message,
                 subject,
-                "<span class=\"subject\">",
-                "</span>",
+                "<p>Subject: <span class=\"subject\">",
+                "</span></p>",
             );
         }
 
@@ -215,18 +223,18 @@ impl<'a> Writer<'a> for HTML<'a> {
                     }
                 }
                 // TODO: Support app messages
-                BubbleType::App => match self.format_app(message) {
+                BubbleType::App => match self.format_app(message, &mut attachments) {
                     Ok(ok_bubble) => self.add_line(
                         &mut formatted_message,
                         &ok_bubble,
-                        "<span class=\"app\">",
-                        "</span>",
+                        "<div class=\"app\">",
+                        "</div>",
                     ),
                     Err(why) => self.add_line(
                         &mut formatted_message,
                         &format!("Unable to format app message: {why}"),
-                        "<span class=\"app_error\">",
-                        "</span>",
+                        "<div class=\"app_error\">",
+                        "</div>",
                     ),
                 },
             };
@@ -399,10 +407,60 @@ impl<'a> Writer<'a> for HTML<'a> {
         }
     }
 
-    fn format_app(&self, _: &'a Message) -> Result<String, PlistParseError> {
-        // TODO: Implement app messages
-        // TODO: Support Apple Pay variants
-        Ok("App messages not yet implemented!".to_string())
+    fn format_app(
+        &self,
+        message: &'a Message,
+        attachments: &mut Vec<Attachment>,
+    ) -> Result<String, PlistParseError> {
+        if let Variant::App(balloon) = message.variant() {
+            let mut app_bubble = String::new();
+
+            match message.payload_data(&self.config.db) {
+                Some(payload) => {
+                    let parsed = parse_plist(&payload)?;
+
+                    let res = if message.is_url() {
+                        match URLMessage::from_map(&parsed) {
+                            Ok(bubble) => self.format_url(&bubble),
+                            Err(why) => {
+                                // If we didn't parse the URL blob, try and get the message text, which may contain the URL
+                                if let Some(text) = &message.text {
+                                    return Ok(text.to_string());
+                                }
+                                return Err(PlistParseError::ParseError(format!("{why}")));
+                            }
+                        }
+                    } else {
+                        match AppMessage::from_map(&parsed) {
+                            Ok(bubble) => match balloon {
+                                CustomBalloon::Application(bundle_id) => {
+                                    self.format_generic_app(&bubble, bundle_id, attachments)
+                                }
+                                CustomBalloon::Handwriting => self.format_handwriting(&bubble),
+                                CustomBalloon::ApplePay => self.format_apple_pay(&bubble),
+                                CustomBalloon::Fitness => self.format_fitness(&bubble),
+                                CustomBalloon::Slideshow => self.format_slideshow(&bubble),
+                                CustomBalloon::URL => unreachable!(),
+                            },
+                            Err(why) => return Err(PlistParseError::ParseError(format!("{why}"))),
+                        }
+                    };
+                    app_bubble.push_str(&res);
+                }
+                None => {
+                    // Sometimes, URL messages are missing their payloads
+                    if message.is_url() {
+                        if let Some(text) = &message.text {
+                            return Ok(text.to_string());
+                        }
+                    }
+                    return Err(PlistParseError::NoPayload);
+                }
+            }
+            Ok(app_bubble)
+        } else {
+            Err(PlistParseError::WrongMessageType)
+        }
     }
 
     fn format_reaction(&self, msg: &Message) -> Result<String, String> {
@@ -484,6 +542,37 @@ impl<'a> Writer<'a> for HTML<'a> {
     }
 }
 
+impl<'a> BalloonFormatter for HTML<'a> {
+    fn format_url(&self, balloon: &URLMessage) -> String {
+        String::from("URL messages are not yet supported!")
+    }
+
+    fn format_handwriting(&self, balloon: &AppMessage) -> String {
+        String::from("Handwritten messages are not yet supported!")
+    }
+
+    fn format_apple_pay(&self, balloon: &AppMessage) -> String {
+        String::from("Apple Pay messages are not yet supported!")
+    }
+
+    fn format_fitness(&self, balloon: &AppMessage) -> String {
+        String::from("Fitness messages are not yet supported!")
+    }
+
+    fn format_slideshow(&self, balloon: &AppMessage) -> String {
+        String::from("Slideshow messages are not yet supported!")
+    }
+
+    fn format_generic_app(
+        &self,
+        balloon: &AppMessage,
+        bundle_id: &str,
+        attachments: &mut Vec<Attachment>,
+    ) -> String {
+        self.balloon_to_html(balloon, bundle_id, attachments)
+    }
+}
+
 impl<'a> HTML<'a> {
     fn get_time(&self, message: &Message) -> String {
         let mut date = dates::format(&message.date(&self.config.offset));
@@ -517,6 +606,95 @@ impl<'a> HTML<'a> {
         HTML::write_to_file(path, "<style>\n");
         HTML::write_to_file(path, STYLE);
         HTML::write_to_file(path, "\n</style>");
+    }
+
+    fn balloon_to_html(
+        &self,
+        balloon: &AppMessage,
+        bundle_id: &str,
+        attachments: &mut Vec<Attachment>,
+    ) -> String {
+        println!("{:?}", balloon);
+        let mut out_s = String::new();
+        if let Some(url) = balloon.url {
+            out_s.push_str("<a href=\"");
+            out_s.push_str(url);
+            out_s.push_str("\">");
+        }
+        out_s.push_str("<div class=\"app_header\">");
+
+        // Image
+        if let Some(image) = balloon.image {
+            out_s.push_str("<img src=\"");
+            out_s.push_str(image);
+            out_s.push_str("\">");
+        } else if let Some(attachment) = attachments.get_mut(0) {
+            out_s.push_str(&self.format_attachment(attachment).unwrap_or_default());
+        }
+
+        // Name
+        out_s.push_str("<div class=\"name\">");
+        out_s.push_str(balloon.app_name.unwrap_or(bundle_id));
+        out_s.push_str("</div>");
+
+        // Title
+        if let Some(title) = balloon.title {
+            out_s.push_str("<div class=\"image_title\">");
+            out_s.push_str(title);
+            out_s.push_str("</div>");
+        }
+
+        // Subtitle
+        if let Some(subtitle) = balloon.subtitle {
+            out_s.push_str("<div class=\"image_subtitle\">");
+            out_s.push_str(subtitle);
+            out_s.push_str("</div>");
+        }
+
+        // ldtext
+        if let Some(ldtext) = balloon.ldtext {
+            out_s.push_str("<div class=\"ldtext\">");
+            out_s.push_str(ldtext);
+            out_s.push_str("</div>");
+        }
+
+        // Header end, footer begin
+        out_s.push_str("</div>");
+        out_s.push_str("<div class=\"app_footer\">");
+
+        // Caption
+        if let Some(caption) = balloon.caption {
+            out_s.push_str("<div class=\"caption\">");
+            out_s.push_str(caption);
+            out_s.push_str("</div>");
+        }
+
+        // Subcaption
+        if let Some(subcaption) = balloon.subcaption {
+            out_s.push_str("<div class=\"subcaption\">");
+            out_s.push_str(subcaption);
+            out_s.push_str("</div>");
+        }
+
+        // Trailing Caption
+        if let Some(trailing_caption) = balloon.trailing_caption {
+            out_s.push_str("<div class=\"trailing_caption\">");
+            out_s.push_str(trailing_caption);
+            out_s.push_str("</div>");
+        }
+
+        // Trailing Subcaption
+        if let Some(trailing_subcaption) = balloon.trailing_subcaption {
+            out_s.push_str("<div class=\"trailing_subcaption\">");
+            out_s.push_str(trailing_subcaption);
+            out_s.push_str("</div>");
+        }
+
+        out_s.push_str("</div>");
+        if balloon.url.is_some() {
+            out_s.push_str("</a>");
+        }
+        out_s
     }
 }
 
