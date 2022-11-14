@@ -257,13 +257,10 @@ impl Message {
                 let mut end: usize = 0;
 
                 for (idx, char) in text.char_indices() {
-                    // If the message is an app, add the app to the body first
-                    // if the message is a URL or a Workout, we don't care about the rest of the body
-                    if let Variant::App(balloon) = self.variant() {
-                        if matches!(balloon, CustomBalloon::URL | CustomBalloon::Fitness) {
-                            out_v.push(BubbleType::App);
-                            return out_v;
-                        }
+                    // If the message is an app, it will be rendered differently, so just escape there
+                    if self.balloon_bundle_id.is_some() {
+                        out_v.push(BubbleType::App);
+                        return out_v
                     }
 
                     if REPLACEMENT_CHARS.contains(&char) {
