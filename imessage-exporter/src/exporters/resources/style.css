@@ -86,6 +86,11 @@ p {
 	padding: 15px;
 }
 
+.app {
+	background: white;
+	border-radius: 25px;
+}
+
 .app a {
 	text-decoration: none;
 }
@@ -111,9 +116,7 @@ p {
 	border-right-color: darkgray;
 	
 	border-width: thin;
-	background: white;
 	color: black;
-	text-decoration: none;
 }
 
 
