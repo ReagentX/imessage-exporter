@@ -42,7 +42,7 @@ pub trait Diagnostic {
 
 /// Get a connection to the iMessage SQLite database
 pub fn get_connection(path: &str) -> Connection {
-    match Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
+    match Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
         Ok(res) => res,
         Err(why) => panic!("Unable to read from chat database: {}\nEnsure full disk access is enabled for your terminal emulator in System Preferences > Security and Privacy > Full Disk Access", why),
     }

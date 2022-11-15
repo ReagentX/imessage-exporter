@@ -40,7 +40,7 @@ pub enum MessageType<'a> {
 }
 
 /// Defines the parts of a message bubble, i.e. the content that can exist in a single message.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum BubbleType<'a> {
     /// A normal text message
     Text(&'a str),
@@ -226,16 +226,15 @@ impl Cacheable for Message {
         for reaction in messages {
             let reaction = Self::extract(reaction)?;
             if reaction.is_reaction() {
-                match reaction.clean_associated_guid() {
-                    Some((_, reaction_target_guid)) => match map.get_mut(reaction_target_guid) {
+                if let Some((_, reaction_target_guid)) = reaction.clean_associated_guid() {
+                    match map.get_mut(reaction_target_guid) {
                         Some(reactions) => {
                             reactions.push(reaction.guid);
                         }
                         None => {
                             map.insert(reaction_target_guid.to_string(), vec![reaction.guid]);
                         }
-                    },
-                    None => (),
+                    }
                 }
             }
         }
@@ -370,7 +369,10 @@ impl Message {
 
     /// `true` if the message has a URL preview, else `false`
     pub fn is_url(&self) -> bool {
-        matches!(self.variant(), Variant::App(CustomBalloon::URL) | Variant::App(CustomBalloon::Music))
+        matches!(
+            self.variant(),
+            Variant::App(CustomBalloon::URL) | Variant::App(CustomBalloon::Music)
+        )
     }
 
     /// `true` if the message has attachments, else `false`
@@ -542,14 +544,14 @@ impl Message {
     /// Parse the App's Bundle ID out of the Balloon's Bundle ID
     fn parse_balloon_bundle_id(&self) -> Option<&str> {
         if let Some(bundle_id) = &self.balloon_bundle_id {
-            let mut parts = bundle_id.split(":").into_iter();
+            let mut parts = bundle_id.split(':');
             let bundle_id = parts.next();
             // If there is only one part, use that, otherwise get the third part
             if parts.next().is_none() {
-                return bundle_id;
+                bundle_id
             } else {
                 // Will be None if there is no third part
-                return parts.next();
+                parts.next()
             }
         } else {
             None

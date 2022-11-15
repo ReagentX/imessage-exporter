@@ -140,7 +140,7 @@ impl Diagnostic for ChatToHandle {
             .prepare(&format!("SELECT DISTINCT chat_id from {CHAT_MESSAGE_JOIN}"))
             .unwrap();
         let statement_message_chat_rows = statement_message_chats
-            .query_map([], |row: &Row| -> Result<i32> { Ok(row.get(0)?) })
+            .query_map([], |row: &Row| -> Result<i32> { row.get(0) })
             .unwrap();
         let mut unique_chats_from_messages: HashSet<i32> = HashSet::new();
         statement_message_chat_rows.into_iter().for_each(|row| {
@@ -152,7 +152,7 @@ impl Diagnostic for ChatToHandle {
             .prepare(&format!("SELECT DISTINCT chat_id from {CHAT_HANDLE_JOIN}"))
             .unwrap();
         let statement_handle_chat_rows = statement_handle_chats
-            .query_map([], |row: &Row| -> Result<i32> { Ok(row.get(0)?) })
+            .query_map([], |row: &Row| -> Result<i32> { row.get(0) })
             .unwrap();
         let mut unique_chats_from_handles: HashSet<i32> = HashSet::new();
         statement_handle_chat_rows.into_iter().for_each(|row| {

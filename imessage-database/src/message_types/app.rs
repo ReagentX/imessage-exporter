@@ -41,12 +41,11 @@ impl<'a> BalloonProvider<'a> for AppMessage<'a> {
     fn from_map(payload: &'a Value) -> Result<Self, PlistParseError> {
         let user_info = payload
             .as_dictionary()
-            .ok_or(PlistParseError::InvalidType(
-                "root".to_string(),
-                "dictionary".to_string(),
-            ))?
+            .ok_or_else(|| {
+                PlistParseError::InvalidType("root".to_string(), "dictionary".to_string())
+            })?
             .get("userInfo")
-            .ok_or(PlistParseError::MissingKey("userInfo".to_string()))?;
+            .ok_or_else(|| PlistParseError::MissingKey("userInfo".to_string()))?;
         Ok(AppMessage {
             image: get_string_from_dict(payload, "image"),
             url: get_string_from_nested_dict(payload, "URL"),

@@ -146,7 +146,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                             attachment_index += 1;
                             self.add_line(&mut formatted_message, &result, &indent);
                         }
-                        Err(result) => self.add_line(&mut formatted_message, &result, &indent),
+                        Err(result) => self.add_line(&mut formatted_message, result, &indent),
                     },
                     // Attachment does not exist in attachments table
                     None => self.add_line(&mut formatted_message, "Attachment missing!", &indent),
@@ -300,7 +300,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                     "Sticker from {}: {}",
                     self.config.who(&msg.handle_id, msg.is_from_me),
                     match paths.get(0) {
-                        Some(sticker) => &sticker.filename.as_ref().unwrap(),
+                        Some(sticker) => sticker.filename.as_ref().unwrap(),
                         None => "Sticker not found!",
                     },
                 ))
@@ -363,20 +363,20 @@ impl<'a> BalloonFormatter for TXT<'a> {
 
         if let Some(url) = balloon.url {
             out_s.push_str(url);
-            out_s.push_str("\n");
+            out_s.push('\n');
         } else if let Some(original_url) = balloon.original_url {
             out_s.push_str(original_url);
-            out_s.push_str("\n");
+            out_s.push('\n');
         }
 
         if let Some(title) = balloon.title {
             out_s.push_str(title);
-            out_s.push_str("\n");
+            out_s.push('\n');
         }
 
         if let Some(summary) = balloon.summary {
             out_s.push_str(summary);
-            out_s.push_str("\n");
+            out_s.push('\n');
         }
 
         // We want to keep the newlines between blocks, but the last one should be removed
@@ -449,32 +449,32 @@ impl<'a> BalloonFormatter for TXT<'a> {
         out_s.push_str(" message:\n");
         if let Some(title) = balloon.title {
             out_s.push_str(title);
-            out_s.push_str("\n");
+            out_s.push('\n');
         }
 
         if let Some(subtitle) = balloon.subtitle {
             out_s.push_str(subtitle);
-            out_s.push_str("\n");
+            out_s.push('\n');
         }
 
         if let Some(caption) = balloon.caption {
             out_s.push_str(caption);
-            out_s.push_str("\n");
+            out_s.push('\n');
         }
 
         if let Some(subcaption) = balloon.subcaption {
             out_s.push_str(subcaption);
-            out_s.push_str("\n");
+            out_s.push('\n');
         }
 
         if let Some(trailing_caption) = balloon.trailing_caption {
             out_s.push_str(trailing_caption);
-            out_s.push_str("\n");
+            out_s.push('\n');
         }
 
         if let Some(trailing_subcaption) = balloon.trailing_subcaption {
             out_s.push_str(trailing_subcaption);
-            out_s.push_str("\n");
+            out_s.push('\n');
         }
 
         // We want to keep the newlines between blocks, but the last one should be removed
@@ -486,22 +486,22 @@ impl<'a> BalloonFormatter for TXT<'a> {
 
         if let Some(track_name) = balloon.track_name {
             out_s.push_str(track_name);
-            out_s.push_str("\n");
+            out_s.push('\n');
         }
 
         if let Some(album) = balloon.album {
             out_s.push_str(album);
-            out_s.push_str("\n");
+            out_s.push('\n');
         }
 
         if let Some(artist) = balloon.artist {
             out_s.push_str(artist);
-            out_s.push_str("\n");
+            out_s.push('\n');
         }
 
         if let Some(url) = balloon.url {
             out_s.push_str(url);
-            out_s.push_str("\n");
+            out_s.push('\n');
         }
 
         println!("{}", out_s);

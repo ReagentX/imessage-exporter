@@ -42,8 +42,9 @@ impl<'a> BalloonProvider<'a> for URLMessage<'a> {
             original_url: get_string_from_nested_dict(url_metadata, "originalURL"),
             item_type: get_string_from_dict(url_metadata, "itemType"),
             images: URLMessage::get_array_from_nested_dict(url_metadata, "images")
-                .unwrap_or(vec![]),
-            icons: URLMessage::get_array_from_nested_dict(url_metadata, "icons").unwrap_or(vec![]),
+                .unwrap_or_default(),
+            icons: URLMessage::get_array_from_nested_dict(url_metadata, "icons")
+                .unwrap_or_default(),
             placeholder: get_bool_from_dict(url_metadata, "richLinkIsPlaceholder").unwrap_or(false),
         })
     }
@@ -55,10 +56,9 @@ impl<'a> URLMessage<'a> {
     /// There are two known ways this data is stored: the more recent `richLinkMetadata` style,
     /// or some kind of social integration stored under a `metadata` key
     fn get_body(payload: &'a Value) -> Result<&'a Value, PlistParseError> {
-        let root_dict = payload.as_dictionary().ok_or(PlistParseError::InvalidType(
-            "root".to_string(),
-            "dictionary".to_string(),
-        ))?;
+        let root_dict = payload.as_dictionary().ok_or_else(|| {
+            PlistParseError::InvalidType("root".to_string(), "dictionary".to_string())
+        })?;
 
         if root_dict.contains_key("richLinkMetadata") {
             // Unwrap is safe here because we validate the key

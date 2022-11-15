@@ -199,7 +199,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                     ),
                     false => self.add_line(
                         &mut formatted_message,
-                        *text,
+                        text,
                         "<span class=\"bubble\">",
                         "</span>",
                     ),
@@ -214,7 +214,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                             Err(result) => {
                                 self.add_line(
                                     &mut formatted_message,
-                                    &result,
+                                    result,
                                     "<span class=\"attachment_error\">Unable to locate attachment: ",
                                     "</span>",
                                 );
@@ -326,7 +326,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                     // Resolve the attachment path if necessary
                     // TODO: can we avoid copying the path here?
                     let resolved_attachment_path = match path.starts_with("~") {
-                        true => path_str.replace("~", &home()),
+                        true => path_str.replace('~', &home()),
                         false => path_str.to_owned(),
                     };
 
@@ -375,7 +375,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                     }
 
                     let embed_path = match &attachment.copied_path {
-                        Some(path) => &path,
+                        Some(path) => path,
                         None => &resolved_attachment_path,
                     };
 
@@ -407,7 +407,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                         }
                     })
                 } else {
-                    return Err(&attachment.transfer_name);
+                    Err(&attachment.transfer_name)
                 }
             }
             None => Err(&attachment.transfer_name),
@@ -493,9 +493,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                     },
                     None => None,
                 }
-                .unwrap_or(format!(
-                    "<span class=\"reaction\">Sticker not found!</span>"
-                )))
+                .unwrap_or_else(|| "<span class=\"reaction\">Sticker not found!</span>".to_string()))
             }
             _ => unreachable!(),
         }
@@ -605,15 +603,15 @@ impl<'a> BalloonFormatter for HTML<'a> {
     }
 
     fn format_apple_pay(&self, balloon: &AppMessage) -> String {
-        self.balloon_to_html(balloon, "Apple Pay", &mut vec![])
+        self.balloon_to_html(balloon, "Apple Pay", &mut [])
     }
 
     fn format_fitness(&self, balloon: &AppMessage) -> String {
-        self.balloon_to_html(balloon, "Fitness", &mut vec![])
+        self.balloon_to_html(balloon, "Fitness", &mut [])
     }
 
     fn format_slideshow(&self, balloon: &AppMessage) -> String {
-        self.balloon_to_html(balloon, "Slideshow", &mut vec![])
+        self.balloon_to_html(balloon, "Slideshow", &mut [])
     }
 
     fn format_generic_app(
@@ -651,7 +649,6 @@ impl<'a> BalloonFormatter for HTML<'a> {
             out_s.push_str(preview);
             out_s.push_str("\" </audio>");
         }
-
 
         // Header end
         out_s.push_str("</div>");
@@ -725,7 +722,7 @@ impl<'a> HTML<'a> {
         &self,
         balloon: &AppMessage,
         bundle_id: &str,
-        attachments: &mut Vec<Attachment>,
+        attachments: &mut [Attachment],
     ) -> String {
         let mut out_s = String::new();
         if let Some(url) = balloon.url {

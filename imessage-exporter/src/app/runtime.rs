@@ -119,12 +119,10 @@ impl<'a> Config<'a> {
                 let space_remaining = extra.len() + out_s.len();
                 if space_remaining >= MAX_LENGTH {
                     out_s.replace_range((MAX_LENGTH - extra.len()).., &extra);
+                } else if out_s.is_empty() {
+                    out_s.push_str(&participant[..MAX_LENGTH])
                 } else {
-                    if out_s.is_empty() {
-                        out_s.push_str(&participant[..MAX_LENGTH])
-                    } else {
-                        out_s.push_str(&extra);
-                    }
+                    out_s.push_str(&extra);
                 }
                 break;
             }
@@ -290,7 +288,7 @@ mod tests {
         }
     }
 
-    fn fake_app<'a>(options: Options) -> Config {
+    fn fake_app(options: Options) -> Config {
         let connection = get_connection(&options.db_path);
         Config {
             chatrooms: HashMap::new(),
@@ -299,7 +297,7 @@ mod tests {
             participants: HashMap::new(),
             real_participants: HashMap::new(),
             reactions: HashMap::new(),
-            options: options,
+            options,
             offset: 0,
             db: connection,
         }

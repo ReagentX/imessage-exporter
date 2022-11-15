@@ -13,7 +13,7 @@ pub enum PlistParseError {
     ParseError(String),
 }
 
-impl<'a> Display for PlistParseError {
+impl Display for PlistParseError {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result {
         match self {
             PlistParseError::MissingKey(key) => write!(fmt, "Expected key {}, found nothing!", key),

@@ -37,7 +37,7 @@ impl<'a> BalloonProvider<'a> for MusicMessage<'a> {
                 track_name: get_string_from_dict(music_metadata, "name"),
             });
         }
-        return Err(PlistParseError::NoPayload);
+        Err(PlistParseError::NoPayload)
     }
 }
 
@@ -49,20 +49,20 @@ impl<'a> MusicMessage<'a> {
     fn get_body_and_url(payload: &'a Value) -> Result<(&'a Value, &'a Value), PlistParseError> {
         let base = payload
             .as_dictionary()
-            .ok_or(PlistParseError::InvalidType(
+            .ok_or_else(|| PlistParseError::InvalidType(
                 "root".to_string(),
                 "dictionary".to_string(),
             ))?
             .get("richLinkMetadata")
-            .ok_or(PlistParseError::MissingKey("richLinkMetadata".to_string()))?;
+            .ok_or_else(|| PlistParseError::MissingKey("richLinkMetadata".to_string()))?;
         Ok((
             base.as_dictionary()
-                .ok_or(PlistParseError::InvalidType(
+                .ok_or_else(|| PlistParseError::InvalidType(
                     "root".to_string(),
                     "dictionary".to_string(),
                 ))?
                 .get("specialization")
-                .ok_or(PlistParseError::MissingKey("specialization".to_string()))?,
+                .ok_or_else(|| PlistParseError::MissingKey("specialization".to_string()))?,
             base,
         ))
     }

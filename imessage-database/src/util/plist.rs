@@ -37,16 +37,16 @@ use std::collections::HashMap;
 /// storing an object table array called $objects in the dictionary. Everything else,
 /// including class information, is referenced by a UID pointer. A $top entry under
 /// the dict points to the top-level object the programmer was meaning to encode.
-pub fn parse_plist<'a>(plist: &'a Value) -> Result<Value, PlistParseError> {
-    let body = plist.as_dictionary().ok_or(PlistParseError::InvalidType(
+pub fn parse_plist(plist: & Value) -> Result<Value, PlistParseError> {
+    let body = plist.as_dictionary().ok_or_else(|| PlistParseError::InvalidType(
         "body".to_string(),
         "dictionary".to_string(),
     ))?;
     let objects = body
         .get("$objects")
-        .ok_or(PlistParseError::MissingKey("$objects".to_string()))?
+        .ok_or_else(|| PlistParseError::MissingKey("$objects".to_string()))?
         .as_array()
-        .ok_or(PlistParseError::InvalidType(
+        .ok_or_else(|| PlistParseError::InvalidType(
             "$objects".to_string(),
             "array".to_string(),
         ))?;
@@ -54,16 +54,16 @@ pub fn parse_plist<'a>(plist: &'a Value) -> Result<Value, PlistParseError> {
     // Index of root object
     let root = body
         .get("$top")
-        .ok_or(PlistParseError::MissingKey("$top".to_string()))?
+        .ok_or_else(|| PlistParseError::MissingKey("$top".to_string()))?
         .as_dictionary()
-        .ok_or(PlistParseError::InvalidType(
+        .ok_or_else(|| PlistParseError::InvalidType(
             "$top".to_string(),
             "dictionary".to_string(),
         ))?
         .get("root")
-        .ok_or(PlistParseError::MissingKey("root".to_string()))?
+        .ok_or_else(|| PlistParseError::MissingKey("root".to_string()))?
         .as_uid()
-        .ok_or(PlistParseError::InvalidType(
+        .ok_or_else(|| PlistParseError::InvalidType(
             "root".to_string(),
             "uid".to_string(),
         ))?
@@ -100,7 +100,7 @@ fn follow_uid<'a>(
                     )?);
                 }
             }
-            return Ok(plist::Value::Array(array));
+            Ok(plist::Value::Array(array))
         }
         Value::Dictionary(dict) => {
             let mut dictionary = Dictionary::new();
@@ -119,18 +119,18 @@ fn follow_uid<'a>(
             else if dict.contains_key("NS.keys") && dict.contains_key("NS.objects") {
                 let keys = dict
                     .get("NS.keys")
-                    .ok_or(PlistParseError::MissingKey("NS.keys".to_string()))?
+                    .ok_or_else(|| PlistParseError::MissingKey("NS.keys".to_string()))?
                     .as_array()
-                    .ok_or(PlistParseError::InvalidType(
+                    .ok_or_else(|| PlistParseError::InvalidType(
                         "NS.keys".to_string(),
                         "array".to_string(),
                     ))?;
                 // These are the values in the objects list
                 let values = dict
                     .get("NS.objects")
-                    .ok_or(PlistParseError::MissingKey("NS.objects".to_string()))?
+                    .ok_or_else(|| PlistParseError::MissingKey("NS.objects".to_string()))?
                     .as_array()
-                    .ok_or(PlistParseError::InvalidType(
+                    .ok_or_else(|| PlistParseError::InvalidType(
                         "NS.objects".to_string(),
                         "array".to_string(),
                     ))?;
@@ -147,20 +147,20 @@ fn follow_uid<'a>(
                         .get(idx)
                         .ok_or(PlistParseError::NoValueAtIndex(idx))?
                         .as_uid()
-                        .ok_or(PlistParseError::InvalidTypeIndex(idx, "uid".to_string()))?
+                        .ok_or_else(|| PlistParseError::InvalidTypeIndex(idx, "uid".to_string()))?
                         .get() as usize;
                     let value_index = values
                         .get(idx)
                         .ok_or(PlistParseError::NoValueAtIndex(idx))?
                         .as_uid()
-                        .ok_or(PlistParseError::InvalidTypeIndex(idx, "uid".to_string()))?
+                        .ok_or_else(|| PlistParseError::InvalidTypeIndex(idx, "uid".to_string()))?
                         .get() as usize;
 
                     let key = objects
                         .get(key_index)
                         .ok_or(PlistParseError::NoValueAtIndex(key_index))?
                         .as_string()
-                        .ok_or(PlistParseError::InvalidTypeIndex(
+                        .ok_or_else(|| PlistParseError::InvalidTypeIndex(
                             key_index,
                             "string".to_string(),
                         ))?;
@@ -186,20 +186,18 @@ fn follow_uid<'a>(
                         );
                     }
                     // If the value is not a pointer, try and follow the data itself
-                    else {
-                        if let Some(p) = &parent {
-                            dictionary.insert(
-                                p.to_owned(),
-                                follow_uid(objects, root, Some(p.to_string()), Some(val))?,
-                            );
-                        }
+                    else if let Some(p) = &parent {
+                        dictionary.insert(
+                            p.to_owned(),
+                            follow_uid(objects, root, Some(p.to_string()), Some(val))?,
+                        );
                     }
                 }
             }
-            return Ok(plist::Value::Dictionary(dictionary));
+            Ok(plist::Value::Dictionary(dictionary))
         }
         Value::Uid(uid) => {
-            return follow_uid(objects, uid.get() as usize, None, None);
+            follow_uid(objects, uid.get() as usize, None, None)
         }
         Value::Boolean(_) | Value::Integer(_) | Value::String(_) => Ok(item.to_owned()),
         _ => Ok(item.to_owned()),
