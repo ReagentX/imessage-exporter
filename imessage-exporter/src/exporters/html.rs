@@ -550,7 +550,6 @@ impl<'a> Writer<'a> for HTML<'a> {
 
 impl<'a> BalloonFormatter for HTML<'a> {
     fn format_url(&self, balloon: &URLMessage) -> String {
-        // TODO: this method
         let mut out_s = String::new();
 
         // Make the whole bubble clickable
@@ -586,16 +585,16 @@ impl<'a> BalloonFormatter for HTML<'a> {
 
             // Subtitle
             if let Some(summary) = balloon.summary {
-                out_s.push_str("<div class=\"subcaption\">");
+                out_s.push_str("<div class=\"subcaption\"><xmp>");
                 out_s.push_str(summary);
-                out_s.push_str("</div>");
+                out_s.push_str("</xmp></div>");
             }
 
             // End footer
             out_s.push_str("</div>");
         }
 
-        // End the l
+        // End the link
         if balloon.url.is_some() {
             out_s.push_str("</a>");
         }
