@@ -32,7 +32,7 @@ pub struct AppMessage<'a> {
     pub trailing_subcaption: Option<&'a str>,
     /// The name of the app that created this message
     pub app_name: Option<&'a str>,
-    /// This property is set only for Apple Pay system messages,
+    /// This property is set only for Apple system messages,
     /// it represents the text that displays in the center of the bubble
     pub ldtext: Option<&'a str>,
 }

@@ -4,5 +4,6 @@
 
 pub mod app;
 pub mod expressives;
+pub mod music;
 pub mod url;
 pub mod variants;

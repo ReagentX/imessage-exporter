@@ -14,6 +14,7 @@ use imessage_database::{
     error::plist::PlistParseError,
     message_types::{
         app::AppMessage,
+        music::MusicMessage,
         url::URLMessage,
         variants::{BalloonProvider, CustomBalloon},
     },
@@ -225,7 +226,11 @@ impl<'a> Writer<'a> for TXT<'a> {
         }
     }
 
-    fn format_app(&self, message: &'a Message, attachments: &mut Vec<Attachment>) -> Result<String, PlistParseError> {
+    fn format_app(
+        &self,
+        message: &'a Message,
+        attachments: &mut Vec<Attachment>,
+    ) -> Result<String, PlistParseError> {
         if let Variant::App(balloon) = message.variant() {
             let mut app_bubble = String::new();
 
@@ -236,15 +241,12 @@ impl<'a> Writer<'a> for TXT<'a> {
                     // Handle URL messages separately since they are a special case
                     let res = if message.is_url() {
                         // Handle the URL case
-                        match URLMessage::from_map(&parsed) {
-                            Ok(bubble) => self.format_url(&bubble),
-                            Err(why) => {
-                                // If we didn't parse the URL blob, try and get the message text, which may contain the URL
-                                if let Some(text) = &message.text {
-                                    return Ok(text.to_string());
-                                }
-                                return Err(PlistParseError::ParseError(format!("{why}")));
+                        match balloon {
+                            CustomBalloon::URL => self.format_url(&URLMessage::from_map(&parsed)?),
+                            CustomBalloon::Music => {
+                                self.format_music(&MusicMessage::from_map(&parsed)?)
                             }
+                            _ => unreachable!(),
                         }
                     } else {
                         // Handle the app case
@@ -257,7 +259,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                                 CustomBalloon::ApplePay => self.format_apple_pay(&bubble),
                                 CustomBalloon::Fitness => self.format_fitness(&bubble),
                                 CustomBalloon::Slideshow => self.format_slideshow(&bubble),
-                                CustomBalloon::URL => unreachable!(),
+                                _ => unreachable!(),
                             },
                             Err(why) => return Err(PlistParseError::ParseError(format!("{why}"))),
                         }
@@ -430,7 +432,12 @@ impl<'a> BalloonFormatter for TXT<'a> {
         out_s
     }
 
-    fn format_generic_app(&self, balloon: &AppMessage, bundle_id: &str, _: &mut Vec<Attachment>) -> String {
+    fn format_generic_app(
+        &self,
+        balloon: &AppMessage,
+        bundle_id: &str,
+        _: &mut Vec<Attachment>,
+    ) -> String {
         let mut out_s = String::new();
 
         if let Some(name) = balloon.app_name {
@@ -472,6 +479,33 @@ impl<'a> BalloonFormatter for TXT<'a> {
 
         // We want to keep the newlines between blocks, but the last one should be removed
         out_s.strip_suffix('\n').unwrap_or(&out_s).to_string()
+    }
+
+    fn format_music(&self, balloon: &MusicMessage) -> String {
+        let mut out_s = String::new();
+
+        if let Some(track_name) = balloon.track_name {
+            out_s.push_str(track_name);
+            out_s.push_str("\n");
+        }
+
+        if let Some(album) = balloon.album {
+            out_s.push_str(album);
+            out_s.push_str("\n");
+        }
+
+        if let Some(artist) = balloon.artist {
+            out_s.push_str(artist);
+            out_s.push_str("\n");
+        }
+
+        if let Some(url) = balloon.url {
+            out_s.push_str(url);
+            out_s.push_str("\n");
+        }
+
+        println!("{}", out_s);
+        out_s
     }
 }
 

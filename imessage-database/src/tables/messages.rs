@@ -260,7 +260,7 @@ impl Message {
                     // If the message is an app, it will be rendered differently, so just escape there
                     if self.balloon_bundle_id.is_some() {
                         out_v.push(BubbleType::App);
-                        return out_v
+                        return out_v;
                     }
 
                     if REPLACEMENT_CHARS.contains(&char) {
@@ -370,7 +370,7 @@ impl Message {
 
     /// `true` if the message has a URL preview, else `false`
     pub fn is_url(&self) -> bool {
-        matches!(self.variant(), Variant::App(CustomBalloon::URL))
+        matches!(self.variant(), Variant::App(CustomBalloon::URL) | Variant::App(CustomBalloon::Music))
     }
 
     /// `true` if the message has attachments, else `false`
@@ -562,7 +562,16 @@ impl Message {
             // Standard iMessages with either text or a message payload
             0 | 2 | 3 => match self.parse_balloon_bundle_id() {
                 Some(bundle_id) => match bundle_id {
-                    "com.apple.messages.URLBalloonProvider" => Variant::App(CustomBalloon::URL),
+                    "com.apple.messages.URLBalloonProvider" => {
+                        if let Some(text) = &self.text {
+                            match text.starts_with("https://music.apple") {
+                                true => Variant::App(CustomBalloon::Music),
+                                false => Variant::App(CustomBalloon::URL),
+                            }
+                        } else {
+                            Variant::App(CustomBalloon::URL)
+                        }
+                    }
                     "com.apple.Handwriting.HandwritingProvider" => {
                         Variant::App(CustomBalloon::Handwriting)
                     }

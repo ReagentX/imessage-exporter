@@ -14,6 +14,7 @@ use imessage_database::{
     error::plist::PlistParseError,
     message_types::{
         app::AppMessage,
+        music::MusicMessage,
         url::URLMessage,
         variants::{BalloonProvider, CustomBalloon},
     },
@@ -165,7 +166,7 @@ impl<'a> Writer<'a> for HTML<'a> {
         let replies = message.get_replies(&self.config.db)?;
         let reactions = message.get_reactions(&self.config.db, &self.config.reactions)?;
 
-        // Index of where we are in the attachment Vectorddddfgfgfdfdd
+        // Index of where we are in the attachment Vector
         let mut attachment_index: usize = 0;
 
         if let Some(subject) = &message.subject {
@@ -426,15 +427,13 @@ impl<'a> Writer<'a> for HTML<'a> {
                     let parsed = parse_plist(&payload)?;
 
                     let res = if message.is_url() {
-                        match URLMessage::from_map(&parsed) {
-                            Ok(bubble) => self.format_url(&bubble),
-                            Err(why) => {
-                                // If we didn't parse the URL blob, try and get the message text, which may contain the URL
-                                if let Some(text) = &message.text {
-                                    return Ok(text.to_string());
-                                }
-                                return Err(PlistParseError::ParseError(format!("{why}")));
+                        // Handle the URL case
+                        match balloon {
+                            CustomBalloon::URL => self.format_url(&URLMessage::from_map(&parsed)?),
+                            CustomBalloon::Music => {
+                                self.format_music(&MusicMessage::from_map(&parsed)?)
                             }
+                            _ => unreachable!(),
                         }
                     } else {
                         match AppMessage::from_map(&parsed) {
@@ -446,7 +445,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                 CustomBalloon::ApplePay => self.format_apple_pay(&bubble),
                                 CustomBalloon::Fitness => self.format_fitness(&bubble),
                                 CustomBalloon::Slideshow => self.format_slideshow(&bubble),
-                                CustomBalloon::URL => unreachable!(),
+                                _ => unreachable!(),
                             },
                             Err(why) => return Err(PlistParseError::ParseError(format!("{why}"))),
                         }
@@ -624,6 +623,66 @@ impl<'a> BalloonFormatter for HTML<'a> {
         attachments: &mut Vec<Attachment>,
     ) -> String {
         self.balloon_to_html(balloon, bundle_id, attachments)
+    }
+
+    fn format_music(&self, balloon: &MusicMessage) -> String {
+        let mut out_s = String::new();
+
+        // Make the whole bubble clickable
+        if let Some(url) = balloon.url {
+            out_s.push_str("<a href=\"");
+            out_s.push_str(url);
+            out_s.push_str("\">");
+        }
+
+        // Header section
+        out_s.push_str("<div class=\"app_header\">");
+
+        // Name
+        if let Some(track_name) = balloon.track_name {
+            out_s.push_str("<div class=\"name\">");
+            out_s.push_str(track_name);
+            out_s.push_str("</div>");
+        }
+
+        // Add preview section
+        if let Some(preview) = balloon.preview {
+            out_s.push_str("<audio controls src=\"");
+            out_s.push_str(preview);
+            out_s.push_str("\" </audio>");
+        }
+
+
+        // Header end
+        out_s.push_str("</div>");
+
+        // Only write the footer if there is data to write
+        if balloon.artist.is_some() || balloon.album.is_some() {
+            out_s.push_str("<div class=\"app_footer\">");
+
+            // artist
+            if let Some(artist) = balloon.artist {
+                out_s.push_str("<div class=\"caption\"><xmp>");
+                out_s.push_str(artist);
+                out_s.push_str("</xmp></div>");
+            }
+
+            // Subtitle
+            if let Some(album) = balloon.album {
+                out_s.push_str("<div class=\"subcaption\"><xmp>");
+                out_s.push_str(album);
+                out_s.push_str("</xmp></div>");
+            }
+
+            // End footer
+            out_s.push_str("</div>");
+        }
+
+        // End the link
+        if balloon.url.is_some() {
+            out_s.push_str("</a>");
+        }
+        out_s
     }
 }
 

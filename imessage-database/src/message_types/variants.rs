@@ -55,6 +55,8 @@ pub enum CustomBalloon<'a> {
     Fitness,
     /// Photos.app slideshow messages
     Slideshow,
+    /// Apple Music messages
+    Music,
 }
 
 /// Message variant container
