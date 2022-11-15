@@ -44,8 +44,8 @@ impl<'a> BalloonProvider<'a> for MusicMessage<'a> {
 impl<'a> MusicMessage<'a> {
     /// Extract the main dictionary of data from the body of the payload
     ///
-    /// There are two known ways this data is stored: the more recent `richLinkMetadata` style,
-    /// or some kind of social integration stored under a `metadata` key
+    /// Apple Music stores the URL under `richLinkMetadata` like a normal URL, but has some 
+    /// extra data stored under `specialization` that contains the track information.
     fn get_body_and_url(payload: &'a Value) -> Result<(&'a Value, &'a Value), PlistParseError> {
         let base = payload
             .as_dictionary()
