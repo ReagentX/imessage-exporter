@@ -578,9 +578,9 @@ impl<'a> BalloonFormatter for HTML<'a> {
 
             // Title
             if let Some(title) = balloon.title {
-                out_s.push_str("<div class=\"caption\">");
+                out_s.push_str("<div class=\"caption\"><xmp>");
                 out_s.push_str(title);
-                out_s.push_str("</div>");
+                out_s.push_str("</xmp></div>");
             }
 
             // Subtitle
