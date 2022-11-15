@@ -29,6 +29,8 @@ pub struct URLMessage<'a> {
     pub images: Vec<&'a str>,
     /// Icons that represent the website, generally the favicon or apple-touch-icon
     pub icons: Vec<&'a str>,
+    /// The name of a website
+    pub site_name: Option<&'a str>,
     pub placeholder: bool,
 }
 
@@ -45,6 +47,7 @@ impl<'a> BalloonProvider<'a> for URLMessage<'a> {
                 .unwrap_or_default(),
             icons: URLMessage::get_array_from_nested_dict(url_metadata, "icons")
                 .unwrap_or_default(),
+            site_name: get_string_from_dict(url_metadata, "siteName"),
             placeholder: get_bool_from_dict(url_metadata, "richLinkIsPlaceholder").unwrap_or(false),
         })
     }
@@ -122,6 +125,7 @@ mod tests {
             item_type: None,
             images: vec![],
             icons: vec!["https://chrissardegna.com/favicon.ico"],
+            site_name: None,
             placeholder: false,
         };
 
@@ -151,6 +155,7 @@ mod tests {
                 "https://chrissardegna.com/ddc-icon-32x32.png",
                 "https://chrissardegna.com/ddc-icon-16x16.png",
             ],
+            site_name: Some("Christopher Sardegna"),
             placeholder: false,
         };
 
@@ -168,7 +173,6 @@ mod tests {
         let parsed = parse_plist(&plist).unwrap();
 
         let balloon = URLMessage::from_map(&parsed).unwrap();
-        println!("{balloon:?}\n");
         let expected = URLMessage {
             title: Some("Christopher Sardegna on Twitter"),
             summary: Some("“Hello Twitter, meet Bella”"),
@@ -184,6 +188,7 @@ mod tests {
                 "https://abs.twimg.com/icons/apple-touch-icon-192x192.png",
                 "https://abs.twimg.com/favicons/favicon.ico",
             ],
+            site_name: Some("Twitter"),
             placeholder: false,
         };
 
@@ -211,6 +216,7 @@ mod tests {
             item_type: None,
             images: vec![],
             icons: vec![],
+            site_name: None,
             placeholder: false,
         };
 

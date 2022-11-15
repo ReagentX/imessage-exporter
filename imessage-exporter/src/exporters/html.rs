@@ -493,7 +493,9 @@ impl<'a> Writer<'a> for HTML<'a> {
                     },
                     None => None,
                 }
-                .unwrap_or_else(|| "<span class=\"reaction\">Sticker not found!</span>".to_string()))
+                .unwrap_or_else(|| {
+                    "<span class=\"reaction\">Sticker not found!</span>".to_string()
+                }))
             }
             _ => unreachable!(),
         }
@@ -565,6 +567,16 @@ impl<'a> BalloonFormatter for HTML<'a> {
             out_s.push_str(image);
             out_s.push_str("\" loading=\"lazy\">");
         });
+
+        if let Some(site_name) = balloon.site_name {
+            out_s.push_str("<div class=\"name\">");
+            out_s.push_str(site_name);
+            out_s.push_str("</div>");
+        } else if let Some(url) = balloon.url {
+            out_s.push_str("<div class=\"name\">");
+            out_s.push_str(url);
+            out_s.push_str("</div>");
+        }
 
         // Header end
         out_s.push_str("</div>");
