@@ -105,6 +105,7 @@ xmp {
 	border-top-left-radius: 25px;
 	border-top-right-radius: 25px;
 	color: black;
+	padding-bottom: 1%;
 }
 
 
@@ -118,24 +119,32 @@ xmp {
 
 
 .app_header .image_title {
-	padding: 1vw;
+	margin-top: 1%;
+	padding-left: 15px;
+	padding-right: 15px;
 	overflow: auto;
 }
 
 
 .app_header .image_subtitle {
-	padding: 1vw;
+	margin-top: 1%;
+	padding-left: 15px;
+	padding-right: 15px;
 	overflow: auto;
 }
 
 .app_header .ldtext {
-	padding: 1vw;
+	margin-top: 1%;
+	padding-left: 15px;
+	padding-right: 15px;
 	overflow: auto;
 }
 
 .app_header .name {
 	font-weight: 600;
-	padding: 1vw;
+	margin-top: 1%;
+	padding-left: 15px;
+	padding-right: 15px;
 	overflow: auto;
 }
 
@@ -159,31 +168,40 @@ xmp {
 	border-width: thin;
 	color: black;
 	background: lightgray;
+	padding-bottom: 1%;
 }
 
 .app_footer .caption {
 	grid-area: caption;
-	padding: 1vw;
+	margin-top: 1%;
+	padding-left: 15px;
+	padding-right: 15px;
 	overflow: auto;
 }
 
 .app_footer .subcaption {
 	grid-area: subcaption;
-	padding: 1vw;
+	margin-top: 1%;
+	padding-left: 15px;
+	padding-right: 15px;
 	overflow: auto;
 }
 
 .app_footer .trailing_caption {
 	grid-area: trailing_caption;
 	text-align: right;
-	padding: 1vw;
+	margin-top: 1%;
+	padding-left: 15px;
+	padding-right: 15px;
 	overflow: auto;
 }
 
 .app_footer .trailing_subcaption {
 	grid-area: trailing_subcaption;
 	text-align: right;
-	padding: 1vw;
+	margin-top: 1%;
+	padding-left: 15px;
+	padding-right: 15px;
 	overflow: auto;
 }
 
