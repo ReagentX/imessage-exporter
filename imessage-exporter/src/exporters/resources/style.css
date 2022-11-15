@@ -9,7 +9,7 @@ p {
 xmp {
 	font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 	white-space: pre-wrap;
-	margin: 0;
+	margin: 0px;
 }
 
 .message {
@@ -104,17 +104,6 @@ xmp {
 .app_header {
 	border-top-left-radius: 25px;
 	border-top-right-radius: 25px;
-
-	/* border-top-style: solid;
-	border-top-color: darkgray;
-
-	border-left-style: solid;
-	border-left-color: darkgray;
-
-	border-right-style: solid;
-	border-right-color: darkgray; */
-
-	/* border-width: thin; */
 	color: black;
 }
 
@@ -270,5 +259,4 @@ audio {
 	body {
 		background: transparent;
 	}
-
 }
