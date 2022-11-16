@@ -105,8 +105,6 @@ xmp {
 	border-top-left-radius: 25px;
 	border-top-right-radius: 25px;
 	color: black;
-	padding-bottom: 1%;
-	padding-top: 1%;
 }
 
 
@@ -118,9 +116,16 @@ xmp {
 	width: 100%;
 }
 
+.app_header audio {
+	max-width: 90%;
+	margin-left: auto;
+	margin-right: auto;
+}
+
 
 .app_header .image_title {
-	margin-top: 1%;
+	padding-top: 1%;
+	padding-bottom: 1%;
 	padding-left: 15px;
 	padding-right: 15px;
 	overflow: auto;
@@ -128,14 +133,16 @@ xmp {
 
 
 .app_header .image_subtitle {
-	margin-top: 1%;
+	padding-top: 1%;
+	padding-bottom: 1%;
 	padding-left: 15px;
 	padding-right: 15px;
 	overflow: auto;
 }
 
 .app_header .ldtext {
-	margin-top: 1%;
+	padding-top: 1%;
+	padding-bottom: 1%;
 	padding-left: 15px;
 	padding-right: 15px;
 	overflow: auto;
@@ -143,7 +150,8 @@ xmp {
 
 .app_header .name {
 	font-weight: 600;
-	margin-top: 1%;
+	padding-top: 1%;
+	padding-bottom: 1%;
 	padding-left: 15px;
 	padding-right: 15px;
 	overflow: auto;

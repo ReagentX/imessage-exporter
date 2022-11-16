@@ -229,7 +229,6 @@ impl<'a> Writer<'a> for HTML<'a> {
                         ),
                     }
                 }
-                // TODO: Support app messages
                 BubbleType::App => match self.format_app(message, &mut attachments) {
                     Ok(ok_bubble) => self.add_line(
                         &mut formatted_message,
@@ -456,7 +455,20 @@ impl<'a> Writer<'a> for HTML<'a> {
                     // Sometimes, URL messages are missing their payloads
                     if message.is_url() {
                         if let Some(text) = &message.text {
-                            return Ok(text.to_string());
+                            let mut out_s = String::new();
+                            out_s.push_str("<a href=\"");
+                            out_s.push_str(text);
+                            out_s.push_str("\">");
+
+                            out_s.push_str("<div class=\"app_header\"><div class=\"name\">");
+                            out_s.push_str(text);
+                            out_s.push_str("</div></div>");
+
+                            out_s.push_str("<div class=\"app_footer\"><div class=\"caption\">");
+                            out_s.push_str(text);
+                            out_s.push_str("</div></div></a>");
+
+                            return Ok(out_s);
                         }
                     }
                     return Err(PlistParseError::NoPayload);
