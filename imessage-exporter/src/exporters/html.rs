@@ -650,13 +650,6 @@ impl<'a> BalloonFormatter for HTML<'a> {
     fn format_music(&self, balloon: &MusicMessage) -> String {
         let mut out_s = String::new();
 
-        // Make the whole bubble clickable
-        if let Some(url) = balloon.url {
-            out_s.push_str("<a href=\"");
-            out_s.push_str(url);
-            out_s.push_str("\">");
-        }
-
         // Header section
         out_s.push_str("<div class=\"app_header\">");
 
@@ -676,6 +669,13 @@ impl<'a> BalloonFormatter for HTML<'a> {
 
         // Header end
         out_s.push_str("</div>");
+
+        // Make the footer clickable so we can interact with the preview
+        if let Some(url) = balloon.url {
+            out_s.push_str("<a href=\"");
+            out_s.push_str(url);
+            out_s.push_str("\">");
+        }
 
         // Only write the footer if there is data to write
         if balloon.artist.is_some() || balloon.album.is_some() {
