@@ -249,19 +249,20 @@ impl Message {
     /// for each attachment and one [`U+FFFD`](https://www.fileformat.info/info/unicode/char/fffd/index.htm) for app messages that we need
     /// to format.
     pub fn body(&self) -> Vec<BubbleType> {
+        let mut out_v = vec![];
+
+        // If the message is an app, it will be rendered differently, so just escape there
+        if self.balloon_bundle_id.is_some() {
+            out_v.push(BubbleType::App);
+            return out_v;
+        }
+
         match &self.text {
             Some(text) => {
-                let mut out_v = vec![];
                 let mut start: usize = 0;
                 let mut end: usize = 0;
 
                 for (idx, char) in text.char_indices() {
-                    // If the message is an app, it will be rendered differently, so just escape there
-                    if self.balloon_bundle_id.is_some() {
-                        out_v.push(BubbleType::App);
-                        return out_v;
-                    }
-
                     if REPLACEMENT_CHARS.contains(&char) {
                         if start < end {
                             out_v.push(BubbleType::Text(text[start..idx].trim()));
@@ -635,7 +636,7 @@ impl Message {
             self.rowid as i64,
             true,
         ) {
-            Ok(payload) => Some(Value::from_reader(payload).unwrap()),
+            Ok(payload) => Some(Value::from_reader(payload).ok()?),
             Err(_) => None,
         }
     }
