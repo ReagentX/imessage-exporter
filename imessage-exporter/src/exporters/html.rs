@@ -238,7 +238,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                     ),
                     Err(why) => self.add_line(
                         &mut formatted_message,
-                        &format!("Unable to format app message: {why}"),
+                        &format!("Unable to format {:?} message: {why}", message.variant()),
                         "<div class=\"app_error\">",
                         "</div>",
                     ),
