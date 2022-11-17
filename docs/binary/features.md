@@ -11,6 +11,7 @@ This tool targets the current latest public release for MacOS and iMessage.
 - Plain Text
   - Correctly extracts time-zone corrected timestamps
   - Detects when a message was read and calculates the time until read for both parties
+    - Humanizes display of time-until-read duration
   - Detects the service a message was sent from
     - In HTML exports, balloons are colored correctly for the service they were sent with
 - Mutli-part messages
