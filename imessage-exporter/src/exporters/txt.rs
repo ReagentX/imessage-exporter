@@ -209,7 +209,6 @@ impl<'a> Writer<'a> for TXT<'a> {
             );
         }
 
-        // TODO: We add 2 newlines for messages that have replies with `has_replies`
         if indent.is_empty() {
             // Add a newline for top-level messages
             formatted_message.push('\n');
@@ -504,7 +503,6 @@ impl<'a> BalloonFormatter for TXT<'a> {
             out_s.push('\n');
         }
 
-        println!("{}", out_s);
         out_s
     }
 }
