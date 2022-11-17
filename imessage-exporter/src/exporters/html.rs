@@ -577,7 +577,7 @@ impl<'a> BalloonFormatter for HTML<'a> {
         balloon.images.iter().for_each(|image| {
             out_s.push_str("<img src=\"");
             out_s.push_str(image);
-            out_s.push_str("\" loading=\"lazy\">");
+            out_s.push_str("\" loading=\"lazy\", onerror=\"this.style.display='none'\">");
         });
 
         if let Some(site_name) = balloon.site_name {
