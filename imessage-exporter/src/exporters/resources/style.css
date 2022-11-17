@@ -117,7 +117,7 @@ xmp {
 }
 
 .app_header audio {
-	max-width: 90%;
+	width: 90%;
 	margin-left: auto;
 	margin-right: auto;
 	display: block;
@@ -151,6 +151,7 @@ xmp {
 }
 
 .app_header .name {
+	color: black;
 	font-weight: 600;
 	padding-top: 1%;
 	padding-bottom: 1%;
