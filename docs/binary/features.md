@@ -14,7 +14,7 @@ This tool targets the current latest public release for MacOS and iMessage.
     - Humanizes display of time-until-read duration
   - Detects the service a message was sent from
     - In HTML exports, balloons are colored correctly for the service they were sent with
-- Mutli-part messages
+- Multi-part messages
   - iMessages can have multiple parts, separated by some special characters
   - Parts are displayed as
     - New lines in TXT exports
