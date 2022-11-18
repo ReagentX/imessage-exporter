@@ -567,9 +567,10 @@ impl Message {
                 Some(bundle_id) => match bundle_id {
                     "com.apple.messages.URLBalloonProvider" => {
                         if let Some(text) = &self.text {
-                            match text.starts_with("https://music.apple") {
-                                true => Variant::App(CustomBalloon::Music),
-                                false => Variant::App(CustomBalloon::URL),
+                            if text.starts_with("https://music.apple") {
+                                Variant::App(CustomBalloon::Music)
+                            } else {
+                                Variant::App(CustomBalloon::URL)
                             }
                         } else {
                             Variant::App(CustomBalloon::URL)
@@ -818,7 +819,6 @@ mod tests {
         // May 17, 2022  9:30:31 PM
         message.date_read = 674530231992568192;
 
-        println!("{:?}", message.time_until_read(&offset));
         assert_eq!(
             message.time_until_read(&offset),
             Some("1 hour, 49 seconds".to_string())
@@ -839,7 +839,6 @@ mod tests {
         // May 17, 2022  8:29:42 PM
         message.date_read = 674526582885055488;
 
-        println!("{:?}", message.time_until_read(&offset));
         assert_eq!(message.time_until_read(&offset), None)
     }
 

@@ -190,20 +190,23 @@ impl<'a> Writer<'a> for HTML<'a> {
             );
 
             match message_part {
-                BubbleType::Text(text) => match text.starts_with(FITNESS_RECEIVER) {
-                    true => self.add_line(
-                        &mut formatted_message,
-                        &text.replace(FITNESS_RECEIVER, "You"),
-                        "<span class=\"bubble\">",
-                        "</span>",
-                    ),
-                    false => self.add_line(
-                        &mut formatted_message,
-                        text,
-                        "<span class=\"bubble\">",
-                        "</span>",
-                    ),
-                },
+                BubbleType::Text(text) => {
+                    if text.starts_with(FITNESS_RECEIVER) {
+                        self.add_line(
+                            &mut formatted_message,
+                            &text.replace(FITNESS_RECEIVER, "You"),
+                            "<span class=\"bubble\">",
+                            "</span>",
+                        );
+                    } else {
+                        self.add_line(
+                            &mut formatted_message,
+                            text,
+                            "<span class=\"bubble\">",
+                            "</span>",
+                        );
+                    }
+                }
                 BubbleType::Attachment => {
                     match attachments.get_mut(attachment_index) {
                         Some(attachment) => match self.format_attachment(attachment) {
@@ -324,9 +327,10 @@ impl<'a> Writer<'a> for HTML<'a> {
                 if let Some(path_str) = path.as_os_str().to_str() {
                     // Resolve the attachment path if necessary
                     // TODO: can we avoid copying the path here?
-                    let resolved_attachment_path = match path.starts_with("~") {
-                        true => path_str.replace('~', &home()),
-                        false => path_str.to_owned(),
+                    let resolved_attachment_path = if path.starts_with("~") {
+                        path_str.replace('~', &home())
+                    } else {
+                        path_str.to_owned()
                     };
 
                     // Perform optional copy + convert
@@ -713,10 +717,7 @@ impl<'a> HTML<'a> {
         let read_after = message.time_until_read(&self.config.offset);
         if let Some(time) = read_after {
             if !time.is_empty() {
-                let who = match message.is_from_me {
-                    true => "them",
-                    false => "you",
-                };
+                let who = if message.is_from_me { "them" } else { "you" };
                 date.push_str(&format!(" (Read by {who} after {time})"));
             }
         }

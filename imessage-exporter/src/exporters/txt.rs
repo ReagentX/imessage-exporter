@@ -132,15 +132,17 @@ impl<'a> Writer<'a> for TXT<'a> {
         for (idx, message_part) in message_parts.iter().enumerate() {
             match message_part {
                 // Fitness messages have a prefix that we need to replace with the opposite if who sent the message
-                BubbleType::Text(text) => if text.starts_with(FITNESS_RECEIVER) {
-                    self.add_line(
-                        &mut formatted_message,
-                        &text.replace(FITNESS_RECEIVER, "You"),
-                        &indent,
-                    )
-                } else {
-                    self.add_line(&mut formatted_message, text, &indent),
-                },
+                BubbleType::Text(text) => {
+                    if text.starts_with(FITNESS_RECEIVER) {
+                        self.add_line(
+                            &mut formatted_message,
+                            &text.replace(FITNESS_RECEIVER, "You"),
+                            &indent,
+                        );
+                    } else {
+                        self.add_line(&mut formatted_message, text, &indent);
+                    }
+                }
                 BubbleType::Attachment => match attachments.get_mut(attachment_index) {
                     Some(attachment) => match self.format_attachment(attachment) {
                         Ok(result) => {
@@ -514,10 +516,7 @@ impl<'a> TXT<'a> {
         let read_after = message.time_until_read(&self.config.offset);
         if let Some(time) = read_after {
             if !time.is_empty() {
-                let who = match message.is_from_me {
-                    true => "them",
-                    false => "you",
-                };
+                let who = if message.is_from_me { "them" } else { "you" };
                 date.push_str(&format!(" (Read by {who} after {time})"));
             }
         }
