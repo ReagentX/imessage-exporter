@@ -37,36 +37,26 @@ use std::collections::HashMap;
 /// storing an object table array called $objects in the dictionary. Everything else,
 /// including class information, is referenced by a UID pointer. A $top entry under
 /// the dict points to the top-level object the programmer was meaning to encode.
-pub fn parse_plist(plist: & Value) -> Result<Value, PlistParseError> {
-    let body = plist.as_dictionary().ok_or_else(|| PlistParseError::InvalidType(
-        "body".to_string(),
-        "dictionary".to_string(),
-    ))?;
+pub fn parse_plist(plist: &Value) -> Result<Value, PlistParseError> {
+    let body = plist.as_dictionary().ok_or_else(|| {
+        PlistParseError::InvalidType("body".to_string(), "dictionary".to_string())
+    })?;
     let objects = body
         .get("$objects")
         .ok_or_else(|| PlistParseError::MissingKey("$objects".to_string()))?
         .as_array()
-        .ok_or_else(|| PlistParseError::InvalidType(
-            "$objects".to_string(),
-            "array".to_string(),
-        ))?;
+        .ok_or_else(|| PlistParseError::InvalidType("$objects".to_string(), "array".to_string()))?;
 
     // Index of root object
     let root = body
         .get("$top")
         .ok_or_else(|| PlistParseError::MissingKey("$top".to_string()))?
         .as_dictionary()
-        .ok_or_else(|| PlistParseError::InvalidType(
-            "$top".to_string(),
-            "dictionary".to_string(),
-        ))?
+        .ok_or_else(|| PlistParseError::InvalidType("$top".to_string(), "dictionary".to_string()))?
         .get("root")
         .ok_or_else(|| PlistParseError::MissingKey("root".to_string()))?
         .as_uid()
-        .ok_or_else(|| PlistParseError::InvalidType(
-            "root".to_string(),
-            "uid".to_string(),
-        ))?
+        .ok_or_else(|| PlistParseError::InvalidType("root".to_string(), "uid".to_string()))?
         .get() as usize;
 
     follow_uid(objects, root, None, None)
@@ -121,19 +111,17 @@ fn follow_uid<'a>(
                     .get("NS.keys")
                     .ok_or_else(|| PlistParseError::MissingKey("NS.keys".to_string()))?
                     .as_array()
-                    .ok_or_else(|| PlistParseError::InvalidType(
-                        "NS.keys".to_string(),
-                        "array".to_string(),
-                    ))?;
+                    .ok_or_else(|| {
+                        PlistParseError::InvalidType("NS.keys".to_string(), "array".to_string())
+                    })?;
                 // These are the values in the objects list
                 let values = dict
                     .get("NS.objects")
                     .ok_or_else(|| PlistParseError::MissingKey("NS.objects".to_string()))?
                     .as_array()
-                    .ok_or_else(|| PlistParseError::InvalidType(
-                        "NS.objects".to_string(),
-                        "array".to_string(),
-                    ))?;
+                    .ok_or_else(|| {
+                        PlistParseError::InvalidType("NS.objects".to_string(), "array".to_string())
+                    })?;
                 // Die here if the data is invalid
                 if keys.len() != values.len() {
                     return Err(PlistParseError::InvalidDictionarySize(
@@ -160,10 +148,9 @@ fn follow_uid<'a>(
                         .get(key_index)
                         .ok_or(PlistParseError::NoValueAtIndex(key_index))?
                         .as_string()
-                        .ok_or_else(|| PlistParseError::InvalidTypeIndex(
-                            key_index,
-                            "string".to_string(),
-                        ))?;
+                        .ok_or_else(|| {
+                            PlistParseError::InvalidTypeIndex(key_index, "string".to_string())
+                        })?;
 
                     dictionary.insert(
                         key.to_string(),
@@ -196,9 +183,7 @@ fn follow_uid<'a>(
             }
             Ok(plist::Value::Dictionary(dictionary))
         }
-        Value::Uid(uid) => {
-            follow_uid(objects, uid.get() as usize, None, None)
-        }
+        Value::Uid(uid) => follow_uid(objects, uid.get() as usize, None, None),
         _ => Ok(item.to_owned()),
     }
 }
