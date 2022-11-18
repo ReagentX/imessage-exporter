@@ -97,6 +97,11 @@ impl<'a> URLMessage<'a> {
             .map(|item| get_string_from_nested_dict(item, "URL"))
             .collect()
     }
+
+    /// Get the redirected URL from a URL message, falling back to the original URL, if it exists
+    pub fn get_url(&self) -> Option<&str> {
+        self.url.or(self.original_url)
+    }
 }
 
 #[cfg(test)]
@@ -221,5 +226,54 @@ mod tests {
         };
 
         assert_eq!(balloon, expected);
+    }
+
+    #[test]
+    fn test_get_url() {
+        let expected = URLMessage {
+            title: Some("Christopher Sardegna"),
+            summary: None,
+            url: Some("https://chrissardegna.com/"),
+            original_url: Some("https://chrissardegna.com"),
+            item_type: None,
+            images: vec![],
+            icons: vec!["https://chrissardegna.com/favicon.ico"],
+            site_name: None,
+            placeholder: false,
+        };
+        assert_eq!(expected.get_url(), Some("https://chrissardegna.com/"))
+    }
+
+
+    #[test]
+    fn test_get_orignal_url() {
+        let expected = URLMessage {
+            title: Some("Christopher Sardegna"),
+            summary: None,
+            url: None,
+            original_url: Some("https://chrissardegna.com"),
+            item_type: None,
+            images: vec![],
+            icons: vec!["https://chrissardegna.com/favicon.ico"],
+            site_name: None,
+            placeholder: false,
+        };
+        assert_eq!(expected.get_url(), Some("https://chrissardegna.com"))
+    }
+
+    #[test]
+    fn test_get_no_url() {
+        let expected = URLMessage {
+            title: Some("Christopher Sardegna"),
+            summary: None,
+            url: None,
+            original_url: None,
+            item_type: None,
+            images: vec![],
+            icons: vec!["https://chrissardegna.com/favicon.ico"],
+            site_name: None,
+            placeholder: false,
+        };
+        assert_eq!(expected.get_url(), None)
     }
 }

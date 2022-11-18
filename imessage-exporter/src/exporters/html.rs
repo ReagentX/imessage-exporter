@@ -568,7 +568,7 @@ impl<'a> BalloonFormatter for HTML<'a> {
         let mut out_s = String::new();
 
         // Make the whole bubble clickable
-        if let Some(url) = balloon.url {
+        if let Some(url) = balloon.get_url() {
             out_s.push_str("<a href=\"");
             out_s.push_str(url);
             out_s.push_str("\">");
@@ -588,7 +588,7 @@ impl<'a> BalloonFormatter for HTML<'a> {
             out_s.push_str("<div class=\"name\">");
             out_s.push_str(site_name);
             out_s.push_str("</div>");
-        } else if let Some(url) = balloon.url {
+        } else if let Some(url) = balloon.get_url() {
             out_s.push_str("<div class=\"name\">");
             out_s.push_str(url);
             out_s.push_str("</div>");
@@ -620,7 +620,7 @@ impl<'a> BalloonFormatter for HTML<'a> {
         }
 
         // End the link
-        if balloon.url.is_some() {
+        if balloon.get_url().is_some() {
             out_s.push_str("</a>");
         }
         out_s
@@ -721,6 +721,7 @@ impl<'a> HTML<'a> {
                 date.push_str(&format!(" (Read by {who} after {time})"));
             }
         }
+        date.push_str(&message.guid);
         date
     }
 
