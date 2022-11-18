@@ -87,7 +87,6 @@ mod tests {
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = parse_plist(&plist).unwrap();
-        println!("{parsed:?}");
 
         let balloon = MusicMessage::from_map(&parsed).unwrap();
         let expected = MusicMessage {

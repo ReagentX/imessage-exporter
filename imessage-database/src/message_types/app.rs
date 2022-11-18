@@ -121,7 +121,6 @@ mod tests {
             app_name: Some("OpenTable"),
             ldtext: None,
         };
-        println!("{:?}", balloon);
 
         assert_eq!(balloon, expected);
     }
@@ -149,7 +148,6 @@ mod tests {
             app_name: Some("Photos"),
             ldtext: Some("Home - 37 Photos"),
         };
-        println!("{:?}", balloon);
 
         assert_eq!(balloon, expected);
     }
@@ -177,7 +175,6 @@ mod tests {
             app_name: Some("GamePigeon"),
             ldtext: Some("Dots & Boxes"),
         };
-        println!("{:?}", balloon);
 
         assert_eq!(balloon, expected);
     }
@@ -205,7 +202,6 @@ mod tests {
             app_name: Some("Business"),
             ldtext: Some("Yes, connect me with Goldman Sachs."),
         };
-        println!("{:?}", balloon);
 
         assert_eq!(balloon, expected);
     }
