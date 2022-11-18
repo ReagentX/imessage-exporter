@@ -132,13 +132,14 @@ impl<'a> Writer<'a> for TXT<'a> {
         for (idx, message_part) in message_parts.iter().enumerate() {
             match message_part {
                 // Fitness messages have a prefix that we need to replace with the opposite if who sent the message
-                BubbleType::Text(text) => match text.starts_with(FITNESS_RECEIVER) {
-                    true => self.add_line(
+                BubbleType::Text(text) => if text.starts_with(FITNESS_RECEIVER) {
+                    self.add_line(
                         &mut formatted_message,
                         &text.replace(FITNESS_RECEIVER, "You"),
                         &indent,
-                    ),
-                    false => self.add_line(&mut formatted_message, text, &indent),
+                    )
+                } else {
+                    self.add_line(&mut formatted_message, text, &indent),
                 },
                 BubbleType::Attachment => match attachments.get_mut(attachment_index) {
                     Some(attachment) => match self.format_attachment(attachment) {

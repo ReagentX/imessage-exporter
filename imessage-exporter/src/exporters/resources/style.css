@@ -117,10 +117,6 @@ xmp {
 }
 
 .app_header audio {
-	width: 90%;
-	margin-left: auto;
-	margin-right: auto;
-	display: block;
 	padding-bottom: 2%;
 }
 
@@ -272,7 +268,10 @@ video {
 }
 
 audio {
-	max-width: 100%;
+	width: 90%;
+	margin-left: auto;
+	margin-right: auto;
+	display: block;
 }
 
 @media (prefers-color-scheme: dark) {
