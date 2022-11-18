@@ -199,7 +199,6 @@ fn follow_uid<'a>(
         Value::Uid(uid) => {
             follow_uid(objects, uid.get() as usize, None, None)
         }
-        Value::Boolean(_) | Value::Integer(_) | Value::String(_) => Ok(item.to_owned()),
         _ => Ok(item.to_owned()),
     }
 }
