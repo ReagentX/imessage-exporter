@@ -6,17 +6,25 @@ use crate::util::dates::TIMESTAMP_FACTOR;
 
 use super::variants::BalloonProvider;
 
-/// Represents the `payload_data` of an edited iMessage.
+/// Represents the `payload_data` of an edited or unsent iMessage.
+/// iMessage permits editing sent messages up to five times
+/// within 15 minutes of sending the first message and unsending
+/// sent messages within 2 minutes.
 ///
-/// Edited messages are stored with a `NULL` `text` field.
-/// They include `payload_data` that contains an array of `streamtyped`
-/// data where each array item contains the edited message. The order
-/// in the array represents the order the messages were edited in, i.e.
-/// item 0 was the original and the last item is the current message.
+/// Edited or unsent messages are stored with a `NULL` `text` field.
+/// Edited messages include `payload_data` that contains an array of
+/// `streamtyped` data where each array item contains the edited
+/// message. The order in the array represents the order the messages 
+/// were edited in, i.e. item 0 was the original and the last item is
+/// the current message.
 ///
 /// For each dictionary item in this array, The `d` key represents the
 /// time the message was edited and the `t` key represents the message
 /// text in the `streamtyped` format.
+/// 
+/// There is no array if the message was unsent.
+///
+/// Apple describes editing and unsending messages [here](https://support.apple.com/guide/iphone/unsend-and-edit-messages-iphe67195653/ios).
 #[derive(Debug, PartialEq, Eq)]
 pub struct EditedMessage<'a> {
     /// The dates the messages were edited
@@ -34,6 +42,10 @@ impl<'a> BalloonProvider<'a> for EditedMessage<'a> {
             PlistParseError::InvalidType("root".to_string(), "dictionary".to_string())
         })?;
 
+        if !plist_root.contains_key("ec") {
+            return Ok(Self::empty());
+        }
+
         let edited_messages = plist_root
             .get("ec")
             .ok_or_else(|| PlistParseError::MissingKey("ec".to_string()))?
@@ -47,11 +59,7 @@ impl<'a> BalloonProvider<'a> for EditedMessage<'a> {
             .as_array()
             .ok_or_else(|| PlistParseError::InvalidType("ec".to_string(), "array".to_string()))?;
 
-        let mut edited = EditedMessage {
-            dates: vec![],
-            texts: vec![],
-            guids: vec![],
-        };
+        let mut edited = Self::with_capacity(edited_messages.len());
 
         for (idx, message) in edited_messages.iter().enumerate() {
             let message_data = message
@@ -63,7 +71,6 @@ impl<'a> BalloonProvider<'a> for EditedMessage<'a> {
                 .ok_or_else(|| PlistParseError::MissingKey("d".to_string()))?
                 .as_real()
                 .ok_or_else(|| PlistParseError::InvalidType("d".to_string(), "real".to_string()))?
-                // TODO: make this a constant or something, this is necessary for the logic to be shared with `get_local_time()`
                 as i64
                 * TIMESTAMP_FACTOR;
 
@@ -87,6 +94,29 @@ impl<'a> BalloonProvider<'a> for EditedMessage<'a> {
 }
 
 impl<'a> EditedMessage<'a> {
+    /// A new empty edited message
+    fn empty() -> Self {
+        EditedMessage {
+            dates: Vec::new(),
+            texts: Vec::new(),
+            guids: Vec::new(),
+        }
+    }
+
+    /// A new message with a preallocated capacity
+    fn with_capacity(capacity: usize) -> Self {
+        EditedMessage {
+            dates: Vec::with_capacity(capacity),
+            texts: Vec::with_capacity(capacity),
+            guids: Vec::with_capacity(capacity),
+        }
+    }
+
+    /// `true` if the message was deleted, `false` if it was edited
+    pub fn is_deleted(&self) -> bool {
+        self.texts.is_empty()
+    }
+
     /// Extract the bytes that represent the edited message text from the message body.
     /// The typedstream might look like:
     ///
@@ -209,5 +239,26 @@ mod tests {
         };
 
         assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_parse_deleted() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/Deleted.plist");
+        let plist_data = File::open(plist_path).unwrap();
+        let plist = Value::from_reader(plist_data).unwrap();
+        let parsed = EditedMessage::from_map(&plist).unwrap();
+        println!("{parsed:?}");
+
+        let expected = EditedMessage {
+            dates: vec![],
+            texts: vec![],
+            guids: vec![],
+        };
+
+        assert_eq!(parsed, expected);
+        assert!(parsed.is_deleted());
     }
 }
