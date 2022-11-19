@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter, Result};
 
-use super::streamtyped::StreamTypedError;
+use crate::error::streamtyped::StreamTypedError;
 
 #[derive(Debug)]
 pub enum MessageError {
