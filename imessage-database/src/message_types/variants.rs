@@ -70,6 +70,7 @@ pub enum Variant<'a> {
     Unknown(i32),
     App(CustomBalloon<'a>),
     Normal,
+    Edited,
 }
 
 /// Defines behavior for different types of messages that have custom balloons
