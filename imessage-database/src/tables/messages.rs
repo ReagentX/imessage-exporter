@@ -2,11 +2,11 @@
  This module represents common (but not all) columns in the `message` table.
 */
 
-use std::{collections::HashMap, vec};
+use std::{collections::HashMap, io::Read, vec};
 
 use chrono::{naive::NaiveDateTime, offset::Local, DateTime, Datelike, TimeZone, Timelike};
 use plist::Value;
-use rusqlite::{Connection, Error, Result, Row, Statement};
+use rusqlite::{blob::Blob, Connection, Error, Result, Row, Statement};
 
 use crate::{
     message_types::{
@@ -14,8 +14,8 @@ use crate::{
         variants::{CustomBalloon, Reaction, Variant},
     },
     tables::table::{
-        Cacheable, Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE, MESSAGE_ATTACHMENT_JOIN,
-        MESSAGE_PAYLOAD,
+        Cacheable, Diagnostic, Table, ATTRIBUTED_BODY, CHAT_MESSAGE_JOIN, MESSAGE,
+        MESSAGE_ATTACHMENT_JOIN, MESSAGE_PAYLOAD, MESSAGE_SUMMARY_INFO,
     },
     util::{
         dates::{readable_diff, TIMESTAMP_FACTOR},
@@ -651,20 +651,43 @@ impl Message {
         }
     }
 
+    /// Extract a blob of data that belongs to a single message from a given column
+    fn get_blob<'a>(&self, db: &'a Connection, column: &str) -> Option<Blob<'a>> {
+        match db.blob_open(
+            rusqlite::DatabaseName::Main,
+            MESSAGE,
+            column,
+            self.rowid as i64,
+            true,
+        ) {
+            Ok(blob) => Some(blob),
+            Err(_) => None,
+        }
+    }
+
     /// Get a message's plist from the `payload_data` BLOB column
     /// Calling this hits the database, so it is expensive and should
     /// only get invoked when needed
     pub fn payload_data(&self, db: &Connection) -> Option<Value> {
-        match db.blob_open(
-            rusqlite::DatabaseName::Main,
-            MESSAGE,
-            MESSAGE_PAYLOAD,
-            self.rowid as i64,
-            true,
-        ) {
-            Ok(payload) => Some(Value::from_reader(payload).ok()?),
-            Err(_) => None,
-        }
+        Value::from_reader(self.get_blob(db, MESSAGE_PAYLOAD)?).ok()
+    }
+
+    /// Get a message's plist from the `message_summary_info` BLOB column
+    /// Calling this hits the database, so it is expensive and should
+    /// only get invoked when needed
+    pub fn message_summary_info(&self, db: &Connection) -> Option<Value> {
+        Value::from_reader(self.get_blob(db, MESSAGE_SUMMARY_INFO)?).ok()
+    }
+
+    /// Get a message's plist from the `message_summary_info` BLOB column
+    /// Calling this hits the database, so it is expensive and should
+    /// only get invoked when needed
+    pub fn attributed_body(&self, db: &Connection) -> Option<String> {
+        let mut body_data = vec![];
+        self.get_blob(db, ATTRIBUTED_BODY)?
+            .read_to_end(&mut body_data)
+            .ok();
+        Some(String::from_utf8_lossy(&body_data).to_string())
     }
 
     /// Determine which expressive the message was sent with
