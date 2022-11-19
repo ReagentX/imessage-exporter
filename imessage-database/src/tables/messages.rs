@@ -9,6 +9,7 @@ use plist::Value;
 use rusqlite::{blob::Blob, Connection, Error, Result, Row, Statement};
 
 use crate::{
+    error::message::MessageError,
     message_types::{
         expressives::{BubbleEffect, Expressive, ScreenEffect},
         variants::{CustomBalloon, Reaction, Variant},
@@ -20,6 +21,7 @@ use crate::{
     util::{
         dates::{readable_diff, TIMESTAMP_FACTOR},
         output::{done_processing, processing},
+        streamtyped,
     },
 };
 
@@ -245,6 +247,19 @@ impl Cacheable for Message {
 }
 
 impl Message {
+    /// Get the body text of a message
+    pub fn gen_text<'a>(&'a mut self, db: &'a Connection) -> Result<&'a str, MessageError> {
+        if self.text.is_none() {
+            let body = self.attributed_body(db).ok_or(MessageError::MissingData)?;
+            self.text = Some(streamtyped::parse(body).map_err(MessageError::ParseError)?);
+        }
+        if let Some(t) = &self.text {
+            Ok(t)
+        } else {
+            Err(MessageError::NoText)
+        }
+    }
+
     /// Get a vector of string slices of the message's components
     ///
     /// If the message has attachments, there will be one [`U+FFFC`]((https://www.fileformat.info/info/unicode/char/fffc/index.htm)) character
@@ -288,7 +303,7 @@ impl Message {
                 }
                 out_v
             }
-            None => vec![],
+            None => out_v,
         }
     }
 
@@ -682,12 +697,12 @@ impl Message {
     /// Get a message's plist from the `message_summary_info` BLOB column
     /// Calling this hits the database, so it is expensive and should
     /// only get invoked when needed
-    pub fn attributed_body(&self, db: &Connection) -> Option<String> {
+    pub fn attributed_body(&self, db: &Connection) -> Option<Vec<u8>> {
         let mut body_data = vec![];
         self.get_blob(db, ATTRIBUTED_BODY)?
             .read_to_end(&mut body_data)
             .ok();
-        Some(String::from_utf8_lossy(&body_data).to_string())
+        Some(body_data)
     }
 
     /// Determine which expressive the message was sent with
