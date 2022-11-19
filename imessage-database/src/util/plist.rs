@@ -1,3 +1,7 @@
+/*!
+ This module contains logic to parse text from plist payload data
+*/
+
 use crate::error::plist::PlistParseError;
 
 use plist::{Dictionary, Value};
