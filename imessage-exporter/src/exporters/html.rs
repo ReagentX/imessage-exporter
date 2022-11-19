@@ -78,7 +78,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
             .unwrap();
 
         for message in messages {
-            let msg = Message::extract(message)?;
+            let mut msg = Message::extract(message)?;
             // Render the annoucement in-line
             if msg.is_annoucement() {
                 let annoucement = self.format_annoucement(&msg);
@@ -90,6 +90,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
             // }
             // Message replies and reactions are rendered in context, so no need to render them separately
             else if !msg.is_reaction() {
+                msg.gen_text(&self.config.db);
                 let message = self.format_message(&msg, 0)?;
                 HTML::write_to_file(self.get_or_create_file(&msg), &message);
             }
@@ -726,7 +727,6 @@ impl<'a> HTML<'a> {
                 date.push_str(&format!(" (Read by {who} after {time})"));
             }
         }
-        date.push_str(&message.guid);
         date
     }
 
