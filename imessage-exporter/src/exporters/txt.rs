@@ -73,6 +73,10 @@ impl<'a> Exporter<'a> for TXT<'a> {
                 let annoucement = self.format_annoucement(&msg);
                 TXT::write_to_file(self.get_or_create_file(&msg), &annoucement);
             }
+            // Render edited messages
+            // else if msg.is_edited() {
+            //     todo!()
+            // }
             // Message replies and reactions are rendered in context, so no need to render them separately
             else if !msg.is_reaction() {
                 let message = self.format_message(&msg, 0)?;
@@ -557,6 +561,7 @@ mod tests {
             expressive_send_style_id: None,
             thread_originator_guid: None,
             thread_originator_part: None,
+            date_edited: 0,
             chat_id: None,
             num_attachments: 0,
             num_replies: 0,

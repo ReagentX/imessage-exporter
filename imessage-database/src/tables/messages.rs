@@ -26,7 +26,7 @@ use crate::{
 const ATTACHMENT_CHAR: char = '\u{FFFC}';
 pub const APP_CHAR: char = '\u{FFFD}';
 const REPLACEMENT_CHARS: [char; 2] = [ATTACHMENT_CHAR, APP_CHAR];
-const COLUMNS: &str = "m.rowid, m.guid, m.text, m.service, m.handle_id, m.subject, m.date, m.date_read, m.date_delivered, m.is_from_me, m.is_read, m.group_title, m.associated_message_guid, m.associated_message_type, m.balloon_bundle_id, m.expressive_send_style_id, m.thread_originator_guid, m.thread_originator_part";
+const COLUMNS: &str = "m.rowid, m.guid, m.text, m.service, m.handle_id, m.subject, m.date, m.date_read, m.date_delivered, m.is_from_me, m.is_read, m.group_title, m.associated_message_guid, m.associated_message_type, m.balloon_bundle_id, m.expressive_send_style_id, m.thread_originator_guid, m.thread_originator_part, m.date_edited";
 
 /// Represents a broad category of messages: standalone, thread originators, and thread replies.
 #[derive(Debug)]
@@ -86,6 +86,7 @@ pub struct Message {
     pub expressive_send_style_id: Option<String>,
     pub thread_originator_guid: Option<String>,
     pub thread_originator_part: Option<String>,
+    pub date_edited: i64,
     pub chat_id: Option<i32>,
     pub num_attachments: i32,
     pub num_replies: i32,
@@ -101,8 +102,8 @@ impl Table for Message {
             handle_id: row.get(4)?,
             subject: row.get(5)?,
             date: row.get(6)?,
-            date_read: row.get(7)?,
-            date_delivered: row.get(8)?,
+            date_read: row.get(7).unwrap_or(0),
+            date_delivered: row.get(8).unwrap_or(0),
             is_from_me: row.get(9)?,
             is_read: row.get(10)?,
             group_title: row.get(11)?,
@@ -112,9 +113,10 @@ impl Table for Message {
             expressive_send_style_id: row.get(15)?,
             thread_originator_guid: row.get(16)?,
             thread_originator_part: row.get(17)?,
-            chat_id: row.get(18)?,
-            num_attachments: row.get(19)?,
-            num_replies: row.get(20)?,
+            date_edited: row.get(18).unwrap_or(0),
+            chat_id: row.get(19)?,
+            num_attachments: row.get(20)?,
+            num_replies: row.get(21)?,
         })
     }
 
@@ -327,6 +329,13 @@ impl Message {
         self.get_local_time(&self.date_read, offset)
     }
 
+    /// Calculates the date a message was edited.
+    ///
+    /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
+    pub fn date_edited(&self, offset: &i64) -> Option<DateTime<Local>> {
+        self.get_local_time(&self.date_read, offset)
+    }
+
     /// Gets the time until the message was read. This can happen in two ways:
     ///
     /// - You recieved a message, then waited to read it
@@ -382,6 +391,11 @@ impl Message {
             self.variant(),
             Variant::App(CustomBalloon::URL) | Variant::App(CustomBalloon::Music)
         )
+    }
+
+    /// `true` if the message was edited, else `false`
+    pub fn is_edited(&self) -> bool {
+        self.date_edited != 0
     }
 
     /// `true` if the message has attachments, else `false`
@@ -569,6 +583,9 @@ impl Message {
 
     /// Get the variant of a message, see [crate::message_types::variants] for detail.
     pub fn variant(&self) -> Variant {
+        if self.is_edited() {
+            return Variant::Edited;
+        }
         match self.associated_message_type {
             // Standard iMessages with either text or a message payload
             0 | 2 | 3 => match self.parse_balloon_bundle_id() {
@@ -725,6 +742,7 @@ mod tests {
             expressive_send_style_id: None,
             thread_originator_guid: None,
             thread_originator_part: None,
+            date_edited: 0,
             chat_id: None,
             num_attachments: 0,
             num_replies: 0,
