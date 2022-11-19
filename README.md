@@ -41,3 +41,4 @@ Documentation is available [here](/docs/).
 - All of my friends, for putting up with me sending them random messages to test things
 - [SQLiteFlow](https://www.sqliteflow.com), the SQL viewer I used to explore and reverse engineer the iMessage database
 - [Xplist](https://github.com/ic005k/Xplist), an invaluable tool for reverse engineering the `payload_data` plist format
+- [Compart](https://www.compart.com/en/unicode/), an amazing resource for looking up esoteric unicode details
