@@ -290,32 +290,39 @@ impl Message {
         }
     }
 
-    fn get_local_time(&self, date_stamp: &i64, offset: &i64) -> DateTime<Local> {
-        let utc_stamp = NaiveDateTime::from_timestamp((date_stamp / 1000000000) + offset, 0);
+    fn get_local_time(&self, date_stamp: &i64, offset: &i64) -> Option<DateTime<Local>> {
+        let utc_stamp = NaiveDateTime::from_timestamp_opt((date_stamp / 1000000000) + offset, 0)?;
         let local_time = Local.from_utc_datetime(&utc_stamp);
         Local
-            .ymd(local_time.year(), local_time.month(), local_time.day())
-            .and_hms(local_time.hour(), local_time.minute(), local_time.second())
+            .with_ymd_and_hms(
+                local_time.year(),
+                local_time.month(),
+                local_time.day(),
+                local_time.hour(),
+                local_time.minute(),
+                local_time.second(),
+            )
+            .single()
     }
 
     /// Calculates the date a message was written to the database.
     ///
     /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
-    pub fn date(&self, offset: &i64) -> DateTime<Local> {
+    pub fn date(&self, offset: &i64) -> Option<DateTime<Local>> {
         self.get_local_time(&self.date, offset)
     }
 
     /// Calculates the date a message was marked as delivered.
     ///
     /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
-    pub fn date_delivered(&self, offset: &i64) -> DateTime<Local> {
+    pub fn date_delivered(&self, offset: &i64) -> Option<DateTime<Local>> {
         self.get_local_time(&self.date_delivered, offset)
     }
 
     /// Calculates the date a message was marked as read.
     ///
     /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
-    pub fn date_read(&self, offset: &i64) -> DateTime<Local> {
+    pub fn date_read(&self, offset: &i64) -> Option<DateTime<Local>> {
         self.get_local_time(&self.date_read, offset)
     }
 
@@ -333,11 +340,11 @@ impl Message {
     pub fn time_until_read(&self, offset: &i64) -> Option<String> {
         // Message we recieved
         if !self.is_from_me && self.date_read != 0 && self.date != 0 {
-            return readable_diff(self.date(offset), self.date_read(offset));
+            return readable_diff(self.date(offset)?, self.date_read(offset)?);
         }
         // Message we sent
         else if self.is_from_me && self.date_delivered != 0 && self.date != 0 {
-            return readable_diff(self.date(offset), self.date_delivered(offset));
+            return readable_diff(self.date(offset)?, self.date_delivered(offset)?);
         }
         None
     }
