@@ -7,6 +7,7 @@
 use chrono::{DateTime, Duration, Local, TimeZone, Utc};
 
 const SEPARATOR: &str = ", ";
+pub const TIMESTAMP_FACTOR: i64 = 1000000000;
 
 /// Get the date offset for the iMessage Database
 ///

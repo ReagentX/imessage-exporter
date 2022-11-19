@@ -2,6 +2,7 @@ use plist::Value;
 
 use crate::error::plist::PlistParseError;
 use crate::tables::messages::APP_CHAR;
+use crate::util::dates::TIMESTAMP_FACTOR;
 
 use super::variants::BalloonProvider;
 
@@ -64,7 +65,7 @@ impl<'a> BalloonProvider<'a> for EditedMessage<'a> {
                 .ok_or_else(|| PlistParseError::InvalidType("d".to_string(), "real".to_string()))?
                 // TODO: make this a constant or something, this is necessary for the logic to be shared with `get_local_time()`
                 as i64
-                * 1000000000;
+                * TIMESTAMP_FACTOR;
 
             let raw_streamtyped = message_data
                 .get("t")

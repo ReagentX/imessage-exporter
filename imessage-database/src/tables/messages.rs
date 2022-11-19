@@ -18,7 +18,7 @@ use crate::{
         MESSAGE_PAYLOAD,
     },
     util::{
-        dates::readable_diff,
+        dates::{readable_diff, TIMESTAMP_FACTOR},
         output::{done_processing, processing},
     },
 };
@@ -291,7 +291,8 @@ impl Message {
     }
 
     fn get_local_time(&self, date_stamp: &i64, offset: &i64) -> Option<DateTime<Local>> {
-        let utc_stamp = NaiveDateTime::from_timestamp_opt((date_stamp / 1000000000) + offset, 0)?;
+        let utc_stamp =
+            NaiveDateTime::from_timestamp_opt((date_stamp / TIMESTAMP_FACTOR) + offset, 0)?;
         let local_time = Local.from_utc_datetime(&utc_stamp);
         Local
             .with_ymd_and_hms(
