@@ -11,6 +11,7 @@ pub enum PlistParseError {
     NoPayload,
     WrongMessageType,
     ParseError(String),
+    InvalidEditedMessage(String),
 }
 
 impl Display for PlistParseError {
@@ -40,6 +41,9 @@ impl Display for PlistParseError {
             PlistParseError::NoPayload => write!(fmt, "Unable to acquire payload data!"),
             PlistParseError::WrongMessageType => write!(fmt, "Message is not an app message!"),
             PlistParseError::ParseError(why) => write!(fmt, "{why}"),
+            PlistParseError::InvalidEditedMessage(message) => {
+                write!(fmt, "Unable to parse message from binary data: {message}")
+            }
         }
     }
 }
