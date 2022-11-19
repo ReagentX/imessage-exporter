@@ -6,13 +6,13 @@ use crate::util::dates::TIMESTAMP_FACTOR;
 
 use super::variants::BalloonProvider;
 
-/// Represents the `payload_data` of an edited or unsent iMessage.
+/// Represents the `message_summary_info` of an edited or unsent iMessage.
 /// iMessage permits editing sent messages up to five times
 /// within 15 minutes of sending the first message and unsending
 /// sent messages within 2 minutes.
 ///
 /// Edited or unsent messages are stored with a `NULL` `text` field.
-/// Edited messages include `payload_data` that contains an array of
+/// Edited messages include `message_summary_info` that contains an array of
 /// `streamtyped` data where each array item contains the edited
 /// message. The order in the array represents the order the messages 
 /// were edited in, i.e. item 0 was the original and the last item is
@@ -118,7 +118,7 @@ impl<'a> EditedMessage<'a> {
     }
 
     /// Extract the bytes that represent the edited message text from the message body.
-    /// The typedstream might look like:
+    /// The streamtyped data might look like:
     ///
     /// ```txt
     /// streamtyped���@���NSAttributedString�NSObject����NSString��+Example message  ��iI���� NSDictionary��i����__kIMMessagePartAttributeName����NSNumber��NSValue��*������
@@ -165,7 +165,7 @@ mod tests {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/Edited.plist");
+            .join("test_data/edited_message/Edited.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = EditedMessage::from_map(&plist).unwrap();
@@ -195,7 +195,7 @@ mod tests {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/EditedToLink.plist");
+            .join("test_data/edited_message/EditedToLink.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = EditedMessage::from_map(&plist).unwrap();
@@ -218,7 +218,7 @@ mod tests {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/EditedToLinkAndBack.plist");
+            .join("test_data/edited_message/EditedToLinkAndBack.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = EditedMessage::from_map(&plist).unwrap();
@@ -246,7 +246,7 @@ mod tests {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/Deleted.plist");
+            .join("test_data/edited_message/Deleted.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = EditedMessage::from_map(&plist).unwrap();
