@@ -42,7 +42,7 @@ pub trait Diagnostic {
 
 /// Get a connection to the iMessage SQLite database
 pub fn get_connection(path: &str) -> Connection {
-    match Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
+    match Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
         Ok(res) => res,
         Err(why) => panic!("Unable to read from chat database: {}\nEnsure full disk access is enabled for your terminal emulator in System Preferences > Security and Privacy > Full Disk Access", why),
     }
@@ -56,6 +56,7 @@ pub const ATTACHMENT: &str = "attachment";
 pub const CHAT_MESSAGE_JOIN: &str = "chat_message_join";
 pub const MESSAGE_ATTACHMENT_JOIN: &str = "message_attachment_join";
 pub const CHAT_HANDLE_JOIN: &str = "chat_handle_join";
+pub const MESSAGE_PAYLOAD: &str = "payload_data";
 
 // Default information
 pub const ME: &str = "Me";
@@ -64,3 +65,4 @@ pub const DEFAULT_PATH: &str = "Library/Messages/chat.db";
 pub const ORPHANED: &str = "orphaned";
 pub const DEFAULT_OUTPUT_DIR: &str = "imessage_export";
 pub const MAX_LENGTH: usize = 240;
+pub const FITNESS_RECEIVER: &str = "$(kIMTranscriptPluginBreadcrumbTextReceiverIdentifier)";

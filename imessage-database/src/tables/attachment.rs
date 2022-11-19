@@ -162,20 +162,20 @@ impl Attachment {
     }
 
     /// Get the media type of an attachment
-    pub fn mime_type<'a>(&'a self) -> MediaType<'a> {
+    pub fn mime_type(&'_ self) -> MediaType<'_> {
         match &self.mime_type {
             Some(mime) => {
                 if let Some(mime_str) = mime.split('/').into_iter().next() {
                     match mime_str {
-                        "image" => MediaType::Image(&mime),
-                        "video" => MediaType::Video(&mime),
-                        "audio" => MediaType::Audio(&mime),
-                        "text" => MediaType::Text(&mime),
-                        "application" => MediaType::Application(&mime),
-                        _ => MediaType::Other(&mime),
+                        "image" => MediaType::Image(mime),
+                        "video" => MediaType::Video(mime),
+                        "audio" => MediaType::Audio(mime),
+                        "text" => MediaType::Text(mime),
+                        "application" => MediaType::Application(mime),
+                        _ => MediaType::Other(mime),
                     }
                 } else {
-                    MediaType::Other(&mime)
+                    MediaType::Other(mime)
                 }
             }
             None => MediaType::Unknown,
@@ -185,7 +185,7 @@ impl Attachment {
     /// Get the path to an attachment, if it exists
     pub fn path(&self) -> Option<&Path> {
         match &self.filename {
-            Some(name) => Some(&Path::new(name)),
+            Some(name) => Some(Path::new(name)),
             None => None,
         }
     }

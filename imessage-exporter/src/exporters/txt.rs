@@ -7,16 +7,23 @@ use std::{
 
 use crate::{
     app::{progress::build_progress_bar_export, runtime::Config},
-    exporters::exporter::{Exporter, Writer},
+    exporters::exporter::{BalloonFormatter, Exporter, Writer},
 };
 
 use imessage_database::{
+    error::plist::PlistParseError,
+    message_types::{
+        app::AppMessage,
+        music::MusicMessage,
+        url::URLMessage,
+        variants::{BalloonProvider, CustomBalloon},
+    },
     tables::{
         messages::BubbleType,
-        table::{ME, ORPHANED, UNKNOWN},
+        table::{FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN},
     },
-    util::dates,
-    Attachment, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
+    util::{dates, plist::parse_plist},
+    Attachment, Variant, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
 };
 
 pub struct TXT<'a> {
@@ -124,22 +131,37 @@ impl<'a> Writer<'a> for TXT<'a> {
         // Generate the message body from it's components
         for (idx, message_part) in message_parts.iter().enumerate() {
             match message_part {
-                BubbleType::Text(text) => self.add_line(&mut formatted_message, text, &indent),
+                // Fitness messages have a prefix that we need to replace with the opposite if who sent the message
+                BubbleType::Text(text) => {
+                    if text.starts_with(FITNESS_RECEIVER) {
+                        self.add_line(
+                            &mut formatted_message,
+                            &text.replace(FITNESS_RECEIVER, "You"),
+                            &indent,
+                        );
+                    } else {
+                        self.add_line(&mut formatted_message, text, &indent);
+                    }
+                }
                 BubbleType::Attachment => match attachments.get_mut(attachment_index) {
                     Some(attachment) => match self.format_attachment(attachment) {
                         Ok(result) => {
                             attachment_index += 1;
                             self.add_line(&mut formatted_message, &result, &indent);
                         }
-                        Err(result) => self.add_line(&mut formatted_message, &result, &indent),
+                        Err(result) => self.add_line(&mut formatted_message, result, &indent),
                     },
                     // Attachment does not exist in attachments table
                     None => self.add_line(&mut formatted_message, "Attachment missing!", &indent),
                 },
-                // TODO: Support app messages
-                BubbleType::App => {
-                    self.add_line(&mut formatted_message, self.format_app(message), &indent)
-                }
+                BubbleType::App => match self.format_app(message, &mut attachments) {
+                    Ok(ok_bubble) => self.add_line(&mut formatted_message, &ok_bubble, &indent),
+                    Err(why) => self.add_line(
+                        &mut formatted_message,
+                        &format!("Unable to format app message: {why}"),
+                        &indent,
+                    ),
+                },
             };
 
             // Handle expressives
@@ -190,7 +212,6 @@ impl<'a> Writer<'a> for TXT<'a> {
             );
         }
 
-        // TODO: We add 2 newlines for messages that have replies
         if indent.is_empty() {
             // Add a newline for top-level messages
             formatted_message.push('\n');
@@ -207,15 +228,65 @@ impl<'a> Writer<'a> for TXT<'a> {
         }
     }
 
-    fn format_app(&self, _: &'a Message) -> &'a str {
-        // TODO: Implement app messages
-        // TODO: Support Apple Pay variants
-        "App messages not yet implemented!"
+    fn format_app(
+        &self,
+        message: &'a Message,
+        attachments: &mut Vec<Attachment>,
+    ) -> Result<String, PlistParseError> {
+        if let Variant::App(balloon) = message.variant() {
+            let mut app_bubble = String::new();
+
+            match message.payload_data(&self.config.db) {
+                Some(payload) => {
+                    let parsed = parse_plist(&payload)?;
+
+                    // Handle URL messages separately since they are a special case
+                    let res = if message.is_url() {
+                        // Handle the URL case
+                        match balloon {
+                            CustomBalloon::URL => self.format_url(&URLMessage::from_map(&parsed)?),
+                            CustomBalloon::Music => {
+                                self.format_music(&MusicMessage::from_map(&parsed)?)
+                            }
+                            _ => unreachable!(),
+                        }
+                    } else {
+                        // Handle the app case
+                        match AppMessage::from_map(&parsed) {
+                            Ok(bubble) => match balloon {
+                                CustomBalloon::Application(bundle_id) => {
+                                    self.format_generic_app(&bubble, bundle_id, attachments)
+                                }
+                                CustomBalloon::Handwriting => self.format_handwriting(&bubble),
+                                CustomBalloon::ApplePay => self.format_apple_pay(&bubble),
+                                CustomBalloon::Fitness => self.format_fitness(&bubble),
+                                CustomBalloon::Slideshow => self.format_slideshow(&bubble),
+                                _ => unreachable!(),
+                            },
+                            Err(why) => return Err(PlistParseError::ParseError(format!("{why}"))),
+                        }
+                    };
+                    app_bubble.push_str(&res);
+                }
+                None => {
+                    // Sometimes, URL messages are missing their payloads
+                    if message.is_url() {
+                        if let Some(text) = &message.text {
+                            return Ok(text.to_string());
+                        }
+                    }
+                    return Err(PlistParseError::NoPayload);
+                }
+            };
+            Ok(app_bubble)
+        } else {
+            Err(PlistParseError::WrongMessageType)
+        }
     }
 
-    fn format_reaction(&self, msg: &Message) -> Result<std::string::String, std::string::String> {
+    fn format_reaction(&self, msg: &Message) -> Result<String, String> {
         match msg.variant() {
-            imessage_database::Variant::Reaction(_, added, reaction) => {
+            Variant::Reaction(_, added, reaction) => {
                 if !added {
                     return Ok("".to_string());
                 }
@@ -225,33 +296,19 @@ impl<'a> Writer<'a> for TXT<'a> {
                     self.config.who(&msg.handle_id, msg.is_from_me),
                 ))
             }
-            imessage_database::Variant::Sticker(_) => {
+            Variant::Sticker(_) => {
                 let paths = Attachment::from_message(&self.config.db, msg)?;
                 Ok(format!(
                     "Sticker from {}: {}",
                     self.config.who(&msg.handle_id, msg.is_from_me),
                     match paths.get(0) {
-                        Some(sticker) => &sticker.filename.as_ref().unwrap(),
+                        Some(sticker) => sticker.filename.as_ref().unwrap(),
                         None => "Sticker not found!",
                     },
                 ))
             }
             _ => unreachable!(),
         }
-    }
-
-    fn format_annoucement(&self, msg: &'a Message) -> String {
-        let mut who = self.config.who(&msg.handle_id, msg.is_from_me);
-        // Rename yourself so we render the proper grammar here
-        if who == ME {
-            who = "You"
-        }
-
-        let timestamp = dates::format(&msg.date(&self.config.offset));
-        format!(
-            "{timestamp} {who} renamed the conversation to {}\n\n",
-            msg.group_title.as_deref().unwrap_or(UNKNOWN)
-        )
     }
 
     fn format_expressive(&self, msg: &'a Message) -> &'a str {
@@ -278,6 +335,20 @@ impl<'a> Writer<'a> for TXT<'a> {
         }
     }
 
+    fn format_annoucement(&self, msg: &'a Message) -> String {
+        let mut who = self.config.who(&msg.handle_id, msg.is_from_me);
+        // Rename yourself so we render the proper grammar here
+        if who == ME {
+            who = "You"
+        }
+
+        let timestamp = dates::format(&msg.date(&self.config.offset));
+        format!(
+            "{timestamp} {who} renamed the conversation to {}\n\n",
+            msg.group_title.as_deref().unwrap_or(UNKNOWN)
+        )
+    }
+
     fn write_to_file(file: &Path, text: &str) {
         let mut file = File::options()
             .append(true)
@@ -288,16 +359,164 @@ impl<'a> Writer<'a> for TXT<'a> {
     }
 }
 
+impl<'a> BalloonFormatter for TXT<'a> {
+    fn format_url(&self, balloon: &URLMessage) -> String {
+        let mut out_s = String::new();
+
+        if let Some(url) = balloon.url {
+            out_s.push_str(url);
+            out_s.push('\n');
+        } else if let Some(original_url) = balloon.original_url {
+            out_s.push_str(original_url);
+            out_s.push('\n');
+        }
+
+        if let Some(title) = balloon.title {
+            out_s.push_str(title);
+            out_s.push('\n');
+        }
+
+        if let Some(summary) = balloon.summary {
+            out_s.push_str(summary);
+            out_s.push('\n');
+        }
+
+        // We want to keep the newlines between blocks, but the last one should be removed
+        out_s.strip_suffix('\n').unwrap_or(&out_s).to_string()
+    }
+
+    fn format_handwriting(&self, _: &AppMessage) -> String {
+        String::from("Handwritten messages are not yet supported!")
+    }
+
+    fn format_apple_pay(&self, balloon: &AppMessage) -> String {
+        let mut out_s = String::new();
+        if let Some(caption) = balloon.caption {
+            out_s.push_str(caption);
+            out_s.push_str(" transaction: ");
+        }
+
+        if let Some(ldtext) = balloon.ldtext {
+            out_s.push_str(ldtext);
+        } else {
+            out_s.push_str("unknown amount");
+        }
+
+        out_s
+    }
+
+    fn format_fitness(&self, balloon: &AppMessage) -> String {
+        let mut out_s = String::new();
+        if let Some(app_name) = balloon.app_name {
+            out_s.push_str(app_name);
+            out_s.push_str(" message: ");
+        }
+        if let Some(ldtext) = balloon.ldtext {
+            out_s.push_str(ldtext);
+        } else {
+            out_s.push_str("unknown workout");
+        }
+        out_s
+    }
+
+    fn format_slideshow(&self, balloon: &AppMessage) -> String {
+        let mut out_s = String::new();
+        if let Some(ldtext) = balloon.ldtext {
+            out_s.push_str("Photo album: ");
+            out_s.push_str(ldtext);
+        }
+
+        if let Some(url) = balloon.url {
+            out_s.push(' ');
+            out_s.push_str(url);
+        }
+
+        out_s
+    }
+
+    fn format_generic_app(
+        &self,
+        balloon: &AppMessage,
+        bundle_id: &str,
+        _: &mut Vec<Attachment>,
+    ) -> String {
+        let mut out_s = String::new();
+
+        if let Some(name) = balloon.app_name {
+            out_s.push_str(name);
+        } else {
+            out_s.push_str(bundle_id);
+        }
+
+        out_s.push_str(" message:\n");
+        if let Some(title) = balloon.title {
+            out_s.push_str(title);
+            out_s.push('\n');
+        }
+
+        if let Some(subtitle) = balloon.subtitle {
+            out_s.push_str(subtitle);
+            out_s.push('\n');
+        }
+
+        if let Some(caption) = balloon.caption {
+            out_s.push_str(caption);
+            out_s.push('\n');
+        }
+
+        if let Some(subcaption) = balloon.subcaption {
+            out_s.push_str(subcaption);
+            out_s.push('\n');
+        }
+
+        if let Some(trailing_caption) = balloon.trailing_caption {
+            out_s.push_str(trailing_caption);
+            out_s.push('\n');
+        }
+
+        if let Some(trailing_subcaption) = balloon.trailing_subcaption {
+            out_s.push_str(trailing_subcaption);
+            out_s.push('\n');
+        }
+
+        // We want to keep the newlines between blocks, but the last one should be removed
+        out_s.strip_suffix('\n').unwrap_or(&out_s).to_string()
+    }
+
+    fn format_music(&self, balloon: &MusicMessage) -> String {
+        let mut out_s = String::new();
+
+        if let Some(track_name) = balloon.track_name {
+            out_s.push_str(track_name);
+            out_s.push('\n');
+        }
+
+        if let Some(album) = balloon.album {
+            out_s.push_str(album);
+            out_s.push('\n');
+        }
+
+        if let Some(artist) = balloon.artist {
+            out_s.push_str(artist);
+            out_s.push('\n');
+        }
+
+        if let Some(url) = balloon.url {
+            out_s.push_str(url);
+            out_s.push('\n');
+        }
+
+        out_s
+    }
+}
+
 impl<'a> TXT<'a> {
     fn get_time(&self, message: &Message) -> String {
         let mut date = dates::format(&message.date(&self.config.offset));
         let read_after = message.time_until_read(&self.config.offset);
         if let Some(time) = read_after {
             if !time.is_empty() {
-                let who = match message.is_from_me {
-                    true => "them",
-                    false => "you",
-                };
+                let who = if message.is_from_me { "them" } else { "you" };
                 date.push_str(&format!(" (Read by {who} after {time})"));
             }
         }
@@ -334,6 +553,7 @@ mod tests {
             group_title: None,
             associated_message_guid: None,
             associated_message_type: i32::default(),
+            balloon_bundle_id: None,
             expressive_send_style_id: None,
             thread_originator_guid: None,
             thread_originator_part: None,

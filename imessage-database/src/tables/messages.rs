@@ -5,37 +5,42 @@
 use std::{collections::HashMap, vec};
 
 use chrono::{naive::NaiveDateTime, offset::Local, DateTime, Datelike, TimeZone, Timelike};
+use plist::Value;
 use rusqlite::{Connection, Error, Result, Row, Statement};
 
 use crate::{
+    message_types::{
+        expressives::{BubbleEffect, Expressive, ScreenEffect},
+        variants::{CustomBalloon, Reaction, Variant},
+    },
     tables::table::{
         Cacheable, Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE, MESSAGE_ATTACHMENT_JOIN,
+        MESSAGE_PAYLOAD,
     },
     util::{
         dates::readable_diff,
         output::{done_processing, processing},
     },
-    ApplePay, BubbleEffect, Expressive, Reaction, ScreenEffect, Variant,
 };
 
 const ATTACHMENT_CHAR: char = '\u{FFFC}';
 const APP_CHAR: char = '\u{FFFD}';
 const REPLACEMENT_CHARS: [char; 2] = [ATTACHMENT_CHAR, APP_CHAR];
-const COLUMNS: &str = "m.rowid, m.guid, m.text, m.service, m.handle_id, m.subject, m.date, m.date_read, m.date_delivered, m.is_from_me, m.is_read, m.group_title, m.associated_message_guid, m.associated_message_type, m.expressive_send_style_id, m.thread_originator_guid, m.thread_originator_part";
+const COLUMNS: &str = "m.rowid, m.guid, m.text, m.service, m.handle_id, m.subject, m.date, m.date_read, m.date_delivered, m.is_from_me, m.is_read, m.group_title, m.associated_message_guid, m.associated_message_type, m.balloon_bundle_id, m.expressive_send_style_id, m.thread_originator_guid, m.thread_originator_part";
 
 /// Represents a broad category of messages: standalone, thread originators, and thread replies.
 #[derive(Debug)]
 pub enum MessageType<'a> {
     /// A normal message not associated with any others
-    Normal(Variant, Expressive<'a>),
+    Normal(Variant<'a>, Expressive<'a>),
     /// A message that has replies
-    Thread(Variant, Expressive<'a>),
+    Thread(Variant<'a>, Expressive<'a>),
     /// A message that is a reply to another message
-    Reply(Variant, Expressive<'a>),
+    Reply(Variant<'a>, Expressive<'a>),
 }
 
 /// Defines the parts of a message bubble, i.e. the content that can exist in a single message.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum BubbleType<'a> {
     /// A normal text message
     Text(&'a str),
@@ -47,14 +52,16 @@ pub enum BubbleType<'a> {
 
 /// Defines different types of services we can recieve messages from.
 #[derive(Debug)]
-pub enum Service {
+pub enum Service<'a> {
     /// An iMessage
     #[allow(non_camel_case_types)]
     iMessage,
     /// A message sent as SMS
     SMS,
     /// Any other type of message
-    Other,
+    Other(&'a str),
+    /// Used when service field is not set
+    Unknown,
 }
 
 /// Represents a single row in the `message` table.
@@ -75,6 +82,7 @@ pub struct Message {
     pub group_title: Option<String>,
     pub associated_message_guid: Option<String>,
     pub associated_message_type: i32,
+    pub balloon_bundle_id: Option<String>,
     pub expressive_send_style_id: Option<String>,
     pub thread_originator_guid: Option<String>,
     pub thread_originator_part: Option<String>,
@@ -100,12 +108,13 @@ impl Table for Message {
             group_title: row.get(11)?,
             associated_message_guid: row.get(12)?,
             associated_message_type: row.get(13)?,
-            expressive_send_style_id: row.get(14)?,
-            thread_originator_guid: row.get(15)?,
-            thread_originator_part: row.get(16)?,
-            chat_id: row.get(17)?,
-            num_attachments: row.get(18)?,
-            num_replies: row.get(19)?,
+            balloon_bundle_id: row.get(14)?,
+            expressive_send_style_id: row.get(15)?,
+            thread_originator_guid: row.get(16)?,
+            thread_originator_part: row.get(17)?,
+            chat_id: row.get(18)?,
+            num_attachments: row.get(19)?,
+            num_replies: row.get(20)?,
         })
     }
 
@@ -217,16 +226,15 @@ impl Cacheable for Message {
         for reaction in messages {
             let reaction = Self::extract(reaction)?;
             if reaction.is_reaction() {
-                match reaction.clean_associated_guid() {
-                    Some((_, reaction_target_guid)) => match map.get_mut(reaction_target_guid) {
+                if let Some((_, reaction_target_guid)) = reaction.clean_associated_guid() {
+                    match map.get_mut(reaction_target_guid) {
                         Some(reactions) => {
                             reactions.push(reaction.guid);
                         }
                         None => {
                             map.insert(reaction_target_guid.to_string(), vec![reaction.guid]);
                         }
-                    },
-                    None => (),
+                    }
                 }
             }
         }
@@ -241,11 +249,19 @@ impl Message {
     /// for each attachment and one [`U+FFFD`](https://www.fileformat.info/info/unicode/char/fffd/index.htm) for app messages that we need
     /// to format.
     pub fn body(&self) -> Vec<BubbleType> {
+        let mut out_v = vec![];
+
+        // If the message is an app, it will be rendered differently, so just escape there
+        if self.balloon_bundle_id.is_some() {
+            out_v.push(BubbleType::App);
+            return out_v;
+        }
+
         match &self.text {
             Some(text) => {
-                let mut out_v = vec![];
                 let mut start: usize = 0;
                 let mut end: usize = 0;
+
                 for (idx, char) in text.char_indices() {
                     if REPLACEMENT_CHARS.contains(&char) {
                         if start < end {
@@ -352,6 +368,14 @@ impl Message {
         self.expressive_send_style_id.is_some()
     }
 
+    /// `true` if the message has a URL preview, else `false`
+    pub fn is_url(&self) -> bool {
+        matches!(
+            self.variant(),
+            Variant::App(CustomBalloon::URL) | Variant::App(CustomBalloon::Music)
+        )
+    }
+
     /// `true` if the message has attachments, else `false`
     pub fn has_attachments(&self) -> bool {
         self.num_attachments > 0
@@ -373,7 +397,7 @@ impl Message {
         0
     }
 
-    /// Build a HashMap of message component index to messages that react to that component
+    /// Get the number of messages in the database
     ///
     /// # Example:
     ///
@@ -518,14 +542,57 @@ impl Message {
         Ok(out_h)
     }
 
+    /// Parse the App's Bundle ID out of the Balloon's Bundle ID
+    fn parse_balloon_bundle_id(&self) -> Option<&str> {
+        if let Some(bundle_id) = &self.balloon_bundle_id {
+            let mut parts = bundle_id.split(':');
+            let bundle_id = parts.next();
+            // If there is only one part, use that, otherwise get the third part
+            if parts.next().is_none() {
+                bundle_id
+            } else {
+                // Will be None if there is no third part
+                parts.next()
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Get the variant of a message, see [crate::message_types::variants] for detail.
     pub fn variant(&self) -> Variant {
         match self.associated_message_type {
-            // Normal message
-            0 => Variant::Normal,
-
-            // Apple Pay
-            2 => Variant::ApplePay(ApplePay::Send(self.text.as_ref().unwrap().to_owned())),
-            3 => Variant::ApplePay(ApplePay::Recieve(self.text.as_ref().unwrap().to_owned())),
+            // Standard iMessages with either text or a message payload
+            0 | 2 | 3 => match self.parse_balloon_bundle_id() {
+                Some(bundle_id) => match bundle_id {
+                    "com.apple.messages.URLBalloonProvider" => {
+                        if let Some(text) = &self.text {
+                            if text.starts_with("https://music.apple") {
+                                Variant::App(CustomBalloon::Music)
+                            } else {
+                                Variant::App(CustomBalloon::URL)
+                            }
+                        } else {
+                            Variant::App(CustomBalloon::URL)
+                        }
+                    }
+                    "com.apple.Handwriting.HandwritingProvider" => {
+                        Variant::App(CustomBalloon::Handwriting)
+                    }
+                    "com.apple.PassbookUIService.PeerPaymentMessagesExtension" => {
+                        Variant::App(CustomBalloon::ApplePay)
+                    }
+                    "com.apple.ActivityMessagesApp.MessagesExtension" => {
+                        Variant::App(CustomBalloon::Fitness)
+                    }
+                    "com.apple.mobileslideshow.PhotosMessagesApp" => {
+                        Variant::App(CustomBalloon::Slideshow)
+                    }
+                    _ => Variant::App(CustomBalloon::Application(bundle_id)),
+                },
+                // This is the most common case
+                None => Variant::Normal,
+            },
 
             // Stickers overlayed on messages
             1000 => Variant::Sticker(self.reaction_index()),
@@ -549,24 +616,33 @@ impl Message {
         }
     }
 
+    /// Determine the service the message was sent from, i.e. iMessage, SMS, IRC, etc.
     pub fn service(&self) -> Service {
         match self.service.as_deref() {
             Some("iMessage") => Service::iMessage,
             Some("SMS") => Service::SMS,
-            _ => Service::Other,
+            Some(service_name) => Service::Other(service_name),
+            None => Service::Unknown,
         }
     }
 
-    pub fn case(&self) -> MessageType {
-        if self.is_reply() {
-            MessageType::Reply(self.variant(), self.get_expressive())
-        } else if self.has_replies() {
-            MessageType::Thread(self.variant(), self.get_expressive())
-        } else {
-            MessageType::Normal(self.variant(), self.get_expressive())
+    /// Get a message's plist from the `payload_data` BLOB column
+    /// Calling this hits the database, so it is expensive and should
+    /// only get invoked when needed
+    pub fn payload_data(&self, db: &Connection) -> Option<Value> {
+        match db.blob_open(
+            rusqlite::DatabaseName::Main,
+            MESSAGE,
+            MESSAGE_PAYLOAD,
+            self.rowid as i64,
+            true,
+        ) {
+            Ok(payload) => Some(Value::from_reader(payload).ok()?),
+            Err(_) => None,
         }
     }
 
+    /// Determine which expressive the message was sent with
     pub fn get_expressive(&self) -> Expressive {
         match &self.expressive_send_style_id {
             Some(content) => match content.as_str() {
@@ -615,9 +691,10 @@ impl Message {
 #[cfg(test)]
 mod tests {
     use crate::{
-        message_types::expressives,
+        message_types::{expressives, variants::CustomBalloon},
         tables::messages::{BubbleType, Message},
         util::dates::get_offset,
+        Variant,
     };
 
     fn blank() -> Message {
@@ -636,6 +713,7 @@ mod tests {
             group_title: None,
             associated_message_guid: None,
             associated_message_type: i32::default(),
+            balloon_bundle_id: None,
             expressive_send_style_id: None,
             thread_originator_guid: None,
             thread_originator_part: None,
@@ -741,7 +819,6 @@ mod tests {
         // May 17, 2022  9:30:31 PM
         message.date_read = 674530231992568192;
 
-        println!("{:?}", message.time_until_read(&offset));
         assert_eq!(
             message.time_until_read(&offset),
             Some("1 hour, 49 seconds".to_string())
@@ -762,7 +839,6 @@ mod tests {
         // May 17, 2022  8:29:42 PM
         message.date_read = 674526582885055488;
 
-        println!("{:?}", message.time_until_read(&offset));
         assert_eq!(message.time_until_read(&offset), None)
     }
 
@@ -791,5 +867,57 @@ mod tests {
             m.get_expressive(),
             expressives::Expressive::Screen(expressives::ScreenEffect::Balloons)
         );
+    }
+
+    #[test]
+    fn can_get_no_balloon_bundle_id() {
+        let m = blank();
+        assert_eq!(m.parse_balloon_bundle_id(), None)
+    }
+
+    #[test]
+    fn can_get_balloon_bundle_id_os() {
+        let mut m = blank();
+        m.balloon_bundle_id = Some("com.apple.Handwriting.HandwritingProvider".to_owned());
+        assert_eq!(
+            m.parse_balloon_bundle_id(),
+            Some("com.apple.Handwriting.HandwritingProvider")
+        )
+    }
+
+    #[test]
+    fn can_get_balloon_bundle_id_url() {
+        let mut m = blank();
+        m.balloon_bundle_id = Some("com.apple.messages.URLBalloonProvider".to_owned());
+        assert_eq!(
+            m.parse_balloon_bundle_id(),
+            Some("com.apple.messages.URLBalloonProvider")
+        )
+    }
+
+    #[test]
+    fn can_get_balloon_bundle_id_apple() {
+        let mut m = blank();
+        m.balloon_bundle_id = Some("com.apple.messages.MSMessageExtensionBalloonPlugin:0000000000:com.apple.PassbookUIService.PeerPaymentMessagesExtension".to_owned());
+        assert_eq!(
+            m.parse_balloon_bundle_id(),
+            Some("com.apple.PassbookUIService.PeerPaymentMessagesExtension")
+        )
+    }
+
+    #[test]
+    fn can_get_balloon_bundle_id_third_party() {
+        let mut m = blank();
+        m.balloon_bundle_id = Some("com.apple.messages.MSMessageExtensionBalloonPlugin:QPU8QS3E62:com.contextoptional.OpenTable.Messages".to_owned());
+        assert_eq!(
+            m.parse_balloon_bundle_id(),
+            Some("com.contextoptional.OpenTable.Messages")
+        );
+        assert!(matches!(
+            m.variant(),
+            Variant::App(CustomBalloon::Application(
+                "com.contextoptional.OpenTable.Messages"
+            ))
+        ));
     }
 }

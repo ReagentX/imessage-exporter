@@ -6,21 +6,13 @@ use std::{
 /// Convert a HEIC image file to a JPEG
 ///
 /// This uses the MacOS builtin `sips` program
-/// Docs: https://www.unix.com/man-page/osx/1/sips/ (or `man sips`)
+/// Docs: <https://www.unix.com/man-page/osx/1/sips/> (or `man sips`)
 pub fn heic_to_jpeg(from: &Path, to: &Path) -> Option<()> {
     // Get the path we want to copy from
-    let from_path = if let Some(from_path) = from.to_str() {
-        from_path
-    } else {
-        return None;
-    };
+    let from_path = from.to_str()?;
 
     // Get the path we want to write to
-    let to_path = if let Some(to_path) = to.to_str() {
-        to_path
-    } else {
-        return None;
-    };
+    let to_path = to.to_str()?;
 
     // Build the comment
     match Command::new("sips")

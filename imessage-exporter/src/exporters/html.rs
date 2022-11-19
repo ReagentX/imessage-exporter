@@ -11,15 +11,24 @@ use crate::{
 };
 
 use imessage_database::{
+    error::plist::PlistParseError,
+    message_types::{
+        app::AppMessage,
+        music::MusicMessage,
+        url::URLMessage,
+        variants::{BalloonProvider, CustomBalloon},
+    },
     tables::{
         attachment::MediaType,
         messages::BubbleType,
-        table::{ME, ORPHANED, UNKNOWN},
+        table::{FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN},
     },
-    util::{dates, dirs::home},
-    Attachment, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
+    util::{dates, dirs::home, plist::parse_plist},
+    Attachment, Variant, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
 };
 use uuid::Uuid;
+
+use super::exporter::BalloonFormatter;
 
 const HEADER: &str = "<html>\n<meta charset=\"UTF-8\">";
 const FOOTER: &str = "</html>";
@@ -165,8 +174,8 @@ impl<'a> Writer<'a> for HTML<'a> {
             self.add_line(
                 &mut formatted_message,
                 subject,
-                "<span class=\"subject\">",
-                "</span>",
+                "<p>Subject: <span class=\"subject\">",
+                "</span></p>",
             );
         }
 
@@ -182,12 +191,21 @@ impl<'a> Writer<'a> for HTML<'a> {
 
             match message_part {
                 BubbleType::Text(text) => {
-                    self.add_line(
-                        &mut formatted_message,
-                        *text,
-                        "<span class=\"bubble\">",
-                        "</span>",
-                    );
+                    if text.starts_with(FITNESS_RECEIVER) {
+                        self.add_line(
+                            &mut formatted_message,
+                            &text.replace(FITNESS_RECEIVER, "You"),
+                            "<span class=\"bubble\">",
+                            "</span>",
+                        );
+                    } else {
+                        self.add_line(
+                            &mut formatted_message,
+                            text,
+                            "<span class=\"bubble\">",
+                            "</span>",
+                        );
+                    }
                 }
                 BubbleType::Attachment => {
                     match attachments.get_mut(attachment_index) {
@@ -199,8 +217,8 @@ impl<'a> Writer<'a> for HTML<'a> {
                             Err(result) => {
                                 self.add_line(
                                     &mut formatted_message,
-                                    &result,
-                                    "<span class=\"attachment_error\">Unable to locate attachment:",
+                                    result,
+                                    "<span class=\"attachment_error\">Unable to locate attachment: ",
                                     "</span>",
                                 );
                             }
@@ -214,13 +232,20 @@ impl<'a> Writer<'a> for HTML<'a> {
                         ),
                     }
                 }
-                // TODO: Support app messages
-                BubbleType::App => self.add_line(
-                    &mut formatted_message,
-                    self.format_app(message),
-                    "<span class=\"attachment_error\">",
-                    "</span>",
-                ),
+                BubbleType::App => match self.format_app(message, &mut attachments) {
+                    Ok(ok_bubble) => self.add_line(
+                        &mut formatted_message,
+                        &ok_bubble,
+                        "<div class=\"app\">",
+                        "</div>",
+                    ),
+                    Err(why) => self.add_line(
+                        &mut formatted_message,
+                        &format!("Unable to format {:?} message: {why}", message.variant()),
+                        "<div class=\"app_error\">",
+                        "</div>",
+                    ),
+                },
             };
 
             // Write the part div end
@@ -302,9 +327,10 @@ impl<'a> Writer<'a> for HTML<'a> {
                 if let Some(path_str) = path.as_os_str().to_str() {
                     // Resolve the attachment path if necessary
                     // TODO: can we avoid copying the path here?
-                    let resolved_attachment_path = match path.starts_with("~") {
-                        true => path_str.replace("~", &home()),
-                        false => path_str.to_owned(),
+                    let resolved_attachment_path = if path.starts_with("~") {
+                        path_str.replace('~', &home())
+                    } else {
+                        path_str.to_owned()
                     };
 
                     // Perform optional copy + convert
@@ -352,7 +378,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                     }
 
                     let embed_path = match &attachment.copied_path {
-                        Some(path) => &path,
+                        Some(path) => path,
                         None => &resolved_attachment_path,
                     };
 
@@ -384,17 +410,78 @@ impl<'a> Writer<'a> for HTML<'a> {
                         }
                     })
                 } else {
-                    return Err(&attachment.transfer_name);
+                    Err(&attachment.transfer_name)
                 }
             }
             None => Err(&attachment.transfer_name),
         }
     }
 
-    fn format_app(&self, _: &'a Message) -> &'a str {
-        // TODO: Implement app messages
-        // TODO: Support Apple Pay variants
-        "App messages not yet implemented!"
+    fn format_app(
+        &self,
+        message: &'a Message,
+        attachments: &mut Vec<Attachment>,
+    ) -> Result<String, PlistParseError> {
+        if let Variant::App(balloon) = message.variant() {
+            let mut app_bubble = String::new();
+
+            match message.payload_data(&self.config.db) {
+                Some(payload) => {
+                    let parsed = parse_plist(&payload)?;
+
+                    let res = if message.is_url() {
+                        // Handle the URL case
+                        match balloon {
+                            CustomBalloon::URL => self.format_url(&URLMessage::from_map(&parsed)?),
+                            CustomBalloon::Music => {
+                                self.format_music(&MusicMessage::from_map(&parsed)?)
+                            }
+                            _ => unreachable!(),
+                        }
+                    } else {
+                        match AppMessage::from_map(&parsed) {
+                            Ok(bubble) => match balloon {
+                                CustomBalloon::Application(bundle_id) => {
+                                    self.format_generic_app(&bubble, bundle_id, attachments)
+                                }
+                                CustomBalloon::Handwriting => self.format_handwriting(&bubble),
+                                CustomBalloon::ApplePay => self.format_apple_pay(&bubble),
+                                CustomBalloon::Fitness => self.format_fitness(&bubble),
+                                CustomBalloon::Slideshow => self.format_slideshow(&bubble),
+                                _ => unreachable!(),
+                            },
+                            Err(why) => return Err(PlistParseError::ParseError(format!("{why}"))),
+                        }
+                    };
+                    app_bubble.push_str(&res);
+                }
+                None => {
+                    // Sometimes, URL messages are missing their payloads
+                    if message.is_url() {
+                        if let Some(text) = &message.text {
+                            let mut out_s = String::new();
+                            out_s.push_str("<a href=\"");
+                            out_s.push_str(text);
+                            out_s.push_str("\">");
+
+                            out_s.push_str("<div class=\"app_header\"><div class=\"name\">");
+                            out_s.push_str(text);
+                            out_s.push_str("</div></div>");
+
+                            out_s.push_str("<div class=\"app_footer\"><div class=\"caption\">");
+                            out_s.push_str(text);
+                            out_s.push_str("</div></div></a>");
+
+                            return Ok(out_s);
+                        }
+                    }
+                    return Err(PlistParseError::NoPayload);
+                }
+            }
+            Ok(app_bubble)
+        } else {
+            Err(PlistParseError::WrongMessageType)
+        }
     }
 
     fn format_reaction(&self, msg: &Message) -> Result<String, String> {
@@ -422,9 +509,9 @@ impl<'a> Writer<'a> for HTML<'a> {
                     },
                     None => None,
                 }
-                .unwrap_or(format!(
-                    "<span class=\"reaction\">Sticker not found!</span>"
-                )))
+                .unwrap_or_else(|| {
+                    "<span class=\"reaction\">Sticker not found!</span>".to_string()
+                }))
             }
             _ => unreachable!(),
         }
@@ -476,19 +563,165 @@ impl<'a> Writer<'a> for HTML<'a> {
     }
 }
 
+impl<'a> BalloonFormatter for HTML<'a> {
+    fn format_url(&self, balloon: &URLMessage) -> String {
+        let mut out_s = String::new();
+
+        // Make the whole bubble clickable
+        if let Some(url) = balloon.get_url() {
+            out_s.push_str("<a href=\"");
+            out_s.push_str(url);
+            out_s.push_str("\">");
+        }
+
+        // Header section
+        out_s.push_str("<div class=\"app_header\">");
+
+        // Add preview images
+        balloon.images.iter().for_each(|image| {
+            out_s.push_str("<img src=\"");
+            out_s.push_str(image);
+            out_s.push_str("\" loading=\"lazy\", onerror=\"this.style.display='none'\">");
+        });
+
+        if let Some(site_name) = balloon.site_name {
+            out_s.push_str("<div class=\"name\">");
+            out_s.push_str(site_name);
+            out_s.push_str("</div>");
+        } else if let Some(url) = balloon.get_url() {
+            out_s.push_str("<div class=\"name\">");
+            out_s.push_str(url);
+            out_s.push_str("</div>");
+        }
+
+        // Header end
+        out_s.push_str("</div>");
+
+        // Only write the footer if there is data to write
+        if balloon.title.is_some() || balloon.summary.is_some() {
+            out_s.push_str("<div class=\"app_footer\">");
+
+            // Title
+            if let Some(title) = balloon.title {
+                out_s.push_str("<div class=\"caption\"><xmp>");
+                out_s.push_str(title);
+                out_s.push_str("</xmp></div>");
+            }
+
+            // Subtitle
+            if let Some(summary) = balloon.summary {
+                out_s.push_str("<div class=\"subcaption\"><xmp>");
+                out_s.push_str(summary);
+                out_s.push_str("</xmp></div>");
+            }
+
+            // End footer
+            out_s.push_str("</div>");
+        }
+
+        // End the link
+        if balloon.get_url().is_some() {
+            out_s.push_str("</a>");
+        }
+        out_s
+    }
+
+    fn format_handwriting(&self, _: &AppMessage) -> String {
+        String::from("Handwritten messages are not yet supported!")
+    }
+
+    fn format_apple_pay(&self, balloon: &AppMessage) -> String {
+        self.balloon_to_html(balloon, "Apple Pay", &mut [])
+    }
+
+    fn format_fitness(&self, balloon: &AppMessage) -> String {
+        self.balloon_to_html(balloon, "Fitness", &mut [])
+    }
+
+    fn format_slideshow(&self, balloon: &AppMessage) -> String {
+        self.balloon_to_html(balloon, "Slideshow", &mut [])
+    }
+
+    fn format_generic_app(
+        &self,
+        balloon: &AppMessage,
+        bundle_id: &str,
+        attachments: &mut Vec<Attachment>,
+    ) -> String {
+        self.balloon_to_html(balloon, bundle_id, attachments)
+    }
+
+    fn format_music(&self, balloon: &MusicMessage) -> String {
+        let mut out_s = String::new();
+
+        // Header section
+        out_s.push_str("<div class=\"app_header\">");
+
+        // Name
+        if let Some(track_name) = balloon.track_name {
+            out_s.push_str("<div class=\"name\">");
+            out_s.push_str(track_name);
+            out_s.push_str("</div>");
+        }
+
+        // Add preview section
+        if let Some(preview) = balloon.preview {
+            out_s.push_str("<audio controls src=\"");
+            out_s.push_str(preview);
+            out_s.push_str("\" </audio>");
+        }
+
+        // Header end
+        out_s.push_str("</div>");
+
+        // Make the footer clickable so we can interact with the preview
+        if let Some(url) = balloon.url {
+            out_s.push_str("<a href=\"");
+            out_s.push_str(url);
+            out_s.push_str("\">");
+        }
+
+        // Only write the footer if there is data to write
+        if balloon.artist.is_some() || balloon.album.is_some() {
+            out_s.push_str("<div class=\"app_footer\">");
+
+            // artist
+            if let Some(artist) = balloon.artist {
+                out_s.push_str("<div class=\"caption\"><xmp>");
+                out_s.push_str(artist);
+                out_s.push_str("</xmp></div>");
+            }
+
+            // Subtitle
+            if let Some(album) = balloon.album {
+                out_s.push_str("<div class=\"subcaption\"><xmp>");
+                out_s.push_str(album);
+                out_s.push_str("</xmp></div>");
+            }
+
+            // End footer
+            out_s.push_str("</div>");
+        }
+
+        // End the link
+        if balloon.url.is_some() {
+            out_s.push_str("</a>");
+        }
+        out_s
+    }
+}
+
 impl<'a> HTML<'a> {
     fn get_time(&self, message: &Message) -> String {
         let mut date = dates::format(&message.date(&self.config.offset));
         let read_after = message.time_until_read(&self.config.offset);
         if let Some(time) = read_after {
             if !time.is_empty() {
-                let who = match message.is_from_me {
-                    true => "them",
-                    false => "you",
-                };
+                let who = if message.is_from_me { "them" } else { "you" };
                 date.push_str(&format!(" (Read by {who} after {time})"));
             }
         }
+        date.push_str(&message.guid);
         date
     }
 
@@ -509,6 +742,102 @@ impl<'a> HTML<'a> {
         HTML::write_to_file(path, "<style>\n");
         HTML::write_to_file(path, STYLE);
         HTML::write_to_file(path, "\n</style>");
+    }
+
+    fn balloon_to_html(
+        &self,
+        balloon: &AppMessage,
+        bundle_id: &str,
+        attachments: &mut [Attachment],
+    ) -> String {
+        let mut out_s = String::new();
+        if let Some(url) = balloon.url {
+            out_s.push_str("<a href=\"");
+            out_s.push_str(url);
+            out_s.push_str("\">");
+        }
+        out_s.push_str("<div class=\"app_header\">");
+
+        // Image
+        if let Some(image) = balloon.image {
+            out_s.push_str("<img src=\"");
+            out_s.push_str(image);
+            out_s.push_str("\">");
+        } else if let Some(attachment) = attachments.get_mut(0) {
+            out_s.push_str(&self.format_attachment(attachment).unwrap_or_default());
+        }
+
+        // Name
+        out_s.push_str("<div class=\"name\">");
+        out_s.push_str(balloon.app_name.unwrap_or(bundle_id));
+        out_s.push_str("</div>");
+
+        // Title
+        if let Some(title) = balloon.title {
+            out_s.push_str("<div class=\"image_title\">");
+            out_s.push_str(title);
+            out_s.push_str("</div>");
+        }
+
+        // Subtitle
+        if let Some(subtitle) = balloon.subtitle {
+            out_s.push_str("<div class=\"image_subtitle\">");
+            out_s.push_str(subtitle);
+            out_s.push_str("</div>");
+        }
+
+        // ldtext
+        if let Some(ldtext) = balloon.ldtext {
+            out_s.push_str("<div class=\"ldtext\">");
+            out_s.push_str(ldtext);
+            out_s.push_str("</div>");
+        }
+
+        // Header end, footer begin
+        out_s.push_str("</div>");
+
+        // Only write the footer if there is data to write
+        if balloon.caption.is_some()
+            || balloon.subcaption.is_some()
+            || balloon.trailing_caption.is_some()
+            || balloon.trailing_subcaption.is_some()
+        {
+            out_s.push_str("<div class=\"app_footer\">");
+
+            // Caption
+            if let Some(caption) = balloon.caption {
+                out_s.push_str("<div class=\"caption\">");
+                out_s.push_str(caption);
+                out_s.push_str("</div>");
+            }
+
+            // Subcaption
+            if let Some(subcaption) = balloon.subcaption {
+                out_s.push_str("<div class=\"subcaption\">");
+                out_s.push_str(subcaption);
+                out_s.push_str("</div>");
+            }
+
+            // Trailing Caption
+            if let Some(trailing_caption) = balloon.trailing_caption {
+                out_s.push_str("<div class=\"trailing_caption\">");
+                out_s.push_str(trailing_caption);
+                out_s.push_str("</div>");
+            }
+
+            // Trailing Subcaption
+            if let Some(trailing_subcaption) = balloon.trailing_subcaption {
+                out_s.push_str("<div class=\"trailing_subcaption\">");
+                out_s.push_str(trailing_subcaption);
+                out_s.push_str("</div>");
+            }
+
+            out_s.push_str("</div>");
+        }
+        if balloon.url.is_some() {
+            out_s.push_str("</a>");
+        }
+        out_s
     }
 }
 
@@ -533,6 +862,7 @@ mod tests {
             group_title: None,
             associated_message_guid: None,
             associated_message_type: i32::default(),
+            balloon_bundle_id: None,
             expressive_send_style_id: None,
             thread_originator_guid: None,
             thread_originator_part: None,

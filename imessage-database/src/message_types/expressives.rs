@@ -5,7 +5,7 @@
 /// Bubble effects are effects that alter the display of the chat bubble.
 ///
 /// Read more [here](https://www.imore.com/how-to-use-bubble-and-screen-effects-imessage-iphone-ipad).
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum BubbleEffect {
     Slam,
     Loud,
@@ -16,7 +16,7 @@ pub enum BubbleEffect {
 /// Screen effects are effects that alter the entire background of the message view.
 ///
 /// Read more [here](https://www.imore.com/how-to-use-bubble-and-screen-effects-imessage-iphone-ipad).
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ScreenEffect {
     Confetti,
     Echo,
@@ -49,7 +49,7 @@ pub enum ScreenEffect {
 /// - com.apple.messages.effect.CKShootingStarEffect
 /// - com.apple.messages.effect.CKSparklesEffect
 /// - com.apple.messages.effect.CKSpotlightEffect
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Expressive<'a> {
     Screen(ScreenEffect),
     Bubble(BubbleEffect),
