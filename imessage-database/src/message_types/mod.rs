@@ -3,6 +3,7 @@
 */
 
 pub mod app;
+pub mod edited;
 pub mod expressives;
 pub mod music;
 pub mod url;
