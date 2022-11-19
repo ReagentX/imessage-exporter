@@ -22,6 +22,8 @@ pub fn parse(mut stream: Vec<u8>) -> Result<String, StreamTypedError> {
         let part = &stream[idx..idx + 2];
 
         if part == START_PATTERN {
+            // Remove one more byte that seems to change every message
+            // TODO: is this always correct?
             stream.drain(..idx + 3);
             break;
         }
@@ -29,7 +31,7 @@ pub fn parse(mut stream: Vec<u8>) -> Result<String, StreamTypedError> {
 
     for idx in 0..stream.len() as usize {
         if idx >= stream.len() {
-            return Err(StreamTypedError::NoEndPatter);
+            return Err(StreamTypedError::NoEndPattern);
         }
         let part = &stream[idx];
 

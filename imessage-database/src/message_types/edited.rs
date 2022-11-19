@@ -2,7 +2,7 @@ use plist::Value;
 
 use crate::error::plist::PlistParseError;
 use crate::tables::messages::APP_CHAR;
-use crate::util::dates::TIMESTAMP_FACTOR;
+use crate::util::{dates::TIMESTAMP_FACTOR, streamtyped::parse};
 
 use super::variants::BalloonProvider;
 
@@ -14,14 +14,14 @@ use super::variants::BalloonProvider;
 /// Edited or unsent messages are stored with a `NULL` `text` field.
 /// Edited messages include `message_summary_info` that contains an array of
 /// `streamtyped` data where each array item contains the edited
-/// message. The order in the array represents the order the messages 
+/// message. The order in the array represents the order the messages
 /// were edited in, i.e. item 0 was the original and the last item is
 /// the current message.
 ///
 /// For each dictionary item in this array, The `d` key represents the
 /// time the message was edited and the `t` key represents the message
 /// text in the `streamtyped` format.
-/// 
+///
 /// There is no array if the message was unsent.
 ///
 /// Apple describes editing and unsending messages [here](https://support.apple.com/guide/iphone/unsend-and-edit-messages-iphe67195653/ios).
@@ -79,8 +79,8 @@ impl<'a> BalloonProvider<'a> for EditedMessage<'a> {
                 .ok_or_else(|| PlistParseError::MissingKey("t".to_string()))?
                 .as_data()
                 .ok_or_else(|| PlistParseError::InvalidType("t".to_string(), "data".to_string()))?;
-            let streamtyped = String::from_utf8_lossy(raw_streamtyped);
-            let text = EditedMessage::extract_message_from_streamtyped(&streamtyped)?;
+            let text =
+                parse(raw_streamtyped.to_vec()).map_err(PlistParseError::StreamTypedError)?;
 
             let guid = message_data.get("bcg").and_then(|item| item.as_string());
 
@@ -179,7 +179,7 @@ mod tests {
                 690513494000000000,
             ],
             texts: vec![
-                "First message".to_string(),
+                "First message  ".to_string(),
                 "Edit 1".to_string(),
                 "Edit 2".to_string(),
                 "Edited message".to_string(),

@@ -1,5 +1,7 @@
 use std::fmt::{Display, Formatter, Result};
 
+use super::streamtyped::StreamTypedError;
+
 /// Errors that can happen when parsing the plist data stored in the `payload_data` field
 #[derive(Debug)]
 pub enum PlistParseError {
@@ -12,6 +14,7 @@ pub enum PlistParseError {
     WrongMessageType,
     ParseError(String),
     InvalidEditedMessage(String),
+    StreamTypedError(StreamTypedError),
 }
 
 impl Display for PlistParseError {
@@ -44,6 +47,7 @@ impl Display for PlistParseError {
             PlistParseError::InvalidEditedMessage(message) => {
                 write!(fmt, "Unable to parse message from binary data: {message}")
             }
+            PlistParseError::StreamTypedError(why) => write!(fmt, "{why}"),
         }
     }
 }

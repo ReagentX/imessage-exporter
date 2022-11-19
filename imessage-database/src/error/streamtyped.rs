@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter, Result};
 pub enum StreamTypedError {
     CannotParse,
     NoStartPattern,
-    NoEndPatter,
+    NoEndPattern,
 }
 
 impl Display for StreamTypedError {
@@ -12,7 +12,7 @@ impl Display for StreamTypedError {
         match self {
             StreamTypedError::CannotParse => write!(fmt, "No attributedBody found!"),
             StreamTypedError::NoStartPattern => write!(fmt, "No start pattern found!"),
-            StreamTypedError::NoEndPatter => write!(fmt, "No end pattern found!"),
+            StreamTypedError::NoEndPattern => write!(fmt, "No end pattern found!"),
         }
     }
 }
