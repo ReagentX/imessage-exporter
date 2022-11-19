@@ -109,7 +109,7 @@ pub fn readable_diff(start: DateTime<Local>, end: DateTime<Local>) -> Option<Str
 
 #[cfg(test)]
 mod tests {
-    use super::{format, readable_diff};
+    use crate::util::dates::{format, readable_diff};
     use chrono::prelude::*;
 
     #[test]

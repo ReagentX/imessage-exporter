@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     app::{converter::heic_to_jpeg, progress::build_progress_bar_export, runtime::Config},
-    exporters::exporter::{Exporter, Writer},
+    exporters::exporter::{BalloonFormatter, Exporter, Writer},
 };
 
 use imessage_database::{
@@ -26,9 +26,8 @@ use imessage_database::{
     util::{dates, dirs::home, plist::parse_plist},
     Attachment, Variant, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
 };
-use uuid::Uuid;
 
-use super::exporter::BalloonFormatter;
+use uuid::Uuid;
 
 const HEADER: &str = "<html>\n<meta charset=\"UTF-8\">";
 const FOOTER: &str = "</html>";

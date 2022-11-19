@@ -4,7 +4,7 @@ use crate::error::plist::PlistParseError;
 use crate::tables::messages::APP_CHAR;
 use crate::util::{dates::TIMESTAMP_FACTOR, streamtyped::parse};
 
-use super::variants::BalloonProvider;
+use crate::message_types::variants::BalloonProvider;
 
 /// Represents the `message_summary_info` of an edited or unsent iMessage.
 /// iMessage permits editing sent messages up to five times

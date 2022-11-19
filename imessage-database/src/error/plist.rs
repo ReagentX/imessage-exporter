@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter, Result};
 
-use super::streamtyped::StreamTypedError;
+use crate::error::streamtyped::StreamTypedError;
 
 /// Errors that can happen when parsing the plist data stored in the `payload_data` field
 #[derive(Debug)]
