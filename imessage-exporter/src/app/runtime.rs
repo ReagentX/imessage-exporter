@@ -47,7 +47,7 @@ impl<'a> Config<'a> {
                 Some(chatroom) => self.real_chatrooms.get(&chat_id).map(|id| (chatroom, id)),
                 // No chatroom for the given chat_id
                 None => {
-                    println!("Chat ID {chat_id} does not exist in chat table!");
+                    eprintln!("Chat ID {chat_id} does not exist in chat table!");
                     None
                 }
             },
