@@ -8,13 +8,20 @@ use crate::error::streamtyped::StreamTypedError;
 /// - <https://www.compart.com/en/unicode/U+0001>
 /// - <https://www.compart.com/en/unicode/U+002b>
 const START_PATTERN: [u8; 2] = [0x0001, 0x002b];
+
 /// Literal: `<Index> (IND)`
 /// - <https://www.compart.com/en/unicode/U+0084>
 const END_PATTERN: u8 = 0x0084;
 
-/// Parse the body text from a known type of `streamtyped` `attributedBody` file
+/// Parse the body text from a known type of `streamtyped` `attributedBody` file.
+///
+/// `attributedBody` `streamtyped` data looks like:
+///
+/// ```txt
+/// streamtyped���@���NSAttributedString�NSObject����NSString��+Example message  ��iI���� NSDictionary��i����__kIMMessagePartAttributeName����NSNumber��NSValue��*������
+/// ```
 pub fn parse(mut stream: Vec<u8>) -> Result<String, StreamTypedError> {
-    // Find the start index and trim
+    // Find the start index and drain
     for idx in 0..stream.len() as usize {
         if idx + 2 > stream.len() {
             return Err(StreamTypedError::NoStartPattern);
@@ -29,6 +36,7 @@ pub fn parse(mut stream: Vec<u8>) -> Result<String, StreamTypedError> {
         }
     }
 
+    // Find the end index and truncate
     for idx in 0..stream.len() as usize {
         if idx >= stream.len() {
             return Err(StreamTypedError::NoEndPattern);
@@ -41,6 +49,8 @@ pub fn parse(mut stream: Vec<u8>) -> Result<String, StreamTypedError> {
         }
     }
 
+    // `from_utf8` doesn't allocate, but `from_utf8_lossy` does, so we try the allocation-free
+    // version first and only allocate if it fails
     match String::from_utf8(stream)
         .map_err(|non_utf8| String::from_utf8_lossy(non_utf8.as_bytes()).into_owned())
     {
@@ -92,7 +102,10 @@ mod tests {
 
     #[test]
     fn test_parse_text_weird_font() {
-        let plist_path = current_dir().unwrap().as_path().join("test_data/streamtyped/WeirdText");
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/streamtyped/WeirdText");
         let mut file = File::open(plist_path).unwrap();
         let mut bytes = vec![];
         file.read_to_end(&mut bytes).unwrap();
@@ -105,7 +118,10 @@ mod tests {
 
     #[test]
     fn test_parse_text_url() {
-        let plist_path = current_dir().unwrap().as_path().join("test_data/streamtyped/URL");
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/streamtyped/URL");
         let mut file = File::open(plist_path).unwrap();
         let mut bytes = vec![];
         file.read_to_end(&mut bytes).unwrap();
@@ -118,7 +134,10 @@ mod tests {
 
     #[test]
     fn test_parse_text_multi_part() {
-        let plist_path = current_dir().unwrap().as_path().join("test_data/streamtyped/MultiPart");
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/streamtyped/MultiPart");
         let mut file = File::open(plist_path).unwrap();
         let mut bytes = vec![];
         file.read_to_end(&mut bytes).unwrap();
