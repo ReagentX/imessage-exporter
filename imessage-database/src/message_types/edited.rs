@@ -1,35 +1,37 @@
+/*!
+Logic and containers for the `message_summary_info` of an edited or unsent iMessage.
+*/
+
 use plist::Value;
 
 use crate::error::plist::PlistParseError;
-use crate::tables::messages::APP_CHAR;
 use crate::util::{dates::TIMESTAMP_FACTOR, streamtyped::parse};
 
 use crate::message_types::variants::BalloonProvider;
 
-/// Represents the `message_summary_info` of an edited or unsent iMessage.
 /// iMessage permits editing sent messages up to five times
 /// within 15 minutes of sending the first message and unsending
 /// sent messages within 2 minutes.
 ///
 /// Edited or unsent messages are stored with a `NULL` `text` field.
 /// Edited messages include `message_summary_info` that contains an array of
-/// `streamtyped` data where each array item contains the edited
+/// [`streamtyped`](crate::util::streamtyped) data where each array item contains the edited
 /// message. The order in the array represents the order the messages
 /// were edited in, i.e. item 0 was the original and the last item is
 /// the current message.
 ///
 /// For each dictionary item in this array, The `d` key represents the
-/// time the message was edited and the `t` key represents the message
-/// text in the `streamtyped` format.
+/// time the message was edited and the `t` key represents the message's
+/// `attributedBody` text in the [`streamtyped`](crate::util::streamtyped) format.
 ///
-/// There is no array if the message was unsent.
+/// There is no data in the array if the message was unsent.
 ///
 /// Apple describes editing and unsending messages [here](https://support.apple.com/guide/iphone/unsend-and-edit-messages-iphe67195653/ios).
 #[derive(Debug, PartialEq, Eq)]
 pub struct EditedMessage<'a> {
     /// The dates the messages were edited
     pub dates: Vec<i64>,
-    /// The content of the edited messages in `streamtyped` format
+    /// The content of the edited messages in [`streamtyped`](crate::util::streamtyped) format
     pub texts: Vec<String>,
     /// A GUID reference to another message
     pub guids: Vec<Option<&'a str>>,
@@ -115,41 +117,6 @@ impl<'a> EditedMessage<'a> {
     /// `true` if the message was deleted, `false` if it was edited
     pub fn is_deleted(&self) -> bool {
         self.texts.is_empty()
-    }
-
-    /// Extract the bytes that represent the edited message text from the message body.
-    /// The streamtyped data might look like:
-    ///
-    /// ```txt
-    /// streamtyped���@���NSAttributedString�NSObject����NSString��+Example message  ��iI���� NSDictionary��i����__kIMMessagePartAttributeName����NSNumber��NSValue��*������
-    /// ```
-    ///
-    /// The message text is in between the first `+` and the subsequent `\u{FFFD}`
-    fn extract_message_from_streamtyped(streamtyped: &str) -> Result<String, PlistParseError> {
-        // Determien the start and end indexes for the message
-        let start_idx = streamtyped
-            .find('+')
-            .ok_or_else(|| PlistParseError::InvalidEditedMessage(streamtyped.to_string()))?;
-        let end_idx = streamtyped[start_idx..]
-            .find(APP_CHAR)
-            .ok_or_else(|| PlistParseError::InvalidEditedMessage(streamtyped.to_string()))?
-            + start_idx;
-
-        // Trim start of the `+` and one more unicode character
-        let start_iter = &mut streamtyped[start_idx..end_idx].char_indices();
-        start_iter.next();
-        start_iter.next();
-        let (idx, _) = start_iter.next().unwrap_or((0, ' '));
-
-        if idx > end_idx {
-            return Err(PlistParseError::InvalidEditedMessage(
-                streamtyped.to_string(),
-            ));
-        }
-
-        Ok(String::from(
-            streamtyped[start_idx + idx..end_idx].trim_end(),
-        ))
     }
 }
 
