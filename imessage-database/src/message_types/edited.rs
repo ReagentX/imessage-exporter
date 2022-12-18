@@ -118,6 +118,20 @@ impl<'a> EditedMessage<'a> {
     pub fn is_deleted(&self) -> bool {
         self.texts.is_empty()
     }
+
+    /// Gets a tuple for the message at the provided position
+    pub fn item_at(&self, position: usize) -> Option<(&i64, &str, &Option<&str>)> {
+        Some((
+            self.dates.get(position)?,
+            self.texts.get(position)?,
+            self.guids.get(position)?,
+        ))
+    }
+
+    /// Gets the number of items in the edit history
+    pub fn items(&self) -> usize {
+        self.texts.len()
+    }
 }
 
 #[cfg(test)]
@@ -155,6 +169,14 @@ mod tests {
         };
 
         assert_eq!(parsed, expected);
+        assert_eq!(parsed.items(), 4);
+
+        let expected_item = Some((
+            expected.dates.first().unwrap(),
+            expected.texts.first().unwrap().as_str(),
+            expected.guids.first().unwrap(),
+        ));
+        assert_eq!(parsed.item_at(0), expected_item)
     }
 
     #[test]
@@ -178,6 +200,14 @@ mod tests {
         };
 
         assert_eq!(parsed, expected);
+        assert_eq!(parsed.items(), 2);
+
+        let expected_item = Some((
+            expected.dates.first().unwrap(),
+            expected.texts.first().unwrap().as_str(),
+            expected.guids.first().unwrap(),
+        ));
+        assert_eq!(parsed.item_at(0), expected_item)
     }
 
     #[test]
@@ -206,6 +236,14 @@ mod tests {
         };
 
         assert_eq!(parsed, expected);
+        assert_eq!(parsed.items(), 3);
+
+        let expected_item = Some((
+            expected.dates.first().unwrap(),
+            expected.texts.first().unwrap().as_str(),
+            expected.guids.first().unwrap(),
+        ));
+        assert_eq!(parsed.item_at(0), expected_item)
     }
 
     #[test]
@@ -227,5 +265,9 @@ mod tests {
 
         assert_eq!(parsed, expected);
         assert!(parsed.is_deleted());
+        assert_eq!(parsed.items(), 0);
+
+        let expected_item = None;
+        assert_eq!(parsed.item_at(0), expected_item)
     }
 }
