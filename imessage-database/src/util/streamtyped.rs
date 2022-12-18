@@ -22,28 +22,28 @@ const END_PATTERN: u8 = 0x0084;
 /// ```
 pub fn parse(mut stream: Vec<u8>) -> Result<String, StreamTypedError> {
     // Find the start index and drain
-    for idx in 0..stream.len() as usize {
+    for idx in 0..stream.len() {
         if idx + 2 > stream.len() {
             return Err(StreamTypedError::NoStartPattern);
         }
         let part = &stream[idx..idx + 2];
 
         if part == START_PATTERN {
-            // Remove one more byte that seems to change every message
-            // TODO: is this always correct?
-            stream.drain(..idx + 3);
+            // Remove the start pattern from the string
+            stream.drain(..idx + 2);
             break;
         }
     }
 
     // Find the end index and truncate
-    for idx in 0..stream.len() as usize {
+    for idx in 1..stream.len() {
         if idx >= stream.len() {
             return Err(StreamTypedError::NoEndPattern);
         }
         let part = &stream[idx];
 
         if part == &END_PATTERN {
+            // Remove the end pattern from the string
             stream.truncate(idx - 1);
             break;
         }
@@ -54,9 +54,28 @@ pub fn parse(mut stream: Vec<u8>) -> Result<String, StreamTypedError> {
     match String::from_utf8(stream)
         .map_err(|non_utf8| String::from_utf8_lossy(non_utf8.as_bytes()).into_owned())
     {
-        Ok(string) => Ok(string),
-        Err(string) => Ok(string),
+        // TODO: Why does this logic work? Maybe the offset can be derived from the bytes
+        // If the bytes are valid unicode, only one char prefixes the actual message
+        // ['\u{6}', 'T', ...] where `T` is the first real char
+        // The prefix char is not always the same
+        Ok(string) => drop_chars(1, string),
+        // If the bytes are not valid unicode, 3 chars prefix the actual message
+        // ['�', '�', '\0', 'T', ...] where `T` is the first real char
+        // The prefix chars are not always the same
+        Err(string) => drop_chars(3, string),
     }
+}
+
+pub fn drop_chars(offset: usize, mut string: String) -> Result<String, StreamTypedError> {
+    // Find the index of the specified character offset
+    let (position, _) = string
+        .char_indices()
+        .nth(offset)
+        .ok_or(StreamTypedError::InvalidPrefix)?;
+
+    // Remove the prefix and give the String back
+    string.drain(..position);
+    Ok(string)
 }
 
 #[cfg(test)]
@@ -69,7 +88,7 @@ mod tests {
     use crate::util::streamtyped::parse;
 
     #[test]
-    fn test_parse_text() {
+    fn test_parse_text_clean() {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
@@ -146,5 +165,22 @@ mod tests {
         let expected = "\u{FFFC}test 1\u{FFFC}test 2 \u{FFFC}test 3".to_string();
 
         assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_parse_text_app() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/streamtyped/ExtraData");
+        let mut file = File::open(plist_path).unwrap();
+        let mut bytes = vec![];
+        file.read_to_end(&mut bytes).unwrap();
+        let parsed = parse(bytes).unwrap();
+
+        // TODO: this contains extra bytes after the start pattern: `81 9D 00`
+        let expected = "This is parsing";
+
+        assert_eq!(&parsed[..expected.len()], expected);
     }
 }
