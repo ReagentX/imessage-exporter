@@ -6,6 +6,7 @@ pub enum StreamTypedError {
     NoStartPattern,
     NoEndPattern,
     InvalidPrefix,
+    InvalidTimestamp,
 }
 
 impl Display for StreamTypedError {
@@ -15,6 +16,7 @@ impl Display for StreamTypedError {
             StreamTypedError::NoStartPattern => write!(fmt, "No start pattern found!"),
             StreamTypedError::NoEndPattern => write!(fmt, "No end pattern found!"),
             StreamTypedError::InvalidPrefix => write!(fmt, "Prefix length is not standard!"),
+            StreamTypedError::InvalidTimestamp => write!(fmt, "Timestamp integer is not valid!"),
         }
     }
 }
