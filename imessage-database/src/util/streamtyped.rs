@@ -66,7 +66,8 @@ pub fn parse(mut stream: Vec<u8>) -> Result<String, StreamTypedError> {
     }
 }
 
-pub fn drop_chars(offset: usize, mut string: String) -> Result<String, StreamTypedError> {
+/// Drop `offset` chars from the front of a String
+fn drop_chars(offset: usize, mut string: String) -> Result<String, StreamTypedError> {
     // Find the index of the specified character offset
     let (position, _) = string
         .char_indices()
@@ -85,7 +86,7 @@ mod tests {
     use std::io::Read;
     use std::vec;
 
-    use crate::util::streamtyped::parse;
+    use crate::util::streamtyped::{drop_chars, parse};
 
     #[test]
     fn test_parse_text_clean() {
@@ -182,5 +183,26 @@ mod tests {
         let expected = "This is parsing";
 
         assert_eq!(&parsed[..expected.len()], expected);
+    }
+
+    #[test]
+    fn test_can_drop_chars() {
+        assert_eq!(
+            drop_chars(1, String::from("Hello world")).unwrap(),
+            String::from("ello world")
+        );
+    }
+
+    #[test]
+    fn test_can_drop_chars_none() {
+        assert_eq!(
+            drop_chars(0, String::from("Hello world")).unwrap(),
+            String::from("Hello world")
+        );
+    }
+
+    #[test]
+    fn test_cant_drop_all() {
+        assert!(drop_chars(1000, String::from("Hello world")).is_err());
     }
 }
