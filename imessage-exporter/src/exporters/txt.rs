@@ -11,9 +11,10 @@ use crate::{
 };
 
 use imessage_database::{
-    error::plist::PlistParseError,
+    error::{plist::PlistParseError, streamtyped::StreamTypedError},
     message_types::{
         app::AppMessage,
+        edited::EditedMessage,
         music::MusicMessage,
         url::URLMessage,
         variants::{BalloonProvider, CustomBalloon},
@@ -22,7 +23,7 @@ use imessage_database::{
         messages::BubbleType,
         table::{FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN},
     },
-    util::{dates, plist::parse_plist},
+    util::{dates::{readable_diff, format}, plist::parse_plist},
     Attachment, Variant, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
 };
 
@@ -73,12 +74,9 @@ impl<'a> Exporter<'a> for TXT<'a> {
                 let annoucement = self.format_annoucement(&msg);
                 TXT::write_to_file(self.get_or_create_file(&msg), &annoucement);
             }
-            // Render edited messages
-            // else if msg.is_edited() {
-            //     todo!()
-            // }
             // Message replies and reactions are rendered in context, so no need to render them separately
             else if !msg.is_reaction() {
+                // TODO: Handle this!
                 msg.gen_text(&self.config.db);
                 let message = self.format_message(&msg, 0)?;
                 TXT::write_to_file(self.get_or_create_file(&msg), &message);
@@ -144,6 +142,14 @@ impl<'a> Writer<'a> for TXT<'a> {
                             &text.replace(FITNESS_RECEIVER, "You"),
                             &indent,
                         );
+                    }
+                    // Render edited messages
+                    else if message.is_edited() {
+                        let edited = match self.format_edited(message) {
+                            Ok(s) => s,
+                            Err(why) => format!("{}, {}", message.guid, why),
+                        };
+                        self.add_line(&mut formatted_message, &edited, &indent);
                     } else {
                         self.add_line(&mut formatted_message, text, &indent);
                     }
@@ -347,7 +353,7 @@ impl<'a> Writer<'a> for TXT<'a> {
             who = "You"
         }
 
-        let timestamp = dates::format(&msg.date(&self.config.offset));
+        let timestamp = format(&msg.date(&self.config.offset));
         format!(
             "{timestamp} {who} renamed the conversation to {}\n\n",
             msg.group_title.as_deref().unwrap_or(UNKNOWN)
@@ -361,6 +367,60 @@ impl<'a> Writer<'a> for TXT<'a> {
             .open(file)
             .unwrap();
         file.write_all(text.as_bytes()).unwrap();
+    }
+
+    fn format_edited(&self, msg: &'a Message) -> Result<String, PlistParseError> {
+        let out_s: String = if let Some(payload) = msg.message_summary_info(&self.config.db) {
+            // Parse the edited message
+            let edited_message = EditedMessage::from_map(&payload)?;
+
+            let mut out_s = String::new();
+            let mut previous_timestamp: Option<&i64> = None;
+
+            for i in 0..edited_message.items() {
+                // If a message exists, build a string for it
+                if let Some((timestamp, text, _)) = edited_message.item_at(i) {
+                    match previous_timestamp {
+                        // Original message get an absolute timestamp
+                        None => {
+                            let parsed_timestamp =
+                                format(&msg.get_local_time(timestamp, &self.config.offset));
+                            out_s.push_str(&parsed_timestamp);
+                            out_s.push(' ');
+                        }
+                        // Subsequent edits get a relative timestamp
+                        Some(prev_timestamp) => {
+                            let end = msg.get_local_time(timestamp, &self.config.offset).ok_or(
+                                PlistParseError::StreamTypedError(
+                                    StreamTypedError::InvalidTimestamp,
+                                ),
+                            )?;
+                            let start = msg
+                                .get_local_time(prev_timestamp, &self.config.offset)
+                                .ok_or(PlistParseError::StreamTypedError(
+                                    StreamTypedError::InvalidTimestamp,
+                                ))?;
+                            if let Some(diff) = readable_diff(start, end) {
+                                out_s.push_str("Edited ");
+                                out_s.push_str(&diff);
+                                out_s.push_str(" later: ");
+                            }
+                        }
+                    };
+
+                    // Update the previous timestamp for the next loop
+                    previous_timestamp = Some(timestamp);
+
+                    // Render the message text
+                    out_s.push_str(text);
+                    out_s.push('\n');
+                }
+            }
+            out_s
+        } else {
+            return Err(PlistParseError::NoPayload);
+        };
+        Ok(out_s)
     }
 }
 
@@ -517,7 +577,7 @@ impl<'a> BalloonFormatter for TXT<'a> {
 
 impl<'a> TXT<'a> {
     fn get_time(&self, message: &Message) -> String {
-        let mut date = dates::format(&message.date(&self.config.offset));
+        let mut date = format(&message.date(&self.config.offset));
         let read_after = message.time_until_read(&self.config.offset);
         if let Some(time) = read_after {
             if !time.is_empty() {
