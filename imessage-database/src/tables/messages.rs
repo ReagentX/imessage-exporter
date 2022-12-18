@@ -307,20 +307,10 @@ impl Message {
         }
     }
 
-    fn get_local_time(&self, date_stamp: &i64, offset: &i64) -> Option<DateTime<Local>> {
+    pub fn get_local_time(&self, date_stamp: &i64, offset: &i64) -> Option<DateTime<Local>> {
         let utc_stamp =
             NaiveDateTime::from_timestamp_opt((date_stamp / TIMESTAMP_FACTOR) + offset, 0)?;
-        let local_time = Local.from_utc_datetime(&utc_stamp);
-        Local
-            .with_ymd_and_hms(
-                local_time.year(),
-                local_time.month(),
-                local_time.day(),
-                local_time.hour(),
-                local_time.minute(),
-                local_time.second(),
-            )
-            .single()
+        Some(Local.from_utc_datetime(&utc_stamp))
     }
 
     /// Calculates the date a message was written to the database.
@@ -344,7 +334,7 @@ impl Message {
         self.get_local_time(&self.date_read, offset)
     }
 
-    /// Calculates the date a message was edited.
+    /// Calculates the date a message was most recently edited.
     ///
     /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
     pub fn date_edited(&self, offset: &i64) -> Option<DateTime<Local>> {
