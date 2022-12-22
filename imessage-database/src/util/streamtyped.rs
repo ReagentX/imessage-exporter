@@ -11,7 +11,7 @@ const START_PATTERN: [u8; 2] = [0x0001, 0x002b];
 
 /// Literal: `<Index> (IND)`
 /// - <https://www.compart.com/en/unicode/U+0084>
-const END_PATTERN: u8 = 0x0084;
+const END_PATTERN: [u8; 2] = [0x0086, 0x0084];
 
 /// Parse the body text from a known type of `streamtyped` `attributedBody` file.
 ///
@@ -37,14 +37,14 @@ pub fn parse(mut stream: Vec<u8>) -> Result<String, StreamTypedError> {
 
     // Find the end index and truncate
     for idx in 1..stream.len() {
-        if idx >= stream.len() {
+        if idx >= stream.len() - 2 {
             return Err(StreamTypedError::NoEndPattern);
         }
-        let part = &stream[idx];
+        let part = &stream[idx..idx + 2];
 
-        if part == &END_PATTERN {
+        if part == END_PATTERN {
             // Remove the end pattern from the string
-            stream.truncate(idx - 1);
+            stream.truncate(idx);
             break;
         }
     }
@@ -179,10 +179,23 @@ mod tests {
         file.read_to_end(&mut bytes).unwrap();
         let parsed = parse(bytes).unwrap();
 
-        // TODO: this contains extra bytes after the start pattern: `81 9D 00`
         let expected = "This is parsing";
 
         assert_eq!(&parsed[..expected.len()], expected);
+    }
+
+    #[test]
+    fn test_parse_text_blank() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/streamtyped/Blank");
+        let mut file = File::open(plist_path).unwrap();
+        let mut bytes = vec![];
+        file.read_to_end(&mut bytes).unwrap();
+        let parsed = parse(bytes);
+
+        assert!(&parsed.is_err());
     }
 
     #[test]
