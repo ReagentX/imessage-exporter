@@ -4,7 +4,7 @@
 
 use std::{collections::HashMap, io::Read, vec};
 
-use chrono::{naive::NaiveDateTime, offset::Local, DateTime, Datelike, TimeZone, Timelike};
+use chrono::{naive::NaiveDateTime, offset::Local, DateTime, TimeZone};
 use plist::Value;
 use rusqlite::{blob::Blob, Connection, Error, Result, Row, Statement};
 
@@ -253,6 +253,7 @@ impl Message {
             let body = self.attributed_body(db).ok_or(MessageError::MissingData)?;
             self.text = Some(streamtyped::parse(body).map_err(MessageError::ParseError)?);
         }
+
         if let Some(t) = &self.text {
             Ok(t)
         } else {
