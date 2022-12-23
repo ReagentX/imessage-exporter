@@ -12,8 +12,17 @@ This tool targets the current latest public release for MacOS and iMessage.
   - Correctly extracts time-zone corrected timestamps
   - Detects when a message was read and calculates the time until read for both parties
     - Humanizes display of time-until-read duration
+  - Parses streamtyped message body data
   - Detects the service a message was sent from
     - In HTML exports, balloons are colored correctly for the service they were sent with
+- Edited and Unsent messages
+  - Detects if messages were edited or unsent
+    - Edited messages
+      - Displays content and timestamps for each edit
+      - Humanizes display of edit timestamp gaps
+      - Edited messages received before Ventura display as normal messages wihtout history
+    - Unsent messages
+      - No content, but are noted in context
 - Multi-part messages
   - iMessages can have multiple parts, separated by some special characters
   - Parts are displayed as
