@@ -254,7 +254,7 @@ mod tests {
         let end = Ok(Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap());
         assert_eq!(
             readable_diff(start, end),
-            Some("immediately".to_owned())
+            Some("".to_owned())
         )
     }
 }
