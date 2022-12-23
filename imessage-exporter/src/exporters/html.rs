@@ -11,7 +11,7 @@ use crate::{
 };
 
 use imessage_database::{
-    error::{message::MessageError, plist::PlistParseError, streamtyped::StreamTypedError},
+    error::{message::MessageError, plist::PlistParseError},
     message_types::{
         app::AppMessage,
         edited::EditedMessage,
@@ -585,9 +585,8 @@ impl<'a> Writer<'a> for HTML<'a> {
             let edited_message =
                 EditedMessage::from_map(&payload).map_err(MessageError::PlistParseError)?;
 
-            let mut out_s = String::from(
-                "<table><thead><tr><th>Date</th><th>Message</th></tr></thead>",
-            );
+            let mut out_s =
+                String::from("<table><thead><tr><th>Date</th><th>Message</th></tr></thead>");
             let mut previous_timestamp: Option<&i64> = None;
 
             for i in 0..edited_message.items() {

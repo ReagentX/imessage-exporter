@@ -11,7 +11,7 @@ use crate::{
 };
 
 use imessage_database::{
-    error::{message::MessageError, plist::PlistParseError, streamtyped::StreamTypedError},
+    error::{message::MessageError, plist::PlistParseError},
     message_types::{
         app::AppMessage,
         edited::EditedMessage,
