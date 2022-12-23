@@ -105,7 +105,7 @@ impl<'a> Config<'a> {
     /// Generate a filename from a set of participants, truncating if the name is too long
     fn filename_from_participants(&self, participants: &BTreeSet<i32>) -> String {
         let mut added = 0;
-        let mut out_s = String::with_capacity(MAX_LENGTH as usize);
+        let mut out_s = String::with_capacity(MAX_LENGTH);
         for participant_id in participants.iter() {
             let participant = self.who(participant_id, false);
             if participant.len() + out_s.len() < MAX_LENGTH {
