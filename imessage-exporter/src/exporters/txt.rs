@@ -11,7 +11,7 @@ use crate::{
 };
 
 use imessage_database::{
-    error::{plist::PlistParseError, streamtyped::StreamTypedError},
+    error::{message::MessageError, plist::PlistParseError, streamtyped::StreamTypedError},
     message_types::{
         app::AppMessage,
         edited::EditedMessage,
@@ -372,10 +372,11 @@ impl<'a> Writer<'a> for TXT<'a> {
         )
     }
 
-    fn format_edited(&self, msg: &'a Message, indent: &str) -> Result<String, PlistParseError> {
+    fn format_edited(&self, msg: &'a Message, indent: &str) -> Result<String, MessageError> {
         if let Some(payload) = msg.message_summary_info(&self.config.db) {
             // Parse the edited message
-            let edited_message = EditedMessage::from_map(&payload)?;
+            let edited_message =
+                EditedMessage::from_map(&payload).map_err(MessageError::PlistParseError)?;
 
             let mut out_s = String::new();
             let mut previous_timestamp: Option<&i64> = None;
@@ -393,16 +394,8 @@ impl<'a> Writer<'a> for TXT<'a> {
                         }
                         // Subsequent edits get a relative timestamp
                         Some(prev_timestamp) => {
-                            let end = msg.get_local_time(timestamp, &self.config.offset).ok_or(
-                                PlistParseError::StreamTypedError(
-                                    StreamTypedError::InvalidTimestamp,
-                                ),
-                            )?;
-                            let start = msg
-                                .get_local_time(prev_timestamp, &self.config.offset)
-                                .ok_or(PlistParseError::StreamTypedError(
-                                    StreamTypedError::InvalidTimestamp,
-                                ))?;
+                            let end = msg.get_local_time(timestamp, &self.config.offset);
+                            let start = msg.get_local_time(prev_timestamp, &self.config.offset);
                             if let Some(diff) = readable_diff(start, end) {
                                 out_s.push_str("Edited ");
                                 out_s.push_str(&diff);
@@ -420,7 +413,7 @@ impl<'a> Writer<'a> for TXT<'a> {
             }
             return Ok(out_s);
         }
-        Err(PlistParseError::NoPayload)
+        Err(MessageError::PlistParseError(PlistParseError::NoPayload))
     }
 
     fn write_to_file(file: &Path, text: &str) {

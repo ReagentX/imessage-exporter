@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use imessage_database::{
-    error::plist::PlistParseError,
+    error::{message::MessageError, plist::PlistParseError},
     message_types::{app::AppMessage, music::MusicMessage, url::URLMessage},
     Attachment, Message,
 };
@@ -38,7 +38,7 @@ pub(super) trait Writer<'a> {
     /// Format an annoucement message
     fn format_annoucement(&self, msg: &'a Message) -> String;
     /// Format an edited message
-    fn format_edited(&self, msg: &'a Message, indent: &str) -> Result<String, PlistParseError>;
+    fn format_edited(&self, msg: &'a Message, indent: &str) -> Result<String, MessageError>;
     fn write_to_file(file: &Path, text: &str);
 }
 

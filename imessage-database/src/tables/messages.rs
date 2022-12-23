@@ -251,7 +251,8 @@ impl Message {
     pub fn gen_text<'a>(&'a mut self, db: &'a Connection) -> Result<&'a str, MessageError> {
         if self.text.is_none() {
             let body = self.attributed_body(db).ok_or(MessageError::MissingData)?;
-            self.text = Some(streamtyped::parse(body).map_err(MessageError::ParseError)?);
+            self.text =
+                Some(streamtyped::parse(body).map_err(MessageError::StreamTypedParseError)?);
         }
 
         if let Some(t) = &self.text {
@@ -308,37 +309,42 @@ impl Message {
         }
     }
 
-    pub fn get_local_time(&self, date_stamp: &i64, offset: &i64) -> Option<DateTime<Local>> {
+    pub fn get_local_time(
+        &self,
+        date_stamp: &i64,
+        offset: &i64,
+    ) -> Result<DateTime<Local>, MessageError> {
         let utc_stamp =
-            NaiveDateTime::from_timestamp_opt((date_stamp / TIMESTAMP_FACTOR) + offset, 0)?;
-        Some(Local.from_utc_datetime(&utc_stamp))
+            NaiveDateTime::from_timestamp_opt((date_stamp / TIMESTAMP_FACTOR) + offset, 0)
+                .ok_or(MessageError::InvalidTimestamp(*date_stamp))?;
+        Ok(Local.from_utc_datetime(&utc_stamp))
     }
 
     /// Calculates the date a message was written to the database.
     ///
     /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
-    pub fn date(&self, offset: &i64) -> Option<DateTime<Local>> {
+    pub fn date(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
         self.get_local_time(&self.date, offset)
     }
 
     /// Calculates the date a message was marked as delivered.
     ///
     /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
-    pub fn date_delivered(&self, offset: &i64) -> Option<DateTime<Local>> {
+    pub fn date_delivered(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
         self.get_local_time(&self.date_delivered, offset)
     }
 
     /// Calculates the date a message was marked as read.
     ///
     /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
-    pub fn date_read(&self, offset: &i64) -> Option<DateTime<Local>> {
-        self.get_local_time(&self.date_read, offset)
+    pub fn date_read(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
+        self.get_local_time(&&self.date_read, offset)
     }
 
     /// Calculates the date a message was most recently edited.
     ///
     /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
-    pub fn date_edited(&self, offset: &i64) -> Option<DateTime<Local>> {
+    pub fn date_edited(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
         self.get_local_time(&self.date_read, offset)
     }
 
@@ -356,11 +362,11 @@ impl Message {
     pub fn time_until_read(&self, offset: &i64) -> Option<String> {
         // Message we recieved
         if !self.is_from_me && self.date_read != 0 && self.date != 0 {
-            return readable_diff(self.date(offset)?, self.date_read(offset)?);
+            return readable_diff(self.date(offset), self.date_read(offset));
         }
         // Message we sent
         else if self.is_from_me && self.date_delivered != 0 && self.date != 0 {
-            return readable_diff(self.date(offset)?, self.date_delivered(offset)?);
+            return readable_diff(self.date(offset), self.date_delivered(offset));
         }
         None
     }
