@@ -29,6 +29,7 @@ pub(super) trait Writer<'a> {
         &self,
         msg: &'a Message,
         attachments: &mut Vec<Attachment>,
+        indent: &str,
     ) -> Result<String, PlistParseError>;
     /// Format a reaction (displayed under a message)
     fn format_reaction(&self, msg: &Message) -> Result<String, String>;
@@ -37,29 +38,30 @@ pub(super) trait Writer<'a> {
     /// Format an annoucement message
     fn format_annoucement(&self, msg: &'a Message) -> String;
     /// Format an edited message
-    fn format_edited(&self, msg: &'a Message) -> Result<String, PlistParseError>;
+    fn format_edited(&self, msg: &'a Message, indent: &str) -> Result<String, PlistParseError>;
     fn write_to_file(file: &Path, text: &str);
 }
 
 /// Defines behavior for formatting custom balloons to the desired output format
 pub(super) trait BalloonFormatter {
     /// Format a URL message
-    fn format_url(&self, balloon: &URLMessage) -> String;
+    fn format_url(&self, balloon: &URLMessage, indent: &str) -> String;
     /// Format an Apple Music message
-    fn format_music(&self, balloon: &MusicMessage) -> String;
+    fn format_music(&self, balloon: &MusicMessage, indent: &str) -> String;
     /// Format a handwritten note message
-    fn format_handwriting(&self, balloon: &AppMessage) -> String;
+    fn format_handwriting(&self, balloon: &AppMessage, indent: &str) -> String;
     /// Format an Apple Pay message
-    fn format_apple_pay(&self, balloon: &AppMessage) -> String;
+    fn format_apple_pay(&self, balloon: &AppMessage, indent: &str) -> String;
     /// Format a Fitness message
-    fn format_fitness(&self, balloon: &AppMessage) -> String;
+    fn format_fitness(&self, balloon: &AppMessage, indent: &str) -> String;
     /// Format a Photo Slideshow message
-    fn format_slideshow(&self, balloon: &AppMessage) -> String;
+    fn format_slideshow(&self, balloon: &AppMessage, indent: &str) -> String;
     /// Format a generic app, generally third party
     fn format_generic_app(
         &self,
         balloon: &AppMessage,
         bundle_id: &str,
         attachments: &mut Vec<Attachment>,
+        indent: &str,
     ) -> String;
 }

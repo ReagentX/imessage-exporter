@@ -23,7 +23,10 @@ use imessage_database::{
         messages::BubbleType,
         table::{FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN},
     },
-    util::{dates::{readable_diff, format}, plist::parse_plist},
+    util::{
+        dates::{format, readable_diff},
+        plist::parse_plist,
+    },
     Attachment, Variant, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
 };
 
@@ -103,8 +106,8 @@ impl<'a> Exporter<'a> for TXT<'a> {
 }
 
 impl<'a> Writer<'a> for TXT<'a> {
-    fn format_message(&self, message: &Message, indent: usize) -> Result<String, String> {
-        let indent = String::from_iter((0..indent).map(|_| " "));
+    fn format_message(&self, message: &Message, indent_size: usize) -> Result<String, String> {
+        let indent = String::from_iter((0..indent_size).map(|_| " "));
         // Data we want to write to a file
         let mut formatted_message = String::new();
 
@@ -121,7 +124,7 @@ impl<'a> Writer<'a> for TXT<'a> {
         // Useful message metadata
         let message_parts = message.body();
         let mut attachments = Attachment::from_message(&self.config.db, message)?;
-        let replies = message.get_replies(&self.config.db)?;
+        let mut replies = message.get_replies(&self.config.db)?;
         let reactions = message.get_reactions(&self.config.db, &self.config.reactions)?;
 
         // Index of where we are in the attachment Vector
@@ -136,20 +139,19 @@ impl<'a> Writer<'a> for TXT<'a> {
             match message_part {
                 // Fitness messages have a prefix that we need to replace with the opposite if who sent the message
                 BubbleType::Text(text) => {
-                    if text.starts_with(FITNESS_RECEIVER) {
+                    // Render edited messages
+                    if message.is_edited() {
+                        let edited = match self.format_edited(message, &indent) {
+                            Ok(s) => s,
+                            Err(why) => format!("{}, {}", message.guid, why),
+                        };
+                        self.add_line(&mut formatted_message, &edited, &indent);
+                    } else if text.starts_with(FITNESS_RECEIVER) {
                         self.add_line(
                             &mut formatted_message,
                             &text.replace(FITNESS_RECEIVER, "You"),
                             &indent,
                         );
-                    }
-                    // Render edited messages
-                    else if message.is_edited() {
-                        let edited = match self.format_edited(message) {
-                            Ok(s) => s,
-                            Err(why) => format!("{}, {}", message.guid, why),
-                        };
-                        self.add_line(&mut formatted_message, &edited, &indent);
                     } else {
                         self.add_line(&mut formatted_message, text, &indent);
                     }
@@ -165,8 +167,9 @@ impl<'a> Writer<'a> for TXT<'a> {
                     // Attachment does not exist in attachments table
                     None => self.add_line(&mut formatted_message, "Attachment missing!", &indent),
                 },
-                BubbleType::App => match self.format_app(message, &mut attachments) {
-                    Ok(ok_bubble) => self.add_line(&mut formatted_message, &ok_bubble, &indent),
+                BubbleType::App => match self.format_app(message, &mut attachments, &indent) {
+                    // We use an empty indent here becuase `format_app` handles building the entire message
+                    Ok(ok_bubble) => self.add_line(&mut formatted_message, &ok_bubble, ""),
                     Err(why) => self.add_line(
                         &mut formatted_message,
                         &format!("Unable to format app message: {why}"),
@@ -200,17 +203,21 @@ impl<'a> Writer<'a> for TXT<'a> {
             }
 
             // Handle Replies
-            if let Some(replies) = replies.get(&idx) {
-                replies.iter().try_for_each(|reply| -> Result<(), String> {
-                    if !reply.is_reaction() {
-                        self.add_line(
-                            &mut formatted_message,
-                            &self.format_message(reply, 4)?,
-                            &indent,
-                        );
-                    }
-                    Ok(())
-                })?;
+            // TODO: Some replies arent rendered in txt messages (see converstaion with dad)
+            if let Some(replies) = replies.get_mut(&idx) {
+                replies
+                    .iter_mut()
+                    .try_for_each(|reply| -> Result<(), String> {
+                        reply.gen_text(&self.config.db);
+                        if !reply.is_reaction() {
+                            self.add_line(
+                                &mut formatted_message,
+                                &self.format_message(reply, 4)?,
+                                &indent,
+                            );
+                        }
+                        Ok(())
+                    })?;
             }
         }
 
@@ -243,6 +250,7 @@ impl<'a> Writer<'a> for TXT<'a> {
         &self,
         message: &'a Message,
         attachments: &mut Vec<Attachment>,
+        indent: &str,
     ) -> Result<String, PlistParseError> {
         if let Variant::App(balloon) = message.variant() {
             let mut app_bubble = String::new();
@@ -255,9 +263,11 @@ impl<'a> Writer<'a> for TXT<'a> {
                     let res = if message.is_url() {
                         // Handle the URL case
                         match balloon {
-                            CustomBalloon::URL => self.format_url(&URLMessage::from_map(&parsed)?),
+                            CustomBalloon::URL => {
+                                self.format_url(&URLMessage::from_map(&parsed)?, indent)
+                            }
                             CustomBalloon::Music => {
-                                self.format_music(&MusicMessage::from_map(&parsed)?)
+                                self.format_music(&MusicMessage::from_map(&parsed)?, indent)
                             }
                             _ => unreachable!(),
                         }
@@ -266,12 +276,14 @@ impl<'a> Writer<'a> for TXT<'a> {
                         match AppMessage::from_map(&parsed) {
                             Ok(bubble) => match balloon {
                                 CustomBalloon::Application(bundle_id) => {
-                                    self.format_generic_app(&bubble, bundle_id, attachments)
+                                    self.format_generic_app(&bubble, bundle_id, attachments, indent)
                                 }
-                                CustomBalloon::Handwriting => self.format_handwriting(&bubble),
-                                CustomBalloon::ApplePay => self.format_apple_pay(&bubble),
-                                CustomBalloon::Fitness => self.format_fitness(&bubble),
-                                CustomBalloon::Slideshow => self.format_slideshow(&bubble),
+                                CustomBalloon::Handwriting => {
+                                    self.format_handwriting(&bubble, indent)
+                                }
+                                CustomBalloon::ApplePay => self.format_apple_pay(&bubble, indent),
+                                CustomBalloon::Fitness => self.format_fitness(&bubble, indent),
+                                CustomBalloon::Slideshow => self.format_slideshow(&bubble, indent),
                                 _ => unreachable!(),
                             },
                             Err(why) => return Err(PlistParseError::ParseError(format!("{why}"))),
@@ -360,17 +372,8 @@ impl<'a> Writer<'a> for TXT<'a> {
         )
     }
 
-    fn write_to_file(file: &Path, text: &str) {
-        let mut file = File::options()
-            .append(true)
-            .create(true)
-            .open(file)
-            .unwrap();
-        file.write_all(text.as_bytes()).unwrap();
-    }
-
-    fn format_edited(&self, msg: &'a Message) -> Result<String, PlistParseError> {
-        let out_s: String = if let Some(payload) = msg.message_summary_info(&self.config.db) {
+    fn format_edited(&self, msg: &'a Message, indent: &str) -> Result<String, PlistParseError> {
+        if let Some(payload) = msg.message_summary_info(&self.config.db) {
             // Parse the edited message
             let edited_message = EditedMessage::from_map(&payload)?;
 
@@ -412,50 +415,74 @@ impl<'a> Writer<'a> for TXT<'a> {
                     previous_timestamp = Some(timestamp);
 
                     // Render the message text
-                    out_s.push_str(text);
-                    out_s.push('\n');
+                    self.add_line(&mut out_s, text, indent);
                 }
             }
-            out_s
-        } else {
-            return Err(PlistParseError::NoPayload);
-        };
-        Ok(out_s)
+            return Ok(out_s);
+        }
+        Err(PlistParseError::NoPayload)
+    }
+
+    fn write_to_file(file: &Path, text: &str) {
+        let mut file = File::options()
+            .append(true)
+            .create(true)
+            .open(file)
+            .unwrap();
+        file.write_all(text.as_bytes()).unwrap();
     }
 }
 
 impl<'a> BalloonFormatter for TXT<'a> {
-    fn format_url(&self, balloon: &URLMessage) -> String {
+    fn format_url(&self, balloon: &URLMessage, indent: &str) -> String {
         let mut out_s = String::new();
 
         if let Some(url) = balloon.url {
-            out_s.push_str(url);
-            out_s.push('\n');
+            self.add_line(&mut out_s, url, indent);
         } else if let Some(original_url) = balloon.original_url {
-            out_s.push_str(original_url);
-            out_s.push('\n');
+            self.add_line(&mut out_s, original_url, indent);
         }
 
         if let Some(title) = balloon.title {
-            out_s.push_str(title);
-            out_s.push('\n');
+            self.add_line(&mut out_s, title, indent);
         }
 
         if let Some(summary) = balloon.summary {
-            out_s.push_str(summary);
-            out_s.push('\n');
+            self.add_line(&mut out_s, summary, indent);
         }
 
         // We want to keep the newlines between blocks, but the last one should be removed
         out_s.strip_suffix('\n').unwrap_or(&out_s).to_string()
     }
 
-    fn format_handwriting(&self, _: &AppMessage) -> String {
-        String::from("Handwritten messages are not yet supported!")
+    fn format_music(&self, balloon: &MusicMessage, indent: &str) -> String {
+        let mut out_s = String::new();
+
+        if let Some(track_name) = balloon.track_name {
+            self.add_line(&mut out_s, track_name, indent);
+        }
+
+        if let Some(album) = balloon.album {
+            self.add_line(&mut out_s, album, indent);
+        }
+
+        if let Some(artist) = balloon.artist {
+            self.add_line(&mut out_s, artist, indent);
+        }
+
+        if let Some(url) = balloon.url {
+            self.add_line(&mut out_s, url, indent);
+        }
+
+        out_s
     }
 
-    fn format_apple_pay(&self, balloon: &AppMessage) -> String {
-        let mut out_s = String::new();
+    fn format_handwriting(&self, _: &AppMessage, indent: &str) -> String {
+        format!("{indent}Handwritten messages are not yet supported!")
+    }
+
+    fn format_apple_pay(&self, balloon: &AppMessage, indent: &str) -> String {
+        let mut out_s = String::from(indent);
         if let Some(caption) = balloon.caption {
             out_s.push_str(caption);
             out_s.push_str(" transaction: ");
@@ -470,8 +497,8 @@ impl<'a> BalloonFormatter for TXT<'a> {
         out_s
     }
 
-    fn format_fitness(&self, balloon: &AppMessage) -> String {
-        let mut out_s = String::new();
+    fn format_fitness(&self, balloon: &AppMessage, indent: &str) -> String {
+        let mut out_s = String::from(indent);
         if let Some(app_name) = balloon.app_name {
             out_s.push_str(app_name);
             out_s.push_str(" message: ");
@@ -484,8 +511,8 @@ impl<'a> BalloonFormatter for TXT<'a> {
         out_s
     }
 
-    fn format_slideshow(&self, balloon: &AppMessage) -> String {
-        let mut out_s = String::new();
+    fn format_slideshow(&self, balloon: &AppMessage, indent: &str) -> String {
+        let mut out_s = String::from(indent);
         if let Some(ldtext) = balloon.ldtext {
             out_s.push_str("Photo album: ");
             out_s.push_str(ldtext);
@@ -504,8 +531,9 @@ impl<'a> BalloonFormatter for TXT<'a> {
         balloon: &AppMessage,
         bundle_id: &str,
         _: &mut Vec<Attachment>,
+        indent: &str,
     ) -> String {
-        let mut out_s = String::new();
+        let mut out_s = String::from(indent);
 
         if let Some(name) = balloon.app_name {
             out_s.push_str(name);
@@ -515,63 +543,31 @@ impl<'a> BalloonFormatter for TXT<'a> {
 
         out_s.push_str(" message:\n");
         if let Some(title) = balloon.title {
-            out_s.push_str(title);
-            out_s.push('\n');
+            self.add_line(&mut out_s, title, indent);
         }
 
         if let Some(subtitle) = balloon.subtitle {
-            out_s.push_str(subtitle);
-            out_s.push('\n');
+            self.add_line(&mut out_s, subtitle, indent);
         }
 
         if let Some(caption) = balloon.caption {
-            out_s.push_str(caption);
-            out_s.push('\n');
+            self.add_line(&mut out_s, caption, indent);
         }
 
         if let Some(subcaption) = balloon.subcaption {
-            out_s.push_str(subcaption);
-            out_s.push('\n');
+            self.add_line(&mut out_s, subcaption, indent);
         }
 
         if let Some(trailing_caption) = balloon.trailing_caption {
-            out_s.push_str(trailing_caption);
-            out_s.push('\n');
+            self.add_line(&mut out_s, trailing_caption, indent);
         }
 
         if let Some(trailing_subcaption) = balloon.trailing_subcaption {
-            out_s.push_str(trailing_subcaption);
-            out_s.push('\n');
+            self.add_line(&mut out_s, trailing_subcaption, indent);
         }
 
         // We want to keep the newlines between blocks, but the last one should be removed
         out_s.strip_suffix('\n').unwrap_or(&out_s).to_string()
-    }
-
-    fn format_music(&self, balloon: &MusicMessage) -> String {
-        let mut out_s = String::new();
-
-        if let Some(track_name) = balloon.track_name {
-            out_s.push_str(track_name);
-            out_s.push('\n');
-        }
-
-        if let Some(album) = balloon.album {
-            out_s.push_str(album);
-            out_s.push('\n');
-        }
-
-        if let Some(artist) = balloon.artist {
-            out_s.push_str(artist);
-            out_s.push('\n');
-        }
-
-        if let Some(url) = balloon.url {
-            out_s.push_str(url);
-            out_s.push('\n');
-        }
-
-        out_s
     }
 }
 
