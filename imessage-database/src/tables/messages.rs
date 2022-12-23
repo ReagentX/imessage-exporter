@@ -338,7 +338,7 @@ impl Message {
     ///
     /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
     pub fn date_read(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
-        self.get_local_time(&&self.date_read, offset)
+        self.get_local_time(&self.date_read, offset)
     }
 
     /// Calculates the date a message was most recently edited.
