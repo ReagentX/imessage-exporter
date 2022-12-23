@@ -274,6 +274,29 @@ audio {
 	display: block;
 }
 
+.sent table {
+	color: white;
+}
+
+table {
+	border-collapse: collapse;
+	text-align: left;
+	overflow-wrap: anywhere;
+}
+
+thead {
+	border-bottom: 2px solid white;
+}
+
+tfoot {
+	border-top: 2px solid white;
+}
+
+td, th {
+	/* border: 1px solid white; */
+	padding: 2px 5px;
+}
+
 @media (prefers-color-scheme: dark) {
 	body {
 		background: black;

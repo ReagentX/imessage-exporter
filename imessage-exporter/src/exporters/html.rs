@@ -11,7 +11,7 @@ use crate::{
 };
 
 use imessage_database::{
-    error::plist::PlistParseError,
+    error::{message::MessageError, plist::PlistParseError, streamtyped::StreamTypedError},
     message_types::{
         app::AppMessage,
         edited::EditedMessage,
@@ -425,7 +425,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                             attachment.transfer_name
                         ),
                         MediaType::Unknown => {
-                            format!("<p>Unknown attachment type: {embed_path}</p>")
+                            format!("<p>Unknown attachment type: {embed_path}</p> <a href=\"file://{embed_path}\">Download</a>")
                         }
                         MediaType::Other(media_type) => {
                             format!("<p>Unable to embed {media_type} attachments: {embed_path}</p>")
@@ -580,20 +580,47 @@ impl<'a> Writer<'a> for HTML<'a> {
             msg.group_title.as_deref().unwrap_or(UNKNOWN)
         )
     }
-    fn format_edited(
-        &self,
-        msg: &'a Message,
-        indent: &str,
-    ) -> Result<std::string::String, imessage_database::error::plist::PlistParseError> {
-        match msg.payload_data(&self.config.db) {
-            Some(payload) => {
-                let parsed = parse_plist(&payload)?;
-                // TODO: Render message
-                let edited_message = EditedMessage::from_map(&parsed)?;
+    fn format_edited(&self, msg: &'a Message, _: &str) -> Result<String, MessageError> {
+        if let Some(payload) = msg.message_summary_info(&self.config.db) {
+            let edited_message =
+                EditedMessage::from_map(&payload).map_err(MessageError::PlistParseError)?;
+
+            let mut out_s = String::from(
+                "<table><thead><tr><th>Date</th><th>Message</th></tr></thead>",
+            );
+            let mut previous_timestamp: Option<&i64> = None;
+
+            for i in 0..edited_message.items() {
+                let last = i == edited_message.items() - 1;
+
+                if let Some((timestamp, text, _)) = edited_message.item_at(i) {
+                    match previous_timestamp {
+                        None => {
+                            let parsed_timestamp =
+                                format(&msg.get_local_time(timestamp, &self.config.offset));
+                            out_s.push_str(&self.edited_to_html(&parsed_timestamp, text, last))
+                        }
+                        Some(prev_timestamp) => {
+                            let end = msg.get_local_time(timestamp, &self.config.offset);
+                            let start = msg.get_local_time(prev_timestamp, &self.config.offset);
+
+                            let diff = readable_diff(start, end).unwrap_or_default();
+                            out_s.push_str(&self.edited_to_html(
+                                &format!("Edited {diff} later"),
+                                text,
+                                last,
+                            ))
+                        }
+                    }
+
+                    // Update the previous timestamp for the next loop
+                    previous_timestamp = Some(timestamp);
+                }
             }
-            None => todo!(),
-        };
-        Ok(String::new())
+            out_s.push_str("</table>");
+            return Ok(out_s);
+        }
+        Err(MessageError::PlistParseError(PlistParseError::NoPayload))
     }
 
     fn write_to_file(file: &Path, text: &str) {
@@ -607,7 +634,7 @@ impl<'a> Writer<'a> for HTML<'a> {
 }
 
 impl<'a> BalloonFormatter for HTML<'a> {
-    fn format_url(&self, balloon: &URLMessage, indent: &str) -> String {
+    fn format_url(&self, balloon: &URLMessage, _: &str) -> String {
         let mut out_s = String::new();
 
         // Make the whole bubble clickable
@@ -669,7 +696,7 @@ impl<'a> BalloonFormatter for HTML<'a> {
         out_s
     }
 
-    fn format_music(&self, balloon: &MusicMessage, indent: &str) -> String {
+    fn format_music(&self, balloon: &MusicMessage, _: &str) -> String {
         let mut out_s = String::new();
 
         // Header section
@@ -728,19 +755,19 @@ impl<'a> BalloonFormatter for HTML<'a> {
         out_s
     }
 
-    fn format_handwriting(&self, _: &AppMessage, indent: &str) -> String {
+    fn format_handwriting(&self, _: &AppMessage, _: &str) -> String {
         String::from("Handwritten messages are not yet supported!")
     }
 
-    fn format_apple_pay(&self, balloon: &AppMessage, indent: &str) -> String {
+    fn format_apple_pay(&self, balloon: &AppMessage, _: &str) -> String {
         self.balloon_to_html(balloon, "Apple Pay", &mut [])
     }
 
-    fn format_fitness(&self, balloon: &AppMessage, indent: &str) -> String {
+    fn format_fitness(&self, balloon: &AppMessage, _: &str) -> String {
         self.balloon_to_html(balloon, "Fitness", &mut [])
     }
 
-    fn format_slideshow(&self, balloon: &AppMessage, indent: &str) -> String {
+    fn format_slideshow(&self, balloon: &AppMessage, _: &str) -> String {
         self.balloon_to_html(balloon, "Slideshow", &mut [])
     }
 
@@ -749,7 +776,7 @@ impl<'a> BalloonFormatter for HTML<'a> {
         balloon: &AppMessage,
         bundle_id: &str,
         attachments: &mut Vec<Attachment>,
-        indent: &str,
+        _: &str,
     ) -> String {
         self.balloon_to_html(balloon, bundle_id, attachments)
     }
@@ -785,6 +812,14 @@ impl<'a> HTML<'a> {
         HTML::write_to_file(path, "<style>\n");
         HTML::write_to_file(path, STYLE);
         HTML::write_to_file(path, "\n</style>");
+    }
+
+    fn edited_to_html(&self, timestamp: &str, text: &str, last: bool) -> String {
+        let tag = match last {
+            true => "tfoot",
+            false => "tbody",
+        };
+        format!("<{tag}><tr><th>{timestamp}</th><td>{text}</td></tr></{tag}>")
     }
 
     fn balloon_to_html(
