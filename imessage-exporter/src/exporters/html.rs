@@ -90,7 +90,6 @@ impl<'a> Exporter<'a> for HTML<'a> {
             }
             // Message replies and reactions are rendered in context, so no need to render them separately
             else if !msg.is_reaction() {
-                // TODO: Handle this!
                 msg.gen_text(&self.config.db);
                 let message = self.format_message(&msg, 0)?;
                 HTML::write_to_file(self.get_or_create_file(&msg), &message);
@@ -348,7 +347,6 @@ impl<'a> Writer<'a> for HTML<'a> {
             Some(path) => {
                 if let Some(path_str) = path.as_os_str().to_str() {
                     // Resolve the attachment path if necessary
-                    // TODO: can we avoid copying the path here?
                     let resolved_attachment_path = if path.starts_with("~") {
                         path_str.replace('~', &home())
                     } else {

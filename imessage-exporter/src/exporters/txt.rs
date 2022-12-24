@@ -79,7 +79,6 @@ impl<'a> Exporter<'a> for TXT<'a> {
             }
             // Message replies and reactions are rendered in context, so no need to render them separately
             else if !msg.is_reaction() {
-                // TODO: Handle this!
                 msg.gen_text(&self.config.db);
                 let message = self.format_message(&msg, 0)?;
                 TXT::write_to_file(self.get_or_create_file(&msg), &message);
@@ -203,7 +202,6 @@ impl<'a> Writer<'a> for TXT<'a> {
             }
 
             // Handle Replies
-            // TODO: Some replies arent rendered in txt messages (see converstaion with dad)
             if let Some(replies) = replies.get_mut(&idx) {
                 replies
                     .iter_mut()
