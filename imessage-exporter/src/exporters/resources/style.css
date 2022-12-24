@@ -311,6 +311,14 @@ td {
 	color: rgba(0, 0, 0, 0.7)
 }
 
+.received .announcement {
+	color: black;
+}
+
+.sent .announcement {
+	color: white;
+}
+
 @media (prefers-color-scheme: dark) {
 	body {
 		background: black;
