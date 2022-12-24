@@ -9,7 +9,6 @@ pub enum MessageError {
     StreamTypedParseError(StreamTypedError),
     PlistParseError(PlistParseError),
     InvalidTimestamp(i64),
-    TimestampDiffError(i64, i64),
 }
 
 impl Display for MessageError {
@@ -25,9 +24,6 @@ impl Display for MessageError {
             }
             MessageError::InvalidTimestamp(when) => {
                 write!(fmt, "Timestamp is invalid: {when}")
-            }
-            MessageError::TimestampDiffError(start, end) => {
-                write!(fmt, "Unable to format diff: {start} - {end}")
             }
         }
     }
