@@ -282,6 +282,10 @@ audio {
 	color: black;
 }
 
+.received .sent table {
+	color: white;
+}
+
 table {
 	border-collapse: collapse;
 	text-align: left;
@@ -296,6 +300,10 @@ td {
 }
 
 .sent tbody {
+	color: rgba(256, 256, 256, 0.7)
+}
+
+.received .sent tbody {
 	color: rgba(256, 256, 256, 0.7)
 }
 
