@@ -83,12 +83,12 @@ xmp {
 }
 
 .reply .received {
-	min-width: 85%;
+	max-width: 85%;
 	padding: 15px;
 }
 
 .reply .sent {
-	min-width: 85%;
+	max-width: 85%;
 	padding: 15px;
 }
 
@@ -278,23 +278,29 @@ audio {
 	color: white;
 }
 
+.received table {
+	color: black;
+}
+
 table {
 	border-collapse: collapse;
 	text-align: left;
-	overflow-wrap: anywhere;
 }
 
 thead {
 	border-bottom: 2px solid white;
 }
 
-tfoot {
-	border-top: 2px solid white;
+td {
+	padding: 2px 5px;
 }
 
-td, th {
-	/* border: 1px solid white; */
-	padding: 2px 5px;
+.sent tbody {
+	color: rgba(256, 256, 256, 0.7)
+}
+
+.received tbody {
+	color: rgba(0, 0, 0, 0.7)
 }
 
 @media (prefers-color-scheme: dark) {

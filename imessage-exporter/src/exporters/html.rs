@@ -206,8 +206,8 @@ impl<'a> Writer<'a> for HTML<'a> {
                         self.add_line(
                             &mut formatted_message,
                             &edited,
-                            "<span class=\"edited\">",
-                            "</span>",
+                            "<div class=\"edited\">",
+                            "</div>",
                         );
                     } else if text.starts_with(FITNESS_RECEIVER) {
                         self.add_line(
@@ -583,8 +583,7 @@ impl<'a> Writer<'a> for HTML<'a> {
             let edited_message =
                 EditedMessage::from_map(&payload).map_err(MessageError::PlistParseError)?;
 
-            let mut out_s =
-                String::from("<table><thead><tr><th>Date</th><th>Message</th></tr></thead>");
+            let mut out_s = String::from("<table>");
             let mut previous_timestamp: Option<&i64> = None;
 
             for i in 0..edited_message.items() {
@@ -592,11 +591,7 @@ impl<'a> Writer<'a> for HTML<'a> {
 
                 if let Some((timestamp, text, _)) = edited_message.item_at(i) {
                     match previous_timestamp {
-                        None => {
-                            let parsed_timestamp =
-                                format(&msg.get_local_time(timestamp, &self.config.offset));
-                            out_s.push_str(&self.edited_to_html(&parsed_timestamp, text, last))
-                        }
+                        None => out_s.push_str(&self.edited_to_html("", text, last)),
                         Some(prev_timestamp) => {
                             let end = msg.get_local_time(timestamp, &self.config.offset);
                             let start = msg.get_local_time(prev_timestamp, &self.config.offset);
@@ -816,7 +811,7 @@ impl<'a> HTML<'a> {
             true => "tfoot",
             false => "tbody",
         };
-        format!("<{tag}><tr><th>{timestamp}</th><td>{text}</td></tr></{tag}>")
+        format!("<{tag}><tr><td><span class=\"timestamp\">{timestamp}</span></td><td>{text}</td></tr></{tag}>")
     }
 
     fn balloon_to_html(
