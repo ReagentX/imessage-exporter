@@ -475,7 +475,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                 CustomBalloon::Slideshow => self.format_slideshow(&bubble, indent),
                                 _ => unreachable!(),
                             },
-                            Err(why) => return Err(PlistParseError::ParseError(format!("{why}"))),
+                            Err(why) => return Err(why),
                         }
                     };
                     app_bubble.push_str(&res);
