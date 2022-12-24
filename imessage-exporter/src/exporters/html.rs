@@ -11,7 +11,10 @@ use crate::{
 };
 
 use imessage_database::{
-    error::{message::MessageError, plist::PlistParseError},
+    error::{
+        message::{self, MessageError},
+        plist::PlistParseError,
+    },
     message_types::{
         app::AppMessage,
         edited::EditedMessage,
@@ -175,6 +178,7 @@ impl<'a> Writer<'a> for HTML<'a> {
         // Index of where we are in the attachment Vector
         let mut attachment_index: usize = 0;
 
+        // Add message subject
         if let Some(subject) = &message.subject {
             // Add message sender
             self.add_line(
@@ -182,6 +186,20 @@ impl<'a> Writer<'a> for HTML<'a> {
                 subject,
                 "<p>Subject: <span class=\"subject\">",
                 "</span></p>",
+            );
+        }
+
+        // If message was removed, display it
+        if message_parts.is_empty() && message.is_edited() {
+            let edited = match self.format_edited(message, "") {
+                Ok(s) => s,
+                Err(why) => format!("{}, {}", message.guid, why),
+            };
+            self.add_line(
+                &mut formatted_message,
+                &edited,
+                "<div class=\"edited\">",
+                "</div>",
             );
         }
 
@@ -583,33 +601,45 @@ impl<'a> Writer<'a> for HTML<'a> {
             let edited_message =
                 EditedMessage::from_map(&payload).map_err(MessageError::PlistParseError)?;
 
-            let mut out_s = String::from("<table>");
+            let mut out_s = String::new();
             let mut previous_timestamp: Option<&i64> = None;
 
-            for i in 0..edited_message.items() {
-                let last = i == edited_message.items() - 1;
+            if edited_message.is_deleted() {
+                let who = if msg.is_from_me { "You" } else { "They" };
 
-                if let Some((timestamp, text, _)) = edited_message.item_at(i) {
-                    match previous_timestamp {
-                        None => out_s.push_str(&self.edited_to_html("", text, last)),
-                        Some(prev_timestamp) => {
-                            let end = msg.get_local_time(timestamp, &self.config.offset);
-                            let start = msg.get_local_time(prev_timestamp, &self.config.offset);
+                out_s.push_str(&format!(
+                    "<p><span class=\"timestamp\">{who} deleted a message.</span></p>"
+                ));
+            } else {
+                out_s.push_str("<table>");
 
-                            let diff = readable_diff(start, end).unwrap_or_default();
-                            out_s.push_str(&self.edited_to_html(
-                                &format!("Edited {diff} later"),
-                                text,
-                                last,
-                            ))
+                for i in 0..edited_message.items() {
+                    let last = i == edited_message.items() - 1;
+
+                    if let Some((timestamp, text, _)) = edited_message.item_at(i) {
+                        match previous_timestamp {
+                            None => out_s.push_str(&self.edited_to_html("", text, last)),
+                            Some(prev_timestamp) => {
+                                let end = msg.get_local_time(timestamp, &self.config.offset);
+                                let start = msg.get_local_time(prev_timestamp, &self.config.offset);
+
+                                let diff = readable_diff(start, end).unwrap_or_default();
+                                out_s.push_str(&self.edited_to_html(
+                                    &format!("Edited {diff} later"),
+                                    text,
+                                    last,
+                                ))
+                            }
                         }
-                    }
 
-                    // Update the previous timestamp for the next loop
-                    previous_timestamp = Some(timestamp);
+                        // Update the previous timestamp for the next loop
+                        previous_timestamp = Some(timestamp);
+                    }
                 }
+
+                out_s.push_str("</table>");
             }
-            out_s.push_str("</table>");
+
             return Ok(out_s);
         }
         Err(MessageError::PlistParseError(PlistParseError::NoPayload))

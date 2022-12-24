@@ -129,8 +129,18 @@ impl<'a> Writer<'a> for TXT<'a> {
         // Index of where we are in the attachment Vector
         let mut attachment_index: usize = 0;
 
+        // Render subject
         if let Some(subject) = &message.subject {
             self.add_line(&mut formatted_message, subject, &indent);
+        }
+
+        // If message was removed, display it
+        if message_parts.is_empty() && message.is_edited() {
+            let edited = match self.format_edited(message, &indent) {
+                Ok(s) => s,
+                Err(why) => format!("{}, {}", message.guid, why),
+            };
+            self.add_line(&mut formatted_message, &edited, &indent);
         }
 
         // Generate the message body from it's components
@@ -379,36 +389,43 @@ impl<'a> Writer<'a> for TXT<'a> {
             let mut out_s = String::new();
             let mut previous_timestamp: Option<&i64> = None;
 
-            for i in 0..edited_message.items() {
-                // If a message exists, build a string for it
-                if let Some((timestamp, text, _)) = edited_message.item_at(i) {
-                    match previous_timestamp {
-                        // Original message get an absolute timestamp
-                        None => {
-                            let parsed_timestamp =
-                                format(&msg.get_local_time(timestamp, &self.config.offset));
-                            out_s.push_str(&parsed_timestamp);
-                            out_s.push(' ');
-                        }
-                        // Subsequent edits get a relative timestamp
-                        Some(prev_timestamp) => {
-                            let end = msg.get_local_time(timestamp, &self.config.offset);
-                            let start = msg.get_local_time(prev_timestamp, &self.config.offset);
-                            if let Some(diff) = readable_diff(start, end) {
-                                out_s.push_str("Edited ");
-                                out_s.push_str(&diff);
-                                out_s.push_str(" later: ");
+            if edited_message.is_deleted() {
+                let who = if msg.is_from_me { "You" } else { "They" };
+                out_s.push_str(who);
+                out_s.push_str(" deleted a message.");
+            } else {
+                for i in 0..edited_message.items() {
+                    // If a message exists, build a string for it
+                    if let Some((timestamp, text, _)) = edited_message.item_at(i) {
+                        match previous_timestamp {
+                            // Original message get an absolute timestamp
+                            None => {
+                                let parsed_timestamp =
+                                    format(&msg.get_local_time(timestamp, &self.config.offset));
+                                out_s.push_str(&parsed_timestamp);
+                                out_s.push(' ');
                             }
-                        }
-                    };
+                            // Subsequent edits get a relative timestamp
+                            Some(prev_timestamp) => {
+                                let end = msg.get_local_time(timestamp, &self.config.offset);
+                                let start = msg.get_local_time(prev_timestamp, &self.config.offset);
+                                if let Some(diff) = readable_diff(start, end) {
+                                    out_s.push_str("Edited ");
+                                    out_s.push_str(&diff);
+                                    out_s.push_str(" later: ");
+                                }
+                            }
+                        };
 
-                    // Update the previous timestamp for the next loop
-                    previous_timestamp = Some(timestamp);
+                        // Update the previous timestamp for the next loop
+                        previous_timestamp = Some(timestamp);
 
-                    // Render the message text
-                    self.add_line(&mut out_s, text, indent);
+                        // Render the message text
+                        self.add_line(&mut out_s, text, indent);
+                    }
                 }
             }
+
             return Ok(out_s);
         }
         Err(MessageError::PlistParseError(PlistParseError::NoPayload))
