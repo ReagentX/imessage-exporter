@@ -410,6 +410,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                                 let end = msg.get_local_time(timestamp, &self.config.offset);
                                 let start = msg.get_local_time(prev_timestamp, &self.config.offset);
                                 if let Some(diff) = readable_diff(start, end) {
+                                    out_s.push_str(indent);
                                     out_s.push_str("Edited ");
                                     out_s.push_str(&diff);
                                     out_s.push_str(" later: ");
