@@ -191,8 +191,9 @@ impl<'a> Writer<'a> for HTML<'a> {
 
         // If message was removed, display it
         if message_parts.is_empty() && message.is_edited() {
+            // If this works, we want to format it as an annoucement, so we early return for the Ok()
             let edited = match self.format_edited(message, "") {
-                Ok(s) => s,
+                Ok(s) => return Ok(s),
                 Err(why) => format!("{}, {}", message.guid, why),
             };
             self.add_line(
@@ -606,9 +607,10 @@ impl<'a> Writer<'a> for HTML<'a> {
 
             if edited_message.is_deleted() {
                 let who = if msg.is_from_me { "You" } else { "They" };
+                let timestamp = format(&msg.date(&self.config.offset));
 
                 out_s.push_str(&format!(
-                    "<p><span class=\"timestamp\">{who} deleted a message.</span></p>"
+                    "<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} deleted a message.</p></div>"
                 ));
             } else {
                 out_s.push_str("<table>");
