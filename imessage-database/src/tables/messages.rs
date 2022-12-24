@@ -678,6 +678,7 @@ impl Message {
     }
 
     /// Get a message's plist from the `payload_data` BLOB column
+    /// 
     /// Calling this hits the database, so it is expensive and should
     /// only get invoked when needed
     pub fn payload_data(&self, db: &Connection) -> Option<Value> {
@@ -685,21 +686,23 @@ impl Message {
     }
 
     /// Get a message's plist from the `message_summary_info` BLOB column
+    /// 
     /// Calling this hits the database, so it is expensive and should
     /// only get invoked when needed
     pub fn message_summary_info(&self, db: &Connection) -> Option<Value> {
         Value::from_reader(self.get_blob(db, MESSAGE_SUMMARY_INFO)?).ok()
     }
 
-    /// Get a message's plist from the `message_summary_info` BLOB column
+    /// Get a message's plist from the `attributedBody` BLOB column
+    /// 
     /// Calling this hits the database, so it is expensive and should
     /// only get invoked when needed
     pub fn attributed_body(&self, db: &Connection) -> Option<Vec<u8>> {
-        let mut body_data = vec![];
+        let mut body = vec![];
         self.get_blob(db, ATTRIBUTED_BODY)?
-            .read_to_end(&mut body_data)
+            .read_to_end(&mut body)
             .ok();
-        Some(body_data)
+        Some(body)
     }
 
     /// Determine which expressive the message was sent with
