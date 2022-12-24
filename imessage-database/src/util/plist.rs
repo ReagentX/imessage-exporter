@@ -2,11 +2,11 @@
  This module contains logic to parse text from plist payload data
 */
 
-use crate::error::plist::PlistParseError;
+use std::collections::HashMap;
 
 use plist::{Dictionary, Value};
 
-use std::collections::HashMap;
+use crate::error::plist::PlistParseError;
 
 /// Serialize a message's `payload_data` BLOB from the `NSKeyedArchiver` format to a native Dictionary
 /// that follows the references in the XML document's UID pointers. First, we find the root of the
