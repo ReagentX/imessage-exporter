@@ -2,6 +2,8 @@
 edition = "2021"
 name = "imessage-exporter"
 version = "0.0.0"
+description = "Export iMessage data and run iMessage diagnostics"
+license-file = "LICENSE"
 
 [dependencies]
 clap = {version = "3.2.22", features = ["cargo"]}
