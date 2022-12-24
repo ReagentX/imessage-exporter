@@ -8,13 +8,13 @@ This crate provides both a library to interact with iMessage data as well as a b
 
 The `imessage_exporter` binary exports iMessage data to `txt` or `html` formats. It can also run diagnostics to find problems with the iMessage database.
 
-Docs for the app are located [here](imessage-exporter/README.md).
+Documentation for the app is located [here](imessage-exporter/README.md).
 
 ## Library
 
 The `imessage_database` library provides models that allow us to access iMessage information as native data structures.
 
-Docs for the library are located [here](imessage-database/README.md).
+Documentation for the library is located [here](imessage-database/README.md).
 
 ### Supported Features
 
@@ -32,10 +32,6 @@ This crate supports every iMessage feature as of MacOS 13.1 (22C65):
 - Edited messages
 
 See more detail about supported features [here](docs/features.md).
-
-## Documentation
-
-Documentation is available [here](/docs/).
 
 ## Special Thanks
 
