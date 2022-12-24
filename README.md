@@ -14,7 +14,7 @@ Docs for the app are located [here](/docs/binary/).
 
 The `imessage_database` library provides models that allow us to access iMessage information as native data structures.
 
-Docs for the library are located [here](/docs/library/).
+Docs for the library are located [here](imessage-database/README.md).
 
 ### Supported Features
 
@@ -31,7 +31,7 @@ This crate supports every iMessage feature as of MacOS 13.1 (22C65):
 - App Integrations
 - Edited messages
 
-See more detail about supported features [here](/docs/binary/features.md).
+See more detail about supported features [here](docs/features.md).
 
 ## Documentation
 
