@@ -43,9 +43,9 @@ pub enum Reaction {
 /// text balloon. This represents the different variants of message balloon.
 #[derive(Debug)]
 pub enum CustomBalloon<'a> {
-    /// Generic third party applications
+    /// Generic third party [applications](crate::message_types::app)
     Application(&'a str),
-    /// URL previews
+    /// [URL](crate::message_types::url) previews
     URL,
     /// Handwritten animated messages
     Handwriting,
@@ -55,7 +55,7 @@ pub enum CustomBalloon<'a> {
     Fitness,
     /// Photos.app slideshow messages
     Slideshow,
-    /// Apple Music messages
+    /// [Apple Music](crate::message_types::music) messages
     Music,
 }
 
@@ -70,6 +70,7 @@ pub enum Variant<'a> {
     Unknown(i32),
     App(CustomBalloon<'a>),
     Normal,
+    Edited,
 }
 
 /// Defines behavior for different types of messages that have custom balloons

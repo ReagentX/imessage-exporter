@@ -116,7 +116,10 @@ mod tests {
 
     #[test]
     fn test_parse_url_me() {
-        let plist_path = current_dir().unwrap().as_path().join("test_data/URL.plist");
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/url_message/URL.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = parse_plist(&plist).unwrap();
@@ -142,7 +145,7 @@ mod tests {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/MetadataURL.plist");
+            .join("test_data/url_message/MetadataURL.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = parse_plist(&plist).unwrap();
@@ -172,7 +175,7 @@ mod tests {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/Twitter.plist");
+            .join("test_data/url_message/Twitter.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = parse_plist(&plist).unwrap();
@@ -205,7 +208,7 @@ mod tests {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/Reminder.plist");
+            .join("test_data/url_message/Reminder.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = parse_plist(&plist).unwrap();
@@ -243,7 +246,6 @@ mod tests {
         };
         assert_eq!(expected.get_url(), Some("https://chrissardegna.com/"))
     }
-
 
     #[test]
     fn test_get_orignal_url() {

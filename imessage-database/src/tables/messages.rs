@@ -2,31 +2,33 @@
  This module represents common (but not all) columns in the `message` table.
 */
 
-use std::{collections::HashMap, vec};
+use std::{collections::HashMap, io::Read, vec};
 
-use chrono::{naive::NaiveDateTime, offset::Local, DateTime, Datelike, TimeZone, Timelike};
+use chrono::{naive::NaiveDateTime, offset::Local, DateTime, TimeZone};
 use plist::Value;
-use rusqlite::{Connection, Error, Result, Row, Statement};
+use rusqlite::{blob::Blob, Connection, Error, Result, Row, Statement};
 
 use crate::{
+    error::message::MessageError,
     message_types::{
         expressives::{BubbleEffect, Expressive, ScreenEffect},
         variants::{CustomBalloon, Reaction, Variant},
     },
     tables::table::{
-        Cacheable, Diagnostic, Table, CHAT_MESSAGE_JOIN, MESSAGE, MESSAGE_ATTACHMENT_JOIN,
-        MESSAGE_PAYLOAD,
+        Cacheable, Diagnostic, Table, ATTRIBUTED_BODY, CHAT_MESSAGE_JOIN, MESSAGE,
+        MESSAGE_ATTACHMENT_JOIN, MESSAGE_PAYLOAD, MESSAGE_SUMMARY_INFO,
     },
     util::{
-        dates::readable_diff,
+        dates::{readable_diff, TIMESTAMP_FACTOR},
         output::{done_processing, processing},
+        streamtyped,
     },
 };
 
 const ATTACHMENT_CHAR: char = '\u{FFFC}';
 const APP_CHAR: char = '\u{FFFD}';
 const REPLACEMENT_CHARS: [char; 2] = [ATTACHMENT_CHAR, APP_CHAR];
-const COLUMNS: &str = "m.rowid, m.guid, m.text, m.service, m.handle_id, m.subject, m.date, m.date_read, m.date_delivered, m.is_from_me, m.is_read, m.group_title, m.associated_message_guid, m.associated_message_type, m.balloon_bundle_id, m.expressive_send_style_id, m.thread_originator_guid, m.thread_originator_part";
+const COLUMNS: &str = "m.rowid, m.guid, m.text, m.service, m.handle_id, m.subject, m.date, m.date_read, m.date_delivered, m.is_from_me, m.is_read, m.group_title, m.associated_message_guid, m.associated_message_type, m.balloon_bundle_id, m.expressive_send_style_id, m.thread_originator_guid, m.thread_originator_part, m.date_edited";
 
 /// Represents a broad category of messages: standalone, thread originators, and thread replies.
 #[derive(Debug)]
@@ -86,6 +88,7 @@ pub struct Message {
     pub expressive_send_style_id: Option<String>,
     pub thread_originator_guid: Option<String>,
     pub thread_originator_part: Option<String>,
+    pub date_edited: i64,
     pub chat_id: Option<i32>,
     pub num_attachments: i32,
     pub num_replies: i32,
@@ -101,8 +104,8 @@ impl Table for Message {
             handle_id: row.get(4)?,
             subject: row.get(5)?,
             date: row.get(6)?,
-            date_read: row.get(7)?,
-            date_delivered: row.get(8)?,
+            date_read: row.get(7).unwrap_or(0),
+            date_delivered: row.get(8).unwrap_or(0),
             is_from_me: row.get(9)?,
             is_read: row.get(10)?,
             group_title: row.get(11)?,
@@ -112,9 +115,10 @@ impl Table for Message {
             expressive_send_style_id: row.get(15)?,
             thread_originator_guid: row.get(16)?,
             thread_originator_part: row.get(17)?,
-            chat_id: row.get(18)?,
-            num_attachments: row.get(19)?,
-            num_replies: row.get(20)?,
+            date_edited: row.get(18).unwrap_or(0),
+            chat_id: row.get(19)?,
+            num_attachments: row.get(20)?,
+            num_replies: row.get(21)?,
         })
     }
 
@@ -243,6 +247,21 @@ impl Cacheable for Message {
 }
 
 impl Message {
+    /// Get the body text of a message
+    pub fn gen_text<'a>(&'a mut self, db: &'a Connection) -> Result<&'a str, MessageError> {
+        if self.text.is_none() {
+            let body = self.attributed_body(db).ok_or(MessageError::MissingData)?;
+            self.text =
+                Some(streamtyped::parse(body).map_err(MessageError::StreamTypedParseError)?);
+        }
+
+        if let Some(t) = &self.text {
+            Ok(t)
+        } else {
+            Err(MessageError::NoText)
+        }
+    }
+
     /// Get a vector of string slices of the message's components
     ///
     /// If the message has attachments, there will be one [`U+FFFC`]((https://www.fileformat.info/info/unicode/char/fffc/index.htm)) character
@@ -286,36 +305,46 @@ impl Message {
                 }
                 out_v
             }
-            None => vec![],
+            None => out_v,
         }
     }
 
-    fn get_local_time(&self, date_stamp: &i64, offset: &i64) -> DateTime<Local> {
-        let utc_stamp = NaiveDateTime::from_timestamp((date_stamp / 1000000000) + offset, 0);
-        let local_time = Local.from_utc_datetime(&utc_stamp);
-        Local
-            .ymd(local_time.year(), local_time.month(), local_time.day())
-            .and_hms(local_time.hour(), local_time.minute(), local_time.second())
+    pub fn get_local_time(
+        &self,
+        date_stamp: &i64,
+        offset: &i64,
+    ) -> Result<DateTime<Local>, MessageError> {
+        let utc_stamp =
+            NaiveDateTime::from_timestamp_opt((date_stamp / TIMESTAMP_FACTOR) + offset, 0)
+                .ok_or(MessageError::InvalidTimestamp(*date_stamp))?;
+        Ok(Local.from_utc_datetime(&utc_stamp))
     }
 
     /// Calculates the date a message was written to the database.
     ///
     /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
-    pub fn date(&self, offset: &i64) -> DateTime<Local> {
+    pub fn date(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
         self.get_local_time(&self.date, offset)
     }
 
     /// Calculates the date a message was marked as delivered.
     ///
     /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
-    pub fn date_delivered(&self, offset: &i64) -> DateTime<Local> {
+    pub fn date_delivered(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
         self.get_local_time(&self.date_delivered, offset)
     }
 
     /// Calculates the date a message was marked as read.
     ///
     /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
-    pub fn date_read(&self, offset: &i64) -> DateTime<Local> {
+    pub fn date_read(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
+        self.get_local_time(&self.date_read, offset)
+    }
+
+    /// Calculates the date a message was most recently edited.
+    ///
+    /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
+    pub fn date_edited(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
         self.get_local_time(&self.date_read, offset)
     }
 
@@ -374,6 +403,11 @@ impl Message {
             self.variant(),
             Variant::App(CustomBalloon::URL) | Variant::App(CustomBalloon::Music)
         )
+    }
+
+    /// `true` if the message was edited, else `false`
+    pub fn is_edited(&self) -> bool {
+        self.date_edited != 0
     }
 
     /// `true` if the message has attachments, else `false`
@@ -561,6 +595,9 @@ impl Message {
 
     /// Get the variant of a message, see [crate::message_types::variants] for detail.
     pub fn variant(&self) -> Variant {
+        if self.is_edited() {
+            return Variant::Edited;
+        }
         match self.associated_message_type {
             // Standard iMessages with either text or a message payload
             0 | 2 | 3 => match self.parse_balloon_bundle_id() {
@@ -626,20 +663,46 @@ impl Message {
         }
     }
 
-    /// Get a message's plist from the `payload_data` BLOB column
-    /// Calling this hits the database, so it is expensive and should
-    /// only get invoked when needed
-    pub fn payload_data(&self, db: &Connection) -> Option<Value> {
+    /// Extract a blob of data that belongs to a single message from a given column
+    fn get_blob<'a>(&self, db: &'a Connection, column: &str) -> Option<Blob<'a>> {
         match db.blob_open(
             rusqlite::DatabaseName::Main,
             MESSAGE,
-            MESSAGE_PAYLOAD,
+            column,
             self.rowid as i64,
             true,
         ) {
-            Ok(payload) => Some(Value::from_reader(payload).ok()?),
+            Ok(blob) => Some(blob),
             Err(_) => None,
         }
+    }
+
+    /// Get a message's plist from the `payload_data` BLOB column
+    /// 
+    /// Calling this hits the database, so it is expensive and should
+    /// only get invoked when needed
+    pub fn payload_data(&self, db: &Connection) -> Option<Value> {
+        Value::from_reader(self.get_blob(db, MESSAGE_PAYLOAD)?).ok()
+    }
+
+    /// Get a message's plist from the `message_summary_info` BLOB column
+    /// 
+    /// Calling this hits the database, so it is expensive and should
+    /// only get invoked when needed
+    pub fn message_summary_info(&self, db: &Connection) -> Option<Value> {
+        Value::from_reader(self.get_blob(db, MESSAGE_SUMMARY_INFO)?).ok()
+    }
+
+    /// Get a message's plist from the `attributedBody` BLOB column
+    /// 
+    /// Calling this hits the database, so it is expensive and should
+    /// only get invoked when needed
+    pub fn attributed_body(&self, db: &Connection) -> Option<Vec<u8>> {
+        let mut body = vec![];
+        self.get_blob(db, ATTRIBUTED_BODY)?
+            .read_to_end(&mut body)
+            .ok();
+        Some(body)
     }
 
     /// Determine which expressive the message was sent with
@@ -717,6 +780,7 @@ mod tests {
             expressive_send_style_id: None,
             thread_originator_guid: None,
             thread_originator_part: None,
+            date_edited: 0,
             chat_id: None,
             num_attachments: 0,
             num_replies: 0,

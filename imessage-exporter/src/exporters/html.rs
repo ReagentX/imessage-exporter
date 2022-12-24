@@ -7,13 +7,14 @@ use std::{
 
 use crate::{
     app::{converter::heic_to_jpeg, progress::build_progress_bar_export, runtime::Config},
-    exporters::exporter::{Exporter, Writer},
+    exporters::exporter::{BalloonFormatter, Exporter, Writer},
 };
 
 use imessage_database::{
-    error::plist::PlistParseError,
+    error::{message::MessageError, plist::PlistParseError},
     message_types::{
         app::AppMessage,
+        edited::EditedMessage,
         music::MusicMessage,
         url::URLMessage,
         variants::{BalloonProvider, CustomBalloon},
@@ -23,12 +24,15 @@ use imessage_database::{
         messages::BubbleType,
         table::{FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN},
     },
-    util::{dates, dirs::home, plist::parse_plist},
+    util::{
+        dates::{format, readable_diff},
+        dirs::home,
+        plist::parse_plist,
+    },
     Attachment, Variant, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
 };
-use uuid::Uuid;
 
-use super::exporter::BalloonFormatter;
+use uuid::Uuid;
 
 const HEADER: &str = "<html>\n<meta charset=\"UTF-8\">";
 const FOOTER: &str = "</html>";
@@ -78,13 +82,15 @@ impl<'a> Exporter<'a> for HTML<'a> {
             .unwrap();
 
         for message in messages {
-            let msg = Message::extract(message)?;
+            let mut msg = Message::extract(message)?;
+            // Render the annoucement in-line
             if msg.is_annoucement() {
                 let annoucement = self.format_annoucement(&msg);
                 HTML::write_to_file(self.get_or_create_file(&msg), &annoucement);
             }
             // Message replies and reactions are rendered in context, so no need to render them separately
             else if !msg.is_reaction() {
+                msg.gen_text(&self.config.db);
                 let message = self.format_message(&msg, 0)?;
                 HTML::write_to_file(self.get_or_create_file(&msg), &message);
             }
@@ -125,7 +131,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
 }
 
 impl<'a> Writer<'a> for HTML<'a> {
-    fn format_message(&self, message: &Message, indent: usize) -> Result<String, String> {
+    fn format_message(&self, message: &Message, indent_size: usize) -> Result<String, String> {
         // Data we want to write to a file
         let mut formatted_message = String::new();
 
@@ -163,12 +169,13 @@ impl<'a> Writer<'a> for HTML<'a> {
         // Useful message metadata
         let message_parts = message.body();
         let mut attachments = Attachment::from_message(&self.config.db, message)?;
-        let replies = message.get_replies(&self.config.db)?;
+        let mut replies = message.get_replies(&self.config.db)?;
         let reactions = message.get_reactions(&self.config.db, &self.config.reactions)?;
 
         // Index of where we are in the attachment Vector
         let mut attachment_index: usize = 0;
 
+        // Add message subject
         if let Some(subject) = &message.subject {
             // Add message sender
             self.add_line(
@@ -176,6 +183,21 @@ impl<'a> Writer<'a> for HTML<'a> {
                 subject,
                 "<p>Subject: <span class=\"subject\">",
                 "</span></p>",
+            );
+        }
+
+        // If message was removed, display it
+        if message_parts.is_empty() && message.is_edited() {
+            // If this works, we want to format it as an annoucement, so we early return for the Ok()
+            let edited = match self.format_edited(message, "") {
+                Ok(s) => return Ok(s),
+                Err(why) => format!("{}, {}", message.guid, why),
+            };
+            self.add_line(
+                &mut formatted_message,
+                &edited,
+                "<div class=\"edited\">",
+                "</div>",
             );
         }
 
@@ -191,7 +213,19 @@ impl<'a> Writer<'a> for HTML<'a> {
 
             match message_part {
                 BubbleType::Text(text) => {
-                    if text.starts_with(FITNESS_RECEIVER) {
+                    // Render edited messages
+                    if message.is_edited() {
+                        let edited = match self.format_edited(message, "") {
+                            Ok(s) => s,
+                            Err(why) => format!("{}, {}", message.guid, why),
+                        };
+                        self.add_line(
+                            &mut formatted_message,
+                            &edited,
+                            "<div class=\"edited\">",
+                            "</div>",
+                        );
+                    } else if text.starts_with(FITNESS_RECEIVER) {
                         self.add_line(
                             &mut formatted_message,
                             &text.replace(FITNESS_RECEIVER, "You"),
@@ -232,7 +266,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                         ),
                     }
                 }
-                BubbleType::App => match self.format_app(message, &mut attachments) {
+                BubbleType::App => match self.format_app(message, &mut attachments, "") {
                     Ok(ok_bubble) => self.add_line(
                         &mut formatted_message,
                         &ok_bubble,
@@ -284,26 +318,29 @@ impl<'a> Writer<'a> for HTML<'a> {
             }
 
             // Handle Replies
-            if let Some(replies) = replies.get(&idx) {
+            if let Some(replies) = replies.get_mut(&idx) {
                 self.add_line(&mut formatted_message, "<div class=\"replies\">", "", "");
-                replies.iter().try_for_each(|reply| -> Result<(), String> {
-                    if !reply.is_reaction() {
-                        // Set indent to 1 so we know this is a recursive call
-                        self.add_line(
-                            &mut formatted_message,
-                            &self.format_message(reply, 1)?,
-                            "<div class=\"reply\">",
-                            "</div>",
-                        );
-                    }
-                    Ok(())
-                })?;
+                replies
+                    .iter_mut()
+                    .try_for_each(|reply| -> Result<(), String> {
+                        reply.gen_text(&self.config.db);
+                        if !reply.is_reaction() {
+                            // Set indent to 1 so we know this is a recursive call
+                            self.add_line(
+                                &mut formatted_message,
+                                &self.format_message(reply, 1)?,
+                                "<div class=\"reply\">",
+                                "</div>",
+                            );
+                        }
+                        Ok(())
+                    })?;
                 self.add_line(&mut formatted_message, "</div>", "", "")
             }
         }
 
         // Add a note if the message is a reply and not rendered in a thread
-        if message.is_reply() && indent == 0 {
+        if message.is_reply() && indent_size == 0 {
             self.add_line(
                 &mut formatted_message,
                 "This message responded to an earlier message.",
@@ -326,7 +363,6 @@ impl<'a> Writer<'a> for HTML<'a> {
             Some(path) => {
                 if let Some(path_str) = path.as_os_str().to_str() {
                     // Resolve the attachment path if necessary
-                    // TODO: can we avoid copying the path here?
                     let resolved_attachment_path = if path.starts_with("~") {
                         path_str.replace('~', &home())
                     } else {
@@ -403,7 +439,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                             attachment.transfer_name
                         ),
                         MediaType::Unknown => {
-                            format!("<p>Unknown attachment type: {embed_path}</p>")
+                            format!("<p>Unknown attachment type: {embed_path}</p> <a href=\"file://{embed_path}\">Download</a>")
                         }
                         MediaType::Other(media_type) => {
                             format!("<p>Unable to embed {media_type} attachments: {embed_path}</p>")
@@ -421,6 +457,7 @@ impl<'a> Writer<'a> for HTML<'a> {
         &self,
         message: &'a Message,
         attachments: &mut Vec<Attachment>,
+        indent: &str,
     ) -> Result<String, PlistParseError> {
         if let Variant::App(balloon) = message.variant() {
             let mut app_bubble = String::new();
@@ -432,9 +469,11 @@ impl<'a> Writer<'a> for HTML<'a> {
                     let res = if message.is_url() {
                         // Handle the URL case
                         match balloon {
-                            CustomBalloon::URL => self.format_url(&URLMessage::from_map(&parsed)?),
+                            CustomBalloon::URL => {
+                                self.format_url(&URLMessage::from_map(&parsed)?, indent)
+                            }
                             CustomBalloon::Music => {
-                                self.format_music(&MusicMessage::from_map(&parsed)?)
+                                self.format_music(&MusicMessage::from_map(&parsed)?, indent)
                             }
                             _ => unreachable!(),
                         }
@@ -442,15 +481,17 @@ impl<'a> Writer<'a> for HTML<'a> {
                         match AppMessage::from_map(&parsed) {
                             Ok(bubble) => match balloon {
                                 CustomBalloon::Application(bundle_id) => {
-                                    self.format_generic_app(&bubble, bundle_id, attachments)
+                                    self.format_generic_app(&bubble, bundle_id, attachments, indent)
                                 }
-                                CustomBalloon::Handwriting => self.format_handwriting(&bubble),
-                                CustomBalloon::ApplePay => self.format_apple_pay(&bubble),
-                                CustomBalloon::Fitness => self.format_fitness(&bubble),
-                                CustomBalloon::Slideshow => self.format_slideshow(&bubble),
+                                CustomBalloon::Handwriting => {
+                                    self.format_handwriting(&bubble, indent)
+                                }
+                                CustomBalloon::ApplePay => self.format_apple_pay(&bubble, indent),
+                                CustomBalloon::Fitness => self.format_fitness(&bubble, indent),
+                                CustomBalloon::Slideshow => self.format_slideshow(&bubble, indent),
                                 _ => unreachable!(),
                             },
-                            Err(why) => return Err(PlistParseError::ParseError(format!("{why}"))),
+                            Err(why) => return Err(why),
                         }
                     };
                     app_bubble.push_str(&res);
@@ -547,12 +588,62 @@ impl<'a> Writer<'a> for HTML<'a> {
         if who == ME {
             who = "You"
         }
-        let timestamp = dates::format(&msg.date(&self.config.offset));
+        let timestamp = format(&msg.date(&self.config.offset));
         format!(
             "\n<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} named the conversation <b>{}</b></p></div>\n",
             msg.group_title.as_deref().unwrap_or(UNKNOWN)
         )
     }
+    fn format_edited(&self, msg: &'a Message, _: &str) -> Result<String, MessageError> {
+        if let Some(payload) = msg.message_summary_info(&self.config.db) {
+            let edited_message =
+                EditedMessage::from_map(&payload).map_err(MessageError::PlistParseError)?;
+
+            let mut out_s = String::new();
+            let mut previous_timestamp: Option<&i64> = None;
+
+            if edited_message.is_deleted() {
+                let who = if msg.is_from_me { "You" } else { "They" };
+                let timestamp = format(&msg.date(&self.config.offset));
+
+                out_s.push_str(&format!(
+                    "<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} deleted a message.</p></div>"
+                ));
+            } else {
+                out_s.push_str("<table>");
+
+                for i in 0..edited_message.items() {
+                    let last = i == edited_message.items() - 1;
+
+                    if let Some((timestamp, text, _)) = edited_message.item_at(i) {
+                        match previous_timestamp {
+                            None => out_s.push_str(&self.edited_to_html("", text, last)),
+                            Some(prev_timestamp) => {
+                                let end = msg.get_local_time(timestamp, &self.config.offset);
+                                let start = msg.get_local_time(prev_timestamp, &self.config.offset);
+
+                                let diff = readable_diff(start, end).unwrap_or_default();
+                                out_s.push_str(&self.edited_to_html(
+                                    &format!("Edited {diff} later"),
+                                    text,
+                                    last,
+                                ))
+                            }
+                        }
+
+                        // Update the previous timestamp for the next loop
+                        previous_timestamp = Some(timestamp);
+                    }
+                }
+
+                out_s.push_str("</table>");
+            }
+
+            return Ok(out_s);
+        }
+        Err(MessageError::PlistParseError(PlistParseError::NoPayload))
+    }
+
     fn write_to_file(file: &Path, text: &str) {
         let mut file = File::options()
             .append(true)
@@ -564,7 +655,7 @@ impl<'a> Writer<'a> for HTML<'a> {
 }
 
 impl<'a> BalloonFormatter for HTML<'a> {
-    fn format_url(&self, balloon: &URLMessage) -> String {
+    fn format_url(&self, balloon: &URLMessage, _: &str) -> String {
         let mut out_s = String::new();
 
         // Make the whole bubble clickable
@@ -626,32 +717,7 @@ impl<'a> BalloonFormatter for HTML<'a> {
         out_s
     }
 
-    fn format_handwriting(&self, _: &AppMessage) -> String {
-        String::from("Handwritten messages are not yet supported!")
-    }
-
-    fn format_apple_pay(&self, balloon: &AppMessage) -> String {
-        self.balloon_to_html(balloon, "Apple Pay", &mut [])
-    }
-
-    fn format_fitness(&self, balloon: &AppMessage) -> String {
-        self.balloon_to_html(balloon, "Fitness", &mut [])
-    }
-
-    fn format_slideshow(&self, balloon: &AppMessage) -> String {
-        self.balloon_to_html(balloon, "Slideshow", &mut [])
-    }
-
-    fn format_generic_app(
-        &self,
-        balloon: &AppMessage,
-        bundle_id: &str,
-        attachments: &mut Vec<Attachment>,
-    ) -> String {
-        self.balloon_to_html(balloon, bundle_id, attachments)
-    }
-
-    fn format_music(&self, balloon: &MusicMessage) -> String {
+    fn format_music(&self, balloon: &MusicMessage, _: &str) -> String {
         let mut out_s = String::new();
 
         // Header section
@@ -709,11 +775,37 @@ impl<'a> BalloonFormatter for HTML<'a> {
         }
         out_s
     }
+
+    fn format_handwriting(&self, _: &AppMessage, _: &str) -> String {
+        String::from("Handwritten messages are not yet supported!")
+    }
+
+    fn format_apple_pay(&self, balloon: &AppMessage, _: &str) -> String {
+        self.balloon_to_html(balloon, "Apple Pay", &mut [])
+    }
+
+    fn format_fitness(&self, balloon: &AppMessage, _: &str) -> String {
+        self.balloon_to_html(balloon, "Fitness", &mut [])
+    }
+
+    fn format_slideshow(&self, balloon: &AppMessage, _: &str) -> String {
+        self.balloon_to_html(balloon, "Slideshow", &mut [])
+    }
+
+    fn format_generic_app(
+        &self,
+        balloon: &AppMessage,
+        bundle_id: &str,
+        attachments: &mut Vec<Attachment>,
+        _: &str,
+    ) -> String {
+        self.balloon_to_html(balloon, bundle_id, attachments)
+    }
 }
 
 impl<'a> HTML<'a> {
     fn get_time(&self, message: &Message) -> String {
-        let mut date = dates::format(&message.date(&self.config.offset));
+        let mut date = format(&message.date(&self.config.offset));
         let read_after = message.time_until_read(&self.config.offset);
         if let Some(time) = read_after {
             if !time.is_empty() {
@@ -721,7 +813,6 @@ impl<'a> HTML<'a> {
                 date.push_str(&format!(" (Read by {who} after {time})"));
             }
         }
-        date.push_str(&message.guid);
         date
     }
 
@@ -742,6 +833,14 @@ impl<'a> HTML<'a> {
         HTML::write_to_file(path, "<style>\n");
         HTML::write_to_file(path, STYLE);
         HTML::write_to_file(path, "\n</style>");
+    }
+
+    fn edited_to_html(&self, timestamp: &str, text: &str, last: bool) -> String {
+        let tag = match last {
+            true => "tfoot",
+            false => "tbody",
+        };
+        format!("<{tag}><tr><td><span class=\"timestamp\">{timestamp}</span></td><td>{text}</td></tr></{tag}>")
     }
 
     fn balloon_to_html(
@@ -866,6 +965,7 @@ mod tests {
             expressive_send_style_id: None,
             thread_originator_guid: None,
             thread_originator_part: None,
+            date_edited: 0,
             chat_id: None,
             num_attachments: 0,
             num_replies: 0,

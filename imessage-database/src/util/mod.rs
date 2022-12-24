@@ -6,3 +6,4 @@ pub mod dates;
 pub mod dirs;
 pub mod output;
 pub mod plist;
+pub mod streamtyped;

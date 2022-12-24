@@ -1,5 +1,7 @@
 use std::fmt::{Display, Formatter, Result};
 
+use crate::error::streamtyped::StreamTypedError;
+
 /// Errors that can happen when parsing the plist data stored in the `payload_data` field
 #[derive(Debug)]
 pub enum PlistParseError {
@@ -10,7 +12,8 @@ pub enum PlistParseError {
     InvalidDictionarySize(usize, usize),
     NoPayload,
     WrongMessageType,
-    ParseError(String),
+    InvalidEditedMessage(String),
+    StreamTypedError(StreamTypedError),
 }
 
 impl Display for PlistParseError {
@@ -39,7 +42,10 @@ impl Display for PlistParseError {
             ),
             PlistParseError::NoPayload => write!(fmt, "Unable to acquire payload data!"),
             PlistParseError::WrongMessageType => write!(fmt, "Message is not an app message!"),
-            PlistParseError::ParseError(why) => write!(fmt, "{why}"),
+            PlistParseError::InvalidEditedMessage(message) => {
+                write!(fmt, "Unable to parse message from binary data: {message}")
+            }
+            PlistParseError::StreamTypedError(why) => write!(fmt, "{why}"),
         }
     }
 }

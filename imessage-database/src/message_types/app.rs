@@ -76,7 +76,7 @@ mod tests {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/Sent265.plist");
+            .join("test_data/app_message/Sent265.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = parse_plist(&plist).unwrap();
@@ -103,7 +103,7 @@ mod tests {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/OpenTableInvited.plist");
+            .join("test_data/app_message/OpenTableInvited.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = parse_plist(&plist).unwrap();
@@ -130,7 +130,7 @@ mod tests {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/Slideshow.plist");
+            .join("test_data/app_message/Slideshow.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = parse_plist(&plist).unwrap();
@@ -157,7 +157,7 @@ mod tests {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/Game.plist");
+            .join("test_data/app_message/Game.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = parse_plist(&plist).unwrap();
@@ -184,7 +184,7 @@ mod tests {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/Business.plist");
+            .join("test_data/app_message/Business.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = parse_plist(&plist).unwrap();

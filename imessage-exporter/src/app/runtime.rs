@@ -47,7 +47,7 @@ impl<'a> Config<'a> {
                 Some(chatroom) => self.real_chatrooms.get(&chat_id).map(|id| (chatroom, id)),
                 // No chatroom for the given chat_id
                 None => {
-                    println!("Chat ID {chat_id} does not exist in chat table!");
+                    eprintln!("Chat ID {chat_id} does not exist in chat table!");
                     None
                 }
             },
@@ -92,7 +92,7 @@ impl<'a> Config<'a> {
                 Some(participants) => self.filename_from_participants(participants),
                 // Unique chat_identifier
                 None => {
-                    println!(
+                    eprintln!(
                         "Found error: message chat ID {} has no members!",
                         chatroom.rowid
                     );
@@ -105,7 +105,7 @@ impl<'a> Config<'a> {
     /// Generate a filename from a set of participants, truncating if the name is too long
     fn filename_from_participants(&self, participants: &BTreeSet<i32>) -> String {
         let mut added = 0;
-        let mut out_s = String::with_capacity(MAX_LENGTH as usize);
+        let mut out_s = String::with_capacity(MAX_LENGTH);
         for participant_id in participants.iter() {
             let participant = self.who(participant_id, false);
             if participant.len() + out_s.len() < MAX_LENGTH {
@@ -236,8 +236,6 @@ impl<'a> Config<'a> {
                     unreachable!()
                 }
             }
-        } else {
-            println!("How did you get here?");
         }
         println!("Done!");
         Ok(())

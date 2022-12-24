@@ -83,7 +83,7 @@ mod tests {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/AppleMusic.plist");
+            .join("test_data/music_message/AppleMusic.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = parse_plist(&plist).unwrap();
