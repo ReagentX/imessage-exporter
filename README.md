@@ -28,8 +28,8 @@ This crate supports every iMessage feature as of MacOS 13.1 (22C65):
 - Stickers
 - Apple Pay
 - URL Previews
-- Edited messages
 - App Integrations
+- Edited messages
 
 See more detail about supported features [here](/docs/binary/features.md).
 
