@@ -92,7 +92,7 @@ impl<'a> Config<'a> {
                 Some(participants) => self.filename_from_participants(participants),
                 // Unique chat_identifier
                 None => {
-                    println!(
+                    eprintln!(
                         "Found error: message chat ID {} has no members!",
                         chatroom.rowid
                     );
@@ -236,8 +236,6 @@ impl<'a> Config<'a> {
                     unreachable!()
                 }
             }
-        } else {
-            println!("How did you get here?");
         }
         println!("Done!");
         Ok(())
