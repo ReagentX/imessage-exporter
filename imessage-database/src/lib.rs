@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-#![doc = include_str!("../../docs/library/README.md")]
+#![doc = include_str!("../README.md")]
 
 pub mod error;
 pub mod message_types;
