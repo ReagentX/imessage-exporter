@@ -4,10 +4,11 @@ Logic and containers for the `message_summary_info` of an edited or unsent iMess
 
 use plist::Value;
 
-use crate::error::plist::PlistParseError;
-use crate::util::{dates::TIMESTAMP_FACTOR, streamtyped::parse};
-
-use crate::message_types::variants::BalloonProvider;
+use crate::{
+    error::plist::PlistParseError,
+    message_types::variants::BalloonProvider,
+    util::{dates::TIMESTAMP_FACTOR, streamtyped::parse},
+};
 
 /// iMessage permits editing sent messages up to five times
 /// within 15 minutes of sending the first message and unsending
@@ -150,7 +151,6 @@ mod tests {
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = EditedMessage::from_map(&plist).unwrap();
-        println!("{parsed:?}");
 
         let expected = EditedMessage {
             dates: vec![
@@ -188,7 +188,6 @@ mod tests {
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = EditedMessage::from_map(&plist).unwrap();
-        println!("{parsed:?}");
 
         let expected = EditedMessage {
             dates: vec![690514004000000000, 690514772000000000],
@@ -219,7 +218,6 @@ mod tests {
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = EditedMessage::from_map(&plist).unwrap();
-        println!("{parsed:?}");
 
         let expected = EditedMessage {
             dates: vec![690514809000000000, 690514819000000000, 690514834000000000],
@@ -255,7 +253,6 @@ mod tests {
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = EditedMessage::from_map(&plist).unwrap();
-        println!("{parsed:?}");
 
         let expected = EditedMessage {
             dates: vec![],
