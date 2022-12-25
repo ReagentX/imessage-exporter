@@ -9,6 +9,7 @@ use rusqlite::Connection;
 
 use crate::{app::options::Options, Exporter, HTML, TXT};
 use imessage_database::{
+    error::table::TableError,
     tables::{
         attachment::Attachment,
         chat::Chat,
@@ -220,7 +221,7 @@ impl<'a> Config<'a> {
     /// let app = State::new(options).unwrap();
     /// app.start();
     /// ```
-    pub fn start(&self) -> Result<(), String> {
+    pub fn start(&self) -> Result<(), TableError> {
         if self.options.diagnostic {
             self.run_diagnostic();
         } else if self.options.export_type.is_some() {

@@ -21,10 +21,10 @@ if [ -n "$VERSION" ]; then
 
     if [ -n "$PUBLISH" ]; then
         echo 'Publishing database library...'
-        cargo publish -p imessage-database
+        cargo publish -p imessage-database --allow-dirty
 
         echo 'Publishing exporter binary...'
-        cargo publish -p imessage-exporter
+        cargo publish -p imessage-exporter --allow-dirty
     else
         echo 'PUBLISH env var not set!'
     fi
@@ -47,5 +47,3 @@ if [ -n "$VERSION" ]; then
 else
     echo 'No version tag set!'
 fi
-
-

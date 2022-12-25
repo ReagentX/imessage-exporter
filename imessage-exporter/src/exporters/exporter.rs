@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use imessage_database::{
-    error::{message::MessageError, plist::PlistParseError},
+    error::{message::MessageError, plist::PlistParseError, table::TableError},
     message_types::{app::AppMessage, music::MusicMessage, url::URLMessage},
     tables::{attachment::Attachment, messages::Message},
 };
@@ -13,7 +13,7 @@ pub trait Exporter<'a> {
     /// Create a new exporter with references to the cached data
     fn new(config: &'a Config) -> Self;
     /// Begin iterating over the messages table
-    fn iter_messages(&mut self) -> Result<(), String>;
+    fn iter_messages(&mut self) -> Result<(), TableError>;
     /// Get the file handle to write to, otherwise create a new one
     fn get_or_create_file(&mut self, message: &Message) -> &Path;
 }
@@ -21,7 +21,7 @@ pub trait Exporter<'a> {
 /// Defines behavior for formatting message instances to the desired output format
 pub(super) trait Writer<'a> {
     /// Format a message, including its reactions and replies
-    fn format_message(&self, msg: &Message, indent: usize) -> Result<String, String>;
+    fn format_message(&self, msg: &Message, indent: usize) -> Result<String, TableError>;
     /// Format an attachment, possibly by reading the disk
     fn format_attachment(&self, msg: &'a mut Attachment) -> Result<String, &'a str>;
     /// Format an app message by parsing some of its fields
@@ -32,7 +32,7 @@ pub(super) trait Writer<'a> {
         indent: &str,
     ) -> Result<String, PlistParseError>;
     /// Format a reaction (displayed under a message)
-    fn format_reaction(&self, msg: &Message) -> Result<String, String>;
+    fn format_reaction(&self, msg: &Message) -> Result<String, TableError>;
     /// Format an expressive message
     fn format_expressive(&self, msg: &'a Message) -> &'a str;
     /// Format an annoucement message

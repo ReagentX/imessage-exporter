@@ -4,8 +4,12 @@
 
 use std::collections::HashMap;
 
-use crate::tables::table::{Cacheable, Table, CHAT};
 use rusqlite::{Connection, Error, Result, Row, Statement};
+
+use crate::{
+    error::table::TableError,
+    tables::table::{Cacheable, Table, CHAT},
+};
 
 const COLUMNS: &str = "ROWID, chat_identifier, service_name, display_name";
 
@@ -33,15 +37,15 @@ impl Table for Chat {
             .unwrap()
     }
 
-    fn extract(chat: Result<Result<Self, Error>, Error>) -> Result<Self, String> {
+    fn extract(chat: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
         match chat {
             Ok(chat) => match chat {
                 Ok(ch) => Ok(ch),
                 // TODO: When does this occur?
-                Err(why) => Err(format!("Chat query error: {why}")),
+                Err(why) => Err(TableError::Chat(why)),
             },
             // TODO: When does this occur?
-            Err(why) => Err(format!("Chat query error: {why}")),
+            Err(why) => Err(TableError::Chat(why)),
         }
     }
 }
@@ -65,7 +69,7 @@ impl Cacheable for Chat {
     /// let conn = get_connection(&db_path);
     /// let chatrooms = Chat::cache(&conn);
     /// ```
-    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, String> {
+    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
         let mut map = HashMap::new();
 
         let mut statement = Chat::get(db);

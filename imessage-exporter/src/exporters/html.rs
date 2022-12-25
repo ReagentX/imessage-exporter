@@ -11,7 +11,7 @@ use crate::{
 };
 
 use imessage_database::{
-    error::{message::MessageError, plist::PlistParseError},
+    error::{message::MessageError, plist::PlistParseError, table::TableError},
     message_types::{
         app::AppMessage,
         edited::EditedMessage,
@@ -60,7 +60,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
         }
     }
 
-    fn iter_messages(&mut self) -> Result<(), String> {
+    fn iter_messages(&mut self) -> Result<(), TableError> {
         // Tell the user what we are doing
         eprintln!(
             "Exporting to {} as html...",
@@ -131,7 +131,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
 }
 
 impl<'a> Writer<'a> for HTML<'a> {
-    fn format_message(&self, message: &Message, indent_size: usize) -> Result<String, String> {
+    fn format_message(&self, message: &Message, indent_size: usize) -> Result<String, TableError> {
         // Data we want to write to a file
         let mut formatted_message = String::new();
 
@@ -305,7 +305,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                 );
                 reactions
                     .iter()
-                    .try_for_each(|reaction| -> Result<(), String> {
+                    .try_for_each(|reaction| -> Result<(), TableError> {
                         self.add_line(
                             &mut formatted_message,
                             &self.format_reaction(reaction)?,
@@ -322,7 +322,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                 self.add_line(&mut formatted_message, "<div class=\"replies\">", "", "");
                 replies
                     .iter_mut()
-                    .try_for_each(|reply| -> Result<(), String> {
+                    .try_for_each(|reply| -> Result<(), TableError> {
                         reply.gen_text(&self.config.db);
                         if !reply.is_reaction() {
                             // Set indent to 1 so we know this is a recursive call
@@ -525,7 +525,7 @@ impl<'a> Writer<'a> for HTML<'a> {
         }
     }
 
-    fn format_reaction(&self, msg: &Message) -> Result<String, String> {
+    fn format_reaction(&self, msg: &Message) -> Result<String, TableError> {
         match msg.variant() {
             Variant::Reaction(_, added, reaction) => {
                 if !added {
