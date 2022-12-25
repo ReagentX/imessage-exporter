@@ -4,11 +4,11 @@ This library represents interfaces used to interact with the iMessage Database.
 
 ## Installation
 
-This library is availabe on [crates.io](https://crates.io/crates/imessage-database).
+This library is available on [crates.io](https://crates.io/crates/imessage-database).
 
 ## Documentation
 
-Documentation is availabe on [docs.rs](https://docs.rs/imessage-database/).
+Documentation is available on [docs.rs](https://docs.rs/imessage-database/).
 
 ## Example
 
