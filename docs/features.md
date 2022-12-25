@@ -21,7 +21,7 @@ This tool targets the current latest public release for MacOS and iMessage.
       - Parses `streamtyped` message data
       - Displays content and timestamps for each edit
       - Humanizes display of edit timestamp gaps
-      - Edited messages received before Ventura display as normal messages wihtout history
+      - Edited messages received before Ventura display as normal messages without history
     - Unsent messages
       - No content, but are noted in context
 - Multi-part messages
