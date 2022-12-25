@@ -6,6 +6,7 @@ use rusqlite::{Connection, Error, Error as E, Result, Row, Statement};
 use std::path::Path;
 
 use crate::{
+    error::table::TableError,
     tables::{
         messages::Message,
         table::{Diagnostic, Table, ATTACHMENT},
@@ -63,15 +64,15 @@ impl Table for Attachment {
             .unwrap()
     }
 
-    fn extract(attachment: Result<Result<Self, Error>, Error>) -> Result<Self, String> {
+    fn extract(attachment: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
         match attachment {
             Ok(attachment) => match attachment {
                 Ok(att) => Ok(att),
                 // TODO: When does this occur?
-                Err(why) => Err(format!("Attachment query error: {why}")),
+                Err(why) => Err(TableError::Attachment(why)),
             },
             // TODO: When does this occur?
-            Err(why) => Err(format!("Attachment query error: {why}")),
+            Err(why) => Err(TableError::Attachment(why)),
         }
     }
 }
@@ -137,7 +138,7 @@ impl Diagnostic for Attachment {
 }
 
 impl Attachment {
-    pub fn from_message(db: &Connection, msg: &Message) -> Result<Vec<Attachment>, String> {
+    pub fn from_message(db: &Connection, msg: &Message) -> Result<Vec<Attachment>, TableError> {
         let mut out_l = vec![];
         if msg.has_attachments() {
             let mut statement = db

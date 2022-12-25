@@ -5,6 +5,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::{
+    error::table::TableError,
     tables::table::{
         Cacheable, Deduplicate, Diagnostic, Table, CHAT_HANDLE_JOIN, CHAT_MESSAGE_JOIN,
     },
@@ -31,15 +32,15 @@ impl Table for ChatToHandle {
             .unwrap()
     }
 
-    fn extract(chat_to_handle: Result<Result<Self, Error>, Error>) -> Result<Self, String> {
+    fn extract(chat_to_handle: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
         match chat_to_handle {
             Ok(chat_to_handle) => match chat_to_handle {
                 Ok(c2h) => Ok(c2h),
                 // TODO: When does this occur?
-                Err(why) => Err(format!("Chat to Handle query error: {why}")),
+                Err(why) => Err(TableError::ChatToHandle(why)),
             },
             // TODO: When does this occur?
-            Err(why) => Err(format!("Chat to Handle query error: {why}")),
+            Err(why) => Err(TableError::ChatToHandle(why)),
         }
     }
 }
@@ -60,7 +61,7 @@ impl Cacheable for ChatToHandle {
     /// let conn = get_connection(&db_path);
     /// let chatrooms = ChatToHandle::cache(&conn);
     /// ```
-    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, String> {
+    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
         let mut cache: HashMap<i32, BTreeSet<i32>> = HashMap::new();
 
         let mut rows = ChatToHandle::get(db);

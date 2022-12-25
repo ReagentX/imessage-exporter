@@ -6,6 +6,7 @@ use rusqlite::{Connection, Error, Result, Row, Statement};
 use std::collections::{HashMap, HashSet};
 
 use crate::{
+    error::table::TableError,
     tables::table::{Cacheable, Deduplicate, Diagnostic, Table, HANDLE, ME},
     util::output::{done_processing, processing},
 };
@@ -34,15 +35,15 @@ impl Table for Handle {
             .unwrap()
     }
 
-    fn extract(handle: Result<Result<Self, Error>, Error>) -> Result<Self, String> {
+    fn extract(handle: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
         match handle {
             Ok(handle) => match handle {
                 Ok(hdl) => Ok(hdl),
                 // TODO: When does this occur?
-                Err(why) => Err(format!("Handle query error: {why}")),
+                Err(why) => Err(TableError::Handle(why)),
             },
             // TODO: When does this occur?
-            Err(why) => Err(format!("Handle query error: {why}")),
+            Err(why) => Err(TableError::Handle(why)),
         }
     }
 }
@@ -64,7 +65,7 @@ impl Cacheable for Handle {
     /// let conn = get_connection(&db_path);
     /// let chatrooms = Handle::cache(&conn);
     /// ```
-    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, String> {
+    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
         // Create cache for user IDs
         let mut map = HashMap::new();
         // Handle ID 0 is self in group chats

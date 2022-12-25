@@ -9,7 +9,7 @@ use plist::Value;
 use rusqlite::{blob::Blob, Connection, Error, Result, Row, Statement};
 
 use crate::{
-    error::message::MessageError,
+    error::{message::MessageError, table::TableError},
     message_types::{
         expressives::{BubbleEffect, Expressive, ScreenEffect},
         variants::{CustomBalloon, Reaction, Variant},
@@ -139,15 +139,15 @@ impl Table for Message {
         .unwrap()
     }
 
-    fn extract(message: Result<Result<Self, Error>, Error>) -> Result<Self, String> {
+    fn extract(message: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
         match message {
             Ok(message) => match message {
                 Ok(msg) => Ok(msg),
                 // TODO: When does this occur?
-                Err(why) => Err(format!("Message query error: {why}")),
+                Err(why) => Err(TableError::Messages(why)),
             },
             // TODO: When does this occur?
-            Err(why) => Err(format!("Message query error: {why}")),
+            Err(why) => Err(TableError::Messages(why)),
         }
     }
 }
@@ -202,7 +202,7 @@ impl Cacheable for Message {
     type K = String;
     type V = Vec<String>;
     /// Used for reactions that do not exist in a foreign key table
-    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, String> {
+    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
         // Create cache for user IDs
         let mut map: HashMap<Self::K, Self::V> = HashMap::new();
 
@@ -494,7 +494,7 @@ impl Message {
         &self,
         db: &Connection,
         reactions: &'a HashMap<String, Vec<String>>,
-    ) -> Result<HashMap<usize, Vec<Self>>, String> {
+    ) -> Result<HashMap<usize, Vec<Self>>, TableError> {
         let mut out_h: HashMap<usize, Vec<Self>> = HashMap::new();
         if let Some(rxs) = reactions.get(&self.guid) {
             let filter: Vec<String> = rxs.iter().map(|guid| format!("\"{}\"", guid)).collect();
@@ -536,7 +536,7 @@ impl Message {
     }
 
     /// Build a HashMap of message component index to messages that reply to that component
-    pub fn get_replies(&self, db: &Connection) -> Result<HashMap<usize, Vec<Self>>, String> {
+    pub fn get_replies(&self, db: &Connection) -> Result<HashMap<usize, Vec<Self>>, TableError> {
         let mut out_h: HashMap<usize, Vec<Self>> = HashMap::new();
 
         // No need to hit the DB if we know we don't have replies

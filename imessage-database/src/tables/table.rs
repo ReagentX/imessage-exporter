@@ -6,6 +6,8 @@ use std::collections::HashMap;
 
 use rusqlite::{Connection, Error, OpenFlags, Result, Row, Statement};
 
+use crate::error::table::TableError;
+
 /// Defines behavior for SQL Table data
 pub trait Table {
     /// Serializes a single row of data to an instance of the struct that implements this Trait
@@ -16,7 +18,7 @@ pub trait Table {
     fn get(db: &Connection) -> Statement;
 
     /// Extract valid row data while handling both types of query errors
-    fn extract(item: Result<Result<Self, Error>, Error>) -> Result<Self, String>
+    fn extract(item: Result<Result<Self, Error>, Error>) -> Result<Self, TableError>
     where
         Self: Sized;
 }
@@ -25,7 +27,7 @@ pub trait Table {
 pub trait Cacheable {
     type K;
     type V;
-    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, String>;
+    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError>;
 }
 
 /// Defines behavior for deduplicating data in a table
