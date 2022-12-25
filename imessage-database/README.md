@@ -1,5 +1,41 @@
-# Library Documentation
+# imessage-exporter
 
-## Table
+This library represents interfaces used to interact with the iMessage Database.
 
-This is the core of the library: it represents the interfaces used to interact with the iMessage Database.
+## Example
+
+```rust
+use imessage_database::{
+    tables::{
+        messages::Message,
+        table::{get_connection, Table},
+    },
+    util::dirs::default_db_path,
+};
+
+fn iter_messages() -> Result<(), String> {
+    /// Create a read-only connection to the iMessage database
+    let db = get_connection(&default_db_path());
+
+    /// Create SQL statement
+    let mut statement = Message::get(&db);
+
+    /// Execute statement
+    let messages = statement
+        .query_map([], |row| Ok(Message::from_row(row)))
+        .unwrap();
+
+    /// Iterate over each row
+    for message in messages {
+        let mut msg = Message::extract(message)?;
+
+        /// Parse message body if it was sent from MacOS 13.0 or newer
+        msg.gen_text(&db);
+
+        /// Emit debug info for each message
+        println!("{:?}", msg)
+    }
+
+    Ok(())
+}
+```
