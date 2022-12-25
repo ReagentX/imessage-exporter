@@ -2,8 +2,12 @@
 edition = "2021"
 name = "imessage-database"
 version = "0.0.0"
-description = "Parsers and tools to interact with iMessage data"
+description = "Parsers and tools to interact with iMessage SQLite data"
 license = "GPL-3.0-or-later"
+authors = ["Christopher Sardegna <imessage@reagentx.net>"]
+categories = ["database"]
+exclude = ["/resources", ".github", "docs", "build.sh"]
+repository = "https://github.com/ReagentX/imessage-exporter"
 
 [dependencies]
 chrono = "0.4.23"
