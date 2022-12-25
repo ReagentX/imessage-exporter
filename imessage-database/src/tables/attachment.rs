@@ -6,12 +6,14 @@ use rusqlite::{Connection, Error, Error as E, Result, Row, Statement};
 use std::path::Path;
 
 use crate::{
-    tables::table::{Diagnostic, Table, ATTACHMENT},
+    tables::{
+        messages::Message,
+        table::{Diagnostic, Table, ATTACHMENT},
+    },
     util::{
         dirs::home,
         output::{done_processing, processing},
     },
-    Message,
 };
 
 const COLUMNS: &str = "a.ROWID, a.filename, a.mime_type, a.transfer_name, a.total_bytes, a.is_sticker, a.attribution_info, a.hide_attachment";

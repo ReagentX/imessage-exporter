@@ -15,19 +15,20 @@ use imessage_database::{
     message_types::{
         app::AppMessage,
         edited::EditedMessage,
+        expressives::{BubbleEffect, Expressive, ScreenEffect},
         music::MusicMessage,
         url::URLMessage,
-        variants::{BalloonProvider, CustomBalloon},
+        variants::{BalloonProvider, CustomBalloon, Variant},
     },
     tables::{
-        messages::BubbleType,
-        table::{FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN},
+        attachment::Attachment,
+        messages::{BubbleType, Message},
+        table::{Table, FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN},
     },
     util::{
         dates::{format, readable_diff},
         plist::parse_plist,
     },
-    Attachment, Variant, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
 };
 
 pub struct TXT<'a> {

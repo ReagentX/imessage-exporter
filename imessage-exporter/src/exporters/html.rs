@@ -15,21 +15,21 @@ use imessage_database::{
     message_types::{
         app::AppMessage,
         edited::EditedMessage,
+        expressives::{BubbleEffect, Expressive, ScreenEffect},
         music::MusicMessage,
         url::URLMessage,
-        variants::{BalloonProvider, CustomBalloon},
+        variants::{BalloonProvider, CustomBalloon, Variant},
     },
     tables::{
-        attachment::MediaType,
-        messages::BubbleType,
-        table::{FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN},
+        attachment::{Attachment, MediaType},
+        messages::{BubbleType, Message},
+        table::{Table, FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN},
     },
     util::{
         dates::{format, readable_diff},
         dirs::home,
         plist::parse_plist,
     },
-    Attachment, Variant, {BubbleEffect, Expressive, Message, ScreenEffect, Table},
 };
 
 use uuid::Uuid;
@@ -527,7 +527,7 @@ impl<'a> Writer<'a> for HTML<'a> {
 
     fn format_reaction(&self, msg: &Message) -> Result<String, String> {
         match msg.variant() {
-            imessage_database::Variant::Reaction(_, added, reaction) => {
+            Variant::Reaction(_, added, reaction) => {
                 if !added {
                     return Ok("".to_string());
                 }
@@ -537,7 +537,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                     self.config.who(&msg.handle_id, msg.is_from_me),
                 ))
             }
-            imessage_database::Variant::Sticker(_) => {
+            Variant::Sticker(_) => {
                 let mut paths = Attachment::from_message(&self.config.db, msg)?;
                 // Sticker messages have only one attachment, the sticker image
                 Ok(match paths.get_mut(0) {

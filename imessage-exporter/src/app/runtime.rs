@@ -9,12 +9,18 @@ use rusqlite::Connection;
 
 use crate::{app::options::Options, Exporter, HTML, TXT};
 use imessage_database::{
-    tables::table::{
-        get_connection, Cacheable, Deduplicate, Diagnostic, DEFAULT_OUTPUT_DIR, MAX_LENGTH, ME,
-        UNKNOWN,
+    tables::{
+        attachment::Attachment,
+        chat::Chat,
+        chat_handle::ChatToHandle,
+        handle::Handle,
+        messages::Message,
+        table::{
+            get_connection, Cacheable, Deduplicate, Diagnostic, DEFAULT_OUTPUT_DIR, MAX_LENGTH, ME,
+            UNKNOWN,
+        },
     },
     util::{dates::get_offset, dirs::home},
-    Attachment, Chat, ChatToHandle, Handle, Message,
 };
 
 /// Stores the application state and handles application lifecycle
