@@ -3,7 +3,7 @@ use std::path::Path;
 use imessage_database::{
     error::{message::MessageError, plist::PlistParseError},
     message_types::{app::AppMessage, music::MusicMessage, url::URLMessage},
-    Attachment, Message,
+    tables::{attachment::Attachment, messages::Message},
 };
 
 use crate::app::runtime::Config;
