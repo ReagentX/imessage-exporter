@@ -1,3 +1,7 @@
+/*!
+ Errors that can happen when parsing message data
+*/
+
 use std::fmt::{Display, Formatter, Result};
 
 use crate::error::{plist::PlistParseError, streamtyped::StreamTypedError};

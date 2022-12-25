@@ -1,6 +1,14 @@
-# imessage-exporter
+# imessage-database
 
 This library represents interfaces used to interact with the iMessage Database.
+
+## Installation
+
+This library is available on [crates.io](https://crates.io/crates/imessage-database).
+
+## Documentation
+
+Documentation is available on [docs.rs](https://docs.rs/imessage-database/).
 
 ## Example
 

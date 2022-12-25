@@ -138,6 +138,7 @@ impl Diagnostic for Attachment {
 }
 
 impl Attachment {
+    /// Gets a Vector of attachments for a single message
     pub fn from_message(db: &Connection, msg: &Message) -> Result<Vec<Attachment>, TableError> {
         let mut out_l = vec![];
         if msg.has_attachments() {
