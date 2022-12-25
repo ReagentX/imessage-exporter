@@ -6,6 +6,7 @@ This library represents interfaces used to interact with the iMessage Database.
 
 ```rust
 use imessage_database::{
+    error::table::TableError,
     tables::{
         messages::Message,
         table::{get_connection, Table},
@@ -13,7 +14,7 @@ use imessage_database::{
     util::dirs::default_db_path,
 };
 
-fn iter_messages() -> Result<(), String> {
+fn iter_messages() -> Result<(), TableError> {
     /// Create a read-only connection to the iMessage database
     let db = get_connection(&default_db_path());
 
