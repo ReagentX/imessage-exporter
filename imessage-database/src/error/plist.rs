@@ -1,3 +1,7 @@
+/*!
+ Errors that can happen when parsing plist data
+*/
+
 use std::fmt::{Display, Formatter, Result};
 
 use crate::error::streamtyped::StreamTypedError;
