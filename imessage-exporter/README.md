@@ -4,13 +4,16 @@ The `imessage_exporter` binary exports iMessage data to `txt`, or `html` formats
 
 ## Installation
 
-`cargo install imessage_exporter` is the best way to install the app for normal use. (Not supported in Alpha Stage)
+## Cargo (reccomended)
 
-### Installing as a standalone app
+This binary is availabe on [crates.io](https://crates.io/crates/imessage-exporter).
+
+`cargo install imessage_exporter` is the best way to install the app for normal use.
+
+### Installing manually
 
 - `clone` the repository
 - `cd` to the repository
-- `cargo test` to make sure everything works
 - `cargo run --release` to compile
 
 ## How To Use
