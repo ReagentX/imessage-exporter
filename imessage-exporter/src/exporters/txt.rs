@@ -336,7 +336,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                     match paths.get(0) {
                         Some(sticker) => match sticker.filename.as_ref() {
                             Some(path) => path,
-                            None => "Path missing for sticker!",
+                            None => &sticker.transfer_name,
                         },
                         None => "Sticker not found!",
                     },
