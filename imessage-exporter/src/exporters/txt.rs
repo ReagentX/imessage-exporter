@@ -334,7 +334,10 @@ impl<'a> Writer<'a> for TXT<'a> {
                     "Sticker from {}: {}",
                     self.config.who(&msg.handle_id, msg.is_from_me),
                     match paths.get(0) {
-                        Some(sticker) => sticker.filename.as_ref().unwrap(),
+                        Some(sticker) => match sticker.filename.as_ref() {
+                            Some(path) => path,
+                            None => &sticker.transfer_name,
+                        },
                         None => "Sticker not found!",
                     },
                 ))
