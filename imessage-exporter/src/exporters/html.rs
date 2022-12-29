@@ -539,11 +539,11 @@ impl<'a> Writer<'a> for HTML<'a> {
             }
             Variant::Sticker(_) => {
                 let mut paths = Attachment::from_message(&self.config.db, msg)?;
+                let who = self.config.who(&msg.handle_id, msg.is_from_me);
                 // Sticker messages have only one attachment, the sticker image
                 Ok(match paths.get_mut(0) {
                     Some(sticker) => match self.format_attachment(sticker) {
                         Ok(img) => {
-                            let who = self.config.who(&msg.handle_id, msg.is_from_me);
                             Some(format!("{img}<span class=\"reaction\"> from {who}</span>"))
                         }
                         Err(_) => None,
@@ -551,7 +551,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                     None => None,
                 }
                 .unwrap_or_else(|| {
-                    "<span class=\"reaction\">Sticker not found!</span>".to_string()
+                    format!("<span class=\"reaction\">Sticker from {who} not found!</span>")
                 }))
             }
             _ => unreachable!(),
