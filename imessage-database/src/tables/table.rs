@@ -14,7 +14,7 @@ pub trait Table {
     fn from_row(row: &Row) -> Result<Self>
     where
         Self: Sized;
-    /// Gets a statment we can exectue to iterate over the data in the table
+    /// Gets a statement we can execute to iterate over the data in the table
     fn get(db: &Connection) -> Statement;
 
     /// Extract valid row data while handling both types of query errors

@@ -83,10 +83,10 @@ impl<'a> Exporter<'a> for HTML<'a> {
 
         for message in messages {
             let mut msg = Message::extract(message)?;
-            // Render the annoucement in-line
-            if msg.is_annoucement() {
-                let annoucement = self.format_annoucement(&msg);
-                HTML::write_to_file(self.get_or_create_file(&msg), &annoucement);
+            // Render the announcement in-line
+            if msg.is_announcement() {
+                let announcement = self.format_announcement(&msg);
+                HTML::write_to_file(self.get_or_create_file(&msg), &announcement);
             }
             // Message replies and reactions are rendered in context, so no need to render them separately
             else if !msg.is_reaction() {
@@ -188,7 +188,7 @@ impl<'a> Writer<'a> for HTML<'a> {
 
         // If message was removed, display it
         if message_parts.is_empty() && message.is_edited() {
-            // If this works, we want to format it as an annoucement, so we early return for the Ok()
+            // If this works, we want to format it as an announcement, so we early return for the Ok()
             let edited = match self.format_edited(message, "") {
                 Ok(s) => return Ok(s),
                 Err(why) => format!("{}, {}", message.guid, why),
@@ -398,7 +398,9 @@ impl<'a> Writer<'a> for HTML<'a> {
                                     // Just copy the file
                                     copy_path.set_extension(ext);
                                     if qualified_attachment_path.exists() {
-                                        copy(qualified_attachment_path, &copy_path).unwrap();
+                                        if let Err(why) = copy(qualified_attachment_path, &copy_path) {
+                                            eprintln!("Unable to copy {qualified_attachment_path:?}: {why}")
+                                        };
                                     } else {
                                         return Err(&attachment.transfer_name);
                                     }
@@ -582,7 +584,7 @@ impl<'a> Writer<'a> for HTML<'a> {
         }
     }
 
-    fn format_annoucement(&self, msg: &'a Message) -> String {
+    fn format_announcement(&self, msg: &'a Message) -> String {
         let mut who = self.config.who(&msg.handle_id, msg.is_from_me);
         // Rename yourself so we render the proper grammar here
         if who == ME {

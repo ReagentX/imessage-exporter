@@ -536,7 +536,7 @@ mod tests {
     }
 
     #[test]
-    fn can_get_chat_ivalid() {
+    fn can_get_chat_invalid() {
         let options = fake_options();
         let mut app = fake_app(options);
 

@@ -19,9 +19,9 @@ use crate::error::plist::PlistParseError;
 ///
 /// Reactions are normal messages in the database, but only the latest reaction
 /// is stored. For example:
-/// - user recieves message -> user likes message
+/// - user receives message -> user likes message
 ///   - This will create a message and a like message
-/// - user recieves message -> user likes message -> user unlikes message
+/// - user receives message -> user likes message -> user unlikes message
 ///   - This will create a message and a like message
 ///   - but that like message will get dropped when the unlike message arrives
 ///   - When messages drop the ROWIDs become non-sequential: the ID of the dropped message row is not reused

@@ -90,7 +90,7 @@ impl Cacheable for ChatToHandle {
 impl Deduplicate for ChatToHandle {
     type T = BTreeSet<i32>;
 
-    /// Given the initial set of duplciated chats, deduplciate them based on the participants
+    /// Given the initial set of duplicated chats, deduplicate them based on the participants
     ///
     /// This returns a new hashmap that maps the real chat ID to a new deduplicated unique chat ID
     /// that represents a single chat for all of the same participants, even if they have multiple handles
@@ -118,7 +118,7 @@ impl Deduplicate for ChatToHandle {
 }
 
 impl Diagnostic for ChatToHandle {
-    /// Emit diagnotsic data for the Chat to Handle join table
+    /// Emit diagnostic data for the Chat to Handle join table
     ///
     /// Get the number of chats referenced in the messages table
     /// that do not exist in this join table:

@@ -23,7 +23,7 @@ pub const ABOUT: &str = concat!(
 pub struct Options<'a> {
     /// Path to database file
     pub db_path: String,
-    /// If true, do not copy files from the Libary to the export
+    /// If true, do not copy files from ~/Library to the export
     pub no_copy: bool,
     /// If true, emit diagnostic information to stdout
     pub diagnostic: bool,
@@ -57,7 +57,7 @@ impl<'a> Options<'a> {
             }
         }
 
-        // Ensure an export type is speficied if other export options are selected
+        // Ensure an export type is specified if other export options are selected
         if no_copy && export_type.is_none() {
             println!("No export type selected, required by {OPTION_COPY}");
             valid = false;
@@ -101,7 +101,7 @@ pub fn from_command_line() -> ArgMatches {
             Arg::new(OPTION_PATH)
                 .short('p')
                 .long(OPTION_PATH)
-                .help(&*format!("Specify a custom path for the iMessage database file\nIf omitted, the defaut directory is {}", default_db_path()))
+                .help(&*format!("Specify a custom path for the iMessage database file\nIf omitted, the default directory is {}", default_db_path()))
                 .takes_value(true)
                 .value_name("path/to/chat.db"),
         )
@@ -129,7 +129,7 @@ pub fn from_command_line() -> ArgMatches {
             Arg::new(OPTION_EXPORT_PATH)
                 .short('o')
                 .long(OPTION_EXPORT_PATH)
-                .help(&*format!("Specify a custom directory for outputting exported data\nIf omitted, the defaut directory is {}/{DEFAULT_OUTPUT_DIR}", home()))
+                .help(&*format!("Specify a custom directory for outputting exported data\nIf omitted, the default directory is {}/{DEFAULT_OUTPUT_DIR}", home()))
                 .takes_value(true)
                 .value_name("path/to/save/files"),
         )

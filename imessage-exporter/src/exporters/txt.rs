@@ -73,10 +73,10 @@ impl<'a> Exporter<'a> for TXT<'a> {
 
         for message in messages {
             let mut msg = Message::extract(message)?;
-            // Render the annoucement in-line
-            if msg.is_annoucement() {
-                let annoucement = self.format_annoucement(&msg);
-                TXT::write_to_file(self.get_or_create_file(&msg), &annoucement);
+            // Render the announcement in-line
+            if msg.is_announcement() {
+                let announcement = self.format_announcement(&msg);
+                TXT::write_to_file(self.get_or_create_file(&msg), &announcement);
             }
             // Message replies and reactions are rendered in context, so no need to render them separately
             else if !msg.is_reaction() {
@@ -178,7 +178,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                     None => self.add_line(&mut formatted_message, "Attachment missing!", &indent),
                 },
                 BubbleType::App => match self.format_app(message, &mut attachments, &indent) {
-                    // We use an empty indent here becuase `format_app` handles building the entire message
+                    // We use an empty indent here because `format_app` handles building the entire message
                     Ok(ok_bubble) => self.add_line(&mut formatted_message, &ok_bubble, ""),
                     Err(why) => self.add_line(
                         &mut formatted_message,
@@ -370,7 +370,7 @@ impl<'a> Writer<'a> for TXT<'a> {
         }
     }
 
-    fn format_annoucement(&self, msg: &'a Message) -> String {
+    fn format_announcement(&self, msg: &'a Message) -> String {
         let mut who = self.config.who(&msg.handle_id, msg.is_from_me);
         // Rename yourself so we render the proper grammar here
         if who == ME {
