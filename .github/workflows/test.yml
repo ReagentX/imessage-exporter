@@ -20,9 +20,11 @@ jobs:
       with:
         toolchain: stable
     - name: Lint
-      uses: actions-rs/clippy-check@v1
+      uses: actions-rs/cargo@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
+        command: clippy
+        args: --all-features
       continue-on-error: true
     - name: Build
       uses: actions-rs/cargo@v1
