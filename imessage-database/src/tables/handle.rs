@@ -100,7 +100,7 @@ impl Cacheable for Handle {
 impl Deduplicate for Handle {
     type T = String;
 
-    /// Given the initial set of duplciated handles, deduplciate them
+    /// Given the initial set of duplicated handles, deduplicate them
     ///
     /// This returns a new hashmap that maps the real handle ID to a new deduplicated unique handle ID
     /// that represents a single handle for all of the deduplicate handles
@@ -129,7 +129,7 @@ impl Deduplicate for Handle {
 }
 
 impl Diagnostic for Handle {
-    /// Emit diagnotsic data for the Handles table
+    /// Emit diagnostic data for the Handles table
     ///
     /// Get the number of handles that are duplicated
     /// The person_centric_id is used to map handles that represent the

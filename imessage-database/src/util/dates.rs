@@ -12,7 +12,6 @@ const SEPARATOR: &str = ", ";
 pub const TIMESTAMP_FACTOR: i64 = 1000000000;
 
 /// Get the date offset for the iMessage Database
-///
 pub fn get_offset() -> i64 {
     Utc.with_ymd_and_hms(2001, 1, 1, 0, 0, 0)
         .unwrap()
@@ -157,7 +156,7 @@ mod tests {
     }
 
     #[test]
-    fn can_format_diff_all_signular() {
+    fn can_format_diff_all_singular() {
         let start = Ok(Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap());
         let end = Ok(Local.with_ymd_and_hms(2020, 5, 21, 10, 11, 12).unwrap());
         assert_eq!(
@@ -167,7 +166,7 @@ mod tests {
     }
 
     #[test]
-    fn can_format_diff_mixed_signular() {
+    fn can_format_diff_mixed_singular() {
         let start = Ok(Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap());
         let end = Ok(Local.with_ymd_and_hms(2020, 5, 22, 10, 20, 12).unwrap());
         assert_eq!(

@@ -1,7 +1,7 @@
 /*!
 Representations of iMessage database tables as structs.
 
-Many of these tables do not include all availalbe columns. Even on the same versions
+Many of these tables do not include all available columns. Even on the same versions
 of MacOS, the schema of the iMessage database can vary.
 */
 

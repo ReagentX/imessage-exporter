@@ -78,7 +78,7 @@ impl Table for Attachment {
 }
 
 impl Diagnostic for Attachment {
-    /// Emit diagnotsic data for the Attachments table
+    /// Emit diagnostic data for the Attachments table
     ///
     /// Get the number of attachments that are missing from the filesystem
     /// or are missing one of the following columns:

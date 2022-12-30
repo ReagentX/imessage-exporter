@@ -52,7 +52,7 @@ pub enum BubbleType<'a> {
     App,
 }
 
-/// Defines different types of services we can recieve messages from.
+/// Defines different types of services we can receive messages from.
 #[derive(Debug)]
 pub enum Service<'a> {
     /// An iMessage
@@ -153,7 +153,7 @@ impl Table for Message {
 }
 
 impl Diagnostic for Message {
-    /// Emit diagnotsic data for the Messages table
+    /// Emit diagnostic data for the Messages table
     ///
     /// # Example:
     ///
@@ -350,17 +350,17 @@ impl Message {
 
     /// Gets the time until the message was read. This can happen in two ways:
     ///
-    /// - You recieved a message, then waited to read it
+    /// - You received a message, then waited to read it
     /// - You sent a message, and the recipient waited to read it
     ///
-    /// In the former case, this subtracts the date read column (`date_read`) from the date recieved column (`date`).
-    /// In the latter case, this subtracts the date delivered column (`date_delivered`) from the date recieved column (`date`).
+    /// In the former case, this subtracts the date read column (`date_read`) from the date received column (`date`).
+    /// In the latter case, this subtracts the date delivered column (`date_delivered`) from the date received column (`date`).
     ///
     /// Not all messages get tagged with the read properties.
     /// If more than one message has been sent in a thread before getting read,
     /// only the most recent message will get the tag.
     pub fn time_until_read(&self, offset: &i64) -> Option<String> {
-        // Message we recieved
+        // Message we received
         if !self.is_from_me && self.date_read != 0 && self.date != 0 {
             return readable_diff(self.date(offset), self.date_read(offset));
         }
@@ -377,7 +377,7 @@ impl Message {
     }
 
     /// `true` if the message renames a thread, else `false`
-    pub fn is_annoucement(&self) -> bool {
+    pub fn is_announcement(&self) -> bool {
         self.group_title.is_some()
     }
 
@@ -631,7 +631,7 @@ impl Message {
                 None => Variant::Normal,
             },
 
-            // Stickers overlayed on messages
+            // Stickers overlaid on messages
             1000 => Variant::Sticker(self.reaction_index()),
 
             // Reactions

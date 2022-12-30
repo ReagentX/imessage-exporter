@@ -62,12 +62,12 @@ impl<'a> URLMessage<'a> {
         let root_dict = payload.as_dictionary().ok_or_else(|| {
             PlistParseError::InvalidType("root".to_string(), "dictionary".to_string())
         })?;
-
-        if root_dict.contains_key("richLinkMetadata") {
-            // Unwrap is safe here because we validate the key
-            return Ok(root_dict.get("richLinkMetadata").unwrap());
-        } else if root_dict.contains_key("metadata") {
-            return Ok(root_dict.get("metadata").unwrap());
+        println!("{:?}", root_dict);
+        if let Some(meta) = root_dict.get("richLinkMetadata") {
+            return Ok(meta);
+        };
+        if let Some(meta) = root_dict.get("metadata") {
+            return Ok(meta);
         };
         Err(PlistParseError::NoPayload)
     }
@@ -248,7 +248,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_orignal_url() {
+    fn test_get_original_url() {
         let expected = URLMessage {
             title: Some("Christopher Sardegna"),
             summary: None,

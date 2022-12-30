@@ -35,8 +35,8 @@ pub(super) trait Writer<'a> {
     fn format_reaction(&self, msg: &Message) -> Result<String, TableError>;
     /// Format an expressive message
     fn format_expressive(&self, msg: &'a Message) -> &'a str;
-    /// Format an annoucement message
-    fn format_annoucement(&self, msg: &'a Message) -> String;
+    /// Format an announcement message
+    fn format_announcement(&self, msg: &'a Message) -> String;
     /// Format an edited message
     fn format_edited(&self, msg: &'a Message, indent: &str) -> Result<String, MessageError>;
     fn write_to_file(file: &Path, text: &str);
