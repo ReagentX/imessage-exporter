@@ -1,6 +1,6 @@
 # Binary Documentation
 
-The `imessage_exporter` binary exports iMessage data to `txt`, or `html` formats. It can also run diagnostics to find problems with the iMessage database.
+The `imessage_exporter` binary exports iMessage data to `txt` or `html` formats. It can also run diagnostics to find problems with the iMessage database.
 
 ## Installation
 
@@ -33,11 +33,11 @@ This binary is available on [crates.io](https://crates.io/crates/imessage-export
 
 -o, --export-path <path/to/save/files>
         Specify a custom directory for outputting exported data
-        If omitted, the defaut directory is ~/imessage_export
+        If omitted, the default directory is ~/imessage_export
 
 -p, --db-path <path/to/chat.db>
         Specify a custom path for the iMessage database file
-        If omitted, the defaut directory is ~/Library/Messages/chat.db
+        If omitted, the default directory is ~/Library/Messages/chat.db
 
 -V, --version
         Print version information
