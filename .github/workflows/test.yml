@@ -22,10 +22,8 @@ jobs:
     - name: Lint
       uses: actions-rs/cargo@v1
       with:
-        token: ${{ secrets.GITHUB_TOKEN }}
         command: clippy
         args: --all-features
-      continue-on-error: true
     - name: Build
       uses: actions-rs/cargo@v1
       with:
