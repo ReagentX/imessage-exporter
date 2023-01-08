@@ -2,8 +2,6 @@
  This module contains logic to parse text from plist payload data
 */
 
-use std::collections::HashMap;
-
 use plist::{Dictionary, Value};
 
 use crate::error::plist::PlistParseError;
@@ -45,23 +43,10 @@ pub fn parse_plist(plist: &Value) -> Result<Value, PlistParseError> {
     let body = plist.as_dictionary().ok_or_else(|| {
         PlistParseError::InvalidType("body".to_string(), "dictionary".to_string())
     })?;
-    let objects = body
-        .get("$objects")
-        .ok_or_else(|| PlistParseError::MissingKey("$objects".to_string()))?
-        .as_array()
-        .ok_or_else(|| PlistParseError::InvalidType("$objects".to_string(), "array".to_string()))?;
+    let objects = extract_array_key(body, "$objects")?;
 
     // Index of root object
-    let root = body
-        .get("$top")
-        .ok_or_else(|| PlistParseError::MissingKey("$top".to_string()))?
-        .as_dictionary()
-        .ok_or_else(|| PlistParseError::InvalidType("$top".to_string(), "dictionary".to_string()))?
-        .get("root")
-        .ok_or_else(|| PlistParseError::MissingKey("root".to_string()))?
-        .as_uid()
-        .ok_or_else(|| PlistParseError::InvalidType("root".to_string(), "uid".to_string()))?
-        .get() as usize;
+    let root = extract_uid_key(extract_dictionary(body, "$top")?, "root")?;
 
     follow_uid(objects, root, None, None)
 }
@@ -111,21 +96,9 @@ fn follow_uid<'a>(
             }
             // Handle the NSDictionary and NSMutableDictionary types
             else if dict.contains_key("NS.keys") && dict.contains_key("NS.objects") {
-                let keys = dict
-                    .get("NS.keys")
-                    .ok_or_else(|| PlistParseError::MissingKey("NS.keys".to_string()))?
-                    .as_array()
-                    .ok_or_else(|| {
-                        PlistParseError::InvalidType("NS.keys".to_string(), "array".to_string())
-                    })?;
+                let keys = extract_array_key(dict, "NS.keys")?;
                 // These are the values in the objects list
-                let values = dict
-                    .get("NS.objects")
-                    .ok_or_else(|| PlistParseError::MissingKey("NS.objects".to_string()))?
-                    .as_array()
-                    .ok_or_else(|| {
-                        PlistParseError::InvalidType("NS.objects".to_string(), "array".to_string())
-                    })?;
+                let values = extract_array_key(dict, "NS.objects")?;
                 // Die here if the data is invalid
                 if keys.len() != values.len() {
                     return Err(PlistParseError::InvalidDictionarySize(
@@ -135,26 +108,9 @@ fn follow_uid<'a>(
                 }
 
                 for idx in 0..keys.len() {
-                    let key_index = keys
-                        .get(idx)
-                        .ok_or(PlistParseError::NoValueAtIndex(idx))?
-                        .as_uid()
-                        .ok_or_else(|| PlistParseError::InvalidTypeIndex(idx, "uid".to_string()))?
-                        .get() as usize;
-                    let value_index = values
-                        .get(idx)
-                        .ok_or(PlistParseError::NoValueAtIndex(idx))?
-                        .as_uid()
-                        .ok_or_else(|| PlistParseError::InvalidTypeIndex(idx, "uid".to_string()))?
-                        .get() as usize;
-
-                    let key = objects
-                        .get(key_index)
-                        .ok_or(PlistParseError::NoValueAtIndex(key_index))?
-                        .as_string()
-                        .ok_or_else(|| {
-                            PlistParseError::InvalidTypeIndex(key_index, "string".to_string())
-                        })?;
+                    let key_index = extract_uid_idx(keys, idx)?;
+                    let value_index = extract_uid_idx(values, idx)?;
+                    let key = extract_string_idx(objects, key_index)?;
 
                     dictionary.insert(
                         key.to_string(),
@@ -192,14 +148,72 @@ fn follow_uid<'a>(
     }
 }
 
-pub fn extract_parsed_str<'a>(
-    payload: &'a HashMap<&'a str, &'a Value>,
+/// Extract a dictionary from a specific key in a collection
+pub fn extract_dictionary<'a>(
+    body: &'a Dictionary,
     key: &str,
-) -> Option<&'a str> {
-    payload
+) -> Result<&'a Dictionary, PlistParseError> {
+    body.get(key)
+        .ok_or_else(|| PlistParseError::MissingKey(key.to_string()))?
+        .as_dictionary()
+        .ok_or_else(|| PlistParseError::InvalidType(key.to_string(), "dictionary".to_string()))
+}
+
+/// Extract an array from a specific key in a collection
+fn extract_array_key<'a>(
+    body: &'a Dictionary,
+    key: &str,
+) -> Result<&'a Vec<Value>, PlistParseError> {
+    body.get(key)
+        .ok_or_else(|| PlistParseError::MissingKey(key.to_string()))?
+        .as_array()
+        .ok_or_else(|| PlistParseError::InvalidType(key.to_string(), "array".to_string()))
+}
+
+/// Extract a Uid from a specific key in a collection
+fn extract_uid_key(body: &Dictionary, key: &str) -> Result<usize, PlistParseError> {
+    Ok(body
         .get(key)
-        .and_then(|item| item.as_string())
-        .filter(|s| !s.is_empty())
+        .ok_or_else(|| PlistParseError::MissingKey(key.to_string()))?
+        .as_uid()
+        .ok_or_else(|| PlistParseError::InvalidType(key.to_string(), "uid".to_string()))?
+        .get() as usize)
+}
+
+/// Extract bytes from a specific key in a collection
+pub fn extract_bytes_key<'a>(body: &'a Dictionary, key: &str) -> Result<&'a [u8], PlistParseError> {
+    body.get(key)
+        .ok_or_else(|| PlistParseError::MissingKey(key.to_string()))?
+        .as_data()
+        .ok_or_else(|| PlistParseError::InvalidType(key.to_string(), "data".to_string()))
+}
+
+/// Extract an int from a specific key in a collection
+pub fn extract_int_key(body: &Dictionary, key: &str) -> Result<i64, PlistParseError> {
+    Ok(body
+        .get(key)
+        .ok_or_else(|| PlistParseError::MissingKey(key.to_string()))?
+        .as_real()
+        .ok_or_else(|| PlistParseError::InvalidType(key.to_string(), "int".to_string()))?
+        as i64)
+}
+
+/// Extract a Uid from a specific index in a collection
+fn extract_uid_idx(body: &[Value], idx: usize) -> Result<usize, PlistParseError> {
+    Ok(body
+        .get(idx)
+        .ok_or(PlistParseError::NoValueAtIndex(idx))?
+        .as_uid()
+        .ok_or_else(|| PlistParseError::InvalidTypeIndex(idx, "uid".to_string()))?
+        .get() as usize)
+}
+
+/// Extract a string from a specific index in a collection
+fn extract_string_idx(body: &[Value], idx: usize) -> Result<&str, PlistParseError> {
+    body.get(idx)
+        .ok_or(PlistParseError::NoValueAtIndex(idx))?
+        .as_string()
+        .ok_or_else(|| PlistParseError::InvalidTypeIndex(idx, "string".to_string()))
 }
 
 /// Extract a string from a key-value pair that looks like {key: String("value")}
