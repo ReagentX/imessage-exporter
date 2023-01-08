@@ -48,12 +48,12 @@ impl Table for Attachment {
     fn from_row(row: &Row) -> Result<Attachment> {
         Ok(Attachment {
             rowid: row.get(0)?,
-            filename: row.get(1)?,
-            mime_type: row.get(2)?,
+            filename: row.get(1).unwrap_or(None),
+            mime_type: row.get(2).unwrap_or(None),
             transfer_name: row.get(3)?,
             total_bytes: row.get(4)?,
             is_sticker: row.get(5)?,
-            attribution_info: row.get(6)?,
+            attribution_info: row.get(6).unwrap_or(None),
             hide_attachment: row.get(7)?,
             copied_path: None,
         })

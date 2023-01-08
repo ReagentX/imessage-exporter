@@ -28,7 +28,7 @@ impl Table for Chat {
             rowid: row.get(0)?,
             chat_identifier: row.get(1)?,
             service_name: row.get(2)?,
-            display_name: row.get(3)?,
+            display_name: row.get(3).unwrap_or(None),
         })
     }
 

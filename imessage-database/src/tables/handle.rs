@@ -26,7 +26,7 @@ impl Table for Handle {
         Ok(Handle {
             rowid: row.get(0)?,
             id: row.get(1)?,
-            person_centric_id: row.get(2)?,
+            person_centric_id: row.get(2).unwrap_or(None),
         })
     }
 
