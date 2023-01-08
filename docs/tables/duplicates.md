@@ -32,7 +32,7 @@ The `Person Centric ID` is a unique identifier for each contact. Here, we can us
 
 ### Chats Table
 
-When you recieve a message from `A`, you either recieve from the address `Y` or `Z`. Each of these is listed under a separate chat (thread):
+When you receive a message from `A`, you either receive from the address `Y` or `Z`. Each of these is listed under a separate chat (thread):
 
 | Chat ID | Handle ID | Group ID |
 | -- | -- | -- |
@@ -45,7 +45,7 @@ Note: The `Chat ID` is not unique, it represents group chats as well, so in this
 
 ## The Many-To-Many Problem
 
-Chats between yourself and `A` *should* go to the same chat, becuase `Y` and `X` are actually the same person. Further, any messages sent to chat `12` from any of the addresses of the participants *should* go to the same chat, not a separate one with the same participants. This does not happen, because the iMessage Database uses the `Handle ID` field here, not the `Person Centric ID`.
+Chats between yourself and `A` *should* go to the same chat, because `Y` and `X` are actually the same person. Further, any messages sent to chat `12` from any of the addresses of the participants *should* go to the same chat, not a separate one with the same participants. This does not happen, because the iMessage Database uses the `Handle ID` field here, not the `Person Centric ID`.
 
 If contact `A` sends messages from `Y` and `X`, you will see two separate conversations. Given the above table, messages from `Y` will go to `10` and messages from `X` will go to `11`, even though said messages should belong to the same chat.
 
@@ -60,7 +60,7 @@ Further, if contact `A` sends messages from `Y` and `X` to you and `B`, only mes
 | 13 | 1 |
 | 13 | 3 |
 
-Chats `12` and `13` are the same group of people, but because the IDs of the participatns are different, the messages get sorted into a separate chat.
+Chats `12` and `13` are the same group of people, but because the IDs of the participants are different, the messages get sorted into a separate chat.
 
 ## Solving the Problems
 
@@ -68,7 +68,7 @@ Chats `12` and `13` are the same group of people, but because the IDs of the par
 
 Applying a small two-pass check solves this problem, since the handles table only contains a few columns of metadata.
 
-First, generate a map of each `Person Centric ID` to its correspondng handles. The second pass iteratees over each handle in the table, building a hashmap of `Handle ID` to a string that combines all of the corresponding handles' metadata. For example, for the above table, we would generate a hashmap that looks like
+First, generate a map of each `Person Centric ID` to its corresponding handles. The second pass iterates over each handle in the table, building a hashmap of `Handle ID` to a string that combines all of the corresponding handles' metadata. For example, for the above table, we would generate a hashmap that looks like
 
 ```json
 {
@@ -84,11 +84,11 @@ Now, any lookups against a contact ID will result in the same metadata.
 
 `Person Centric ID` gives us a unique field that exists on a per-contact basis. In the above handles table, all of the handles associated with `A` have the same `Person Centric ID`. If we want to map our conversations against this, we need to fix this many-to-many problem. We can solve it with a few hash tables, with the second containing a new field:
 
-1. Recieve a reference to the hashmap generated for the `Handle` table
+1. Receive a reference to the hashmap generated for the `Handle` table
 2. Participants to Unique Chat ID: `Set(Person Centric ID)` -> Set(`Chat ID`)
 3. Chat to Unique Chat: `Chat ID` -> `Unique Chat ID`
 
-The steps to generate this unique chat identifer are as follows:
+The steps to generate this unique chat identifier are as follows:
 
 - Generate hashmap `1` that contains all of the sets of participants
 - Generate hashmap `2` by iterating through the values of `1`, inserting each new set of participants

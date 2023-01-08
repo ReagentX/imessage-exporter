@@ -62,7 +62,7 @@ impl<'a> URLMessage<'a> {
         let root_dict = payload.as_dictionary().ok_or_else(|| {
             PlistParseError::InvalidType("root".to_string(), "dictionary".to_string())
         })?;
-        println!("{:?}", root_dict);
+
         if let Some(meta) = root_dict.get("richLinkMetadata") {
             return Ok(meta);
         };

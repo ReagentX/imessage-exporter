@@ -26,7 +26,7 @@ pub fn get_offset() -> i64 {
 /// use chrono::offset::Local;
 /// use imessage_database::util::dates::format;
 ///
-/// let date = format(&Some(Local::now()));
+/// let date = format(&Ok(Local::now()));
 /// println!("{date}");
 /// ```
 pub fn format(date: &Result<DateTime<Local>, MessageError>) -> String {
@@ -36,7 +36,7 @@ pub fn format(date: &Result<DateTime<Local>, MessageError>) -> String {
     }
 }
 
-/// Generate a readable diff from two local timestamps. If the diff is invalid, the 
+/// Generate a readable diff from two local timestamps.
 ///
 /// # Example:
 ///
@@ -44,8 +44,8 @@ pub fn format(date: &Result<DateTime<Local>, MessageError>) -> String {
 /// use chrono::prelude::*;
 /// use imessage_database::util::dates::readable_diff;
 ///
-/// let start = Local.ymd(2020, 5, 20).and_hms_milli(9, 10, 11, 12);
-/// let end = Local.ymd(2020, 5, 20).and_hms_milli(9, 15, 11, 12);
+/// let start = Ok(Local.ymd(2020, 5, 20).and_hms_milli(9, 10, 11, 12));
+/// let end = Ok(Local.ymd(2020, 5, 20).and_hms_milli(9, 15, 11, 12));
 /// println!("{}", readable_diff(start, end).unwrap())
 /// ```
 pub fn readable_diff(
@@ -251,9 +251,6 @@ mod tests {
     fn can_format_no_diff() {
         let start = Ok(Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap());
         let end = Ok(Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap());
-        assert_eq!(
-            readable_diff(start, end),
-            Some("".to_owned())
-        )
+        assert_eq!(readable_diff(start, end), Some("".to_owned()))
     }
 }

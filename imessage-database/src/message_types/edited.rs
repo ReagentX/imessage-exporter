@@ -7,7 +7,11 @@ use plist::Value;
 use crate::{
     error::plist::PlistParseError,
     message_types::variants::BalloonProvider,
-    util::{dates::TIMESTAMP_FACTOR, streamtyped::parse},
+    util::{
+        dates::TIMESTAMP_FACTOR,
+        plist::{extract_bytes_key, extract_dictionary, extract_int_key},
+        streamtyped::parse,
+    },
 };
 
 /// iMessage permits editing sent messages up to five times
@@ -49,15 +53,9 @@ impl<'a> BalloonProvider<'a> for EditedMessage<'a> {
             return Ok(Self::empty());
         }
 
-        let edited_messages = plist_root
-            .get("ec")
-            .ok_or_else(|| PlistParseError::MissingKey("ec".to_string()))?
-            .as_dictionary()
-            .ok_or_else(|| {
-                PlistParseError::InvalidType("ec".to_string(), "dictionary".to_string())
-            })?
+        let edited_messages = extract_dictionary(plist_root, "ec")?
             .values()
-            .next() // Get the first item
+            .next()
             .ok_or_else(|| PlistParseError::MissingKey("ec".to_string()))?
             .as_array()
             .ok_or_else(|| PlistParseError::InvalidType("ec".to_string(), "array".to_string()))?;
@@ -69,19 +67,9 @@ impl<'a> BalloonProvider<'a> for EditedMessage<'a> {
                 .as_dictionary()
                 .ok_or_else(|| PlistParseError::InvalidTypeIndex(idx, "dictionary".to_string()))?;
 
-            let timestamp = message_data
-                .get("d")
-                .ok_or_else(|| PlistParseError::MissingKey("d".to_string()))?
-                .as_real()
-                .ok_or_else(|| PlistParseError::InvalidType("d".to_string(), "real".to_string()))?
-                as i64
-                * TIMESTAMP_FACTOR;
+            let timestamp = extract_int_key(message_data, "d")? * TIMESTAMP_FACTOR;
 
-            let raw_streamtyped = message_data
-                .get("t")
-                .ok_or_else(|| PlistParseError::MissingKey("t".to_string()))?
-                .as_data()
-                .ok_or_else(|| PlistParseError::InvalidType("t".to_string(), "data".to_string()))?;
+            let raw_streamtyped = extract_bytes_key(message_data, "t")?;
             let text =
                 parse(raw_streamtyped.to_vec()).map_err(PlistParseError::StreamTypedError)?;
 

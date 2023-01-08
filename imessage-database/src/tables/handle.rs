@@ -11,8 +11,6 @@ use crate::{
     util::output::{done_processing, processing},
 };
 
-const COLUMNS: &str = "ROWID, id, person_centric_id";
-
 /// Represents a single row in the `handle` table.
 #[derive(Debug)]
 pub struct Handle {
@@ -24,15 +22,14 @@ pub struct Handle {
 impl Table for Handle {
     fn from_row(row: &Row) -> Result<Handle> {
         Ok(Handle {
-            rowid: row.get(0)?,
-            id: row.get(1)?,
-            person_centric_id: row.get(2)?,
+            rowid: row.get("rowid")?,
+            id: row.get("id")?,
+            person_centric_id: row.get("person_centric_id").unwrap_or(None),
         })
     }
 
     fn get(db: &Connection) -> Statement {
-        db.prepare(&format!("SELECT {COLUMNS} from {}", HANDLE))
-            .unwrap()
+        db.prepare(&format!("SELECT * from {HANDLE}")).unwrap()
     }
 
     fn extract(handle: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {

@@ -28,7 +28,6 @@ use crate::{
 const ATTACHMENT_CHAR: char = '\u{FFFC}';
 const APP_CHAR: char = '\u{FFFD}';
 const REPLACEMENT_CHARS: [char; 2] = [ATTACHMENT_CHAR, APP_CHAR];
-const COLUMNS: &str = "m.rowid, m.guid, m.text, m.service, m.handle_id, m.subject, m.date, m.date_read, m.date_delivered, m.is_from_me, m.is_read, m.group_title, m.associated_message_guid, m.associated_message_type, m.balloon_bundle_id, m.expressive_send_style_id, m.thread_originator_guid, m.thread_originator_part, m.date_edited";
 
 /// Represents a broad category of messages: standalone, thread originators, and thread replies.
 #[derive(Debug)]
@@ -97,35 +96,36 @@ pub struct Message {
 impl Table for Message {
     fn from_row(row: &Row) -> Result<Message> {
         Ok(Message {
-            rowid: row.get(0)?,
-            guid: row.get(1)?,
-            text: row.get(2)?,
-            service: row.get(3)?,
-            handle_id: row.get(4)?,
-            subject: row.get(5)?,
-            date: row.get(6)?,
-            date_read: row.get(7).unwrap_or(0),
-            date_delivered: row.get(8).unwrap_or(0),
-            is_from_me: row.get(9)?,
-            is_read: row.get(10)?,
-            group_title: row.get(11)?,
-            associated_message_guid: row.get(12)?,
-            associated_message_type: row.get(13)?,
-            balloon_bundle_id: row.get(14)?,
-            expressive_send_style_id: row.get(15)?,
-            thread_originator_guid: row.get(16)?,
-            thread_originator_part: row.get(17)?,
-            date_edited: row.get(18).unwrap_or(0),
-            chat_id: row.get(19)?,
-            num_attachments: row.get(20)?,
-            num_replies: row.get(21)?,
+            rowid: row.get("rowid")?,
+            guid: row.get("guid")?,
+            text: row.get("text").unwrap_or(None),
+            service: row.get("service").unwrap_or(None),
+            handle_id: row.get("handle_id")?,
+            subject: row.get("subject").unwrap_or(None),
+            date: row.get("date")?,
+            date_read: row.get("date_read").unwrap_or(0),
+            date_delivered: row.get("date_delivered").unwrap_or(0),
+            is_from_me: row.get("is_from_me")?,
+            is_read: row.get("is_read")?,
+            group_title: row.get("group_title").unwrap_or(None),
+            associated_message_guid: row.get("associated_message_guid").unwrap_or(None),
+            associated_message_type: row.get("associated_message_type")?,
+            balloon_bundle_id: row.get("balloon_bundle_id").unwrap_or(None),
+            expressive_send_style_id: row.get("expressive_send_style_id").unwrap_or(None),
+            thread_originator_guid: row.get("thread_originator_guid").unwrap_or(None),
+            thread_originator_part: row.get("thread_originator_part").unwrap_or(None),
+            date_edited: row.get("date_edited").unwrap_or(0),
+            chat_id: row.get("chat_id").unwrap_or(None),
+            num_attachments: row.get("num_attachments")?,
+            num_replies: row.get("num_replies")?,
         })
     }
 
     fn get(db: &Connection) -> Statement {
+        // If database has `thread_originator_guid`, we can parse replies, otherwise default to 0
         db.prepare(&format!(
             "SELECT 
-                 {COLUMNS},
+                 *,
                  c.chat_id, 
                  (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
                  (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
@@ -136,7 +136,20 @@ impl Table for Message {
                  m.date;
             "
         ))
-        .unwrap()
+        .unwrap_or_else(|_| db.prepare(&format!(
+            "SELECT 
+                 *,
+                 c.chat_id, 
+                 (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                 (SELECT 0) as num_replies
+             FROM 
+                 message as m 
+                 LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id 
+             ORDER BY 
+                 m.date;
+            "
+        )).unwrap()
+    )
     }
 
     fn extract(message: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
@@ -207,9 +220,9 @@ impl Cacheable for Message {
         let mut map: HashMap<Self::K, Self::V> = HashMap::new();
 
         // Create query
-        let mut statement = db.prepare(&format!(
+        let statement = db.prepare(&format!(
             "SELECT 
-                 {COLUMNS}, 
+                 *, 
                  c.chat_id, 
                  (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
                  (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
@@ -218,30 +231,32 @@ impl Cacheable for Message {
                  LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
              WHERE m.associated_message_guid NOT NULL
             "
-        ))
-        .unwrap();
+        ));
 
-        // Execute query to build the Handles
-        let messages = statement
-            .query_map([], |row| Ok(Message::from_row(row)))
-            .unwrap();
+        if let Ok(mut statement) = statement {
+            // Execute query to build the Handles
+            let messages = statement
+                .query_map([], |row| Ok(Message::from_row(row)))
+                .unwrap();
 
-        // Iterate over the messages and update the map
-        for reaction in messages {
-            let reaction = Self::extract(reaction)?;
-            if reaction.is_reaction() {
-                if let Some((_, reaction_target_guid)) = reaction.clean_associated_guid() {
-                    match map.get_mut(reaction_target_guid) {
-                        Some(reactions) => {
-                            reactions.push(reaction.guid);
-                        }
-                        None => {
-                            map.insert(reaction_target_guid.to_string(), vec![reaction.guid]);
+            // Iterate over the messages and update the map
+            for reaction in messages {
+                let reaction = Self::extract(reaction)?;
+                if reaction.is_reaction() {
+                    if let Some((_, reaction_target_guid)) = reaction.clean_associated_guid() {
+                        match map.get_mut(reaction_target_guid) {
+                            Some(reactions) => {
+                                reactions.push(reaction.guid);
+                            }
+                            None => {
+                                map.insert(reaction_target_guid.to_string(), vec![reaction.guid]);
+                            }
                         }
                     }
                 }
             }
         }
+
         Ok(map)
     }
 }
@@ -501,7 +516,7 @@ impl Message {
             // Create query
             let mut statement = db.prepare(&format!(
                 "SELECT 
-                        {COLUMNS}, 
+                        *, 
                         c.chat_id, 
                         (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
                         (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
@@ -543,7 +558,7 @@ impl Message {
         if self.has_replies() {
             let mut statement = db.prepare(&format!(
                 "SELECT 
-                     {COLUMNS}, 
+                     *, 
                      c.chat_id, 
                      (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
                      (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
