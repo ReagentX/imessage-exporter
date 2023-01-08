@@ -17,8 +17,6 @@ use crate::{
     },
 };
 
-const COLUMNS: &str = "a.ROWID, a.filename, a.mime_type, a.transfer_name, a.total_bytes, a.is_sticker, a.attribution_info, a.hide_attachment";
-
 #[derive(Debug)]
 pub enum MediaType<'a> {
     Image(&'a str),
@@ -47,14 +45,14 @@ pub struct Attachment {
 impl Table for Attachment {
     fn from_row(row: &Row) -> Result<Attachment> {
         Ok(Attachment {
-            rowid: row.get(0)?,
-            filename: row.get(1).unwrap_or(None),
-            mime_type: row.get(2).unwrap_or(None),
-            transfer_name: row.get(3)?,
-            total_bytes: row.get(4)?,
-            is_sticker: row.get(5)?,
-            attribution_info: row.get(6).unwrap_or(None),
-            hide_attachment: row.get(7)?,
+            rowid: row.get("rowid")?,
+            filename: row.get("filename").unwrap_or(None),
+            mime_type: row.get("mime_type").unwrap_or(None),
+            transfer_name: row.get("transfer_name")?,
+            total_bytes: row.get("total_bytes")?,
+            is_sticker: row.get("is_sticker")?,
+            attribution_info: row.get("attribution_info").unwrap_or(None),
+            hide_attachment: row.get("hide_attachment")?,
             copied_path: None,
         })
     }
@@ -145,7 +143,7 @@ impl Attachment {
             let mut statement = db
                 .prepare(&format!(
                     "
-                    SELECT {COLUMNS} FROM message_attachment_join j 
+                    SELECT * FROM message_attachment_join j 
                         LEFT JOIN attachment AS a ON j.attachment_id = a.ROWID
                     WHERE j.message_id = {}
                     ",

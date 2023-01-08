@@ -11,8 +11,6 @@ use crate::{
     tables::table::{Cacheable, Table, CHAT},
 };
 
-const COLUMNS: &str = "ROWID, chat_identifier, service_name, display_name";
-
 /// Represents a single row in the `chat` table.
 #[derive(Debug)]
 pub struct Chat {
@@ -25,16 +23,15 @@ pub struct Chat {
 impl Table for Chat {
     fn from_row(row: &Row) -> Result<Chat> {
         Ok(Chat {
-            rowid: row.get(0)?,
-            chat_identifier: row.get(1)?,
-            service_name: row.get(2)?,
-            display_name: row.get(3).unwrap_or(None),
+            rowid: row.get("rowid")?,
+            chat_identifier: row.get("chat_identifier")?,
+            service_name: row.get("service_name")?,
+            display_name: row.get("display_name").unwrap_or(None),
         })
     }
 
     fn get(db: &Connection) -> Statement {
-        db.prepare(&format!("SELECT {COLUMNS} from {}", CHAT))
-            .unwrap()
+        db.prepare(&format!("SELECT * from {CHAT}")).unwrap()
     }
 
     fn extract(chat: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {

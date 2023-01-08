@@ -28,7 +28,6 @@ use crate::{
 const ATTACHMENT_CHAR: char = '\u{FFFC}';
 const APP_CHAR: char = '\u{FFFD}';
 const REPLACEMENT_CHARS: [char; 2] = [ATTACHMENT_CHAR, APP_CHAR];
-const COLUMNS: &str = "m.rowid, m.guid, m.text, m.service, m.handle_id, m.subject, m.date, m.date_read, m.date_delivered, m.is_from_me, m.is_read, m.group_title, m.associated_message_guid, m.associated_message_type, m.balloon_bundle_id, m.expressive_send_style_id, m.thread_originator_guid, m.thread_originator_part, m.date_edited";
 
 /// Represents a broad category of messages: standalone, thread originators, and thread replies.
 #[derive(Debug)]
@@ -97,35 +96,35 @@ pub struct Message {
 impl Table for Message {
     fn from_row(row: &Row) -> Result<Message> {
         Ok(Message {
-            rowid: row.get(0)?,
-            guid: row.get(1)?,
-            text: row.get(2).unwrap_or(None),
-            service: row.get(3).unwrap_or(None),
-            handle_id: row.get(4)?,
-            subject: row.get(5).unwrap_or(None),
-            date: row.get(6)?,
-            date_read: row.get(7).unwrap_or(0),
-            date_delivered: row.get(8).unwrap_or(0),
-            is_from_me: row.get(9)?,
-            is_read: row.get(10)?,
-            group_title: row.get(11).unwrap_or(None),
-            associated_message_guid: row.get(12).unwrap_or(None),
-            associated_message_type: row.get(13)?,
-            balloon_bundle_id: row.get(14).unwrap_or(None),
-            expressive_send_style_id: row.get(15).unwrap_or(None),
-            thread_originator_guid: row.get(16).unwrap_or(None),
-            thread_originator_part: row.get(17).unwrap_or(None),
-            date_edited: row.get(18).unwrap_or(0),
-            chat_id: row.get(19).unwrap_or(None),
-            num_attachments: row.get(20)?,
-            num_replies: row.get(21)?,
+            rowid: row.get("rowid")?,
+            guid: row.get("guid")?,
+            text: row.get("text").unwrap_or(None),
+            service: row.get("service").unwrap_or(None),
+            handle_id: row.get("handle_id")?,
+            subject: row.get("subject").unwrap_or(None),
+            date: row.get("date")?,
+            date_read: row.get("date_read").unwrap_or(0),
+            date_delivered: row.get("date_delivered").unwrap_or(0),
+            is_from_me: row.get("is_from_me")?,
+            is_read: row.get("is_read")?,
+            group_title: row.get("group_title").unwrap_or(None),
+            associated_message_guid: row.get("associated_message_guid").unwrap_or(None),
+            associated_message_type: row.get("associated_message_type")?,
+            balloon_bundle_id: row.get("balloon_bundle_id").unwrap_or(None),
+            expressive_send_style_id: row.get("expressive_send_style_id").unwrap_or(None),
+            thread_originator_guid: row.get("thread_originator_guid").unwrap_or(None),
+            thread_originator_part: row.get("thread_originator_part").unwrap_or(None),
+            date_edited: row.get("date_edited").unwrap_or(0),
+            chat_id: row.get("chat_id").unwrap_or(None),
+            num_attachments: row.get("num_attachments")?,
+            num_replies: row.get("num_replies")?,
         })
     }
 
     fn get(db: &Connection) -> Statement {
         db.prepare(&format!(
             "SELECT 
-                 {COLUMNS},
+                 *,
                  c.chat_id, 
                  (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
                  (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
@@ -209,7 +208,7 @@ impl Cacheable for Message {
         // Create query
         let mut statement = db.prepare(&format!(
             "SELECT 
-                 {COLUMNS}, 
+                 *, 
                  c.chat_id, 
                  (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
                  (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
@@ -501,7 +500,7 @@ impl Message {
             // Create query
             let mut statement = db.prepare(&format!(
                 "SELECT 
-                        {COLUMNS}, 
+                        *, 
                         c.chat_id, 
                         (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
                         (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
@@ -543,7 +542,7 @@ impl Message {
         if self.has_replies() {
             let mut statement = db.prepare(&format!(
                 "SELECT 
-                     {COLUMNS}, 
+                     *, 
                      c.chat_id, 
                      (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
                      (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies

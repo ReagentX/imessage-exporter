@@ -22,8 +22,8 @@ pub struct ChatToHandle {
 impl Table for ChatToHandle {
     fn from_row(row: &Row) -> Result<ChatToHandle> {
         Ok(ChatToHandle {
-            chat_id: row.get(0)?,
-            handle_id: row.get(1)?,
+            chat_id: row.get("chat_id")?,
+            handle_id: row.get("handle_id")?,
         })
     }
 
