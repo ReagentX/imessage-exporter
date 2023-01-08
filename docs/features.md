@@ -4,7 +4,7 @@ This exporter is fully-featured and well-documented.
 
 ## Targeted Versions
 
-This tool targets the current latest public release for MacOS and iMessage.
+This tool targets the current latest public release for MacOS and iMessage. It may work with older databases, but all features may not be available.
 
 ## Supported Message Features
 
@@ -65,3 +65,8 @@ This tool targets the current latest public release for MacOS and iMessage.
   - Parses the `NSKeyedArchiver` payload to extract balloon data
   - Supports system message types as well as third party applications
   - Supports Apple Music preview streams
+- Duplicated group chats
+  - Handles (participants) and chats (threads) can become duplicated
+  - On startup:
+    - Different handles that belong to the same person are combined
+    - Chatrooms that contain identical contacts (i.e., duplicated handles) are combined
