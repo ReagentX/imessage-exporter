@@ -122,6 +122,7 @@ impl Table for Message {
     }
 
     fn get(db: &Connection) -> Statement {
+        // If database has `thread_originator_guid`, we can parse replies, otherwise default to 0
         db.prepare(&format!(
             "SELECT 
                  *,
@@ -135,7 +136,20 @@ impl Table for Message {
                  m.date;
             "
         ))
-        .unwrap()
+        .unwrap_or_else(|_| db.prepare(&format!(
+            "SELECT 
+                 *,
+                 c.chat_id, 
+                 (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                 (SELECT 0) as num_replies
+             FROM 
+                 message as m 
+                 LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id 
+             ORDER BY 
+                 m.date;
+            "
+        )).unwrap()
+    )
     }
 
     fn extract(message: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
@@ -206,7 +220,7 @@ impl Cacheable for Message {
         let mut map: HashMap<Self::K, Self::V> = HashMap::new();
 
         // Create query
-        let mut statement = db.prepare(&format!(
+        let statement = db.prepare(&format!(
             "SELECT 
                  *, 
                  c.chat_id, 
@@ -217,30 +231,32 @@ impl Cacheable for Message {
                  LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
              WHERE m.associated_message_guid NOT NULL
             "
-        ))
-        .unwrap();
+        ));
 
-        // Execute query to build the Handles
-        let messages = statement
-            .query_map([], |row| Ok(Message::from_row(row)))
-            .unwrap();
+        if let Ok(mut statement) = statement {
+            // Execute query to build the Handles
+            let messages = statement
+                .query_map([], |row| Ok(Message::from_row(row)))
+                .unwrap();
 
-        // Iterate over the messages and update the map
-        for reaction in messages {
-            let reaction = Self::extract(reaction)?;
-            if reaction.is_reaction() {
-                if let Some((_, reaction_target_guid)) = reaction.clean_associated_guid() {
-                    match map.get_mut(reaction_target_guid) {
-                        Some(reactions) => {
-                            reactions.push(reaction.guid);
-                        }
-                        None => {
-                            map.insert(reaction_target_guid.to_string(), vec![reaction.guid]);
+            // Iterate over the messages and update the map
+            for reaction in messages {
+                let reaction = Self::extract(reaction)?;
+                if reaction.is_reaction() {
+                    if let Some((_, reaction_target_guid)) = reaction.clean_associated_guid() {
+                        match map.get_mut(reaction_target_guid) {
+                            Some(reactions) => {
+                                reactions.push(reaction.guid);
+                            }
+                            None => {
+                                map.insert(reaction_target_guid.to_string(), vec![reaction.guid]);
+                            }
                         }
                     }
                 }
             }
         }
+
         Ok(map)
     }
 }
