@@ -25,8 +25,11 @@ use crate::{
     },
 };
 
+/// Character found in message body text that indicates attachment position
 const ATTACHMENT_CHAR: char = '\u{FFFC}';
+/// Character found in message body text that indicates app message position
 const APP_CHAR: char = '\u{FFFD}';
+/// A collection of characters that represent non-text content within body text
 const REPLACEMENT_CHARS: [char; 2] = [ATTACHMENT_CHAR, APP_CHAR];
 
 /// Represents a broad category of messages: standalone, thread originators, and thread replies.
@@ -698,7 +701,9 @@ impl Message {
     /// Get a message's plist from the `payload_data` BLOB column
     ///
     /// Calling this hits the database, so it is expensive and should
-    /// only get invoked when needed
+    /// only get invoked when needed.
+    ///
+    /// This column contains data used by iMessage app balloons.
     pub fn payload_data(&self, db: &Connection) -> Option<Value> {
         Value::from_reader(self.get_blob(db, MESSAGE_PAYLOAD)?).ok()
     }
@@ -706,7 +711,9 @@ impl Message {
     /// Get a message's plist from the `message_summary_info` BLOB column
     ///
     /// Calling this hits the database, so it is expensive and should
-    /// only get invoked when needed
+    /// only get invoked when needed.
+    ///
+    /// This column contains data used by edited iMessages.
     pub fn message_summary_info(&self, db: &Connection) -> Option<Value> {
         Value::from_reader(self.get_blob(db, MESSAGE_SUMMARY_INFO)?).ok()
     }
@@ -714,7 +721,9 @@ impl Message {
     /// Get a message's plist from the `attributedBody` BLOB column
     ///
     /// Calling this hits the database, so it is expensive and should
-    /// only get invoked when needed
+    /// only get invoked when needed.
+    /// 
+    /// This column contains the message's body text with any other attributes.
     pub fn attributed_body(&self, db: &Connection) -> Option<Vec<u8>> {
         let mut body = vec![];
         self.get_blob(db, ATTRIBUTED_BODY)?
