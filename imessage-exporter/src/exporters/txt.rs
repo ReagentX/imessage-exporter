@@ -366,7 +366,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                 BubbleEffect::InvisibleInk => "Sent with Invisible Ink",
             },
             Expressive::Unknown(effect) => effect,
-            Expressive::Normal => "",
+            Expressive::None => "",
         }
     }
 

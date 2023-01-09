@@ -764,7 +764,7 @@ impl Message {
                 }
                 _ => Expressive::Unknown(content),
             },
-            None => Expressive::Normal,
+            None => Expressive::None,
         }
     }
 }
@@ -929,7 +929,7 @@ mod tests {
     #[test]
     fn can_get_message_expression_none() {
         let m = blank();
-        assert_eq!(m.get_expressive(), expressives::Expressive::Normal);
+        assert_eq!(m.get_expressive(), expressives::Expressive::None);
     }
 
     #[test]

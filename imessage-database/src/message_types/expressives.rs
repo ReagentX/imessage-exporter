@@ -51,8 +51,12 @@ pub enum ScreenEffect {
 /// - com.apple.messages.effect.CKSpotlightEffect
 #[derive(Debug, PartialEq, Eq)]
 pub enum Expressive<'a> {
+    /// Effects that use the entire screen
     Screen(ScreenEffect),
+    /// Effects that display on a single bubble
     Bubble(BubbleEffect),
+    /// Container for new or unknown messages
     Unknown(&'a str),
-    Normal,
+    /// Message is not an expressive
+    None,
 }
