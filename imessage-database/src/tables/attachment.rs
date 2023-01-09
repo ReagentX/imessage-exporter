@@ -17,6 +17,7 @@ use crate::{
     },
 };
 
+/// Represents the MIME type of a message's attachment data
 #[derive(Debug)]
 pub enum MediaType<'a> {
     Image(&'a str),

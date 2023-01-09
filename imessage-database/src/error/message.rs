@@ -6,6 +6,7 @@ use std::fmt::{Display, Formatter, Result};
 
 use crate::error::{plist::PlistParseError, streamtyped::StreamTypedError};
 
+/// Errors that can happen when working with message table data
 #[derive(Debug)]
 pub enum MessageError {
     MissingData,

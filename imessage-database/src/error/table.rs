@@ -6,6 +6,7 @@ use std::fmt::{Display, Formatter, Result};
 
 use rusqlite::Error;
 
+/// Errors that can happen when extracting data from a SQLite table
 #[derive(Debug)]
 pub enum TableError {
     Attachment(Error),
