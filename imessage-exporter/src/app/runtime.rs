@@ -80,18 +80,18 @@ impl<'a> Config<'a> {
 
     /// Get a filename for a chat, possibly using cached data.
     ///
-    /// If the chat has an assigned name, use that.
+    /// If the chat has an assigned name, use that, truncating if necessary.
     ///
     /// If it does not, first try and make a flat list of its members. Failing that, use the unique `chat_identifier` field.
     pub fn filename(&self, chatroom: &Chat) -> String {
         match &chatroom.display_name() {
             // If there is a display name, use that
             Some(name) => {
-                let name = name.to_string();
-                let unique = format!(" - {}", chatroom.rowid);
-                let mut usable_name = name[..min(MAX_LENGTH, name.len())].to_string();
-                usable_name.push_str(&unique);
-                usable_name
+                format!(
+                    "{} - {}",
+                    &name[..min(MAX_LENGTH, name.len())],
+                    chatroom.rowid
+                )
             }
             // Fallback if there is no name set
             None => match self.chatroom_participants.get(&chatroom.rowid) {
@@ -110,6 +110,11 @@ impl<'a> Config<'a> {
     }
 
     /// Generate a filename from a set of participants, truncating if the name is too long
+    /// 
+    /// - All names:
+    ///   - Contact 1, Contact 2
+    /// - Truncated Names
+    ///   - Contact 1, Contact 2, ... Contact 13 and 4 others
     fn filename_from_participants(&self, participants: &BTreeSet<i32>) -> String {
         let mut added = 0;
         let mut out_s = String::with_capacity(MAX_LENGTH);

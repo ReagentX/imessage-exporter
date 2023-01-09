@@ -4,6 +4,7 @@
 
 use std::fmt::{Display, Formatter, Result};
 
+/// Errors that can happen when parsing `streamtyped` data
 #[derive(Debug)]
 pub enum StreamTypedError {
     NoStartPattern,

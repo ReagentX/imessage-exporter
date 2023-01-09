@@ -17,6 +17,7 @@ use crate::{
     },
 };
 
+/// Represents the MIME type of a message's attachment data
 #[derive(Debug)]
 pub enum MediaType<'a> {
     Image(&'a str),
@@ -36,7 +37,6 @@ pub struct Attachment {
     pub mime_type: Option<String>,
     pub transfer_name: String,
     pub total_bytes: i32,
-    pub is_sticker: i32,
     pub attribution_info: Option<Vec<u8>>,
     pub hide_attachment: i32,
     pub copied_path: Option<String>,
@@ -50,9 +50,8 @@ impl Table for Attachment {
             mime_type: row.get("mime_type").unwrap_or(None),
             transfer_name: row.get("transfer_name")?,
             total_bytes: row.get("total_bytes")?,
-            is_sticker: row.get("is_sticker")?,
             attribution_info: row.get("attribution_info").unwrap_or(None),
-            hide_attachment: row.get("hide_attachment")?,
+            hide_attachment: row.get("hide_attachment").unwrap_or(0),
             copied_path: None,
         })
     }

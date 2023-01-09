@@ -29,11 +29,17 @@ use crate::error::plist::PlistParseError;
 ///   time of latest change; the history of reaction statuses is not kept
 #[derive(Debug)]
 pub enum Reaction {
+    /// Heart
     Loved,
+    /// Thumbs up
     Liked,
+    /// Thumbs down
     Disliked,
+    /// Laughing face
     Laughed,
+    /// Exclamation points
     Emphasized,
+    /// Question marks
     Questioned,
 }
 
@@ -65,11 +71,17 @@ pub enum CustomBalloon<'a> {
 /// all of the possibilities.
 #[derive(Debug)]
 pub enum Variant<'a> {
+    /// A reaction to another message
     Reaction(usize, bool, Reaction),
+    /// A sticker message, either placed on another message or by itself
     Sticker(usize),
+    /// Container for new or unknown messages
     Unknown(i32),
+    /// An [iMessage app](https://support.apple.com/en-us/HT206906) generated message
     App(CustomBalloon<'a>),
+    /// An iMessage with a standard text body that may include attachments
     Normal,
+    /// A message that has been edited or unsent
     Edited,
 }
 

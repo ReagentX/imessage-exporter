@@ -580,7 +580,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                 BubbleEffect::InvisibleInk => "Sent with Invisible Ink",
             },
             Expressive::Unknown(effect) => effect,
-            Expressive::Normal => "",
+            Expressive::None => "",
         }
     }
 
@@ -962,7 +962,7 @@ mod tests {
             is_read: false,
             group_title: None,
             associated_message_guid: None,
-            associated_message_type: i32::default(),
+            associated_message_type: Some(i32::default()),
             balloon_bundle_id: None,
             expressive_send_style_id: None,
             thread_originator_guid: None,
