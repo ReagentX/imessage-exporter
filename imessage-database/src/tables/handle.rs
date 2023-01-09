@@ -183,53 +183,56 @@ impl Handle {
             "WHERE A.person_centric_id NOT NULL ",
             "ORDER BY A.person_centric_id",
         );
-        let mut rows = db.prepare(query).unwrap();
+        let statement = db.prepare(query);
 
-        // Cache the results of the query in memory
-        let contacts = rows
-            .query_map([], |row| {
-                let person_centric_id: String = row.get(0).unwrap();
-                let rowid: i32 = row.get(1).unwrap();
-                let id: String = row.get(2).unwrap();
-                Ok((person_centric_id, rowid, id))
-            })
-            .unwrap();
+        if let Ok(mut statement) = statement {
+            // Cache the results of the query in memory
+            let contacts = statement
+                .query_map([], |row| {
+                    let person_centric_id: String = row.get(0).unwrap();
+                    let rowid: i32 = row.get(1).unwrap();
+                    let id: String = row.get(2).unwrap();
+                    Ok((person_centric_id, rowid, id))
+                })
+                .unwrap();
 
-        for contact in contacts {
-            match contact {
-                Ok(tup) => {
-                    row_data.push(tup);
+            for contact in contacts {
+                match contact {
+                    Ok(tup) => {
+                        row_data.push(tup);
+                    }
+                    Err(why) => {
+                        panic!("{:?}", why);
+                    }
                 }
-                Err(why) => {
-                    panic!("{:?}", why);
+            }
+
+            // First pass: generate a map of each person_centric_id to its matching ids
+            for contact in &row_data {
+                let (person_centric_id, _, id) = contact;
+                match person_to_id.get_mut(person_centric_id) {
+                    Some(set) => {
+                        set.insert(id.to_owned());
+                    }
+                    None => {
+                        let mut set = HashSet::new();
+                        set.insert(id.to_owned());
+                        person_to_id.insert(person_centric_id.to_owned(), set);
+                    }
                 }
+            }
+
+            // Second pass: point each ROWID to the matching ids
+            for contact in &row_data {
+                let (person_centric_id, rowid, _) = contact;
+                let data_to_insert = match person_to_id.get_mut(person_centric_id) {
+                    Some(person) => person.iter().cloned().collect::<Vec<String>>().join(" "),
+                    None => panic!("Attempted to resolve contact with no person_centric_id!"),
+                };
+                row_to_id.insert(rowid.to_owned(), data_to_insert);
             }
         }
 
-        // First pass: generate a map of each person_centric_id to its matching ids
-        for contact in &row_data {
-            let (person_centric_id, _, id) = contact;
-            match person_to_id.get_mut(person_centric_id) {
-                Some(set) => {
-                    set.insert(id.to_owned());
-                }
-                None => {
-                    let mut set = HashSet::new();
-                    set.insert(id.to_owned());
-                    person_to_id.insert(person_centric_id.to_owned(), set);
-                }
-            }
-        }
-
-        // Second pass: point each ROWID to the matching ids
-        for contact in &row_data {
-            let (person_centric_id, rowid, _) = contact;
-            let data_to_insert = match person_to_id.get_mut(person_centric_id) {
-                Some(person) => person.iter().cloned().collect::<Vec<String>>().join(" "),
-                None => panic!("Attempted to resolve contact with no person_centric_id!"),
-            };
-            row_to_id.insert(rowid.to_owned(), data_to_insert);
-        }
         row_to_id
     }
 }

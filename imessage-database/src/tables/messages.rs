@@ -82,7 +82,7 @@ pub struct Message {
     pub is_read: bool,
     pub group_title: Option<String>,
     pub associated_message_guid: Option<String>,
-    pub associated_message_type: i32,
+    pub associated_message_type: Option<i32>,
     pub balloon_bundle_id: Option<String>,
     pub expressive_send_style_id: Option<String>,
     pub thread_originator_guid: Option<String>,
@@ -109,7 +109,7 @@ impl Table for Message {
             is_read: row.get("is_read")?,
             group_title: row.get("group_title").unwrap_or(None),
             associated_message_guid: row.get("associated_message_guid").unwrap_or(None),
-            associated_message_type: row.get("associated_message_type")?,
+            associated_message_type: row.get("associated_message_type").unwrap_or(None),
             balloon_bundle_id: row.get("balloon_bundle_id").unwrap_or(None),
             expressive_send_style_id: row.get("expressive_send_style_id").unwrap_or(None),
             thread_originator_guid: row.get("thread_originator_guid").unwrap_or(None),
@@ -613,59 +613,62 @@ impl Message {
         if self.is_edited() {
             return Variant::Edited;
         }
-        match self.associated_message_type {
-            // Standard iMessages with either text or a message payload
-            0 | 2 | 3 => match self.parse_balloon_bundle_id() {
-                Some(bundle_id) => match bundle_id {
-                    "com.apple.messages.URLBalloonProvider" => {
-                        if let Some(text) = &self.text {
-                            if text.starts_with("https://music.apple") {
-                                Variant::App(CustomBalloon::Music)
+        if let Some(associated_message_type) = self.associated_message_type {
+            return match associated_message_type {
+                // Standard iMessages with either text or a message payload
+                0 | 2 | 3 => match self.parse_balloon_bundle_id() {
+                    Some(bundle_id) => match bundle_id {
+                        "com.apple.messages.URLBalloonProvider" => {
+                            if let Some(text) = &self.text {
+                                if text.starts_with("https://music.apple") {
+                                    Variant::App(CustomBalloon::Music)
+                                } else {
+                                    Variant::App(CustomBalloon::URL)
+                                }
                             } else {
                                 Variant::App(CustomBalloon::URL)
                             }
-                        } else {
-                            Variant::App(CustomBalloon::URL)
                         }
-                    }
-                    "com.apple.Handwriting.HandwritingProvider" => {
-                        Variant::App(CustomBalloon::Handwriting)
-                    }
-                    "com.apple.PassbookUIService.PeerPaymentMessagesExtension" => {
-                        Variant::App(CustomBalloon::ApplePay)
-                    }
-                    "com.apple.ActivityMessagesApp.MessagesExtension" => {
-                        Variant::App(CustomBalloon::Fitness)
-                    }
-                    "com.apple.mobileslideshow.PhotosMessagesApp" => {
-                        Variant::App(CustomBalloon::Slideshow)
-                    }
-                    _ => Variant::App(CustomBalloon::Application(bundle_id)),
+                        "com.apple.Handwriting.HandwritingProvider" => {
+                            Variant::App(CustomBalloon::Handwriting)
+                        }
+                        "com.apple.PassbookUIService.PeerPaymentMessagesExtension" => {
+                            Variant::App(CustomBalloon::ApplePay)
+                        }
+                        "com.apple.ActivityMessagesApp.MessagesExtension" => {
+                            Variant::App(CustomBalloon::Fitness)
+                        }
+                        "com.apple.mobileslideshow.PhotosMessagesApp" => {
+                            Variant::App(CustomBalloon::Slideshow)
+                        }
+                        _ => Variant::App(CustomBalloon::Application(bundle_id)),
+                    },
+                    // This is the most common case
+                    None => Variant::Normal,
                 },
-                // This is the most common case
-                None => Variant::Normal,
-            },
 
-            // Stickers overlaid on messages
-            1000 => Variant::Sticker(self.reaction_index()),
+                // Stickers overlaid on messages
+                1000 => Variant::Sticker(self.reaction_index()),
 
-            // Reactions
-            2000 => Variant::Reaction(self.reaction_index(), true, Reaction::Loved),
-            2001 => Variant::Reaction(self.reaction_index(), true, Reaction::Liked),
-            2002 => Variant::Reaction(self.reaction_index(), true, Reaction::Disliked),
-            2003 => Variant::Reaction(self.reaction_index(), true, Reaction::Laughed),
-            2004 => Variant::Reaction(self.reaction_index(), true, Reaction::Emphasized),
-            2005 => Variant::Reaction(self.reaction_index(), true, Reaction::Questioned),
-            3000 => Variant::Reaction(self.reaction_index(), false, Reaction::Loved),
-            3001 => Variant::Reaction(self.reaction_index(), false, Reaction::Liked),
-            3002 => Variant::Reaction(self.reaction_index(), false, Reaction::Disliked),
-            3003 => Variant::Reaction(self.reaction_index(), false, Reaction::Laughed),
-            3004 => Variant::Reaction(self.reaction_index(), false, Reaction::Emphasized),
-            3005 => Variant::Reaction(self.reaction_index(), false, Reaction::Questioned),
+                // Reactions
+                2000 => Variant::Reaction(self.reaction_index(), true, Reaction::Loved),
+                2001 => Variant::Reaction(self.reaction_index(), true, Reaction::Liked),
+                2002 => Variant::Reaction(self.reaction_index(), true, Reaction::Disliked),
+                2003 => Variant::Reaction(self.reaction_index(), true, Reaction::Laughed),
+                2004 => Variant::Reaction(self.reaction_index(), true, Reaction::Emphasized),
+                2005 => Variant::Reaction(self.reaction_index(), true, Reaction::Questioned),
+                3000 => Variant::Reaction(self.reaction_index(), false, Reaction::Loved),
+                3001 => Variant::Reaction(self.reaction_index(), false, Reaction::Liked),
+                3002 => Variant::Reaction(self.reaction_index(), false, Reaction::Disliked),
+                3003 => Variant::Reaction(self.reaction_index(), false, Reaction::Laughed),
+                3004 => Variant::Reaction(self.reaction_index(), false, Reaction::Emphasized),
+                3005 => Variant::Reaction(self.reaction_index(), false, Reaction::Questioned),
 
-            // Unknown
-            x => Variant::Unknown(x),
+                // Unknown
+                x => Variant::Unknown(x),
+            };
         }
+        Variant::Normal
     }
 
     /// Determine the service the message was sent from, i.e. iMessage, SMS, IRC, etc.
@@ -792,7 +795,7 @@ mod tests {
             is_read: false,
             group_title: None,
             associated_message_guid: None,
-            associated_message_type: i32::default(),
+            associated_message_type: Some(i32::default()),
             balloon_bundle_id: None,
             expressive_send_style_id: None,
             thread_originator_guid: None,

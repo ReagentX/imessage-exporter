@@ -50,9 +50,9 @@ impl Table for Attachment {
             mime_type: row.get("mime_type").unwrap_or(None),
             transfer_name: row.get("transfer_name")?,
             total_bytes: row.get("total_bytes")?,
-            is_sticker: row.get("is_sticker")?,
+            is_sticker: row.get("is_sticker").unwrap_or(0),
             attribution_info: row.get("attribution_info").unwrap_or(None),
-            hide_attachment: row.get("hide_attachment")?,
+            hide_attachment: row.get("hide_attachment").unwrap_or(0),
             copied_path: None,
         })
     }
