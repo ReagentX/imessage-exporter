@@ -87,11 +87,11 @@ impl<'a> Config<'a> {
         match &chatroom.display_name() {
             // If there is a display name, use that
             Some(name) => {
-                let name = name.to_string();
-                let unique = format!(" - {}", chatroom.rowid);
-                let mut usable_name = name[..min(MAX_LENGTH, name.len())].to_string();
-                usable_name.push_str(&unique);
-                usable_name
+                format!(
+                    "{} - {}",
+                    &name[..min(MAX_LENGTH, name.len())],
+                    chatroom.rowid
+                )
             }
             // Fallback if there is no name set
             None => match self.chatroom_participants.get(&chatroom.rowid) {
