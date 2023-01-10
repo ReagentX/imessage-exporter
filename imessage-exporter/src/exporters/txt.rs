@@ -441,8 +441,8 @@ impl<'a> Writer<'a> for TXT<'a> {
         .append(true)
         .create(true)
         .open(file) {
-            Ok(file) => file.write_all(text.as_bytes()).unwrap(),
-            Err(why) => eprintln!("Unable to write to {file}: {why:?}"),
+            Ok(mut file) => file.write_all(text.as_bytes()).unwrap(),
+            Err(why) => eprintln!("Unable to write to {file:?}: {why:?}"),
         }
     }
 }
