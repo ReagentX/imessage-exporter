@@ -647,12 +647,13 @@ impl<'a> Writer<'a> for HTML<'a> {
     }
 
     fn write_to_file(file: &Path, text: &str) {
-        let mut file = File::options()
-            .append(true)
-            .create(true)
-            .open(file)
-            .unwrap();
-        file.write_all(text.as_bytes()).unwrap();
+        match File::options()
+        .append(true)
+        .create(true)
+        .open(file) {
+            Ok(file) => file.write_all(text.as_bytes()).unwrap(),
+            Err(why) => eprintln!("Unable to write to {file}: {why:?}"),
+        }
     }
 }
 
