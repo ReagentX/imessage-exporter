@@ -9,7 +9,9 @@ use crate::error::plist::PlistParseError;
 /// Reactions to iMessages
 ///
 /// `bp:` GUID prefix for bubble message reactions (links, apps, etc)
+/// 
 /// `p:0/` GUID prefix for normal messages (body text, attachments)
+/// 
 /// for `p:#/`, the # is the message index, so if a message has 3 attachments:
 /// - 0 is the first image
 /// - 1 is the second image

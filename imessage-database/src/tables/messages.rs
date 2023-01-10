@@ -2,7 +2,7 @@
  This module represents common (but not all) columns in the `message` table.
 */
 
-use std::{collections::HashMap, io::Read, vec};
+use std::{collections::HashMap, io::Read};
 
 use chrono::{naive::NaiveDateTime, offset::Local, DateTime, TimeZone};
 use plist::Value;
@@ -280,11 +280,19 @@ impl Message {
         }
     }
 
-    /// Get a vector of string slices of the message's components
+    /// Get a vector of a message's components
     ///
     /// If the message has attachments, there will be one [`U+FFFC`]((https://www.fileformat.info/info/unicode/char/fffc/index.htm)) character
     /// for each attachment and one [`U+FFFD`](https://www.fileformat.info/info/unicode/char/fffd/index.htm) for app messages that we need
     /// to format.
+    /// 
+    /// An iMessage that contains body text like:
+    /// 
+    /// `\u{FFFC}Check out this photo!`
+    /// 
+    /// Will have a `body()` of:
+    /// 
+    /// `[BubbleType::Attachment, BubbleType::Text("Check out this photo!")]`
     pub fn body(&self) -> Vec<BubbleType> {
         let mut out_v = vec![];
 
