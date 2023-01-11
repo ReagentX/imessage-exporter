@@ -404,7 +404,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                             eprintln!("Unable to copy {qualified_attachment_path:?}: {why}")
                                         };
                                     } else {
-                                        return Err(&attachment.filename());
+                                        return Err(attachment.filename());
                                     }
                                 }
                                 // Update the attachment
@@ -412,7 +412,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                     Some(copy_path.to_string_lossy().to_string());
                             }
                             None => {
-                                return Err(&attachment.filename());
+                                return Err(attachment.filename());
                             }
                         }
                     }
@@ -450,10 +450,10 @@ impl<'a> Writer<'a> for HTML<'a> {
                         }
                     })
                 } else {
-                    Err(&attachment.filename())
+                    Err(attachment.filename())
                 }
             }
-            None => Err(&attachment.filename()),
+            None => Err(attachment.filename()),
         }
     }
 

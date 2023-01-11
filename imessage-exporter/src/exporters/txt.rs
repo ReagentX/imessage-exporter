@@ -251,7 +251,7 @@ impl<'a> Writer<'a> for TXT<'a> {
         match &attachment.filename {
             Some(filename) => Ok(filename.to_owned()),
             // Filepath missing!
-            None => Err(&attachment.filename()),
+            None => Err(attachment.filename()),
         }
     }
 
