@@ -18,7 +18,7 @@ use crate::{
 };
 
 /// Represents the MIME type of a message's attachment data
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum MediaType<'a> {
     Image(&'a str),
     Video(&'a str),
@@ -35,7 +35,7 @@ pub struct Attachment {
     pub rowid: i32,
     pub filename: Option<String>,
     pub mime_type: Option<String>,
-    pub transfer_name: String,
+    pub transfer_name: Option<String>,
     pub total_bytes: i32,
     pub attribution_info: Option<Vec<u8>>,
     pub hide_attachment: i32,
@@ -48,8 +48,8 @@ impl Table for Attachment {
             rowid: row.get("rowid")?,
             filename: row.get("filename").unwrap_or(None),
             mime_type: row.get("mime_type").unwrap_or(None),
-            transfer_name: row.get("transfer_name")?,
-            total_bytes: row.get("total_bytes")?,
+            transfer_name: row.get("transfer_name").unwrap_or(None),
+            total_bytes: row.get("total_bytes").unwrap_or_default(),
             attribution_info: row.get("attribution_info").unwrap_or(None),
             hide_attachment: row.get("hide_attachment").unwrap_or(0),
             copied_path: None,
@@ -200,5 +200,110 @@ impl Attachment {
             },
             None => None,
         }
+    }
+
+    /// Get a reasonable filename for an attachment
+    pub fn filename(&self) -> &str {
+        if let Some(transfer_name) = &self.transfer_name {
+            return transfer_name;
+        }
+        if let Some(filename) = &self.filename {
+            return filename;
+        }
+        "Attachment missing name metadata!"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::tables::attachment::{Attachment, MediaType};
+
+    use std::path::Path;
+
+    fn sample_attachment() -> Attachment {
+        Attachment {
+            rowid: 1,
+            filename: Some("a/b/c.png".to_string()),
+            mime_type: Some("image".to_string()),
+            transfer_name: Some("c.png".to_string()),
+            total_bytes: 100,
+            attribution_info: None,
+            hide_attachment: 0,
+            copied_path: None,
+        }
+    }
+
+    #[test]
+    fn can_get_path() {
+        let attachment = sample_attachment();
+        assert_eq!(attachment.path(), Some(Path::new("a/b/c.png")));
+    }
+
+    #[test]
+    fn cant_get_path_missing() {
+        let mut attachment = sample_attachment();
+        attachment.filename = None;
+        assert_eq!(attachment.path(), None);
+    }
+
+    #[test]
+    fn can_get_extension() {
+        let attachment = sample_attachment();
+        assert_eq!(attachment.extension(), Some("png"));
+    }
+
+    #[test]
+    fn cant_get_extension_missing() {
+        let mut attachment = sample_attachment();
+        attachment.filename = None;
+        assert_eq!(attachment.extension(), None);
+    }
+
+    #[test]
+    fn can_get_mime_type() {
+        let attachment = sample_attachment();
+        assert_eq!(attachment.mime_type(), MediaType::Image("image"));
+    }
+
+    #[test]
+    fn can_get_mime_type_fake() {
+        let mut attachment = sample_attachment();
+        attachment.mime_type = Some("bloop".to_string());
+        assert_eq!(attachment.mime_type(), MediaType::Other("bloop"));
+    }
+
+    #[test]
+    fn can_get_mime_type_missing() {
+        let mut attachment = sample_attachment();
+        attachment.mime_type = None;
+        assert_eq!(attachment.mime_type(), MediaType::Unknown);
+    }
+
+    #[test]
+    fn can_get_filename() {
+        let attachment = sample_attachment();
+        assert_eq!(attachment.filename(), "c.png");
+    }
+
+    #[test]
+    fn can_get_filename_no_transfer_name() {
+        let mut attachment = sample_attachment();
+        attachment.transfer_name = None;
+        assert_eq!(attachment.filename(), "a/b/c.png");
+    }
+
+    #[test]
+    fn can_get_filename_no_filename() {
+        let mut attachment = sample_attachment();
+        attachment.filename = None;
+        assert_eq!(attachment.filename(), "c.png");
+    }
+
+    #[test]
+    fn can_get_filename_no_meta() {
+        let mut attachment = sample_attachment();
+        attachment.transfer_name = None;
+        attachment.filename = None;
+        assert_eq!(attachment.filename(), "Attachment missing name metadata!");
     }
 }

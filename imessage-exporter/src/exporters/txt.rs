@@ -251,7 +251,7 @@ impl<'a> Writer<'a> for TXT<'a> {
         match &attachment.filename {
             Some(filename) => Ok(filename.to_owned()),
             // Filepath missing!
-            None => Err(&attachment.transfer_name),
+            None => Err(attachment.filename()),
         }
     }
 
@@ -336,7 +336,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                     match paths.get(0) {
                         Some(sticker) => match sticker.filename.as_ref() {
                             Some(path) => path,
-                            None => &sticker.transfer_name,
+                            None => sticker.filename(),
                         },
                         None => "Sticker not found!",
                     },
@@ -437,10 +437,7 @@ impl<'a> Writer<'a> for TXT<'a> {
     }
 
     fn write_to_file(file: &Path, text: &str) {
-        match File::options()
-        .append(true)
-        .create(true)
-        .open(file) {
+        match File::options().append(true).create(true).open(file) {
             Ok(mut file) => file.write_all(text.as_bytes()).unwrap(),
             Err(why) => eprintln!("Unable to write to {file:?}: {why:?}"),
         }

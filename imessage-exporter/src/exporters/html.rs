@@ -390,7 +390,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                             // of some kind, but this conversion failure is quite rare.
                                             return Ok(format!(
                                                 "Unable to convert and display file: {}",
-                                                &attachment.transfer_name
+                                                &attachment.filename()
                                             ));
                                         }
                                     }
@@ -398,11 +398,13 @@ impl<'a> Writer<'a> for HTML<'a> {
                                     // Just copy the file
                                     copy_path.set_extension(ext);
                                     if qualified_attachment_path.exists() {
-                                        if let Err(why) = copy(qualified_attachment_path, &copy_path) {
+                                        if let Err(why) =
+                                            copy(qualified_attachment_path, &copy_path)
+                                        {
                                             eprintln!("Unable to copy {qualified_attachment_path:?}: {why}")
                                         };
                                     } else {
-                                        return Err(&attachment.transfer_name);
+                                        return Err(attachment.filename());
                                     }
                                 }
                                 // Update the attachment
@@ -410,7 +412,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                     Some(copy_path.to_string_lossy().to_string());
                             }
                             None => {
-                                return Err(&attachment.transfer_name);
+                                return Err(attachment.filename());
                             }
                         }
                     }
@@ -433,12 +435,12 @@ impl<'a> Writer<'a> for HTML<'a> {
                         MediaType::Text(_) => {
                             format!(
                                 "<a href=\"file://{embed_path}\">Click to download {}</a>",
-                                attachment.transfer_name
+                                attachment.filename()
                             )
                         }
                         MediaType::Application(_) => format!(
                             "<a href=\"file://{embed_path}\">Click to download {}</a>",
-                            attachment.transfer_name
+                            attachment.filename()
                         ),
                         MediaType::Unknown => {
                             format!("<p>Unknown attachment type: {embed_path}</p> <a href=\"file://{embed_path}\">Download</a>")
@@ -448,10 +450,10 @@ impl<'a> Writer<'a> for HTML<'a> {
                         }
                     })
                 } else {
-                    Err(&attachment.transfer_name)
+                    Err(attachment.filename())
                 }
             }
-            None => Err(&attachment.transfer_name),
+            None => Err(attachment.filename()),
         }
     }
 
@@ -647,10 +649,7 @@ impl<'a> Writer<'a> for HTML<'a> {
     }
 
     fn write_to_file(file: &Path, text: &str) {
-        match File::options()
-        .append(true)
-        .create(true)
-        .open(file) {
+        match File::options().append(true).create(true).open(file) {
             Ok(mut file) => file.write_all(text.as_bytes()).unwrap(),
             Err(why) => eprintln!("Unable to write to {file:?}: {why:?}"),
         }
