@@ -1,6 +1,6 @@
 # Binary Documentation
 
-The `imessage_exporter` binary exports iMessage data to `txt` or `html` formats. It can also run diagnostics to find problems with the iMessage database.
+The `imessage-exporter` binary exports iMessage data to `txt` or `html` formats. It can also run diagnostics to find problems with the iMessage database.
 
 ## Installation
 
@@ -10,7 +10,7 @@ There are several ways to install this software.
 
 This binary is available on [crates.io](https://crates.io/crates/imessage-exporter).
 
-`cargo install imessage_exporter` is the best way to install the app for normal use.
+`cargo install imessage-exporter` is the best way to install the app for normal use.
 
 ## Installing manually
 
