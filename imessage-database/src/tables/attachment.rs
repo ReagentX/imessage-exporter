@@ -18,7 +18,7 @@ use crate::{
 };
 
 /// Represents the MIME type of a message's attachment data
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum MediaType<'a> {
     Image(&'a str),
     Video(&'a str),
@@ -216,7 +216,9 @@ impl Attachment {
 
 #[cfg(test)]
 mod tests {
-    use crate::tables::attachment::Attachment;
+    use crate::tables::attachment::{Attachment, MediaType};
+
+    use std::path::Path;
 
     fn sample_attachment() -> Attachment {
         Attachment {
@@ -232,23 +234,69 @@ mod tests {
     }
 
     #[test]
+    fn can_get_path() {
+        let attachment = sample_attachment();
+        assert_eq!(attachment.path(), Some(Path::new("a/b/c.png")));
+    }
+
+    #[test]
+    fn cant_get_path_missing() {
+        let mut attachment = sample_attachment();
+        attachment.filename = None;
+        assert_eq!(attachment.path(), None);
+    }
+
+    #[test]
+    fn can_get_extension() {
+        let attachment = sample_attachment();
+        assert_eq!(attachment.extension(), Some("png"));
+    }
+
+    #[test]
+    fn cant_get_extension_missing() {
+        let mut attachment = sample_attachment();
+        attachment.filename = None;
+        assert_eq!(attachment.extension(), None);
+    }
+
+    #[test]
+    fn can_get_mime_type() {
+        let attachment = sample_attachment();
+        assert_eq!(attachment.mime_type(), MediaType::Image("image"));
+    }
+
+    #[test]
+    fn can_get_mime_type_fake() {
+        let mut attachment = sample_attachment();
+        attachment.mime_type = Some("bloop".to_string());
+        assert_eq!(attachment.mime_type(), MediaType::Other("bloop"));
+    }
+
+    #[test]
+    fn can_get_mime_type_missing() {
+        let mut attachment = sample_attachment();
+        attachment.mime_type = None;
+        assert_eq!(attachment.mime_type(), MediaType::Unknown);
+    }
+
+    #[test]
     fn can_get_filename() {
         let attachment = sample_attachment();
-        assert_eq!(attachment.filename(), "c.png")
+        assert_eq!(attachment.filename(), "c.png");
     }
 
     #[test]
     fn can_get_filename_no_transfer_name() {
         let mut attachment = sample_attachment();
         attachment.transfer_name = None;
-        assert_eq!(attachment.filename(), "a/b/c.png")
+        assert_eq!(attachment.filename(), "a/b/c.png");
     }
 
     #[test]
     fn can_get_filename_no_filename() {
         let mut attachment = sample_attachment();
         attachment.filename = None;
-        assert_eq!(attachment.filename(), "c.png")
+        assert_eq!(attachment.filename(), "c.png");
     }
 
     #[test]
@@ -256,6 +304,6 @@ mod tests {
         let mut attachment = sample_attachment();
         attachment.transfer_name = None;
         attachment.filename = None;
-        assert_eq!(attachment.filename(), "Attachment missing name metadata!")
+        assert_eq!(attachment.filename(), "Attachment missing name metadata!");
     }
 }
