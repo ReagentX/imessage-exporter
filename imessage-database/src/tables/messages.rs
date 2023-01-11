@@ -479,18 +479,7 @@ impl Message {
         count
     }
 
-    /// In some special cases, the `guid` is stored with some additional data we need to parse out. There are two prefixes:
-    ///
-    /// - `bp:` GUID prefix for bubble message reactions (links, apps, etc)
-    /// - `p:0/` GUID prefix for normal messages (body text, attachments)
-    /// 
-    /// In `p:#/`, the # represents the message index. If a message has 3 attachments:
-    ///     - 0 is the first image
-    ///     - 1 is the second image
-    ///     - 2 is the third image
-    ///     - 3 is the text of the message
-    /// 
-    /// In this example, a Like on `p:2/` is a like on the third image
+    /// See [Reaction](crate::message_types::variants::Reaction) for details on this data.
     fn clean_associated_guid(&self) -> Option<(usize, &str)> {
         // TODO: Test that the GUID length is correct!
         if let Some(guid) = &self.associated_message_guid {
