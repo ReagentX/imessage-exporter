@@ -8,14 +8,16 @@ use crate::error::plist::PlistParseError;
 
 /// Reactions to iMessages
 ///
-/// `bp:` GUID prefix for bubble message reactions (links, apps, etc)
-/// `p:0/` GUID prefix for normal messages (body text, attachments)
-/// for `p:#/`, the # is the message index, so if a message has 3 attachments:
+/// `bp:` GUID prefix for bubble message reactions (links, apps, etc).
+/// 
+/// `p:0/` GUID prefix for normal messages (body text, attachments).
+/// 
+/// In `p:#/`, the # represents the message index. If a message has 3 attachments:
 /// - 0 is the first image
 /// - 1 is the second image
 /// - 2 is the third image
 /// - 3 is the text of the message
-/// In this example, a Like on `p:2/` is a like on the second message
+/// In this example, a Like on `p:2/` is a like on the third image
 ///
 /// Reactions are normal messages in the database, but only the latest reaction
 /// is stored. For example:

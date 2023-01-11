@@ -7,7 +7,7 @@ use std::{
 
 use rusqlite::Connection;
 
-use crate::{app::options::Options, Exporter, HTML, TXT};
+use crate::{app::{options::Options, sanitizers::sanitize_filename}, Exporter, HTML, TXT};
 use imessage_database::{
     error::table::TableError,
     tables::{
@@ -84,7 +84,7 @@ impl<'a> Config<'a> {
     ///
     /// If it does not, first try and make a flat list of its members. Failing that, use the unique `chat_identifier` field.
     pub fn filename(&self, chatroom: &Chat) -> String {
-        match &chatroom.display_name() {
+        let filename = match &chatroom.display_name() {
             // If there is a display name, use that
             Some(name) => {
                 format!(
@@ -106,7 +106,8 @@ impl<'a> Config<'a> {
                     chatroom.chat_identifier.to_owned()
                 }
             },
-        }
+        };
+        sanitize_filename(filename)
     }
 
     /// Generate a filename from a set of participants, truncating if the name is too long
