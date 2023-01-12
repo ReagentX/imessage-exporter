@@ -425,10 +425,7 @@ impl Message {
 
     /// `true` if the message has a URL preview, else `false`
     pub fn is_url(&self) -> bool {
-        matches!(
-            self.variant(),
-            Variant::App(CustomBalloon::URL) | Variant::App(CustomBalloon::Music)
-        )
+        matches!(self.variant(), Variant::App(CustomBalloon::URL))
     }
 
     /// `true` if the message was edited, else `false`
@@ -620,19 +617,7 @@ impl Message {
                 // Standard iMessages with either text or a message payload
                 0 | 2 | 3 => match self.parse_balloon_bundle_id() {
                     Some(bundle_id) => match bundle_id {
-                        "com.apple.messages.URLBalloonProvider" => {
-                            if let Some(text) = &self.text {
-                                if text.starts_with("https://music.apple") {
-                                    Variant::App(CustomBalloon::Music)
-                                } else if text.starts_with("https://www.icloud") {
-                                    Variant::App(CustomBalloon::Collaboration)  // TODO: Handle this in exporters
-                                } else {
-                                    Variant::App(CustomBalloon::URL)
-                                }
-                            } else {
-                                Variant::App(CustomBalloon::URL)
-                            }
-                        }
+                        "com.apple.messages.URLBalloonProvider" => Variant::App(CustomBalloon::URL),
                         "com.apple.Handwriting.HandwritingProvider" => {
                             Variant::App(CustomBalloon::Handwriting)
                         }
