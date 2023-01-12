@@ -7,7 +7,10 @@ use std::{
 
 use rusqlite::Connection;
 
-use crate::{app::{options::Options, sanitizers::sanitize_filename}, Exporter, HTML, TXT};
+use crate::{
+    app::{options::Options, sanitizers::sanitize_filename},
+    Exporter, HTML, TXT,
+};
 use imessage_database::{
     error::table::TableError,
     tables::{
@@ -111,7 +114,7 @@ impl<'a> Config<'a> {
     }
 
     /// Generate a filename from a set of participants, truncating if the name is too long
-    /// 
+    ///
     /// - All names:
     ///   - Contact 1, Contact 2
     /// - Truncated Names
@@ -163,7 +166,7 @@ impl<'a> Config<'a> {
             return Err(String::from("Invalid options!"));
         }
 
-        let conn = get_connection(&options.db_path);
+        let conn = get_connection(&options.db_path)?;
         // TODO: Implement Try for these cache calls `?`
         eprintln!("Building cache...");
         eprintln!("[1/4] Caching chats...");
@@ -300,7 +303,7 @@ mod tests {
     }
 
     fn fake_app(options: Options) -> Config {
-        let connection = get_connection(&options.db_path);
+        let connection = get_connection(&options.db_path).unwrap();
         Config {
             chatrooms: HashMap::new(),
             real_chatrooms: HashMap::new(),

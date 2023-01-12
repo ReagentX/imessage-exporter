@@ -14,11 +14,12 @@ use imessage_database::{
     error::{message::MessageError, plist::PlistParseError, table::TableError},
     message_types::{
         app::AppMessage,
+        collaboration::CollaborationMessage,
         edited::EditedMessage,
         expressives::{BubbleEffect, Expressive, ScreenEffect},
         music::MusicMessage,
         url::URLMessage,
-        variants::{BalloonProvider, CustomBalloon, Variant},
+        variants::{BalloonProvider, CustomBalloon, URLOverride, Variant},
     },
     tables::{
         attachment::{Attachment, MediaType},
@@ -471,15 +472,13 @@ impl<'a> Writer<'a> for HTML<'a> {
                     let parsed = parse_plist(&payload)?;
 
                     let res = if message.is_url() {
-                        // Handle the URL case
-                        match balloon {
-                            CustomBalloon::URL => {
-                                self.format_url(&URLMessage::from_map(&parsed)?, indent)
+                        let bubble = URLMessage::get_url_message_override(&parsed)?;
+                        match bubble {
+                            URLOverride::Normal(balloon) => self.format_url(&balloon, indent),
+                            URLOverride::AppleMusic(balloon) => self.format_music(&balloon, indent),
+                            URLOverride::Collaboration(balloon) => {
+                                self.format_collaboration(&balloon, indent)
                             }
-                            CustomBalloon::Music => {
-                                self.format_music(&MusicMessage::from_map(&parsed)?, indent)
-                            }
-                            _ => unreachable!(),
                         }
                     } else {
                         match AppMessage::from_map(&parsed) {
@@ -755,16 +754,16 @@ impl<'a> BalloonFormatter for HTML<'a> {
 
             // artist
             if let Some(artist) = balloon.artist {
-                out_s.push_str("<div class=\"caption\"><xmp>");
+                out_s.push_str("<div class=\"caption\">");
                 out_s.push_str(artist);
-                out_s.push_str("</xmp></div>");
+                out_s.push_str("</div>");
             }
 
             // Subtitle
             if let Some(album) = balloon.album {
-                out_s.push_str("<div class=\"subcaption\"><xmp>");
+                out_s.push_str("<div class=\"subcaption\">");
                 out_s.push_str(album);
-                out_s.push_str("</xmp></div>");
+                out_s.push_str("</div>");
             }
 
             // End footer
@@ -802,6 +801,63 @@ impl<'a> BalloonFormatter for HTML<'a> {
         _: &str,
     ) -> String {
         self.balloon_to_html(balloon, bundle_id, attachments)
+    }
+
+    fn format_collaboration(&self, balloon: &CollaborationMessage, _: &str) -> String {
+        let mut out_s = String::new();
+
+        // Header section
+        out_s.push_str("<div class=\"app_header\">");
+
+        // Name
+        if let Some(app_name) = balloon.app_name {
+            out_s.push_str("<div class=\"name\">");
+            out_s.push_str(app_name);
+            out_s.push_str("</div>");
+        } else if let Some(bundle_id) = balloon.bundle_id {
+            out_s.push_str("<div class=\"name\">");
+            out_s.push_str(bundle_id);
+            out_s.push_str("</div>");
+        }
+
+        // Header end
+        out_s.push_str("</div>");
+
+        // Make the footer clickable so we can interact with the preview
+        if let Some(url) = balloon.url {
+            out_s.push_str("<a href=\"");
+            out_s.push_str(url);
+            out_s.push_str("\">");
+        }
+
+        // Only write the footer if there is data to write
+        if balloon.title.is_some() || balloon.get_url().is_some() {
+            out_s.push_str("<div class=\"app_footer\">");
+
+            // artist
+            if let Some(title) = balloon.title {
+                out_s.push_str("<div class=\"caption\">");
+                out_s.push_str(title);
+                out_s.push_str("</div>");
+            }
+
+            // Subtitle
+            if let Some(url) = balloon.get_url() {
+                out_s.push_str("<div class=\"subcaption\">");
+                out_s.push_str(url);
+                out_s.push_str("</div>");
+            }
+
+            // End footer
+            out_s.push_str("</div>");
+        }
+
+        // End the link
+        if balloon.url.is_some() {
+            out_s.push_str("</a>");
+        }
+
+        out_s
     }
 }
 

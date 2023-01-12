@@ -24,7 +24,7 @@ use imessage_database::{
 
 fn iter_messages() -> Result<(), TableError> {
     /// Create a read-only connection to the iMessage database
-    let db = get_connection(&default_db_path());
+    let db = get_connection(&default_db_path()).unwrap();
 
     /// Create SQL statement
     let mut statement = Message::get(&db);

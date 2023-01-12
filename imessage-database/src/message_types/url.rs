@@ -7,7 +7,11 @@ use plist::Value;
 
 use crate::{
     error::plist::PlistParseError,
-    message_types::variants::BalloonProvider,
+    message_types::{
+        collaboration::CollaborationMessage,
+        music::MusicMessage,
+        variants::{BalloonProvider, URLOverride},
+    },
     util::plist::{get_bool_from_dict, get_string_from_dict, get_string_from_nested_dict},
 };
 
@@ -54,6 +58,20 @@ impl<'a> BalloonProvider<'a> for URLMessage<'a> {
 }
 
 impl<'a> URLMessage<'a> {
+    /// Gets the subtype of the URL message based on the payload
+    pub fn get_url_message_override(payload: &'a Value) -> Result<URLOverride, PlistParseError> {
+        if let Ok(balloon) = CollaborationMessage::from_map(payload) {
+            return Ok(URLOverride::Collaboration(balloon));
+        }
+        if let Ok(balloon) = MusicMessage::from_map(payload) {
+            return Ok(URLOverride::AppleMusic(balloon));
+        }
+        if let Ok(balloon) = URLMessage::from_map(payload) {
+            return Ok(URLOverride::Normal(balloon));
+        }
+        Err(PlistParseError::NoPayload)
+    }
+
     /// Extract the main dictionary of data from the body of the payload
     ///
     /// There are two known ways this data is stored: the more recent `richLinkMetadata` style,

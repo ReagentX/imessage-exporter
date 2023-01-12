@@ -63,7 +63,7 @@ impl Cacheable for Chat {
     /// use imessage_database::tables::chat::Chat;
     ///
     /// let db_path = default_db_path();
-    /// let conn = get_connection(&db_path);
+    /// let conn = get_connection(&db_path).unwrap();
     /// let chatrooms = Chat::cache(&conn);
     /// ```
     fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {

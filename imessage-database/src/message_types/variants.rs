@@ -4,14 +4,17 @@
 
 use plist::Value;
 
-use crate::error::plist::PlistParseError;
+use crate::{
+    error::plist::PlistParseError,
+    message_types::{collaboration::CollaborationMessage, music::MusicMessage, url::URLMessage},
+};
 
 /// Reactions to iMessages
 ///
 /// `bp:` GUID prefix for bubble message reactions (links, apps, etc).
-/// 
+///
 /// `p:0/` GUID prefix for normal messages (body text, attachments).
-/// 
+///
 /// In `p:#/`, the # represents the message index. If a message has 3 attachments:
 /// - 0 is the first image
 /// - 1 is the second image
@@ -63,8 +66,20 @@ pub enum CustomBalloon<'a> {
     Fitness,
     /// Photos.app slideshow messages
     Slideshow,
+}
+
+/// URL Message Types
+///
+/// Apple sometimes semantically overloads the `com.apple.messages.URLBalloonProvider` with
+/// other types of messages; this enum represents those variants.
+#[derive(Debug)]
+pub enum URLOverride<'a> {
+    /// [URL](crate::message_types::url) previews
+    Normal(URLMessage<'a>),
     /// [Apple Music](crate::message_types::music) messages
-    Music,
+    AppleMusic(MusicMessage<'a>),
+    /// [Collaboration](crate::message_types::collaboration) messages
+    Collaboration(CollaborationMessage<'a>),
 }
 
 /// Message variant container
