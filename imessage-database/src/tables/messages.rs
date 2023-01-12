@@ -179,7 +179,7 @@ impl Diagnostic for Message {
     /// use imessage_database::tables::messages::Message;
     ///
     /// let db_path = default_db_path();
-    /// let conn = get_connection(&db_path);
+    /// let conn = get_connection(&db_path).unwrap();
     /// Message::run_diagnostic(&conn);
     /// ```
     fn run_diagnostic(db: &Connection) {
@@ -285,13 +285,13 @@ impl Message {
     /// If the message has attachments, there will be one [`U+FFFC`]((https://www.fileformat.info/info/unicode/char/fffc/index.htm)) character
     /// for each attachment and one [`U+FFFD`](https://www.fileformat.info/info/unicode/char/fffd/index.htm) for app messages that we need
     /// to format.
-    /// 
+    ///
     /// An iMessage that contains body text like:
-    /// 
+    ///
     /// `\u{FFFC}Check out this photo!`
-    /// 
+    ///
     /// Will have a `body()` of:
-    /// 
+    ///
     /// `[BubbleType::Attachment, BubbleType::Text("Check out this photo!")]`
     pub fn body(&self) -> Vec<BubbleType> {
         let mut out_v = vec![];
@@ -467,7 +467,7 @@ impl Message {
     /// use imessage_database::tables::messages::Message;
     ///
     /// let db_path = default_db_path();
-    /// let conn = get_connection(&db_path);
+    /// let conn = get_connection(&db_path).unwrap();
     /// Message::get_count(&conn);
     /// ```
     pub fn get_count(db: &Connection) -> u64 {
@@ -624,6 +624,8 @@ impl Message {
                             if let Some(text) = &self.text {
                                 if text.starts_with("https://music.apple") {
                                     Variant::App(CustomBalloon::Music)
+                                } else if text.starts_with("https://www.icloud") {
+                                    Variant::App(CustomBalloon::Collaboration)  // TODO: Handle this in exporters
                                 } else {
                                     Variant::App(CustomBalloon::URL)
                                 }
@@ -721,7 +723,7 @@ impl Message {
     ///
     /// Calling this hits the database, so it is expensive and should
     /// only get invoked when needed.
-    /// 
+    ///
     /// This column contains the message's body text with any other attributes.
     pub fn attributed_body(&self, db: &Connection) -> Option<Vec<u8>> {
         let mut body = vec![];

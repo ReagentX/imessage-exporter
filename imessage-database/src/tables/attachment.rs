@@ -91,7 +91,7 @@ impl Diagnostic for Attachment {
     /// use imessage_database::tables::attachment::Attachment;
     ///
     /// let db_path = default_db_path();
-    /// let conn = get_connection(&db_path);
+    /// let conn = get_connection(&db_path).unwrap();
     /// Attachment::run_diagnostic(&conn);
     /// ```
     fn run_diagnostic(db: &Connection) {

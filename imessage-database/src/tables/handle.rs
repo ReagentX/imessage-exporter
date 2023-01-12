@@ -59,7 +59,7 @@ impl Cacheable for Handle {
     /// use imessage_database::tables::handle::Handle;
     ///
     /// let db_path = default_db_path();
-    /// let conn = get_connection(&db_path);
+    /// let conn = get_connection(&db_path).unwrap();
     /// let chatrooms = Handle::cache(&conn);
     /// ```
     fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
@@ -141,7 +141,7 @@ impl Diagnostic for Handle {
     /// use imessage_database::tables::handle::Handle;
     ///
     /// let db_path = default_db_path();
-    /// let conn = get_connection(&db_path);
+    /// let conn = get_connection(&db_path).unwrap();
     /// Handle::run_diagnostic(&conn);
     /// ```
     fn run_diagnostic(db: &Connection) {

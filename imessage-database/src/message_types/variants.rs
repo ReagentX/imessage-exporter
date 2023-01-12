@@ -65,6 +65,8 @@ pub enum CustomBalloon<'a> {
     Slideshow,
     /// [Apple Music](crate::message_types::music) messages
     Music,
+    /// [Collaboration](crate::message_types::collaboration) messages
+    Collaboration
 }
 
 /// Message variant container
