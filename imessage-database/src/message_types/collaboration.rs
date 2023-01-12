@@ -14,19 +14,19 @@ use crate::{
 /// This struct is not documented by Apple, but represents messages displayed as
 /// `com.apple.messages.URLBalloonProvider` but from [Rich Collaboration](https://developer.apple.com/videos/play/wwdc2022/10095/) messages
 #[derive(Debug, PartialEq)]
-struct CollaborationMessage<'a> {
+pub struct CollaborationMessage<'a> {
     /// The URL the user interacts with to start the share session
-    original_url: Option<&'a str>,
+    pub original_url: Option<&'a str>,
     /// The unique URL for the collaboration item
-    url: Option<&'a str>,
+    pub url: Option<&'a str>,
     /// The title of the shared file
-    title: Option<&'a str>,
+    pub title: Option<&'a str>,
     /// The date the session was initiated
-    creation_date: Option<f64>,
+    pub creation_date: Option<f64>,
     /// The Bundle ID of the application that generated the message
-    bundle_id: Option<&'a str>,
+    pub bundle_id: Option<&'a str>,
     /// The name of the application that generated the message
-    application: Option<&'a str>,
+    pub app_name: Option<&'a str>,
 }
 
 impl<'a> BalloonProvider<'a> for CollaborationMessage<'a> {
@@ -38,7 +38,7 @@ impl<'a> BalloonProvider<'a> for CollaborationMessage<'a> {
                 title: get_string_from_dict(meta, "title"),
                 creation_date: get_float_from_nested_dict(meta, "creationDate"),
                 bundle_id: CollaborationMessage::get_bundle_id(meta),
-                application: CollaborationMessage::get_app_name(base),
+                app_name: CollaborationMessage::get_app_name(base),
             });
         }
         Err(PlistParseError::NoPayload)
@@ -94,6 +94,11 @@ impl<'a> CollaborationMessage<'a> {
             .get("application")?
             .as_string()
     }
+
+    /// Get the redirected URL from a URL message, falling back to the original URL, if it exists
+    pub fn get_url(&self) -> Option<&str> {
+        self.url.or(self.original_url)
+    }
 }
 
 #[cfg(test)]
@@ -118,14 +123,12 @@ mod tests {
 
         let actual = CollaborationMessage::from_map(&parsed).unwrap();
         let expected = CollaborationMessage {
-            original_url: Some(
-                "https://www.icloud.com/freeform/REDACTED#Untitled",
-            ),
+            original_url: Some("https://www.icloud.com/freeform/REDACTED#Untitled"),
             url: Some("https://www.icloud.com/freeform/REDACTED"),
             title: Some("Untitled"),
             creation_date: Some(695179243.070923),
             bundle_id: Some("com.apple.freeform"),
-            application: Some("Freeform"),
+            app_name: Some("Freeform"),
         };
 
         assert_eq!(actual, expected)
