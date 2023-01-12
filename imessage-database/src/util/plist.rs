@@ -240,3 +240,13 @@ pub fn get_string_from_nested_dict<'a>(payload: &'a Value, key: &'a str) -> Opti
         .as_string()
         .filter(|s| !s.is_empty())
 }
+
+/// Extract a float from a key-value pair that looks like {key: {key: 1.2}}
+pub fn get_float_from_nested_dict<'a>(payload: &'a Value, key: &'a str) -> Option<f64> {
+    payload
+        .as_dictionary()?
+        .get(key)?
+        .as_dictionary()?
+        .get(key)?
+        .as_real()
+}
