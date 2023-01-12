@@ -14,11 +14,12 @@ use imessage_database::{
     error::{message::MessageError, plist::PlistParseError, table::TableError},
     message_types::{
         app::AppMessage,
+        collaboration::CollaborationMessage,
         edited::EditedMessage,
         expressives::{BubbleEffect, Expressive, ScreenEffect},
         music::MusicMessage,
         url::URLMessage,
-        variants::{BalloonProvider, CustomBalloon, Variant},
+        variants::{BalloonProvider, CustomBalloon, URLOverride, Variant},
     },
     tables::{
         attachment::Attachment,
@@ -270,15 +271,13 @@ impl<'a> Writer<'a> for TXT<'a> {
 
                     // Handle URL messages separately since they are a special case
                     let res = if message.is_url() {
-                        // Handle the URL case
-                        match balloon {
-                            CustomBalloon::URL => {
-                                self.format_url(&URLMessage::from_map(&parsed)?, indent)
+                        let bubble = URLMessage::get_url_message_override(&parsed)?;
+                        match bubble {
+                            URLOverride::Normal(balloon) => self.format_url(&balloon, indent),
+                            URLOverride::AppleMusic(balloon) => self.format_music(&balloon, indent),
+                            URLOverride::Collaboration(balloon) => {
+                                self.format_collaboration(&balloon, indent)
                             }
-                            CustomBalloon::Music => {
-                                self.format_music(&MusicMessage::from_map(&parsed)?, indent)
-                            }
-                            _ => unreachable!(),
                         }
                     } else {
                         // Handle the app case
@@ -552,7 +551,10 @@ impl<'a> BalloonFormatter for TXT<'a> {
             out_s.push_str(bundle_id);
         }
 
-        out_s.push_str(" message:\n");
+        if !out_s.is_empty() {
+            out_s.push_str(" message:\n");
+        }
+
         if let Some(title) = balloon.title {
             self.add_line(&mut out_s, title, indent);
         }
@@ -575,6 +577,31 @@ impl<'a> BalloonFormatter for TXT<'a> {
 
         if let Some(trailing_subcaption) = balloon.trailing_subcaption {
             self.add_line(&mut out_s, trailing_subcaption, indent);
+        }
+
+        // We want to keep the newlines between blocks, but the last one should be removed
+        out_s.strip_suffix('\n').unwrap_or(&out_s).to_string()
+    }
+
+    fn format_collaboration(&self, balloon: &CollaborationMessage, indent: &str) -> String {
+        let mut out_s = String::from(indent);
+
+        if let Some(name) = balloon.app_name {
+            out_s.push_str(name);
+        } else if let Some(bundle_id) = balloon.bundle_id {
+            out_s.push_str(bundle_id);
+        }
+
+        if !out_s.is_empty() {
+            out_s.push_str(" message:\n");
+        }
+
+        if let Some(title) = balloon.title {
+            self.add_line(&mut out_s, title, indent);
+        }
+
+        if let Some(url) = balloon.get_url() {
+            self.add_line(&mut out_s, url, indent);
         }
 
         // We want to keep the newlines between blocks, but the last one should be removed
