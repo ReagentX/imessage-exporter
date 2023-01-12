@@ -100,6 +100,8 @@ pub enum Variant<'a> {
     Normal,
     /// A message that has been edited or unsent
     Edited,
+    /// A SharePlay message
+    SharePlay,
 }
 
 /// Defines behavior for different types of messages that have custom balloons
