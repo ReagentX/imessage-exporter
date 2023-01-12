@@ -202,6 +202,16 @@ impl<'a> Writer<'a> for HTML<'a> {
             );
         }
 
+        // Handle SharePlay
+        if message.is_shareplay() {
+            self.add_line(
+                &mut formatted_message,
+                self.format_shareplay(),
+                "<span class=\"shareplay\">",
+                "</span>",
+            );
+        }
+
         // Generate the message body from it's components
         for (idx, message_part) in message_parts.iter().enumerate() {
             // Write the part div start
@@ -597,6 +607,10 @@ impl<'a> Writer<'a> for HTML<'a> {
             msg.group_title.as_deref().unwrap_or(UNKNOWN)
         )
     }
+    fn format_shareplay(&self) -> &str {
+        "SharePlay Message Ended"
+    }
+
     fn format_edited(&self, msg: &'a Message, _: &str) -> Result<String, MessageError> {
         if let Some(payload) = msg.message_summary_info(&self.config.db) {
             let edited_message =
@@ -777,32 +791,6 @@ impl<'a> BalloonFormatter for HTML<'a> {
         out_s
     }
 
-    fn format_handwriting(&self, _: &AppMessage, _: &str) -> String {
-        String::from("Handwritten messages are not yet supported!")
-    }
-
-    fn format_apple_pay(&self, balloon: &AppMessage, _: &str) -> String {
-        self.balloon_to_html(balloon, "Apple Pay", &mut [])
-    }
-
-    fn format_fitness(&self, balloon: &AppMessage, _: &str) -> String {
-        self.balloon_to_html(balloon, "Fitness", &mut [])
-    }
-
-    fn format_slideshow(&self, balloon: &AppMessage, _: &str) -> String {
-        self.balloon_to_html(balloon, "Slideshow", &mut [])
-    }
-
-    fn format_generic_app(
-        &self,
-        balloon: &AppMessage,
-        bundle_id: &str,
-        attachments: &mut Vec<Attachment>,
-        _: &str,
-    ) -> String {
-        self.balloon_to_html(balloon, bundle_id, attachments)
-    }
-
     fn format_collaboration(&self, balloon: &CollaborationMessage, _: &str) -> String {
         let mut out_s = String::new();
 
@@ -858,6 +846,32 @@ impl<'a> BalloonFormatter for HTML<'a> {
         }
 
         out_s
+    }
+
+    fn format_handwriting(&self, _: &AppMessage, _: &str) -> String {
+        String::from("Handwritten messages are not yet supported!")
+    }
+
+    fn format_apple_pay(&self, balloon: &AppMessage, _: &str) -> String {
+        self.balloon_to_html(balloon, "Apple Pay", &mut [])
+    }
+
+    fn format_fitness(&self, balloon: &AppMessage, _: &str) -> String {
+        self.balloon_to_html(balloon, "Fitness", &mut [])
+    }
+
+    fn format_slideshow(&self, balloon: &AppMessage, _: &str) -> String {
+        self.balloon_to_html(balloon, "Slideshow", &mut [])
+    }
+
+    fn format_generic_app(
+        &self,
+        balloon: &AppMessage,
+        bundle_id: &str,
+        attachments: &mut Vec<Attachment>,
+        _: &str,
+    ) -> String {
+        self.balloon_to_html(balloon, bundle_id, attachments)
     }
 }
 
@@ -1016,6 +1030,7 @@ mod tests {
             date_delivered: i64::default(),
             is_from_me: false,
             is_read: false,
+            item_type: 0,
             group_title: None,
             associated_message_guid: None,
             associated_message_type: Some(i32::default()),
