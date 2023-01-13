@@ -621,7 +621,7 @@ impl Message {
             return Variant::Edited;
         }
 
-        // Handle different types of bundle IDs first, as those are most common
+        // Handle different types of bundle IDs next, as those are most common
         if let Some(associated_message_type) = self.associated_message_type {
             return match associated_message_type {
                 // Standard iMessages with either text or a message payload
