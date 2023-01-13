@@ -83,6 +83,7 @@ pub struct Message {
     pub date_delivered: i64,
     pub is_from_me: bool,
     pub is_read: bool,
+    pub item_type: i32,
     pub group_title: Option<String>,
     pub associated_message_guid: Option<String>,
     pub associated_message_type: Option<i32>,
@@ -110,6 +111,7 @@ impl Table for Message {
             date_delivered: row.get("date_delivered").unwrap_or(0),
             is_from_me: row.get("is_from_me")?,
             is_read: row.get("is_read")?,
+            item_type: row.get("item_type").unwrap_or_default(),
             group_title: row.get("group_title").unwrap_or(None),
             associated_message_guid: row.get("associated_message_guid").unwrap_or(None),
             associated_message_type: row.get("associated_message_type").unwrap_or(None),
@@ -439,8 +441,13 @@ impl Message {
     }
 
     /// `true` if the message begins a thread, else `false`
-    fn has_replies(&self) -> bool {
+    pub fn has_replies(&self) -> bool {
         self.num_replies > 0
+    }
+
+    /// `true` if the message is a SharePlay/FaceTime message, else `false`
+    pub fn is_shareplay(&self) -> bool {
+        self.item_type == 6
     }
 
     /// Get the index of the part of a message a reply is pointing to
@@ -609,9 +616,12 @@ impl Message {
 
     /// Get the variant of a message, see [crate::message_types::variants] for detail.
     pub fn variant(&self) -> Variant {
+        // Check if a message was edited first as those have special properties
         if self.is_edited() {
             return Variant::Edited;
         }
+
+        // Handle different types of bundle IDs next, as those are most common
         if let Some(associated_message_type) = self.associated_message_type {
             return match associated_message_type {
                 // Standard iMessages with either text or a message payload
@@ -657,6 +667,12 @@ impl Message {
                 x => Variant::Unknown(x),
             };
         }
+
+        // Any other rarer cases belong here
+        if self.is_shareplay() {
+            return Variant::SharePlay;
+        }
+
         Variant::Normal
     }
 
@@ -788,6 +804,7 @@ mod tests {
             date_delivered: i64::default(),
             is_from_me: false,
             is_read: false,
+            item_type: 0,
             group_title: None,
             associated_message_guid: None,
             associated_message_type: Some(i32::default()),

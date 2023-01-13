@@ -145,6 +145,11 @@ impl<'a> Writer<'a> for TXT<'a> {
             self.add_line(&mut formatted_message, &edited, &indent);
         }
 
+        // Handle SharePlay
+        if message.is_shareplay() {
+            self.add_line(&mut formatted_message, self.format_shareplay(), &indent);
+        }
+
         // Generate the message body from it's components
         for (idx, message_part) in message_parts.iter().enumerate() {
             match message_part {
@@ -383,6 +388,10 @@ impl<'a> Writer<'a> for TXT<'a> {
         )
     }
 
+    fn format_shareplay(&self) -> &str {
+        "SharePlay Message\nEnded"
+    }
+
     fn format_edited(&self, msg: &'a Message, indent: &str) -> Result<String, MessageError> {
         if let Some(payload) = msg.message_summary_info(&self.config.db) {
             // Parse the edited message
@@ -487,6 +496,31 @@ impl<'a> BalloonFormatter for TXT<'a> {
         out_s
     }
 
+    fn format_collaboration(&self, balloon: &CollaborationMessage, indent: &str) -> String {
+        let mut out_s = String::from(indent);
+
+        if let Some(name) = balloon.app_name {
+            out_s.push_str(name);
+        } else if let Some(bundle_id) = balloon.bundle_id {
+            out_s.push_str(bundle_id);
+        }
+
+        if !out_s.is_empty() {
+            out_s.push_str(" message:\n");
+        }
+
+        if let Some(title) = balloon.title {
+            self.add_line(&mut out_s, title, indent);
+        }
+
+        if let Some(url) = balloon.get_url() {
+            self.add_line(&mut out_s, url, indent);
+        }
+
+        // We want to keep the newlines between blocks, but the last one should be removed
+        out_s.strip_suffix('\n').unwrap_or(&out_s).to_string()
+    }
+
     fn format_handwriting(&self, _: &AppMessage, indent: &str) -> String {
         format!("{indent}Handwritten messages are not yet supported!")
     }
@@ -582,31 +616,6 @@ impl<'a> BalloonFormatter for TXT<'a> {
         // We want to keep the newlines between blocks, but the last one should be removed
         out_s.strip_suffix('\n').unwrap_or(&out_s).to_string()
     }
-
-    fn format_collaboration(&self, balloon: &CollaborationMessage, indent: &str) -> String {
-        let mut out_s = String::from(indent);
-
-        if let Some(name) = balloon.app_name {
-            out_s.push_str(name);
-        } else if let Some(bundle_id) = balloon.bundle_id {
-            out_s.push_str(bundle_id);
-        }
-
-        if !out_s.is_empty() {
-            out_s.push_str(" message:\n");
-        }
-
-        if let Some(title) = balloon.title {
-            self.add_line(&mut out_s, title, indent);
-        }
-
-        if let Some(url) = balloon.get_url() {
-            self.add_line(&mut out_s, url, indent);
-        }
-
-        // We want to keep the newlines between blocks, but the last one should be removed
-        out_s.strip_suffix('\n').unwrap_or(&out_s).to_string()
-    }
 }
 
 impl<'a> TXT<'a> {
@@ -649,6 +658,7 @@ mod tests {
             date_delivered: i64::default(),
             is_from_me: false,
             is_read: false,
+            item_type: 0,
             group_title: None,
             associated_message_guid: None,
             associated_message_type: Some(i32::default()),
