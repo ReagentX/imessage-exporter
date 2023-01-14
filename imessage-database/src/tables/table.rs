@@ -57,7 +57,7 @@ pub const HANDLE: &str = "handle";
 pub const MESSAGE: &str = "message";
 /// Chat table name
 pub const CHAT: &str = "chat";
-/// Attachment table names
+/// Attachment table name
 pub const ATTACHMENT: &str = "attachment";
 /// Chat to message join table name
 pub const CHAT_MESSAGE_JOIN: &str = "chat_message_join";

@@ -12,6 +12,9 @@ const SEPARATOR: &str = ", ";
 pub const TIMESTAMP_FACTOR: i64 = 1000000000;
 
 /// Get the date offset for the iMessage Database
+///
+/// This offset is used to adjust the unix timestamps stored in the iMessage database
+/// with a non-standard epoch of `2001-01-01 00:00:00` in the local time zone.
 pub fn get_offset() -> i64 {
     Utc.with_ymd_and_hms(2001, 1, 1, 0, 0, 0)
         .unwrap()
