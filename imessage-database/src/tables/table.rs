@@ -46,7 +46,7 @@ pub trait Diagnostic {
 pub fn get_connection(path: &str) -> Result<Connection, String> {
     match Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
         Ok(res) => Ok(res),
-        Err(why) => Err(format!("Unable to read from chat database: {}\nEnsure full disk access is enabled for your terminal emulator in System Preferences > Security and Privacy > Full Disk Access", why)),
+        Err(why) => Err(format!("Unable to read from chat database: {}\nEnsure full disk access is enabled for your terminal emulator in System Settings > Security and Privacy > Full Disk Access", why)),
     }
 }
 

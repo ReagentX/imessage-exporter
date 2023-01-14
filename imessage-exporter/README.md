@@ -57,7 +57,7 @@ In HTML exports in Safari, when referencing files in-place, you must permit Safa
 
 ![](../docs/binary/img/safari_local_file_restrictions.png)
 
-Further, since the files are stored in `~/Library`, you will need to grant your browser Full Disk Access in System Preferences.
+Further, since the files are stored in `~/Library`, you will need to grant your browser Full Disk Access in System Settings.
 
 ### PDF Exports
 
