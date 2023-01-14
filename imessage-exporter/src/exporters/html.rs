@@ -1014,7 +1014,7 @@ impl<'a> HTML<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Config, Exporter, Options, HTML};
+    use crate::{exporters::exporter::Writer, Config, Exporter, Options, HTML};
     use imessage_database::{tables::messages::Message, util::dirs::default_db_path};
 
     fn blank() -> Message {
@@ -1144,5 +1144,173 @@ mod tests {
         exporter.add_line(&mut s, "hello world", "<div>", "</div>");
 
         assert_eq!(s, "<div>hello world</div>\n".to_string());
+    }
+
+    #[test]
+    fn can_format_html_from_me_normal() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.text = Some("Hello world".to_string());
+        message.is_from_me = true;
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected = "<div class=\"message\">\n<div class=\"sent iMessage\">\n<p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span>\n<span class=\"sender\">Me</span></p>\n<hr><div class=\"message_part\">\n<span class=\"bubble\">Hello world</span>\n</div>\n</div>\n</div>\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_html_from_me_normal_read() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        message.text = Some("Hello world".to_string());
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        // May 17, 2022  9:30:31 PM
+        message.date_delivered = 674530231992568192;
+        message.is_from_me = true;
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected =
+            "<div class=\"message\">\n<div class=\"sent iMessage\">\n<p><span class=\"timestamp\">May 17, 2022  5:29:42 PM (Read by them after 1 hour, 49 seconds)</span>\n<span class=\"sender\">Me</span></p>\n<hr><div class=\"message_part\">\n<span class=\"bubble\">Hello world</span>\n</div>\n</div>\n</div>\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_html_from_them_normal() {
+        // Create exporter
+        let options = fake_options();
+        let mut config = Config::new(options).unwrap();
+        config
+            .participants
+            .insert(999999, "Sample Contact".to_string());
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.text = Some("Hello world".to_string());
+        message.handle_id = 999999;
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected = "<div class=\"message\">\n<div class=\"received\">\n<p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span>\n<span class=\"sender\">Sample Contact</span></p>\n<hr><div class=\"message_part\">\n<span class=\"bubble\">Hello world</span>\n</div>\n</div>\n</div>\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_html_from_them_normal_read() {
+        // Create exporter
+        let options = fake_options();
+        let mut config = Config::new(options).unwrap();
+        config
+            .participants
+            .insert(999999, "Sample Contact".to_string());
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        message.handle_id = 999999;
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.text = Some("Hello world".to_string());
+        // May 17, 2022  8:29:42 PM
+        message.date_delivered = 674526582885055488;
+        // May 17, 2022  9:30:31 PM
+        message.date_read = 674530231992568192;
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected =
+            "<div class=\"message\">\n<div class=\"received\">\n<p><span class=\"timestamp\">May 17, 2022  5:29:42 PM (Read by you after 1 hour, 49 seconds)</span>\n<span class=\"sender\">Sample Contact</span></p>\n<hr><div class=\"message_part\">\n<span class=\"bubble\">Hello world</span>\n</div>\n</div>\n</div>\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_html_shareplay() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.item_type = 6;
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected = "<div class=\"message\">\n<div class=\"received\">\n<p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span>\n<span class=\"sender\">Me</span></p>\n<span class=\"shareplay\">SharePlay Message Ended</span>\n</div>\n</div>\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_html_announcement() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.group_title = Some("Hello world".to_string());
+
+        let actual = exporter.format_announcement(&message);
+        let expected = "\n<div class =\"announcement\"><p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span> You named the conversation <b>Hello world</b></p></div>\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_html_reaction_me() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.associated_message_type = Some(2000);
+        message.associated_message_guid = Some("fake_guid".to_string());
+
+        let actual = exporter.format_reaction(&message).unwrap();
+        let expected = "<span class=\"reaction\"><b>Loved</b> by Me</span>";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_html_reaction_them() {
+        // Create exporter
+        let options = fake_options();
+        let mut config = Config::new(options).unwrap();
+        config
+            .participants
+            .insert(999999, "Sample Contact".to_string());
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.associated_message_type = Some(2000);
+        message.associated_message_guid = Some("fake_guid".to_string());
+        message.handle_id = 999999;
+
+        let actual = exporter.format_reaction(&message).unwrap();
+        let expected = "<span class=\"reaction\"><b>Loved</b> by Sample Contact</span>";
+
+        assert_eq!(actual, expected);
     }
 }
