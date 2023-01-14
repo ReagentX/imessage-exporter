@@ -267,7 +267,7 @@ impl Cacheable for Message {
 }
 
 impl Message {
-    /// Get the body text of a message
+    /// Get the body text of a message, parsing it as [`streamtyped`](crate::util::streamtyped) data if necessary.
     pub fn gen_text<'a>(&'a mut self, db: &'a Connection) -> Result<&'a str, MessageError> {
         if self.text.is_none() {
             let body = self.attributed_body(db).ok_or(MessageError::MissingData)?;
@@ -337,6 +337,11 @@ impl Message {
         }
     }
 
+    /// Create a `DateTime<Local>` from an arbitrary date and offset
+    /// 
+    /// This is used to create date data for anywhere dates are stored in the table, including
+    /// plist payload or [`streamtyped`](crate::util::streamtyped) data. In this struct, the
+    /// other date methods invoke this method.
     pub fn get_local_time(
         &self,
         date_stamp: &i64,
@@ -350,28 +355,28 @@ impl Message {
 
     /// Calculates the date a message was written to the database.
     ///
-    /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
+    /// This field is stored as a unix timestamp with an epoch of `2001-01-01 00:00:00` in the local time zone
     pub fn date(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
         self.get_local_time(&self.date, offset)
     }
 
     /// Calculates the date a message was marked as delivered.
     ///
-    /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
+    /// This field is stored as a unix timestamp with an epoch of `2001-01-01 00:00:00` in the local time zone
     pub fn date_delivered(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
         self.get_local_time(&self.date_delivered, offset)
     }
 
     /// Calculates the date a message was marked as read.
     ///
-    /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
+    /// This field is stored as a unix timestamp with an epoch of `2001-01-01 00:00:00` in the local time zone
     pub fn date_read(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
         self.get_local_time(&self.date_read, offset)
     }
 
     /// Calculates the date a message was most recently edited.
     ///
-    /// This field is stored as a unix timestamp with an epoch of `1/1/2001 00:00:00` in the local time zone
+    /// This field is stored as a unix timestamp with an epoch of `2001-01-01 00:00:00` in the local time zone
     pub fn date_edited(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
         self.get_local_time(&self.date_read, offset)
     }
@@ -451,7 +456,7 @@ impl Message {
     }
 
     /// Get the index of the part of a message a reply is pointing to
-    pub fn get_reply_index(&self) -> usize {
+    fn get_reply_index(&self) -> usize {
         if let Some(parts) = &self.thread_originator_part {
             return match parts.split(':').next() {
                 Some(part) => str::parse::<usize>(part).unwrap(),
