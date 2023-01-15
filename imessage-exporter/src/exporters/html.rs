@@ -1014,18 +1014,8 @@ impl<'a> HTML<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        exporters::exporter::{BalloonFormatter, Writer},
-        Config, Exporter, Options, HTML,
-    };
-    use imessage_database::{
-        message_types::{
-            app::AppMessage, collaboration::CollaborationMessage, music::MusicMessage,
-            url::URLMessage,
-        },
-        tables::messages::Message,
-        util::dirs::default_db_path,
-    };
+    use crate::{exporters::exporter::Writer, Config, Exporter, Options, HTML};
+    use imessage_database::{tables::messages::Message, util::dirs::default_db_path};
 
     fn blank() -> Message {
         Message {
@@ -1055,7 +1045,7 @@ mod tests {
         }
     }
 
-    fn fake_options() -> Options<'static> {
+    pub fn fake_options() -> Options<'static> {
         Options {
             db_path: default_db_path(),
             no_copy: true,
@@ -1323,6 +1313,15 @@ mod tests {
 
         assert_eq!(actual, expected);
     }
+}
+
+#[cfg(test)]
+mod balloon_format_tests {
+    use super::tests::fake_options;
+    use crate::{exporters::exporter::BalloonFormatter, Config, Exporter, HTML};
+    use imessage_database::message_types::{
+        app::AppMessage, collaboration::CollaborationMessage, music::MusicMessage, url::URLMessage,
+    };
 
     #[test]
     fn can_format_html_url() {
