@@ -642,8 +642,18 @@ impl<'a> TXT<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{exporters::exporter::Writer, Config, Exporter, Options, TXT};
-    use imessage_database::{tables::messages::Message, util::dirs::default_db_path};
+    use crate::{
+        exporters::exporter::{BalloonFormatter, Writer},
+        Config, Exporter, Options, TXT,
+    };
+    use imessage_database::{
+        message_types::{
+            app::AppMessage, collaboration::CollaborationMessage, music::MusicMessage,
+            url::URLMessage,
+        },
+        tables::messages::Message,
+        util::dirs::default_db_path,
+    };
 
     fn blank() -> Message {
         Message {
@@ -926,5 +936,177 @@ mod tests {
         let expected = "Loved by Sample Contact";
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_txt_url() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = URLMessage {
+            title: Some("title"),
+            summary: Some("summary"),
+            url: Some("url"),
+            original_url: Some("original_url"),
+            item_type: Some("item_type"),
+            images: vec!["images"],
+            icons: vec!["icons"],
+            site_name: Some("site_name"),
+            placeholder: false,
+        };
+
+        let expected = exporter.format_url(&balloon, "");
+        let actual = "url\ntitle\nsummary";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_music() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = MusicMessage {
+            url: Some("url"),
+            preview: Some("preview"),
+            artist: Some("artist"),
+            album: Some("album"),
+            track_name: Some("track_name"),
+        };
+
+        let expected = exporter.format_music(&balloon, "");
+        let actual = "track_name\nalbum\nartist\nurl\n";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_collaboration() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = CollaborationMessage {
+            original_url: Some("original_url"),
+            url: Some("url"),
+            title: Some("title"),
+            creation_date: Some(0.),
+            bundle_id: Some("bundle_id"),
+            app_name: Some("app_name"),
+        };
+
+        let expected = exporter.format_collaboration(&balloon, "");
+        let actual = "app_name message:\ntitle\nurl";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_apple_pay() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = AppMessage {
+            image: Some("image"),
+            url: Some("url"),
+            title: Some("title"),
+            subtitle: Some("subtitle"),
+            caption: Some("caption"),
+            subcaption: Some("subcaption"),
+            trailing_caption: Some("trailing_caption"),
+            trailing_subcaption: Some("trailing_subcaption"),
+            app_name: Some("app_name"),
+            ldtext: Some("ldtext"),
+        };
+
+        let expected = exporter.format_apple_pay(&balloon, "");
+        let actual = "caption transaction: ldtext";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_fitness() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = AppMessage {
+            image: Some("image"),
+            url: Some("url"),
+            title: Some("title"),
+            subtitle: Some("subtitle"),
+            caption: Some("caption"),
+            subcaption: Some("subcaption"),
+            trailing_caption: Some("trailing_caption"),
+            trailing_subcaption: Some("trailing_subcaption"),
+            app_name: Some("app_name"),
+            ldtext: Some("ldtext"),
+        };
+
+        let expected = exporter.format_fitness(&balloon, "");
+        let actual = "app_name message: ldtext";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_slideshow() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = AppMessage {
+            image: Some("image"),
+            url: Some("url"),
+            title: Some("title"),
+            subtitle: Some("subtitle"),
+            caption: Some("caption"),
+            subcaption: Some("subcaption"),
+            trailing_caption: Some("trailing_caption"),
+            trailing_subcaption: Some("trailing_subcaption"),
+            app_name: Some("app_name"),
+            ldtext: Some("ldtext"),
+        };
+
+        let expected = exporter.format_slideshow(&balloon, "");
+        let actual = "Photo album: ldtext url";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_generic_app() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = AppMessage {
+            image: Some("image"),
+            url: Some("url"),
+            title: Some("title"),
+            subtitle: Some("subtitle"),
+            caption: Some("caption"),
+            subcaption: Some("subcaption"),
+            trailing_caption: Some("trailing_caption"),
+            trailing_subcaption: Some("trailing_subcaption"),
+            app_name: Some("app_name"),
+            ldtext: Some("ldtext"),
+        };
+
+        let expected = exporter.format_generic_app(&balloon, "bundle_id", &mut vec![], "");
+        let actual = "app_name message:\ntitle\nsubtitle\ncaption\nsubcaption\ntrailing_caption\ntrailing_subcaption";
+
+        assert_eq!(expected, actual);
     }
 }
