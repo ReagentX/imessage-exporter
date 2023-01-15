@@ -59,10 +59,10 @@ Export to `txt` from the default iMessage Database location to a new folder in t
 % imessage-exporter -f txt -o output
 ```
 
-Export to `html` from `/Volumes/external/chat.db` to a new folder in the current working directory called `output`:
+Export to `html` from `/Volumes/external/chat.db` to `/Volumes/external/export` without copying attachments:
 
 ```zsh
-% imessage-exporter -f html --no-copy -o output -p /Volumes/external/chat.db
+% imessage-exporter -f html --no-copy -p /Volumes/external/chat.db -o /Volumes/external/export
 ```
 
 ## Features
