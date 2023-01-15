@@ -167,16 +167,15 @@ impl<'a> Config<'a> {
         }
 
         let conn = get_connection(&options.db_path)?;
-        // TODO: Implement Try for these cache calls `?`
         eprintln!("Building cache...");
         eprintln!("[1/4] Caching chats...");
-        let chatrooms = Chat::cache(&conn).unwrap();
+        let chatrooms = Chat::cache(&conn)?;
         eprintln!("[2/4] Caching chatrooms...");
-        let chatroom_participants = ChatToHandle::cache(&conn).unwrap();
+        let chatroom_participants = ChatToHandle::cache(&conn)?;
         eprintln!("[3/4] Caching participants...");
-        let participants = Handle::cache(&conn).unwrap();
+        let participants = Handle::cache(&conn)?;
         eprintln!("[4/4] Caching reactions...");
-        let reactions = Message::cache(&conn).unwrap();
+        let reactions = Message::cache(&conn)?;
         eprintln!("Cache built!");
         Ok(Config {
             chatrooms,

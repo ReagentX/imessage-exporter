@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use indicatif::{ProgressBar, ProgressStyle};
 
 pub fn build_progress_bar_export(total_messages: u64) -> ProgressBar {
@@ -11,5 +13,6 @@ pub fn build_progress_bar_export(total_messages: u64) -> ProgressBar {
             .progress_chars("#>-"),
     );
     pb.set_position(0);
+    pb.enable_steady_tick(Duration::from_millis(100));
     pb
 }

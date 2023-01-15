@@ -12,6 +12,9 @@ const SEPARATOR: &str = ", ";
 pub const TIMESTAMP_FACTOR: i64 = 1000000000;
 
 /// Get the date offset for the iMessage Database
+///
+/// This offset is used to adjust the unix timestamps stored in the iMessage database
+/// with a non-standard epoch of `2001-01-01 00:00:00` in the local time zone.
 pub fn get_offset() -> i64 {
     Utc.with_ymd_and_hms(2001, 1, 1, 0, 0, 0)
         .unwrap()
@@ -52,19 +55,8 @@ pub fn readable_diff(
     start: Result<DateTime<Local>, MessageError>,
     end: Result<DateTime<Local>, MessageError>,
 ) -> Option<String> {
-    //  Validate inputs
-    if let Err(why) = start {
-        eprintln!("{why}");
-        return None;
-    }
-
-    if let Err(why) = end {
-        eprintln!("{why}");
-        return None;
-    }
-
     // Calculate diff
-    let diff: Duration = end.unwrap() - start.unwrap();
+    let diff: Duration = end.ok()? - start.ok()?;
     let seconds = diff.num_seconds();
 
     // Early escape for invalid date diff

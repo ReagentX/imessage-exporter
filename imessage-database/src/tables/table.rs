@@ -27,7 +27,7 @@ pub trait Table {
 pub trait Cacheable {
     type K;
     type V;
-    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError>;
+    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, String>;
 }
 
 /// Defines behavior for deduplicating data in a table
@@ -46,7 +46,7 @@ pub trait Diagnostic {
 pub fn get_connection(path: &str) -> Result<Connection, String> {
     match Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
         Ok(res) => Ok(res),
-        Err(why) => Err(format!("Unable to read from chat database: {}\nEnsure full disk access is enabled for your terminal emulator in System Preferences > Security and Privacy > Full Disk Access", why)),
+        Err(why) => Err(format!("Unable to read from chat database: {}\nEnsure full disk access is enabled for your terminal emulator in System Settings > Security and Privacy > Full Disk Access", why)),
     }
 }
 
@@ -57,7 +57,7 @@ pub const HANDLE: &str = "handle";
 pub const MESSAGE: &str = "message";
 /// Chat table name
 pub const CHAT: &str = "chat";
-/// Attachment table names
+/// Attachment table name
 pub const ATTACHMENT: &str = "attachment";
 /// Chat to message join table name
 pub const CHAT_MESSAGE_JOIN: &str = "chat_message_join";

@@ -86,7 +86,9 @@ impl<'a> Exporter<'a> for TXT<'a> {
                 TXT::write_to_file(self.get_or_create_file(&msg), &message);
             }
             current_message += 1;
-            pb.set_position(current_message);
+            if current_message % 99 == 0 {
+                pb.set_position(current_message);
+            }
         }
         pb.finish();
         Ok(())
@@ -642,7 +644,7 @@ impl<'a> TXT<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Config, Exporter, Options, TXT};
+    use crate::{exporters::exporter::Writer, Config, Exporter, Options, TXT};
     use imessage_database::{tables::messages::Message, util::dirs::default_db_path};
 
     fn blank() -> Message {
@@ -673,7 +675,7 @@ mod tests {
         }
     }
 
-    fn fake_options() -> Options<'static> {
+    pub fn fake_options() -> Options<'static> {
         Options {
             db_path: default_db_path(),
             no_copy: true,
@@ -758,5 +760,354 @@ mod tests {
         exporter.add_line(&mut s, "hello world", "  ");
 
         assert_eq!(s, "  hello world\n".to_string());
+    }
+
+    #[test]
+    fn can_format_txt_from_me_normal() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.text = Some("Hello world".to_string());
+        message.is_from_me = true;
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected = "May 17, 2022  5:29:42 PM\nMe\nHello world\n\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_txt_from_me_normal_read() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let mut message = blank();
+        message.text = Some("Hello world".to_string());
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        // May 17, 2022  9:30:31 PM
+        message.date_delivered = 674530231992568192;
+        message.is_from_me = true;
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected =
+            "May 17, 2022  5:29:42 PM (Read by them after 1 hour, 49 seconds)\nMe\nHello world\n\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_txt_from_them_normal() {
+        // Create exporter
+        let options = fake_options();
+        let mut config = Config::new(options).unwrap();
+        config
+            .participants
+            .insert(999999, "Sample Contact".to_string());
+        let exporter = TXT::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.text = Some("Hello world".to_string());
+        message.handle_id = 999999;
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected = "May 17, 2022  5:29:42 PM\nSample Contact\nHello world\n\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_txt_from_them_normal_read() {
+        // Create exporter
+        let options = fake_options();
+        let mut config = Config::new(options).unwrap();
+        config
+            .participants
+            .insert(999999, "Sample Contact".to_string());
+        let exporter = TXT::new(&config);
+
+        let mut message = blank();
+        message.handle_id = 999999;
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.text = Some("Hello world".to_string());
+        // May 17, 2022  8:29:42 PM
+        message.date_delivered = 674526582885055488;
+        // May 17, 2022  9:30:31 PM
+        message.date_read = 674530231992568192;
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected =
+            "May 17, 2022  5:29:42 PM (Read by you after 1 hour, 49 seconds)\nSample Contact\nHello world\n\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_txt_shareplay() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.item_type = 6;
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected = "May 17, 2022  5:29:42 PM\nMe\nSharePlay Message\nEnded\n\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_txt_announcement() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.group_title = Some("Hello world".to_string());
+
+        let actual = exporter.format_announcement(&message);
+        let expected = "May 17, 2022  5:29:42 PM You renamed the conversation to Hello world\n\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_txt_reaction_me() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.associated_message_type = Some(2000);
+        message.associated_message_guid = Some("fake_guid".to_string());
+
+        let actual = exporter.format_reaction(&message).unwrap();
+        let expected = "Loved by Me";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_txt_reaction_them() {
+        // Create exporter
+        let options = fake_options();
+        let mut config = Config::new(options).unwrap();
+        config
+            .participants
+            .insert(999999, "Sample Contact".to_string());
+        let exporter = TXT::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.associated_message_type = Some(2000);
+        message.associated_message_guid = Some("fake_guid".to_string());
+        message.handle_id = 999999;
+
+        let actual = exporter.format_reaction(&message).unwrap();
+        let expected = "Loved by Sample Contact";
+
+        assert_eq!(actual, expected);
+    }
+}
+
+#[cfg(test)]
+mod balloon_format_tests {
+    use super::tests::fake_options;
+    use crate::{exporters::exporter::BalloonFormatter, Config, Exporter, TXT};
+    use imessage_database::message_types::{
+        app::AppMessage, collaboration::CollaborationMessage, music::MusicMessage, url::URLMessage,
+    };
+
+    #[test]
+    fn can_format_txt_url() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = URLMessage {
+            title: Some("title"),
+            summary: Some("summary"),
+            url: Some("url"),
+            original_url: Some("original_url"),
+            item_type: Some("item_type"),
+            images: vec!["images"],
+            icons: vec!["icons"],
+            site_name: Some("site_name"),
+            placeholder: false,
+        };
+
+        let expected = exporter.format_url(&balloon, "");
+        let actual = "url\ntitle\nsummary";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_music() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = MusicMessage {
+            url: Some("url"),
+            preview: Some("preview"),
+            artist: Some("artist"),
+            album: Some("album"),
+            track_name: Some("track_name"),
+        };
+
+        let expected = exporter.format_music(&balloon, "");
+        let actual = "track_name\nalbum\nartist\nurl\n";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_collaboration() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = CollaborationMessage {
+            original_url: Some("original_url"),
+            url: Some("url"),
+            title: Some("title"),
+            creation_date: Some(0.),
+            bundle_id: Some("bundle_id"),
+            app_name: Some("app_name"),
+        };
+
+        let expected = exporter.format_collaboration(&balloon, "");
+        let actual = "app_name message:\ntitle\nurl";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_apple_pay() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = AppMessage {
+            image: Some("image"),
+            url: Some("url"),
+            title: Some("title"),
+            subtitle: Some("subtitle"),
+            caption: Some("caption"),
+            subcaption: Some("subcaption"),
+            trailing_caption: Some("trailing_caption"),
+            trailing_subcaption: Some("trailing_subcaption"),
+            app_name: Some("app_name"),
+            ldtext: Some("ldtext"),
+        };
+
+        let expected = exporter.format_apple_pay(&balloon, "");
+        let actual = "caption transaction: ldtext";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_fitness() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = AppMessage {
+            image: Some("image"),
+            url: Some("url"),
+            title: Some("title"),
+            subtitle: Some("subtitle"),
+            caption: Some("caption"),
+            subcaption: Some("subcaption"),
+            trailing_caption: Some("trailing_caption"),
+            trailing_subcaption: Some("trailing_subcaption"),
+            app_name: Some("app_name"),
+            ldtext: Some("ldtext"),
+        };
+
+        let expected = exporter.format_fitness(&balloon, "");
+        let actual = "app_name message: ldtext";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_slideshow() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = AppMessage {
+            image: Some("image"),
+            url: Some("url"),
+            title: Some("title"),
+            subtitle: Some("subtitle"),
+            caption: Some("caption"),
+            subcaption: Some("subcaption"),
+            trailing_caption: Some("trailing_caption"),
+            trailing_subcaption: Some("trailing_subcaption"),
+            app_name: Some("app_name"),
+            ldtext: Some("ldtext"),
+        };
+
+        let expected = exporter.format_slideshow(&balloon, "");
+        let actual = "Photo album: ldtext url";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_generic_app() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = AppMessage {
+            image: Some("image"),
+            url: Some("url"),
+            title: Some("title"),
+            subtitle: Some("subtitle"),
+            caption: Some("caption"),
+            subcaption: Some("subcaption"),
+            trailing_caption: Some("trailing_caption"),
+            trailing_subcaption: Some("trailing_subcaption"),
+            app_name: Some("app_name"),
+            ldtext: Some("ldtext"),
+        };
+
+        let expected = exporter.format_generic_app(&balloon, "bundle_id", &mut vec![], "");
+        let actual = "app_name message:\ntitle\nsubtitle\ncaption\nsubcaption\ntrailing_caption\ntrailing_subcaption";
+
+        assert_eq!(expected, actual);
     }
 }

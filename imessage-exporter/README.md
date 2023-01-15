@@ -6,13 +6,13 @@ The `imessage-exporter` binary exports iMessage data to `txt` or `html` formats.
 
 There are several ways to install this software.
 
-## Cargo (recommended)
+### Cargo (recommended)
 
 This binary is available on [crates.io](https://crates.io/crates/imessage-exporter).
 
 `cargo install imessage-exporter` is the best way to install the app for normal use.
 
-## Installing manually
+### Installing manually
 
 - `clone` the repository
 - `cd` to the repository
@@ -45,6 +45,26 @@ This binary is available on [crates.io](https://crates.io/crates/imessage-export
         Print version information
 ```
 
+### Examples
+
+Export as `html` and copy attachments from the default iMessage Database location to your home directory:
+
+```zsh
+% imessage-exporter -f html
+```
+
+Export as `txt` from the default iMessage Database location to a new folder in the current working directory called `output`:
+
+```zsh
+% imessage-exporter -f txt -o output
+```
+
+Export as `html` from `/Volumes/external/chat.db` to `/Volumes/external/export` without copying attachments:
+
+```zsh
+% imessage-exporter -f html --no-copy -p /Volumes/external/chat.db -o /Volumes/external/export
+```
+
 ## Features
 
 [Click here](../docs/features.md) for a full list of features.
@@ -57,7 +77,7 @@ In HTML exports in Safari, when referencing files in-place, you must permit Safa
 
 ![](../docs/binary/img/safari_local_file_restrictions.png)
 
-Further, since the files are stored in `~/Library`, you will need to grant your browser Full Disk Access in System Preferences.
+Further, since the files are stored in `~/Library`, you will need to grant your browser Full Disk Access in System Settings.
 
 ### PDF Exports
 

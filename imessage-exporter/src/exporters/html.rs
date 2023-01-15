@@ -96,7 +96,9 @@ impl<'a> Exporter<'a> for HTML<'a> {
                 HTML::write_to_file(self.get_or_create_file(&msg), &message);
             }
             current_message += 1;
-            pb.set_position(current_message);
+            if current_message % 99 == 0 {
+                pb.set_position(current_message);
+            }
         }
         pb.finish();
 
@@ -1014,7 +1016,7 @@ impl<'a> HTML<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Config, Exporter, Options, HTML};
+    use crate::{exporters::exporter::Writer, Config, Exporter, Options, HTML};
     use imessage_database::{tables::messages::Message, util::dirs::default_db_path};
 
     fn blank() -> Message {
@@ -1045,7 +1047,7 @@ mod tests {
         }
     }
 
-    fn fake_options() -> Options<'static> {
+    pub fn fake_options() -> Options<'static> {
         Options {
             db_path: default_db_path(),
             no_copy: true,
@@ -1144,5 +1146,354 @@ mod tests {
         exporter.add_line(&mut s, "hello world", "<div>", "</div>");
 
         assert_eq!(s, "<div>hello world</div>\n".to_string());
+    }
+
+    #[test]
+    fn can_format_html_from_me_normal() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.text = Some("Hello world".to_string());
+        message.is_from_me = true;
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected = "<div class=\"message\">\n<div class=\"sent iMessage\">\n<p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span>\n<span class=\"sender\">Me</span></p>\n<hr><div class=\"message_part\">\n<span class=\"bubble\">Hello world</span>\n</div>\n</div>\n</div>\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_html_from_me_normal_read() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        message.text = Some("Hello world".to_string());
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        // May 17, 2022  9:30:31 PM
+        message.date_delivered = 674530231992568192;
+        message.is_from_me = true;
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected =
+            "<div class=\"message\">\n<div class=\"sent iMessage\">\n<p><span class=\"timestamp\">May 17, 2022  5:29:42 PM (Read by them after 1 hour, 49 seconds)</span>\n<span class=\"sender\">Me</span></p>\n<hr><div class=\"message_part\">\n<span class=\"bubble\">Hello world</span>\n</div>\n</div>\n</div>\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_html_from_them_normal() {
+        // Create exporter
+        let options = fake_options();
+        let mut config = Config::new(options).unwrap();
+        config
+            .participants
+            .insert(999999, "Sample Contact".to_string());
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.text = Some("Hello world".to_string());
+        message.handle_id = 999999;
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected = "<div class=\"message\">\n<div class=\"received\">\n<p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span>\n<span class=\"sender\">Sample Contact</span></p>\n<hr><div class=\"message_part\">\n<span class=\"bubble\">Hello world</span>\n</div>\n</div>\n</div>\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_html_from_them_normal_read() {
+        // Create exporter
+        let options = fake_options();
+        let mut config = Config::new(options).unwrap();
+        config
+            .participants
+            .insert(999999, "Sample Contact".to_string());
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        message.handle_id = 999999;
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.text = Some("Hello world".to_string());
+        // May 17, 2022  8:29:42 PM
+        message.date_delivered = 674526582885055488;
+        // May 17, 2022  9:30:31 PM
+        message.date_read = 674530231992568192;
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected =
+            "<div class=\"message\">\n<div class=\"received\">\n<p><span class=\"timestamp\">May 17, 2022  5:29:42 PM (Read by you after 1 hour, 49 seconds)</span>\n<span class=\"sender\">Sample Contact</span></p>\n<hr><div class=\"message_part\">\n<span class=\"bubble\">Hello world</span>\n</div>\n</div>\n</div>\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_html_shareplay() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.item_type = 6;
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected = "<div class=\"message\">\n<div class=\"received\">\n<p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span>\n<span class=\"sender\">Me</span></p>\n<span class=\"shareplay\">SharePlay Message Ended</span>\n</div>\n</div>\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_html_announcement() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.group_title = Some("Hello world".to_string());
+
+        let actual = exporter.format_announcement(&message);
+        let expected = "\n<div class =\"announcement\"><p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span> You named the conversation <b>Hello world</b></p></div>\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_html_reaction_me() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.associated_message_type = Some(2000);
+        message.associated_message_guid = Some("fake_guid".to_string());
+
+        let actual = exporter.format_reaction(&message).unwrap();
+        let expected = "<span class=\"reaction\"><b>Loved</b> by Me</span>";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_html_reaction_them() {
+        // Create exporter
+        let options = fake_options();
+        let mut config = Config::new(options).unwrap();
+        config
+            .participants
+            .insert(999999, "Sample Contact".to_string());
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.associated_message_type = Some(2000);
+        message.associated_message_guid = Some("fake_guid".to_string());
+        message.handle_id = 999999;
+
+        let actual = exporter.format_reaction(&message).unwrap();
+        let expected = "<span class=\"reaction\"><b>Loved</b> by Sample Contact</span>";
+
+        assert_eq!(actual, expected);
+    }
+}
+
+#[cfg(test)]
+mod balloon_format_tests {
+    use super::tests::fake_options;
+    use crate::{exporters::exporter::BalloonFormatter, Config, Exporter, HTML};
+    use imessage_database::message_types::{
+        app::AppMessage, collaboration::CollaborationMessage, music::MusicMessage, url::URLMessage,
+    };
+
+    #[test]
+    fn can_format_html_url() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = URLMessage {
+            title: Some("title"),
+            summary: Some("summary"),
+            url: Some("url"),
+            original_url: Some("original_url"),
+            item_type: Some("item_type"),
+            images: vec!["images"],
+            icons: vec!["icons"],
+            site_name: Some("site_name"),
+            placeholder: false,
+        };
+
+        let expected = exporter.format_url(&balloon, "");
+        let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"images\" loading=\"lazy\", onerror=\"this.style.display='none'\"><div class=\"name\">site_name</div></div><div class=\"app_footer\"><div class=\"caption\"><xmp>title</xmp></div><div class=\"subcaption\"><xmp>summary</xmp></div></div></a>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_music() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = MusicMessage {
+            url: Some("url"),
+            preview: Some("preview"),
+            artist: Some("artist"),
+            album: Some("album"),
+            track_name: Some("track_name"),
+        };
+
+        let expected = exporter.format_music(&balloon, "");
+        let actual = "<div class=\"app_header\"><div class=\"name\">track_name</div><audio controls src=\"preview\" </audio></div><a href=\"url\"><div class=\"app_footer\"><div class=\"caption\">artist</div><div class=\"subcaption\">album</div></div></a>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_collaboration() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = CollaborationMessage {
+            original_url: Some("original_url"),
+            url: Some("url"),
+            title: Some("title"),
+            creation_date: Some(0.),
+            bundle_id: Some("bundle_id"),
+            app_name: Some("app_name"),
+        };
+
+        let expected = exporter.format_collaboration(&balloon, "");
+        let actual = "<div class=\"app_header\"><div class=\"name\">app_name</div></div><a href=\"url\"><div class=\"app_footer\"><div class=\"caption\">title</div><div class=\"subcaption\">url</div></div></a>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_apple_pay() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = AppMessage {
+            image: Some("image"),
+            url: Some("url"),
+            title: Some("title"),
+            subtitle: Some("subtitle"),
+            caption: Some("caption"),
+            subcaption: Some("subcaption"),
+            trailing_caption: Some("trailing_caption"),
+            trailing_subcaption: Some("trailing_subcaption"),
+            app_name: Some("app_name"),
+            ldtext: Some("ldtext"),
+        };
+
+        let expected = exporter.format_apple_pay(&balloon, "");
+        let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"image\"><div class=\"name\">app_name</div><div class=\"image_title\">title</div><div class=\"image_subtitle\">subtitle</div><div class=\"ldtext\">ldtext</div></div><div class=\"app_footer\"><div class=\"caption\">caption</div><div class=\"subcaption\">subcaption</div><div class=\"trailing_caption\">trailing_caption</div><div class=\"trailing_subcaption\">trailing_subcaption</div></div></a>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_fitness() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = AppMessage {
+            image: Some("image"),
+            url: Some("url"),
+            title: Some("title"),
+            subtitle: Some("subtitle"),
+            caption: Some("caption"),
+            subcaption: Some("subcaption"),
+            trailing_caption: Some("trailing_caption"),
+            trailing_subcaption: Some("trailing_subcaption"),
+            app_name: Some("app_name"),
+            ldtext: Some("ldtext"),
+        };
+
+        let expected = exporter.format_fitness(&balloon, "");
+        let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"image\"><div class=\"name\">app_name</div><div class=\"image_title\">title</div><div class=\"image_subtitle\">subtitle</div><div class=\"ldtext\">ldtext</div></div><div class=\"app_footer\"><div class=\"caption\">caption</div><div class=\"subcaption\">subcaption</div><div class=\"trailing_caption\">trailing_caption</div><div class=\"trailing_subcaption\">trailing_subcaption</div></div></a>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_slideshow() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = AppMessage {
+            image: Some("image"),
+            url: Some("url"),
+            title: Some("title"),
+            subtitle: Some("subtitle"),
+            caption: Some("caption"),
+            subcaption: Some("subcaption"),
+            trailing_caption: Some("trailing_caption"),
+            trailing_subcaption: Some("trailing_subcaption"),
+            app_name: Some("app_name"),
+            ldtext: Some("ldtext"),
+        };
+
+        let expected = exporter.format_slideshow(&balloon, "");
+        let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"image\"><div class=\"name\">app_name</div><div class=\"image_title\">title</div><div class=\"image_subtitle\">subtitle</div><div class=\"ldtext\">ldtext</div></div><div class=\"app_footer\"><div class=\"caption\">caption</div><div class=\"subcaption\">subcaption</div><div class=\"trailing_caption\">trailing_caption</div><div class=\"trailing_subcaption\">trailing_subcaption</div></div></a>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_generic_app() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = AppMessage {
+            image: Some("image"),
+            url: Some("url"),
+            title: Some("title"),
+            subtitle: Some("subtitle"),
+            caption: Some("caption"),
+            subcaption: Some("subcaption"),
+            trailing_caption: Some("trailing_caption"),
+            trailing_subcaption: Some("trailing_subcaption"),
+            app_name: Some("app_name"),
+            ldtext: Some("ldtext"),
+        };
+
+        let expected = exporter.format_generic_app(&balloon, "bundle_id", &mut vec![], "");
+        let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"image\"><div class=\"name\">app_name</div><div class=\"image_title\">title</div><div class=\"image_subtitle\">subtitle</div><div class=\"ldtext\">ldtext</div></div><div class=\"app_footer\"><div class=\"caption\">caption</div><div class=\"subcaption\">subcaption</div><div class=\"trailing_caption\">trailing_caption</div><div class=\"trailing_subcaption\">trailing_subcaption</div></div></a>";
+
+        assert_eq!(expected, actual);
     }
 }
