@@ -47,19 +47,19 @@ This binary is available on [crates.io](https://crates.io/crates/imessage-export
 
 ### Examples
 
-Export to `html` and copy attachments from the default iMessage Database location to your home directory:
+Export as `html` and copy attachments from the default iMessage Database location to your home directory:
 
 ```zsh
 % imessage-exporter -f html
 ```
 
-Export to `txt` from the default iMessage Database location to a new folder in the current working directory called `output`:
+Export as `txt` from the default iMessage Database location to a new folder in the current working directory called `output`:
 
 ```zsh
 % imessage-exporter -f txt -o output
 ```
 
-Export to `html` from `/Volumes/external/chat.db` to `/Volumes/external/export` without copying attachments:
+Export as `html` from `/Volumes/external/chat.db` to `/Volumes/external/export` without copying attachments:
 
 ```zsh
 % imessage-exporter -f html --no-copy -p /Volumes/external/chat.db -o /Volumes/external/export
