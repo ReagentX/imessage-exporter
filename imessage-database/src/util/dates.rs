@@ -55,19 +55,8 @@ pub fn readable_diff(
     start: Result<DateTime<Local>, MessageError>,
     end: Result<DateTime<Local>, MessageError>,
 ) -> Option<String> {
-    //  Validate inputs
-    if let Err(why) = start {
-        eprintln!("{why}");
-        return None;
-    }
-
-    if let Err(why) = end {
-        eprintln!("{why}");
-        return None;
-    }
-
     // Calculate diff
-    let diff: Duration = end.unwrap() - start.unwrap();
+    let diff: Duration = end.ok()? - start.ok()?;
     let seconds = diff.num_seconds();
 
     // Early escape for invalid date diff
