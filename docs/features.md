@@ -65,7 +65,7 @@ This tool targets the current latest public release for MacOS and iMessage. It m
   - Parses the `NSKeyedArchiver` payload to extract balloon data
   - Supports system message types as well as third party applications
   - Supports Apple Music preview streams
-  - Supports Rich Collaboration messages links
+  - Supports Rich Collaboration messages
   - Supports SharePlay/Facetime message balloons
 - Duplicated group chats
   - Handles (participants) and chats (threads) can become duplicated
