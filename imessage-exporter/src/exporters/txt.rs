@@ -86,7 +86,9 @@ impl<'a> Exporter<'a> for TXT<'a> {
                 TXT::write_to_file(self.get_or_create_file(&msg), &message);
             }
             current_message += 1;
-            pb.set_position(current_message);
+            if current_message % 99 == 0 {
+                pb.set_position(current_message);
+            }
         }
         pb.finish();
         Ok(())
