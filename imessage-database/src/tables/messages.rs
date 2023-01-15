@@ -220,7 +220,7 @@ impl Cacheable for Message {
     type K = String;
     type V = Vec<String>;
     /// Used for reactions that do not exist in a foreign key table
-    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
+    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, String> {
         // Create cache for user IDs
         let mut map: HashMap<Self::K, Self::V> = HashMap::new();
 
@@ -246,7 +246,8 @@ impl Cacheable for Message {
 
             // Iterate over the messages and update the map
             for reaction in messages {
-                let reaction = Self::extract(reaction)?;
+                let reaction = Self::extract(reaction)
+                    .map_err(|why| format!("Unable to query {MESSAGE} table: {why}"))?;
                 if reaction.is_reaction() {
                     if let Some((_, reaction_target_guid)) = reaction.clean_associated_guid() {
                         match map.get_mut(reaction_target_guid) {
@@ -338,7 +339,7 @@ impl Message {
     }
 
     /// Create a `DateTime<Local>` from an arbitrary date and offset
-    /// 
+    ///
     /// This is used to create date data for anywhere dates are stored in the table, including
     /// plist payload or [`streamtyped`](crate::util::streamtyped) data. In this struct, the
     /// other date methods invoke this method.
@@ -459,7 +460,7 @@ impl Message {
     fn get_reply_index(&self) -> usize {
         if let Some(parts) = &self.thread_originator_part {
             return match parts.split(':').next() {
-                Some(part) => str::parse::<usize>(part).unwrap(),
+                Some(part) => str::parse::<usize>(part).unwrap_or(0),
                 None => 0,
             };
         }

@@ -66,7 +66,7 @@ impl Cacheable for Chat {
     /// let conn = get_connection(&db_path).unwrap();
     /// let chatrooms = Chat::cache(&conn);
     /// ```
-    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
+    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, String> {
         let mut map = HashMap::new();
 
         let mut statement = Chat::get(db);
@@ -76,7 +76,8 @@ impl Cacheable for Chat {
             .unwrap();
 
         for chat in chats {
-            let result = Chat::extract(chat)?;
+            let result = Chat::extract(chat)
+                .map_err(|why| format!("Unable to query {CHAT} table: {why}"))?;
             map.insert(result.rowid, result);
         }
         Ok(map)

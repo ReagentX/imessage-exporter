@@ -27,7 +27,7 @@ pub trait Table {
 pub trait Cacheable {
     type K;
     type V;
-    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError>;
+    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, String>;
 }
 
 /// Defines behavior for deduplicating data in a table
