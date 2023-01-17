@@ -27,6 +27,8 @@ use imessage_database::{
     util::{dates::get_offset, dirs::home},
 };
 
+use super::error::RuntimeError;
+
 /// Stores the application state and handles application lifecycle
 pub struct Config<'a> {
     /// Map of chatroom ID to chatroom information
@@ -160,22 +162,23 @@ impl<'a> Config<'a> {
     /// let options = Options::from_args(&args);
     /// let app = State::new(options).unwrap();
     /// ```
-    pub fn new(options: Options) -> Result<Config, String> {
+    pub fn new(options: Options) -> Result<Config, RuntimeError> {
         // Escape early if options are invalid
         if !options.valid {
-            return Err(String::from("Invalid options!"));
+            return Err(RuntimeError::InvalidOptions);
         }
 
-        let conn = get_connection(&options.db_path)?;
+        let conn = get_connection(&options.db_path).map_err(RuntimeError::DatabaseError)?;
         eprintln!("Building cache...");
         eprintln!("[1/4] Caching chats...");
-        let chatrooms = Chat::cache(&conn)?;
+        let chatrooms = Chat::cache(&conn).map_err(RuntimeError::DatabaseError)?;
         eprintln!("[2/4] Caching chatrooms...");
-        let chatroom_participants = ChatToHandle::cache(&conn)?;
+        let chatroom_participants =
+            ChatToHandle::cache(&conn).map_err(RuntimeError::DatabaseError)?;
         eprintln!("[3/4] Caching participants...");
-        let participants = Handle::cache(&conn)?;
+        let participants = Handle::cache(&conn).map_err(RuntimeError::DatabaseError)?;
         eprintln!("[4/4] Caching reactions...");
-        let reactions = Message::cache(&conn)?;
+        let reactions = Message::cache(&conn).map_err(RuntimeError::DatabaseError)?;
         eprintln!("Cache built!");
         Ok(Config {
             chatrooms,
