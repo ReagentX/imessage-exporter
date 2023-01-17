@@ -14,6 +14,7 @@ pub enum TableError {
     Chat(Error),
     Handle(Error),
     Messages(Error),
+    CannotConnect(String),
 }
 
 impl Display for TableError {
@@ -24,6 +25,7 @@ impl Display for TableError {
             TableError::Chat(why) => write!(fmt, "Failed to parse row: {why}"),
             TableError::Handle(why) => write!(fmt, "Failed to parse row: {why}"),
             TableError::Messages(why) => write!(fmt, "Failed to parse row: {why}"),
+            TableError::CannotConnect(why) => write!(fmt, "{why}"),
         }
     }
 }

@@ -2,7 +2,7 @@
  This module defines traits for table representations and stores some shared table constants.
 */
 
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 use rusqlite::{Connection, Error, OpenFlags, Result, Row, Statement};
 
@@ -27,7 +27,7 @@ pub trait Table {
 pub trait Cacheable {
     type K;
     type V;
-    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, String>;
+    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError>;
 }
 
 /// Defines behavior for deduplicating data in a table
@@ -43,11 +43,22 @@ pub trait Diagnostic {
 }
 
 /// Get a connection to the iMessage SQLite database
-pub fn get_connection(path: &str) -> Result<Connection, String> {
-    match Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
-        Ok(res) => Ok(res),
-        Err(why) => Err(format!("Unable to read from chat database: {}\nEnsure full disk access is enabled for your terminal emulator in System Settings > Security and Privacy > Full Disk Access", why)),
+pub fn get_connection(path_str: &str) -> Result<Connection, TableError> {
+    let path = Path::new(path_str);
+    if path.exists() {
+        return match Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
+            Ok(res) => Ok(res),
+            Err(why) => Err(
+                TableError::CannotConnect(
+                    format!("Unable to read from chat database: {}\nEnsure full disk access is enabled for your terminal emulator in System Settings > Security and Privacy > Full Disk Access", why)
+                )
+            ),
+        };
     }
+    Err(TableError::CannotConnect(format!(
+        "File not found at {}",
+        &path.to_str().unwrap_or("Unknown")
+    )))
 }
 
 // Table Names

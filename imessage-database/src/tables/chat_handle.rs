@@ -61,7 +61,7 @@ impl Cacheable for ChatToHandle {
     /// let conn = get_connection(&db_path).unwrap();
     /// let chatrooms = ChatToHandle::cache(&conn);
     /// ```
-    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, String> {
+    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
         let mut cache: HashMap<i32, BTreeSet<i32>> = HashMap::new();
 
         let mut rows = ChatToHandle::get(db);
@@ -70,8 +70,7 @@ impl Cacheable for ChatToHandle {
             .unwrap();
 
         for mapping in mappings {
-            let joiner = ChatToHandle::extract(mapping)
-                .map_err(|why| format!("Unable to query {CHAT_HANDLE_JOIN} table: {why}"))?;
+            let joiner = ChatToHandle::extract(mapping)?;
             match cache.get_mut(&joiner.chat_id) {
                 Some(handles) => {
                     handles.insert(joiner.handle_id);

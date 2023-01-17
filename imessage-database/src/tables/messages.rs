@@ -220,7 +220,7 @@ impl Cacheable for Message {
     type K = String;
     type V = Vec<String>;
     /// Used for reactions that do not exist in a foreign key table
-    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, String> {
+    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
         // Create cache for user IDs
         let mut map: HashMap<Self::K, Self::V> = HashMap::new();
 
@@ -246,8 +246,7 @@ impl Cacheable for Message {
 
             // Iterate over the messages and update the map
             for reaction in messages {
-                let reaction = Self::extract(reaction)
-                    .map_err(|why| format!("Unable to query {MESSAGE} table: {why}"))?;
+                let reaction = Self::extract(reaction)?;
                 if reaction.is_reaction() {
                     if let Some((_, reaction_target_guid)) = reaction.clean_associated_guid() {
                         match map.get_mut(reaction_target_guid) {
@@ -285,8 +284,8 @@ impl Message {
 
     /// Get a vector of a message's components
     ///
-    /// If the message has attachments, there will be one [`U+FFFC`]((https://www.fileformat.info/info/unicode/char/fffc/index.htm)) character
-    /// for each attachment and one [`U+FFFD`](https://www.fileformat.info/info/unicode/char/fffd/index.htm) for app messages that we need
+    /// If the message has attachments, there will be one [`U+FFFC`](https://www.compart.com/en/unicode/U+FFFC) character
+    /// for each attachment and one [`U+FFFD`](https://www.compart.com/en/unicode/U+FFFD) for app messages that we need
     /// to format.
     ///
     /// An iMessage that contains body text like:
