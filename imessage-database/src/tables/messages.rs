@@ -220,6 +220,17 @@ impl Cacheable for Message {
     type K = String;
     type V = HashMap<usize, Vec<Self>>;
     /// Used for reactions that do not exist in a foreign key table
+    ///
+    /// Builds a map like:
+    ///
+    /// {
+    ///     message_guid: {
+    ///         0: [Message, Message],
+    ///         1: [Message]
+    ///     }
+    /// }
+    ///
+    /// Where the `0` and `1` are the reaction indexes in the body of the message mapped by `message_guid`
     fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
         // Create cache for user IDs
         let mut map: HashMap<Self::K, Self::V> = HashMap::new();
