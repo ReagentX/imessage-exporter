@@ -6,7 +6,10 @@ use std::{
 };
 
 use crate::{
-    app::{converter::heic_to_jpeg, progress::build_progress_bar_export, runtime::Config},
+    app::{
+        converter::heic_to_jpeg, error::RuntimeError, progress::build_progress_bar_export,
+        runtime::Config,
+    },
     exporters::exporter::{BalloonFormatter, Exporter, Writer},
 };
 
@@ -61,7 +64,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
         }
     }
 
-    fn iter_messages(&mut self) -> Result<(), TableError> {
+    fn iter_messages(&mut self) -> Result<(), RuntimeError> {
         // Tell the user what we are doing
         eprintln!(
             "Exporting to {} as html...",
@@ -83,7 +86,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
             .unwrap();
 
         for message in messages {
-            let mut msg = Message::extract(message)?;
+            let mut msg = Message::extract(message).map_err(RuntimeError::DatabaseError)?;
             // Render the announcement in-line
             if msg.is_announcement() {
                 let announcement = self.format_announcement(&msg);
@@ -92,7 +95,9 @@ impl<'a> Exporter<'a> for HTML<'a> {
             // Message replies and reactions are rendered in context, so no need to render them separately
             else if !msg.is_reaction() {
                 msg.gen_text(&self.config.db);
-                let message = self.format_message(&msg, 0)?;
+                let message = self
+                    .format_message(&msg, 0)
+                    .map_err(RuntimeError::DatabaseError)?;
                 HTML::write_to_file(self.get_or_create_file(&msg), &message);
             }
             current_message += 1;
@@ -173,7 +178,6 @@ impl<'a> Writer<'a> for HTML<'a> {
         let message_parts = message.body();
         let mut attachments = Attachment::from_message(&self.config.db, message)?;
         let mut replies = message.get_replies(&self.config.db)?;
-        let reactions = message.get_reactions(&self.config.db, &self.config.reactions)?;
 
         // Index of where we are in the attachment Vector
         let mut attachment_index: usize = 0;
@@ -309,25 +313,27 @@ impl<'a> Writer<'a> for HTML<'a> {
             }
 
             // Handle Reactions
-            if let Some(reactions) = reactions.get(&idx) {
-                self.add_line(
-                    &mut formatted_message,
-                    "<hr><p>Reactions:</p>",
-                    "<div class=\"reactions\">",
-                    "",
-                );
-                reactions
-                    .iter()
-                    .try_for_each(|reaction| -> Result<(), TableError> {
-                        self.add_line(
-                            &mut formatted_message,
-                            &self.format_reaction(reaction)?,
-                            "<div class=\"reaction\">",
-                            "</div>",
-                        );
-                        Ok(())
-                    })?;
-                self.add_line(&mut formatted_message, "</div>", "", "")
+            if let Some(reactions_map) = self.config.reactions.get(&message.guid) {
+                if let Some(reactions) = reactions_map.get(&idx) {
+                    self.add_line(
+                        &mut formatted_message,
+                        "<hr><p>Reactions:</p>",
+                        "<div class=\"reactions\">",
+                        "",
+                    );
+                    reactions
+                        .iter()
+                        .try_for_each(|reaction| -> Result<(), TableError> {
+                            self.add_line(
+                                &mut formatted_message,
+                                &self.format_reaction(reaction)?,
+                                "<div class=\"reaction\">",
+                                "</div>",
+                            );
+                            Ok(())
+                        })?;
+                    self.add_line(&mut formatted_message, "</div>", "", "")
+                }
             }
 
             // Handle Replies

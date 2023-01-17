@@ -12,7 +12,6 @@ use crate::{
     Exporter, HTML, TXT,
 };
 use imessage_database::{
-    error::table::TableError,
     tables::{
         attachment::Attachment,
         chat::Chat,
@@ -42,7 +41,7 @@ pub struct Config<'a> {
     /// Map of participant ID to an internal unique participant ID
     pub real_participants: HashMap<i32, i32>,
     /// Messages that are reactions to other messages
-    pub reactions: HashMap<String, Vec<String>>,
+    pub reactions: HashMap<String, HashMap<usize, Vec<Message>>>,
     /// App configuration options
     pub options: Options<'a>,
     /// Global date offset used by the iMessage database:
@@ -232,7 +231,7 @@ impl<'a> Config<'a> {
     /// let app = State::new(options).unwrap();
     /// app.start();
     /// ```
-    pub fn start(&self) -> Result<(), TableError> {
+    pub fn start(&self) -> Result<(), RuntimeError> {
         if self.options.diagnostic {
             self.run_diagnostic();
         } else if self.options.export_type.is_some() {
