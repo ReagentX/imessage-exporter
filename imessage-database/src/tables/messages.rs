@@ -218,7 +218,7 @@ impl Diagnostic for Message {
 
 impl Cacheable for Message {
     type K = String;
-    type V = Vec<String>;
+    type V = HashMap<usize, Vec<Self>>;
     /// Used for reactions that do not exist in a foreign key table
     fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
         // Create cache for user IDs
@@ -248,13 +248,22 @@ impl Cacheable for Message {
             for reaction in messages {
                 let reaction = Self::extract(reaction)?;
                 if reaction.is_reaction() {
-                    if let Some((_, reaction_target_guid)) = reaction.clean_associated_guid() {
+                    if let Some((idx, reaction_target_guid)) = reaction.clean_associated_guid() {
                         match map.get_mut(reaction_target_guid) {
-                            Some(reactions) => {
-                                reactions.push(reaction.guid);
-                            }
+                            Some(reactions) => match reactions.get_mut(&idx) {
+                                Some(reactions_vec) => {
+                                    reactions_vec.push(reaction);
+                                }
+                                None => {
+                                    reactions.insert(idx, vec![reaction]);
+                                }
+                            },
                             None => {
-                                map.insert(reaction_target_guid.to_string(), vec![reaction.guid]);
+                                map.insert(
+                                    reaction_target_guid.to_string(),
+                                    HashMap::from([(idx, vec![reaction])]),
+                                );
+                                // map.insert(reaction_target_guid.to_string(), vec![reaction]);
                             }
                         }
                     }
