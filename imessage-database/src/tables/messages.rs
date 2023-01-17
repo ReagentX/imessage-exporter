@@ -274,7 +274,6 @@ impl Cacheable for Message {
                                     reaction_target_guid.to_string(),
                                     HashMap::from([(idx, vec![reaction])]),
                                 );
-                                // map.insert(reaction_target_guid.to_string(), vec![reaction]);
                             }
                         }
                     }
