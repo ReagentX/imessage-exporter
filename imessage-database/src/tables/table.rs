@@ -100,3 +100,5 @@ pub const DEFAULT_OUTPUT_DIR: &str = "imessage_export";
 pub const MAX_LENGTH: usize = 240;
 /// Replacement text sent in Fitness.app messages
 pub const FITNESS_RECEIVER: &str = "$(kIMTranscriptPluginBreadcrumbTextReceiverIdentifier)";
+/// Name for attachments directory in exports
+pub const ATTACHMENTS_DIR: &str = "attachments";

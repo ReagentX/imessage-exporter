@@ -27,7 +27,7 @@ use imessage_database::{
     tables::{
         attachment::{Attachment, MediaType},
         messages::{BubbleType, Message},
-        table::{Table, FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN},
+        table::{Table, ATTACHMENTS_DIR, FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN},
     },
     util::{
         dates::{format, readable_diff},
@@ -427,8 +427,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                     }
                                 }
                                 // Update the attachment
-                                attachment.copied_path =
-                                    Some(copy_path.to_string_lossy().to_string());
+                                attachment.copied_path = Some(copy_path);
                             }
                             None => {
                                 return Err(attachment.filename());
@@ -437,8 +436,14 @@ impl<'a> Writer<'a> for HTML<'a> {
                     }
 
                     let embed_path = match &attachment.copied_path {
-                        Some(path) => path,
-                        None => &resolved_attachment_path,
+                        Some(path) => format!(
+                            "{ATTACHMENTS_DIR}/{}",
+                            path.file_name()
+                                .ok_or(attachment.filename())?
+                                .to_str()
+                                .ok_or(attachment.filename())?
+                        ),
+                        None => resolved_attachment_path,
                     };
 
                     Ok(match attachment.mime_type() {

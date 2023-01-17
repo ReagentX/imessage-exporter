@@ -3,7 +3,7 @@
 */
 
 use rusqlite::{Connection, Error, Error as E, Result, Row, Statement};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::{
     error::table::TableError,
@@ -39,7 +39,7 @@ pub struct Attachment {
     pub total_bytes: i32,
     pub attribution_info: Option<Vec<u8>>,
     pub hide_attachment: i32,
-    pub copied_path: Option<String>,
+    pub copied_path: Option<PathBuf>,
 }
 
 impl Table for Attachment {

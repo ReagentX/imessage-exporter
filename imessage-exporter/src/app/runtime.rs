@@ -19,8 +19,8 @@ use imessage_database::{
         handle::Handle,
         messages::Message,
         table::{
-            get_connection, Cacheable, Deduplicate, Diagnostic, DEFAULT_OUTPUT_DIR, MAX_LENGTH, ME,
-            UNKNOWN,
+            get_connection, Cacheable, Deduplicate, Diagnostic, ATTACHMENTS_DIR,
+            DEFAULT_OUTPUT_DIR, MAX_LENGTH, ME, UNKNOWN,
         },
     },
     util::{dates::get_offset, dirs::home},
@@ -78,7 +78,7 @@ impl<'a> Config<'a> {
     /// Get the attachment path for the current session
     pub fn attachment_path(&self) -> PathBuf {
         let mut path = self.export_path();
-        path.push("attachments");
+        path.push(ATTACHMENTS_DIR);
         path
     }
 
