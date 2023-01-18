@@ -33,6 +33,10 @@ This crate supports every iMessage feature as of MacOS 13.1 (22C65):
 
 See more detail about supported features [here](docs/features.md).
 
+## Frequently Asked Questions
+
+The FAQ document is located [here](/docs/faq.md).
+
 ## Special Thanks
 
 - All of my friends, for putting up with me sending them random messages to test things
