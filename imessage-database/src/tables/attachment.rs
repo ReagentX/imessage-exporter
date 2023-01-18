@@ -56,9 +56,9 @@ impl Table for Attachment {
         })
     }
 
-    fn get(db: &Connection) -> Statement {
+    fn get(db: &Connection) -> Result<Statement, TableError> {
         db.prepare(&format!("SELECT * from {}", ATTACHMENT))
-            .unwrap()
+            .map_err(TableError::Attachment)
     }
 
     fn extract(attachment: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {

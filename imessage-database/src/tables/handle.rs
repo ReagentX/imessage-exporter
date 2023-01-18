@@ -28,8 +28,9 @@ impl Table for Handle {
         })
     }
 
-    fn get(db: &Connection) -> Statement {
-        db.prepare(&format!("SELECT * from {HANDLE}")).unwrap()
+    fn get(db: &Connection) -> Result<Statement, TableError> {
+        db.prepare(&format!("SELECT * from {HANDLE}"))
+            .map_err(TableError::Handle)
     }
 
     fn extract(handle: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
@@ -69,7 +70,7 @@ impl Cacheable for Handle {
         map.insert(0, ME.to_string());
 
         // Create query
-        let mut statement = Handle::get(db);
+        let mut statement = Handle::get(db)?;
 
         // Execute query to build the Handles
         let handles = statement

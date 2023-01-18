@@ -27,9 +27,9 @@ impl Table for ChatToHandle {
         })
     }
 
-    fn get(db: &Connection) -> Statement {
+    fn get(db: &Connection) -> Result<Statement, TableError> {
         db.prepare(&format!("SELECT * FROM {}", CHAT_HANDLE_JOIN))
-            .unwrap()
+            .map_err(TableError::ChatToHandle)
     }
 
     fn extract(chat_to_handle: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
@@ -64,7 +64,7 @@ impl Cacheable for ChatToHandle {
     fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
         let mut cache: HashMap<i32, BTreeSet<i32>> = HashMap::new();
 
-        let mut rows = ChatToHandle::get(db);
+        let mut rows = ChatToHandle::get(db)?;
         let mappings = rows
             .query_map([], |row| Ok(ChatToHandle::from_row(row)))
             .unwrap();

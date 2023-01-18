@@ -15,7 +15,7 @@ pub trait Table {
     where
         Self: Sized;
     /// Gets a statement we can execute to iterate over the data in the table
-    fn get(db: &Connection) -> Statement;
+    fn get(db: &Connection) -> Result<Statement, TableError>;
 
     /// Extract valid row data while handling both types of query errors
     fn extract(item: Result<Result<Self, Error>, Error>) -> Result<Self, TableError>

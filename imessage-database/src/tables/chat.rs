@@ -30,8 +30,9 @@ impl Table for Chat {
         })
     }
 
-    fn get(db: &Connection) -> Statement {
-        db.prepare(&format!("SELECT * from {CHAT}")).unwrap()
+    fn get(db: &Connection) -> Result<Statement, TableError> {
+        db.prepare(&format!("SELECT * from {CHAT}"))
+            .map_err(TableError::Chat)
     }
 
     fn extract(chat: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
@@ -69,7 +70,7 @@ impl Cacheable for Chat {
     fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
         let mut map = HashMap::new();
 
-        let mut statement = Chat::get(db);
+        let mut statement = Chat::get(db)?;
 
         let chats = statement
             .query_map([], |row| Ok(Chat::from_row(row)))

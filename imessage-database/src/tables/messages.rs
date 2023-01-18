@@ -126,9 +126,9 @@ impl Table for Message {
         })
     }
 
-    fn get(db: &Connection) -> Statement {
+    fn get(db: &Connection) -> Result<Statement, TableError> {
         // If database has `thread_originator_guid`, we can parse replies, otherwise default to 0
-        db.prepare(&format!(
+        Ok(db.prepare(&format!(
             "SELECT 
                  *,
                  c.chat_id, 
@@ -141,7 +141,7 @@ impl Table for Message {
                  m.date;
             "
         ))
-        .unwrap_or_else(|_| db.prepare(&format!(
+        .unwrap_or(db.prepare(&format!(
             "SELECT 
                  *,
                  c.chat_id, 
@@ -153,7 +153,7 @@ impl Table for Message {
              ORDER BY 
                  m.date;
             "
-        )).unwrap()
+        )).map_err(TableError::Messages)?)
     )
     }
 
