@@ -56,7 +56,7 @@ pub fn get_connection(path_str: &str) -> Result<Connection, TableError> {
         };
     }
     Err(TableError::CannotConnect(format!(
-        "File not found at {}",
+        "Database not found at {}",
         &path.to_str().unwrap_or("Unknown")
     )))
 }
