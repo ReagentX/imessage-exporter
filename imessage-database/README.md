@@ -27,7 +27,7 @@ fn iter_messages() -> Result<(), TableError> {
     let db = get_connection(&default_db_path()).unwrap();
 
     /// Create SQL statement
-    let mut statement = Message::get(&db);
+    let mut statement = Message::get(&db)?;
 
     /// Execute statement
     let messages = statement

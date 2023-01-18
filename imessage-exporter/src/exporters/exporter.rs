@@ -8,14 +8,14 @@ use imessage_database::{
     tables::{attachment::Attachment, messages::Message},
 };
 
-use crate::app::runtime::Config;
+use crate::app::{error::RuntimeError, runtime::Config};
 
 /// Defines behavior for iterating over messages from the iMessage database and managing export files
 pub trait Exporter<'a> {
     /// Create a new exporter with references to the cached data
     fn new(config: &'a Config) -> Self;
     /// Begin iterating over the messages table
-    fn iter_messages(&mut self) -> Result<(), TableError>;
+    fn iter_messages(&mut self) -> Result<(), RuntimeError>;
     /// Get the file handle to write to, otherwise create a new one
     fn get_or_create_file(&mut self, message: &Message) -> &Path;
 }

@@ -6,7 +6,10 @@ use std::{
 };
 
 use crate::{
-    app::{converter::heic_to_jpeg, progress::build_progress_bar_export, runtime::Config},
+    app::{
+        converter::heic_to_jpeg, error::RuntimeError, progress::build_progress_bar_export,
+        runtime::Config,
+    },
     exporters::exporter::{BalloonFormatter, Exporter, Writer},
 };
 
@@ -24,7 +27,7 @@ use imessage_database::{
     tables::{
         attachment::{Attachment, MediaType},
         messages::{BubbleType, Message},
-        table::{Table, FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN},
+        table::{Table, ATTACHMENTS_DIR, FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN},
     },
     util::{
         dates::{format, readable_diff},
@@ -61,7 +64,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
         }
     }
 
-    fn iter_messages(&mut self) -> Result<(), TableError> {
+    fn iter_messages(&mut self) -> Result<(), RuntimeError> {
         // Tell the user what we are doing
         eprintln!(
             "Exporting to {} as html...",
@@ -76,14 +79,14 @@ impl<'a> Exporter<'a> for HTML<'a> {
         let total_messages = Message::get_count(&self.config.db);
         let pb = build_progress_bar_export(total_messages);
 
-        let mut statement = Message::get(&self.config.db);
+        let mut statement = Message::get(&self.config.db).map_err(RuntimeError::DatabaseError)?;
 
         let messages = statement
             .query_map([], |row| Ok(Message::from_row(row)))
             .unwrap();
 
         for message in messages {
-            let mut msg = Message::extract(message)?;
+            let mut msg = Message::extract(message).map_err(RuntimeError::DatabaseError)?;
             // Render the announcement in-line
             if msg.is_announcement() {
                 let announcement = self.format_announcement(&msg);
@@ -92,7 +95,9 @@ impl<'a> Exporter<'a> for HTML<'a> {
             // Message replies and reactions are rendered in context, so no need to render them separately
             else if !msg.is_reaction() {
                 msg.gen_text(&self.config.db);
-                let message = self.format_message(&msg, 0)?;
+                let message = self
+                    .format_message(&msg, 0)
+                    .map_err(RuntimeError::DatabaseError)?;
                 HTML::write_to_file(self.get_or_create_file(&msg), &message);
             }
             current_message += 1;
@@ -173,7 +178,6 @@ impl<'a> Writer<'a> for HTML<'a> {
         let message_parts = message.body();
         let mut attachments = Attachment::from_message(&self.config.db, message)?;
         let mut replies = message.get_replies(&self.config.db)?;
-        let reactions = message.get_reactions(&self.config.db, &self.config.reactions)?;
 
         // Index of where we are in the attachment Vector
         let mut attachment_index: usize = 0;
@@ -309,25 +313,36 @@ impl<'a> Writer<'a> for HTML<'a> {
             }
 
             // Handle Reactions
-            if let Some(reactions) = reactions.get(&idx) {
-                self.add_line(
-                    &mut formatted_message,
-                    "<hr><p>Reactions:</p>",
-                    "<div class=\"reactions\">",
-                    "",
-                );
-                reactions
-                    .iter()
-                    .try_for_each(|reaction| -> Result<(), TableError> {
+            if let Some(reactions_map) = self.config.reactions.get(&message.guid) {
+                if let Some(reactions) = reactions_map.get(&idx) {
+                    let mut formatted_reactions = String::new();
+
+                    reactions
+                        .iter()
+                        .try_for_each(|reaction| -> Result<(), TableError> {
+                            let formatted = self.format_reaction(reaction)?;
+                            if !formatted.is_empty() {
+                                self.add_line(
+                                    &mut formatted_reactions,
+                                    &self.format_reaction(reaction)?,
+                                    "<div class=\"reaction\">",
+                                    "</div>",
+                                );
+                            }
+                            Ok(())
+                        })?;
+
+                    if !formatted_reactions.is_empty() {
                         self.add_line(
                             &mut formatted_message,
-                            &self.format_reaction(reaction)?,
-                            "<div class=\"reaction\">",
-                            "</div>",
+                            "<hr><p>Reactions:</p>",
+                            "<div class=\"reactions\">",
+                            "",
                         );
-                        Ok(())
-                    })?;
-                self.add_line(&mut formatted_message, "</div>", "", "")
+                        self.add_line(&mut formatted_message, &formatted_reactions, "", "");
+                    }
+                    self.add_line(&mut formatted_message, "</div>", "", "")
+                }
             }
 
             // Handle Replies
@@ -421,8 +436,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                     }
                                 }
                                 // Update the attachment
-                                attachment.copied_path =
-                                    Some(copy_path.to_string_lossy().to_string());
+                                attachment.copied_path = Some(copy_path);
                             }
                             None => {
                                 return Err(attachment.filename());
@@ -431,8 +445,14 @@ impl<'a> Writer<'a> for HTML<'a> {
                     }
 
                     let embed_path = match &attachment.copied_path {
-                        Some(path) => path,
-                        None => &resolved_attachment_path,
+                        Some(path) => format!(
+                            "{ATTACHMENTS_DIR}/{}",
+                            path.file_name()
+                                .ok_or(attachment.filename())?
+                                .to_str()
+                                .ok_or(attachment.filename())?
+                        ),
+                        None => resolved_attachment_path,
                     };
 
                     Ok(match attachment.mime_type() {
@@ -440,7 +460,8 @@ impl<'a> Writer<'a> for HTML<'a> {
                             format!("<img src=\"{embed_path}\" loading=\"lazy\">")
                         }
                         MediaType::Video(media_type) => {
-                            format!("<video controls> <source src=\"{embed_path}\" type=\"{media_type}\"> </video>")
+                            // See https://github.com/ReagentX/imessage-exporter/issues/73 for why duplicate the source tag
+                            format!("<video controls> <source src=\"{embed_path}\" type=\"{media_type}\"> <source src=\"{embed_path}\"> </video>")
                         }
                         MediaType::Audio(media_type) => {
                             format!("<audio controls src=\"{embed_path}\" type=\"{media_type}\" </audio>")
