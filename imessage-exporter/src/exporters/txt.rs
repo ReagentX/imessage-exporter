@@ -66,7 +66,7 @@ impl<'a> Exporter<'a> for TXT<'a> {
         let total_messages = Message::get_count(&self.config.db);
         let pb = build_progress_bar_export(total_messages);
 
-        let mut statement = Message::get(&self.config.db);
+        let mut statement = Message::get(&self.config.db).map_err(RuntimeError::DatabaseError)?;
 
         let messages = statement
             .query_map([], |row| Ok(Message::from_row(row)))
