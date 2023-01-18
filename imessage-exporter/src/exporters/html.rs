@@ -460,7 +460,8 @@ impl<'a> Writer<'a> for HTML<'a> {
                             format!("<img src=\"{embed_path}\" loading=\"lazy\">")
                         }
                         MediaType::Video(media_type) => {
-                            format!("<video controls> <source src=\"{embed_path}\" type=\"{media_type}\"> </video>")
+                            // See https://github.com/ReagentX/imessage-exporter/issues/73 for why duplicate the source tag
+                            format!("<video controls> <source src=\"{embed_path}\" type=\"{media_type}\"> <source src=\"{embed_path}\"> </video>")
                         }
                         MediaType::Audio(media_type) => {
                             format!("<audio controls src=\"{embed_path}\" type=\"{media_type}\" </audio>")
