@@ -315,23 +315,32 @@ impl<'a> Writer<'a> for HTML<'a> {
             // Handle Reactions
             if let Some(reactions_map) = self.config.reactions.get(&message.guid) {
                 if let Some(reactions) = reactions_map.get(&idx) {
-                    self.add_line(
-                        &mut formatted_message,
-                        "<hr><p>Reactions:</p>",
-                        "<div class=\"reactions\">",
-                        "",
-                    );
+                    let mut formatted_reactions = String::new();
+
                     reactions
                         .iter()
                         .try_for_each(|reaction| -> Result<(), TableError> {
-                            self.add_line(
-                                &mut formatted_message,
-                                &self.format_reaction(reaction)?,
-                                "<div class=\"reaction\">",
-                                "</div>",
-                            );
+                            let formatted = self.format_reaction(reaction)?;
+                            if !formatted.is_empty() {
+                                self.add_line(
+                                    &mut formatted_reactions,
+                                    &self.format_reaction(reaction)?,
+                                    "<div class=\"reaction\">",
+                                    "</div>",
+                                );
+                            }
                             Ok(())
                         })?;
+
+                    if !formatted_reactions.is_empty() {
+                        self.add_line(
+                            &mut formatted_message,
+                            "<hr><p>Reactions:</p>",
+                            "<div class=\"reactions\">",
+                            "",
+                        );
+                        self.add_line(&mut formatted_message, &formatted_reactions, "", "");
+                    }
                     self.add_line(&mut formatted_message, "</div>", "", "")
                 }
             }
