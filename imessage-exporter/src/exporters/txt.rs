@@ -229,7 +229,6 @@ impl<'a> Writer<'a> for TXT<'a> {
                         self.add_line(&mut formatted_message, "Reactions:", &indent);
                         self.add_line(&mut formatted_message, &formatted_reactions, &indent);
                     }
-                    // TODO: Check if the reactions list contains removed items
                 }
             }
 
