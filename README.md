@@ -8,8 +8,19 @@ This crate provides both a library to interact with iMessage data as well as a b
 
 The `imessage-exporter` binary exports iMessage data to `txt` or `html` formats. It can also run diagnostics to find problems with the iMessage database.
 
+### Installation
+
+#### From source
 Installation instructions for the binary are located [here](imessage-exporter/README.md).
 
+
+#### Using Homebrew (macOS)
+If you are a homebrew user on macOS, you can install using `brew tap`:
+
+```shell
+brew tap ReagentX/imessage-exporter https://github.com/ReagentX/imessage-exporter
+brew install ReagentX/imessage-exporter/imessage-exporter
+```
 ## Library
 
 The `imessage_database` library provides models that allow us to access iMessage information as native data structures.
