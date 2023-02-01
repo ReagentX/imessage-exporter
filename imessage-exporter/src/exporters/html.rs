@@ -443,7 +443,6 @@ impl<'a> Writer<'a> for HTML<'a> {
                                     // Just copy the file
                                     copy_path.set_extension(ext);
                                     if qualified_attachment_path.exists() {
-
                                         // Ensure the directory tree exists
                                         if let Some(folder) = copy_path.parent() {
                                             if !folder.exists() {
