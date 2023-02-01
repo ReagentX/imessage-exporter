@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    fs::{copy, File},
+    fs::{copy, create_dir_all, File},
     io::Write,
     path::{Path, PathBuf},
 };
@@ -260,7 +260,10 @@ impl<'a> Writer<'a> for HTML<'a> {
                 }
                 BubbleType::Attachment => {
                     match attachments.get_mut(attachment_index) {
-                        Some(attachment) => match self.format_attachment(attachment) {
+                        Some(attachment) => match self.format_attachment(
+                            attachment,
+                            &message.chat_id.unwrap_or(0).to_string(),
+                        ) {
                             Ok(result) => {
                                 attachment_index += 1;
                                 self.add_line(&mut formatted_message, &result, "", "");
@@ -386,7 +389,11 @@ impl<'a> Writer<'a> for HTML<'a> {
         Ok(formatted_message)
     }
 
-    fn format_attachment(&self, attachment: &'a mut Attachment) -> Result<String, &'a str> {
+    fn format_attachment(
+        &self,
+        attachment: &'a mut Attachment,
+        sub_dir: &str,
+    ) -> Result<String, &'a str> {
         match attachment.path() {
             Some(path) => {
                 if let Some(path_str) = path.as_os_str().to_str() {
@@ -404,7 +411,17 @@ impl<'a> Writer<'a> for HTML<'a> {
                             Some(ext) => {
                                 // Create a path to copy the file to
                                 let mut copy_path = self.config.attachment_path();
+
+                                // Add the subdirectory
+                                if !sub_dir.is_empty() {
+                                    copy_path.push(sub_dir);
+                                } else {
+                                    copy_path.push(ORPHANED);
+                                }
+
+                                // Add the random filename
                                 copy_path.push(Uuid::new_v4().to_string());
+
                                 // If the image is a HEIC, convert it to PNG, otherwise perform the copy
                                 if ext == "heic" || ext == "HEIC" {
                                     // Write the converted file
@@ -427,11 +444,17 @@ impl<'a> Writer<'a> for HTML<'a> {
                                     copy_path.set_extension(ext);
                                     if qualified_attachment_path.exists() {
                                         if let Err(why) =
+                                            create_dir_all(copy_path.parent().unwrap())
+                                        {
+                                            eprintln!("Unable to create {copy_path:?}: {why}");
+                                        }
+                                        if let Err(why) =
                                             copy(qualified_attachment_path, &copy_path)
                                         {
-                                            eprintln!("Unable to copy {qualified_attachment_path:?}: {why}")
+                                            eprintln!("Unable to copy {qualified_attachment_path:?} to {copy_path:?}: {why}")
                                         };
                                     } else {
+                                        eprintln!("Unable to create {copy_path:?} from {qualified_attachment_path:?}");
                                         return Err(attachment.filename());
                                     }
                                 }
@@ -446,7 +469,12 @@ impl<'a> Writer<'a> for HTML<'a> {
 
                     let embed_path = match &attachment.copied_path {
                         Some(path) => format!(
-                            "{ATTACHMENTS_DIR}/{}",
+                            "{ATTACHMENTS_DIR}/{}/{}",
+                            if !sub_dir.is_empty() {
+                                sub_dir
+                            } else {
+                                ORPHANED
+                            },
                             path.file_name()
                                 .ok_or(attachment.filename())?
                                 .to_str()
@@ -578,7 +606,9 @@ impl<'a> Writer<'a> for HTML<'a> {
                 let who = self.config.who(&msg.handle_id, msg.is_from_me);
                 // Sticker messages have only one attachment, the sticker image
                 Ok(match paths.get_mut(0) {
-                    Some(sticker) => match self.format_attachment(sticker) {
+                    Some(sticker) => match self
+                        .format_attachment(sticker, &msg.chat_id.unwrap_or(0).to_string())
+                    {
                         Ok(img) => {
                             Some(format!("{img}<span class=\"reaction\"> from {who}</span>"))
                         }
@@ -875,16 +905,16 @@ impl<'a> BalloonFormatter for HTML<'a> {
         String::from("Handwritten messages are not yet supported!")
     }
 
-    fn format_apple_pay(&self, balloon: &AppMessage, _: &str) -> String {
-        self.balloon_to_html(balloon, "Apple Pay", &mut [])
+    fn format_apple_pay(&self, balloon: &AppMessage, sub_dir: &str) -> String {
+        self.balloon_to_html(balloon, "Apple Pay", &mut [], sub_dir)
     }
 
-    fn format_fitness(&self, balloon: &AppMessage, _: &str) -> String {
-        self.balloon_to_html(balloon, "Fitness", &mut [])
+    fn format_fitness(&self, balloon: &AppMessage, sub_dir: &str) -> String {
+        self.balloon_to_html(balloon, "Fitness", &mut [], sub_dir)
     }
 
-    fn format_slideshow(&self, balloon: &AppMessage, _: &str) -> String {
-        self.balloon_to_html(balloon, "Slideshow", &mut [])
+    fn format_slideshow(&self, balloon: &AppMessage, sub_dir: &str) -> String {
+        self.balloon_to_html(balloon, "Slideshow", &mut [], sub_dir)
     }
 
     fn format_generic_app(
@@ -892,9 +922,9 @@ impl<'a> BalloonFormatter for HTML<'a> {
         balloon: &AppMessage,
         bundle_id: &str,
         attachments: &mut Vec<Attachment>,
-        _: &str,
+        sub_dir: &str,
     ) -> String {
-        self.balloon_to_html(balloon, bundle_id, attachments)
+        self.balloon_to_html(balloon, bundle_id, attachments, sub_dir)
     }
 }
 
@@ -943,6 +973,7 @@ impl<'a> HTML<'a> {
         balloon: &AppMessage,
         bundle_id: &str,
         attachments: &mut [Attachment],
+        sub_dir: &str,
     ) -> String {
         let mut out_s = String::new();
         if let Some(url) = balloon.url {
@@ -958,7 +989,11 @@ impl<'a> HTML<'a> {
             out_s.push_str(image);
             out_s.push_str("\">");
         } else if let Some(attachment) = attachments.get_mut(0) {
-            out_s.push_str(&self.format_attachment(attachment).unwrap_or_default());
+            out_s.push_str(
+                &self
+                    .format_attachment(attachment, sub_dir)
+                    .unwrap_or_default(),
+            );
         }
 
         // Name
