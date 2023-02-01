@@ -262,7 +262,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                     match attachments.get_mut(attachment_index) {
                         Some(attachment) => match self.format_attachment(
                             attachment,
-                            &message.chat_id.unwrap_or(0).to_string(),
+                            &message.get_chat_id(),
                         ) {
                             Ok(result) => {
                                 attachment_index += 1;
@@ -611,7 +611,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                 // Sticker messages have only one attachment, the sticker image
                 Ok(match paths.get_mut(0) {
                     Some(sticker) => match self
-                        .format_attachment(sticker, &msg.chat_id.unwrap_or(0).to_string())
+                        .format_attachment(sticker, &msg.get_chat_id())
                     {
                         Ok(img) => {
                             Some(format!("{img}<span class=\"reaction\"> from {who}</span>"))

@@ -474,6 +474,11 @@ impl Message {
         self.item_type == 6
     }
 
+    /// Get the chat_id of a chat as a String
+    pub fn get_chat_id(&self) -> String {
+        self.chat_id.unwrap_or(0).to_string()
+    }
+
     /// Get the index of the part of a message a reply is pointing to
     fn get_reply_index(&self) -> usize {
         if let Some(parts) = &self.thread_originator_part {
