@@ -443,11 +443,16 @@ impl<'a> Writer<'a> for HTML<'a> {
                                     // Just copy the file
                                     copy_path.set_extension(ext);
                                     if qualified_attachment_path.exists() {
-                                        if let Err(why) =
-                                            create_dir_all(copy_path.parent().unwrap())
-                                        {
-                                            eprintln!("Unable to create {copy_path:?}: {why}");
+
+                                        // Ensure the directory tree exists
+                                        if let Some(folder) = copy_path.parent() {
+                                            if !folder.exists() {
+                                                if let Err(why) = create_dir_all(folder) {
+                                                    eprintln!("Unable to create {folder:?}: {why}");
+                                                }
+                                            }
                                         }
+
                                         if let Err(why) =
                                             copy(qualified_attachment_path, &copy_path)
                                         {
