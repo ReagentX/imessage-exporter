@@ -177,7 +177,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                     }
                 }
                 BubbleType::Attachment => match attachments.get_mut(attachment_index) {
-                    Some(attachment) => match self.format_attachment(attachment) {
+                    Some(attachment) => match self.format_attachment(attachment, "") {
                         Ok(result) => {
                             attachment_index += 1;
                             self.add_line(&mut formatted_message, &result, &indent);
@@ -267,7 +267,11 @@ impl<'a> Writer<'a> for TXT<'a> {
         Ok(formatted_message)
     }
 
-    fn format_attachment(&self, attachment: &'a mut Attachment) -> Result<String, &'a str> {
+    fn format_attachment(
+        &self,
+        attachment: &'a mut Attachment,
+        _: &str,
+    ) -> Result<String, &'a str> {
         match &attachment.filename {
             Some(filename) => Ok(filename.to_owned()),
             // Filepath missing!

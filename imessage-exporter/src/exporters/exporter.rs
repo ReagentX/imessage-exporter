@@ -25,7 +25,11 @@ pub(super) trait Writer<'a> {
     /// Format a message, including its reactions and replies
     fn format_message(&self, msg: &Message, indent: usize) -> Result<String, TableError>;
     /// Format an attachment, possibly by reading the disk
-    fn format_attachment(&self, msg: &'a mut Attachment) -> Result<String, &'a str>;
+    fn format_attachment(
+        &self,
+        msg: &'a mut Attachment,
+        sub_dir: &'a str,
+    ) -> Result<String, &'a str>;
     /// Format an app message by parsing some of its fields
     fn format_app(
         &self,

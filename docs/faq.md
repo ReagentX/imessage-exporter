@@ -42,5 +42,6 @@ A: Expired ones cannot because they are deleted. If you kept them then they are 
 
 ***
 
-Q: Are deleted messages simply erased from the database?
+Q: Are messages deleted from the messages app erased from the database?
+
 A: Yes, this tool cannot recover deleted messages.
