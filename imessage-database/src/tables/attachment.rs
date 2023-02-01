@@ -37,7 +37,6 @@ pub struct Attachment {
     pub mime_type: Option<String>,
     pub transfer_name: Option<String>,
     pub total_bytes: i32,
-    pub attribution_info: Option<Vec<u8>>,
     pub hide_attachment: i32,
     pub copied_path: Option<PathBuf>,
 }
@@ -50,7 +49,6 @@ impl Table for Attachment {
             mime_type: row.get("mime_type").unwrap_or(None),
             transfer_name: row.get("transfer_name").unwrap_or(None),
             total_bytes: row.get("total_bytes").unwrap_or_default(),
-            attribution_info: row.get("attribution_info").unwrap_or(None),
             hide_attachment: row.get("hide_attachment").unwrap_or(0),
             copied_path: None,
         })
@@ -227,7 +225,6 @@ mod tests {
             mime_type: Some("image".to_string()),
             transfer_name: Some("c.png".to_string()),
             total_bytes: 100,
-            attribution_info: None,
             hide_attachment: 0,
             copied_path: None,
         }
