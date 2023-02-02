@@ -406,18 +406,6 @@ impl<'a> Writer<'a> for HTML<'a> {
                     if !self.config.options.no_copy {
                         let qualified_attachment_path = Path::new(&resolved_attachment_path);
 
-                        // Save time metadata for use later
-                        let metadata = metadata(qualified_attachment_path).unwrap();
-                        let mtime = match &message.date(&self.config.offset) {
-                            Ok(date) => FileTime::from_unix_time(
-                                date.timestamp(),
-                                date.timestamp_subsec_nanos(),
-                            ),
-                            Err(_) => FileTime::from_last_modification_time(&metadata),
-                        };
-
-                        let atime = FileTime::from_last_access_time(&metadata);
-
                         match attachment.extension() {
                             Some(ext) => {
                                 // Create a path to copy the file to
@@ -475,9 +463,22 @@ impl<'a> Writer<'a> for HTML<'a> {
                                     }
                                 }
                                 // Set the timestamps on the file's metadata to the original ones
-                                if let Err(why) = set_file_times(&copy_path, atime, mtime) {
-                                    eprintln!("Unable to update {copy_path:?} metadata: {why}")
-                                }
+                                // Save time metadata for use later
+                                if let Ok(metadata) = metadata(qualified_attachment_path) {
+                                    let mtime = match &message.date(&self.config.offset) {
+                                        Ok(date) => FileTime::from_unix_time(
+                                            date.timestamp(),
+                                            date.timestamp_subsec_nanos(),
+                                        ),
+                                        Err(_) => FileTime::from_last_modification_time(&metadata),
+                                    };
+
+                                    let atime = FileTime::from_last_access_time(&metadata);
+
+                                    if let Err(why) = set_file_times(&copy_path, atime, mtime) {
+                                        eprintln!("Unable to update {copy_path:?} metadata: {why}")
+                                    }
+                                };
 
                                 // Update the attachment
                                 attachment.copied_path = Some(copy_path);
