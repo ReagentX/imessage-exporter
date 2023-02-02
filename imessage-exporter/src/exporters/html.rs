@@ -462,6 +462,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                         return Err(attachment.filename());
                                     }
                                 }
+
                                 // Set the timestamps on the file's metadata to the original ones
                                 if let Ok(metadata) = metadata(qualified_attachment_path) {
                                     let mtime = match &message.date(&self.config.offset) {
