@@ -177,7 +177,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                     }
                 }
                 BubbleType::Attachment => match attachments.get_mut(attachment_index) {
-                    Some(attachment) => match self.format_attachment(attachment, &message) {
+                    Some(attachment) => match self.format_attachment(attachment, message) {
                         Ok(result) => {
                             attachment_index += 1;
                             self.add_line(&mut formatted_message, &result, &indent);
