@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    fs::{copy, create_dir_all, File},
+    fs::{copy, create_dir_all, metadata, File},
     io::Write,
     path::{Path, PathBuf},
 };
@@ -36,6 +36,7 @@ use imessage_database::{
     },
 };
 
+use filetime::{set_file_times, FileTime};
 use uuid::Uuid;
 
 const HEADER: &str = "<html>\n<meta charset=\"UTF-8\">";
@@ -260,10 +261,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                 }
                 BubbleType::Attachment => {
                     match attachments.get_mut(attachment_index) {
-                        Some(attachment) => match self.format_attachment(
-                            attachment,
-                            &message.get_chat_id(),
-                        ) {
+                        Some(attachment) => match self.format_attachment(attachment, message) {
                             Ok(result) => {
                                 attachment_index += 1;
                                 self.add_line(&mut formatted_message, &result, "", "");
@@ -392,7 +390,7 @@ impl<'a> Writer<'a> for HTML<'a> {
     fn format_attachment(
         &self,
         attachment: &'a mut Attachment,
-        sub_dir: &str,
+        message: &Message,
     ) -> Result<String, &'a str> {
         match attachment.path() {
             Some(path) => {
@@ -407,12 +405,14 @@ impl<'a> Writer<'a> for HTML<'a> {
                     // Perform optional copy + convert
                     if !self.config.options.no_copy {
                         let qualified_attachment_path = Path::new(&resolved_attachment_path);
+
                         match attachment.extension() {
                             Some(ext) => {
                                 // Create a path to copy the file to
                                 let mut copy_path = self.config.attachment_path();
 
                                 // Add the subdirectory
+                                let sub_dir = message.get_chat_id();
                                 if !sub_dir.is_empty() {
                                     copy_path.push(sub_dir);
                                 } else {
@@ -462,6 +462,24 @@ impl<'a> Writer<'a> for HTML<'a> {
                                         return Err(attachment.filename());
                                     }
                                 }
+
+                                // Set the timestamps on the file's metadata to the original ones
+                                if let Ok(metadata) = metadata(qualified_attachment_path) {
+                                    let mtime = match &message.date(&self.config.offset) {
+                                        Ok(date) => FileTime::from_unix_time(
+                                            date.timestamp(),
+                                            date.timestamp_subsec_nanos(),
+                                        ),
+                                        Err(_) => FileTime::from_last_modification_time(&metadata),
+                                    };
+
+                                    let atime = FileTime::from_last_access_time(&metadata);
+
+                                    if let Err(why) = set_file_times(&copy_path, atime, mtime) {
+                                        eprintln!("Unable to update {copy_path:?} metadata: {why}")
+                                    }
+                                };
+
                                 // Update the attachment
                                 attachment.copied_path = Some(copy_path);
                             }
@@ -471,19 +489,23 @@ impl<'a> Writer<'a> for HTML<'a> {
                         }
                     }
 
+                    // Build a relative filepath from the fully qualified one on the `Attachment`
                     let embed_path = match &attachment.copied_path {
-                        Some(path) => format!(
-                            "{ATTACHMENTS_DIR}/{}/{}",
-                            if !sub_dir.is_empty() {
-                                sub_dir
-                            } else {
-                                ORPHANED
-                            },
-                            path.file_name()
-                                .ok_or(attachment.filename())?
-                                .to_str()
-                                .ok_or(attachment.filename())?
-                        ),
+                        Some(path) => {
+                            let sub_dir = &message.get_chat_id();
+                            format!(
+                                "{ATTACHMENTS_DIR}/{}/{}",
+                                if !sub_dir.is_empty() {
+                                    sub_dir
+                                } else {
+                                    ORPHANED
+                                },
+                                path.file_name()
+                                    .ok_or(attachment.filename())?
+                                    .to_str()
+                                    .ok_or(attachment.filename())?
+                            )
+                        }
                         None => resolved_attachment_path,
                     };
 
@@ -527,7 +549,7 @@ impl<'a> Writer<'a> for HTML<'a> {
         &self,
         message: &'a Message,
         attachments: &mut Vec<Attachment>,
-        indent: &str,
+        _: &str,
     ) -> Result<String, PlistParseError> {
         if let Variant::App(balloon) = message.variant() {
             let mut app_bubble = String::new();
@@ -539,24 +561,29 @@ impl<'a> Writer<'a> for HTML<'a> {
                     let res = if message.is_url() {
                         let bubble = URLMessage::get_url_message_override(&parsed)?;
                         match bubble {
-                            URLOverride::Normal(balloon) => self.format_url(&balloon, indent),
-                            URLOverride::AppleMusic(balloon) => self.format_music(&balloon, indent),
+                            URLOverride::Normal(balloon) => self.format_url(&balloon, message),
+                            URLOverride::AppleMusic(balloon) => {
+                                self.format_music(&balloon, message)
+                            }
                             URLOverride::Collaboration(balloon) => {
-                                self.format_collaboration(&balloon, indent)
+                                self.format_collaboration(&balloon, message)
                             }
                         }
                     } else {
                         match AppMessage::from_map(&parsed) {
                             Ok(bubble) => match balloon {
-                                CustomBalloon::Application(bundle_id) => {
-                                    self.format_generic_app(&bubble, bundle_id, attachments, indent)
-                                }
+                                CustomBalloon::Application(bundle_id) => self.format_generic_app(
+                                    &bubble,
+                                    bundle_id,
+                                    attachments,
+                                    message,
+                                ),
                                 CustomBalloon::Handwriting => {
-                                    self.format_handwriting(&bubble, indent)
+                                    self.format_handwriting(&bubble, message)
                                 }
-                                CustomBalloon::ApplePay => self.format_apple_pay(&bubble, indent),
-                                CustomBalloon::Fitness => self.format_fitness(&bubble, indent),
-                                CustomBalloon::Slideshow => self.format_slideshow(&bubble, indent),
+                                CustomBalloon::ApplePay => self.format_apple_pay(&bubble, message),
+                                CustomBalloon::Fitness => self.format_fitness(&bubble, message),
+                                CustomBalloon::Slideshow => self.format_slideshow(&bubble, message),
                                 _ => unreachable!(),
                             },
                             Err(why) => return Err(why),
@@ -610,9 +637,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                 let who = self.config.who(&msg.handle_id, msg.is_from_me);
                 // Sticker messages have only one attachment, the sticker image
                 Ok(match paths.get_mut(0) {
-                    Some(sticker) => match self
-                        .format_attachment(sticker, &msg.get_chat_id())
-                    {
+                    Some(sticker) => match self.format_attachment(sticker, msg) {
                         Ok(img) => {
                             Some(format!("{img}<span class=\"reaction\"> from {who}</span>"))
                         }
@@ -726,8 +751,8 @@ impl<'a> Writer<'a> for HTML<'a> {
     }
 }
 
-impl<'a> BalloonFormatter for HTML<'a> {
-    fn format_url(&self, balloon: &URLMessage, _: &str) -> String {
+impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
+    fn format_url(&self, balloon: &URLMessage, _: &Message) -> String {
         let mut out_s = String::new();
 
         // Make the whole bubble clickable
@@ -789,7 +814,7 @@ impl<'a> BalloonFormatter for HTML<'a> {
         out_s
     }
 
-    fn format_music(&self, balloon: &MusicMessage, _: &str) -> String {
+    fn format_music(&self, balloon: &MusicMessage, _: &Message) -> String {
         let mut out_s = String::new();
 
         // Header section
@@ -848,7 +873,7 @@ impl<'a> BalloonFormatter for HTML<'a> {
         out_s
     }
 
-    fn format_collaboration(&self, balloon: &CollaborationMessage, _: &str) -> String {
+    fn format_collaboration(&self, balloon: &CollaborationMessage, _: &Message) -> String {
         let mut out_s = String::new();
 
         // Header section
@@ -905,20 +930,20 @@ impl<'a> BalloonFormatter for HTML<'a> {
         out_s
     }
 
-    fn format_handwriting(&self, _: &AppMessage, _: &str) -> String {
+    fn format_handwriting(&self, _: &AppMessage, _: &Message) -> String {
         String::from("Handwritten messages are not yet supported!")
     }
 
-    fn format_apple_pay(&self, balloon: &AppMessage, sub_dir: &str) -> String {
-        self.balloon_to_html(balloon, "Apple Pay", &mut [], sub_dir)
+    fn format_apple_pay(&self, balloon: &AppMessage, message: &Message) -> String {
+        self.balloon_to_html(balloon, "Apple Pay", &mut [], message)
     }
 
-    fn format_fitness(&self, balloon: &AppMessage, sub_dir: &str) -> String {
-        self.balloon_to_html(balloon, "Fitness", &mut [], sub_dir)
+    fn format_fitness(&self, balloon: &AppMessage, message: &Message) -> String {
+        self.balloon_to_html(balloon, "Fitness", &mut [], message)
     }
 
-    fn format_slideshow(&self, balloon: &AppMessage, sub_dir: &str) -> String {
-        self.balloon_to_html(balloon, "Slideshow", &mut [], sub_dir)
+    fn format_slideshow(&self, balloon: &AppMessage, message: &Message) -> String {
+        self.balloon_to_html(balloon, "Slideshow", &mut [], message)
     }
 
     fn format_generic_app(
@@ -926,9 +951,9 @@ impl<'a> BalloonFormatter for HTML<'a> {
         balloon: &AppMessage,
         bundle_id: &str,
         attachments: &mut Vec<Attachment>,
-        sub_dir: &str,
+        message: &Message,
     ) -> String {
-        self.balloon_to_html(balloon, bundle_id, attachments, sub_dir)
+        self.balloon_to_html(balloon, bundle_id, attachments, message)
     }
 }
 
@@ -977,7 +1002,7 @@ impl<'a> HTML<'a> {
         balloon: &AppMessage,
         bundle_id: &str,
         attachments: &mut [Attachment],
-        sub_dir: &str,
+        message: &Message,
     ) -> String {
         let mut out_s = String::new();
         if let Some(url) = balloon.url {
@@ -995,7 +1020,7 @@ impl<'a> HTML<'a> {
         } else if let Some(attachment) = attachments.get_mut(0) {
             out_s.push_str(
                 &self
-                    .format_attachment(attachment, sub_dir)
+                    .format_attachment(attachment, message)
                     .unwrap_or_default(),
             );
         }
@@ -1079,7 +1104,7 @@ mod tests {
     use crate::{exporters::exporter::Writer, Config, Exporter, Options, HTML};
     use imessage_database::{tables::messages::Message, util::dirs::default_db_path};
 
-    fn blank() -> Message {
+    pub fn blank() -> Message {
         Message {
             rowid: i32::default(),
             guid: String::default(),
@@ -1379,7 +1404,7 @@ mod tests {
 
 #[cfg(test)]
 mod balloon_format_tests {
-    use super::tests::fake_options;
+    use super::tests::{blank, fake_options};
     use crate::{exporters::exporter::BalloonFormatter, Config, Exporter, HTML};
     use imessage_database::message_types::{
         app::AppMessage, collaboration::CollaborationMessage, music::MusicMessage, url::URLMessage,
@@ -1404,7 +1429,7 @@ mod balloon_format_tests {
             placeholder: false,
         };
 
-        let expected = exporter.format_url(&balloon, "");
+        let expected = exporter.format_url(&balloon, &blank());
         let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"images\" loading=\"lazy\", onerror=\"this.style.display='none'\"><div class=\"name\">site_name</div></div><div class=\"app_footer\"><div class=\"caption\"><xmp>title</xmp></div><div class=\"subcaption\"><xmp>summary</xmp></div></div></a>";
 
         assert_eq!(expected, actual);
@@ -1425,7 +1450,7 @@ mod balloon_format_tests {
             track_name: Some("track_name"),
         };
 
-        let expected = exporter.format_music(&balloon, "");
+        let expected = exporter.format_music(&balloon, &blank());
         let actual = "<div class=\"app_header\"><div class=\"name\">track_name</div><audio controls src=\"preview\" </audio></div><a href=\"url\"><div class=\"app_footer\"><div class=\"caption\">artist</div><div class=\"subcaption\">album</div></div></a>";
 
         assert_eq!(expected, actual);
@@ -1447,7 +1472,7 @@ mod balloon_format_tests {
             app_name: Some("app_name"),
         };
 
-        let expected = exporter.format_collaboration(&balloon, "");
+        let expected = exporter.format_collaboration(&balloon, &blank());
         let actual = "<div class=\"app_header\"><div class=\"name\">app_name</div></div><a href=\"url\"><div class=\"app_footer\"><div class=\"caption\">title</div><div class=\"subcaption\">url</div></div></a>";
 
         assert_eq!(expected, actual);
@@ -1473,7 +1498,7 @@ mod balloon_format_tests {
             ldtext: Some("ldtext"),
         };
 
-        let expected = exporter.format_apple_pay(&balloon, "");
+        let expected = exporter.format_apple_pay(&balloon, &blank());
         let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"image\"><div class=\"name\">app_name</div><div class=\"image_title\">title</div><div class=\"image_subtitle\">subtitle</div><div class=\"ldtext\">ldtext</div></div><div class=\"app_footer\"><div class=\"caption\">caption</div><div class=\"subcaption\">subcaption</div><div class=\"trailing_caption\">trailing_caption</div><div class=\"trailing_subcaption\">trailing_subcaption</div></div></a>";
 
         assert_eq!(expected, actual);
@@ -1499,7 +1524,7 @@ mod balloon_format_tests {
             ldtext: Some("ldtext"),
         };
 
-        let expected = exporter.format_fitness(&balloon, "");
+        let expected = exporter.format_fitness(&balloon, &blank());
         let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"image\"><div class=\"name\">app_name</div><div class=\"image_title\">title</div><div class=\"image_subtitle\">subtitle</div><div class=\"ldtext\">ldtext</div></div><div class=\"app_footer\"><div class=\"caption\">caption</div><div class=\"subcaption\">subcaption</div><div class=\"trailing_caption\">trailing_caption</div><div class=\"trailing_subcaption\">trailing_subcaption</div></div></a>";
 
         assert_eq!(expected, actual);
@@ -1525,7 +1550,7 @@ mod balloon_format_tests {
             ldtext: Some("ldtext"),
         };
 
-        let expected = exporter.format_slideshow(&balloon, "");
+        let expected = exporter.format_slideshow(&balloon, &blank());
         let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"image\"><div class=\"name\">app_name</div><div class=\"image_title\">title</div><div class=\"image_subtitle\">subtitle</div><div class=\"ldtext\">ldtext</div></div><div class=\"app_footer\"><div class=\"caption\">caption</div><div class=\"subcaption\">subcaption</div><div class=\"trailing_caption\">trailing_caption</div><div class=\"trailing_subcaption\">trailing_subcaption</div></div></a>";
 
         assert_eq!(expected, actual);
@@ -1551,7 +1576,7 @@ mod balloon_format_tests {
             ldtext: Some("ldtext"),
         };
 
-        let expected = exporter.format_generic_app(&balloon, "bundle_id", &mut vec![], "");
+        let expected = exporter.format_generic_app(&balloon, "bundle_id", &mut vec![], &blank());
         let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"image\"><div class=\"name\">app_name</div><div class=\"image_title\">title</div><div class=\"image_subtitle\">subtitle</div><div class=\"ldtext\">ldtext</div></div><div class=\"app_footer\"><div class=\"caption\">caption</div><div class=\"subcaption\">subcaption</div><div class=\"trailing_caption\">trailing_caption</div><div class=\"trailing_subcaption\">trailing_subcaption</div></div></a>";
 
         assert_eq!(expected, actual);
