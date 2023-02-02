@@ -463,7 +463,6 @@ impl<'a> Writer<'a> for HTML<'a> {
                                     }
                                 }
                                 // Set the timestamps on the file's metadata to the original ones
-                                // Save time metadata for use later
                                 if let Ok(metadata) = metadata(qualified_attachment_path) {
                                     let mtime = match &message.date(&self.config.offset) {
                                         Ok(date) => FileTime::from_unix_time(
