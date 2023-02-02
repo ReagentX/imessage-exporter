@@ -177,7 +177,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                     }
                 }
                 BubbleType::Attachment => match attachments.get_mut(attachment_index) {
-                    Some(attachment) => match self.format_attachment(attachment, "") {
+                    Some(attachment) => match self.format_attachment(attachment, &message) {
                         Ok(result) => {
                             attachment_index += 1;
                             self.add_line(&mut formatted_message, &result, &indent);
@@ -270,7 +270,7 @@ impl<'a> Writer<'a> for TXT<'a> {
     fn format_attachment(
         &self,
         attachment: &'a mut Attachment,
-        _: &str,
+        _: &Message,
     ) -> Result<String, &'a str> {
         match &attachment.filename {
             Some(filename) => Ok(filename.to_owned()),
@@ -470,7 +470,7 @@ impl<'a> Writer<'a> for TXT<'a> {
     }
 }
 
-impl<'a> BalloonFormatter for TXT<'a> {
+impl<'a> BalloonFormatter<&'a str> for TXT<'a> {
     fn format_url(&self, balloon: &URLMessage, indent: &str) -> String {
         let mut out_s = String::new();
 
