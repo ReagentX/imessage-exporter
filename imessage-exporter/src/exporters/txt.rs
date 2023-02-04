@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    app::{progress::build_progress_bar_export, runtime::Config},
+    app::{error::RuntimeError, progress::build_progress_bar_export, runtime::Config},
     exporters::exporter::{BalloonFormatter, Exporter, Writer},
 };
 
@@ -54,7 +54,7 @@ impl<'a> Exporter<'a> for TXT<'a> {
         }
     }
 
-    fn iter_messages(&mut self) -> Result<(), TableError> {
+    fn iter_messages(&mut self) -> Result<(), RuntimeError> {
         // Tell the user what we are doing
         eprintln!(
             "Exporting to {} as txt...",
@@ -66,14 +66,14 @@ impl<'a> Exporter<'a> for TXT<'a> {
         let total_messages = Message::get_count(&self.config.db);
         let pb = build_progress_bar_export(total_messages);
 
-        let mut statement = Message::get(&self.config.db);
+        let mut statement = Message::get(&self.config.db).map_err(RuntimeError::DatabaseError)?;
 
         let messages = statement
             .query_map([], |row| Ok(Message::from_row(row)))
             .unwrap();
 
         for message in messages {
-            let mut msg = Message::extract(message)?;
+            let mut msg = Message::extract(message).map_err(RuntimeError::DatabaseError)?;
             // Render the announcement in-line
             if msg.is_announcement() {
                 let announcement = self.format_announcement(&msg);
@@ -82,7 +82,9 @@ impl<'a> Exporter<'a> for TXT<'a> {
             // Message replies and reactions are rendered in context, so no need to render them separately
             else if !msg.is_reaction() {
                 msg.gen_text(&self.config.db);
-                let message = self.format_message(&msg, 0)?;
+                let message = self
+                    .format_message(&msg, 0)
+                    .map_err(RuntimeError::DatabaseError)?;
                 TXT::write_to_file(self.get_or_create_file(&msg), &message);
             }
             current_message += 1;
@@ -128,7 +130,6 @@ impl<'a> Writer<'a> for TXT<'a> {
         let message_parts = message.body();
         let mut attachments = Attachment::from_message(&self.config.db, message)?;
         let mut replies = message.get_replies(&self.config.db)?;
-        let reactions = message.get_reactions(&self.config.db, &self.config.reactions)?;
 
         // Index of where we are in the attachment Vector
         let mut attachment_index: usize = 0;
@@ -175,7 +176,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                     }
                 }
                 BubbleType::Attachment => match attachments.get_mut(attachment_index) {
-                    Some(attachment) => match self.format_attachment(attachment) {
+                    Some(attachment) => match self.format_attachment(attachment, message) {
                         Ok(result) => {
                             attachment_index += 1;
                             self.add_line(&mut formatted_message, &result, &indent);
@@ -206,18 +207,28 @@ impl<'a> Writer<'a> for TXT<'a> {
             }
 
             // Handle Reactions
-            if let Some(reactions) = reactions.get(&idx) {
-                self.add_line(&mut formatted_message, "Reactions:", &indent);
-                reactions
-                    .iter()
-                    .try_for_each(|reaction| -> Result<(), TableError> {
-                        self.add_line(
-                            &mut formatted_message,
-                            &self.format_reaction(reaction)?,
-                            &indent,
-                        );
-                        Ok(())
-                    })?;
+            if let Some(reactions_map) = self.config.reactions.get(&message.guid) {
+                if let Some(reactions) = reactions_map.get(&idx) {
+                    let mut formatted_reactions = String::new();
+                    reactions
+                        .iter()
+                        .try_for_each(|reaction| -> Result<(), TableError> {
+                            let formatted = self.format_reaction(reaction)?;
+                            if !formatted.is_empty() {
+                                self.add_line(
+                                    &mut formatted_reactions,
+                                    &self.format_reaction(reaction)?,
+                                    &indent,
+                                );
+                            }
+                            Ok(())
+                        })?;
+
+                    if !formatted_reactions.is_empty() {
+                        self.add_line(&mut formatted_message, "Reactions:", &indent);
+                        self.add_line(&mut formatted_message, &formatted_reactions, &indent);
+                    }
+                }
             }
 
             // Handle Replies
@@ -255,7 +266,11 @@ impl<'a> Writer<'a> for TXT<'a> {
         Ok(formatted_message)
     }
 
-    fn format_attachment(&self, attachment: &'a mut Attachment) -> Result<String, &'a str> {
+    fn format_attachment(
+        &self,
+        attachment: &'a mut Attachment,
+        _: &Message,
+    ) -> Result<String, &'a str> {
         match &attachment.filename {
             Some(filename) => Ok(filename.to_owned()),
             // Filepath missing!
@@ -454,7 +469,7 @@ impl<'a> Writer<'a> for TXT<'a> {
     }
 }
 
-impl<'a> BalloonFormatter for TXT<'a> {
+impl<'a> BalloonFormatter<&'a str> for TXT<'a> {
     fn format_url(&self, balloon: &URLMessage, indent: &str) -> String {
         let mut out_s = String::new();
 

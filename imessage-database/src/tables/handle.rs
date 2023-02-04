@@ -28,8 +28,9 @@ impl Table for Handle {
         })
     }
 
-    fn get(db: &Connection) -> Statement {
-        db.prepare(&format!("SELECT * from {HANDLE}")).unwrap()
+    fn get(db: &Connection) -> Result<Statement, TableError> {
+        db.prepare(&format!("SELECT * from {HANDLE}"))
+            .map_err(TableError::Handle)
     }
 
     fn extract(handle: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
@@ -62,14 +63,14 @@ impl Cacheable for Handle {
     /// let conn = get_connection(&db_path).unwrap();
     /// let chatrooms = Handle::cache(&conn);
     /// ```
-    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, String> {
+    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
         // Create cache for user IDs
         let mut map = HashMap::new();
         // Handle ID 0 is self in group chats
         map.insert(0, ME.to_string());
 
         // Create query
-        let mut statement = Handle::get(db);
+        let mut statement = Handle::get(db)?;
 
         // Execute query to build the Handles
         let handles = statement
@@ -78,8 +79,7 @@ impl Cacheable for Handle {
 
         // Iterate over the handles and update the map
         for handle in handles {
-            let contact = Handle::extract(handle)
-                .map_err(|why| format!("Unable to query {HANDLE} table: {why}"))?;
+            let contact = Handle::extract(handle)?;
             map.insert(contact.rowid, contact.id);
         }
 

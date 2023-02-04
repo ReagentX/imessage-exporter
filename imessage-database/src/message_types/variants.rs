@@ -20,6 +20,7 @@ use crate::{
 /// - 1 is the second image
 /// - 2 is the third image
 /// - 3 is the text of the message
+/// 
 /// In this example, a Like on `p:2/` is a like on the third image
 ///
 /// Reactions are normal messages in the database, but only the latest reaction

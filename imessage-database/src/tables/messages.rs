@@ -126,9 +126,9 @@ impl Table for Message {
         })
     }
 
-    fn get(db: &Connection) -> Statement {
+    fn get(db: &Connection) -> Result<Statement, TableError> {
         // If database has `thread_originator_guid`, we can parse replies, otherwise default to 0
-        db.prepare(&format!(
+        Ok(db.prepare(&format!(
             "SELECT 
                  *,
                  c.chat_id, 
@@ -141,7 +141,7 @@ impl Table for Message {
                  m.date;
             "
         ))
-        .unwrap_or_else(|_| db.prepare(&format!(
+        .unwrap_or(db.prepare(&format!(
             "SELECT 
                  *,
                  c.chat_id, 
@@ -153,7 +153,7 @@ impl Table for Message {
              ORDER BY 
                  m.date;
             "
-        )).unwrap()
+        )).map_err(TableError::Messages)?)
     )
     }
 
@@ -218,9 +218,20 @@ impl Diagnostic for Message {
 
 impl Cacheable for Message {
     type K = String;
-    type V = Vec<String>;
+    type V = HashMap<usize, Vec<Self>>;
     /// Used for reactions that do not exist in a foreign key table
-    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, String> {
+    ///
+    /// Builds a map like:
+    ///
+    /// {
+    ///     message_guid: {
+    ///         0: [Message, Message],
+    ///         1: [Message]
+    ///     }
+    /// }
+    ///
+    /// Where the `0` and `1` are the reaction indexes in the body of the message mapped by `message_guid`
+    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
         // Create cache for user IDs
         let mut map: HashMap<Self::K, Self::V> = HashMap::new();
 
@@ -246,16 +257,23 @@ impl Cacheable for Message {
 
             // Iterate over the messages and update the map
             for reaction in messages {
-                let reaction = Self::extract(reaction)
-                    .map_err(|why| format!("Unable to query {MESSAGE} table: {why}"))?;
+                let reaction = Self::extract(reaction)?;
                 if reaction.is_reaction() {
-                    if let Some((_, reaction_target_guid)) = reaction.clean_associated_guid() {
+                    if let Some((idx, reaction_target_guid)) = reaction.clean_associated_guid() {
                         match map.get_mut(reaction_target_guid) {
-                            Some(reactions) => {
-                                reactions.push(reaction.guid);
-                            }
+                            Some(reactions) => match reactions.get_mut(&idx) {
+                                Some(reactions_vec) => {
+                                    reactions_vec.push(reaction);
+                                }
+                                None => {
+                                    reactions.insert(idx, vec![reaction]);
+                                }
+                            },
                             None => {
-                                map.insert(reaction_target_guid.to_string(), vec![reaction.guid]);
+                                map.insert(
+                                    reaction_target_guid.to_string(),
+                                    HashMap::from([(idx, vec![reaction])]),
+                                );
                             }
                         }
                     }
@@ -285,8 +303,8 @@ impl Message {
 
     /// Get a vector of a message's components
     ///
-    /// If the message has attachments, there will be one [`U+FFFC`]((https://www.fileformat.info/info/unicode/char/fffc/index.htm)) character
-    /// for each attachment and one [`U+FFFD`](https://www.fileformat.info/info/unicode/char/fffd/index.htm) for app messages that we need
+    /// If the message has attachments, there will be one [`U+FFFC`](https://www.compart.com/en/unicode/U+FFFC) character
+    /// for each attachment and one [`U+FFFD`](https://www.compart.com/en/unicode/U+FFFD) for app messages that we need
     /// to format.
     ///
     /// An iMessage that contains body text like:

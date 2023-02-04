@@ -12,7 +12,6 @@ use crate::{
     Exporter, HTML, TXT,
 };
 use imessage_database::{
-    error::table::TableError,
     tables::{
         attachment::Attachment,
         chat::Chat,
@@ -20,12 +19,14 @@ use imessage_database::{
         handle::Handle,
         messages::Message,
         table::{
-            get_connection, Cacheable, Deduplicate, Diagnostic, DEFAULT_OUTPUT_DIR, MAX_LENGTH, ME,
-            UNKNOWN,
+            get_connection, Cacheable, Deduplicate, Diagnostic, ATTACHMENTS_DIR,
+            DEFAULT_OUTPUT_DIR, MAX_LENGTH, ME, ORPHANED, UNKNOWN,
         },
     },
     util::{dates::get_offset, dirs::home},
 };
+
+use super::error::RuntimeError;
 
 /// Stores the application state and handles application lifecycle
 pub struct Config<'a> {
@@ -40,7 +41,7 @@ pub struct Config<'a> {
     /// Map of participant ID to an internal unique participant ID
     pub real_participants: HashMap<i32, i32>,
     /// Messages that are reactions to other messages
-    pub reactions: HashMap<String, Vec<String>>,
+    pub reactions: HashMap<String, HashMap<usize, Vec<Message>>>,
     /// App configuration options
     pub options: Options<'a>,
     /// Global date offset used by the iMessage database:
@@ -77,8 +78,18 @@ impl<'a> Config<'a> {
     /// Get the attachment path for the current session
     pub fn attachment_path(&self) -> PathBuf {
         let mut path = self.export_path();
-        path.push("attachments");
+        path.push(ATTACHMENTS_DIR);
         path
+    }
+
+    /// Get the attachment path for a specific chat ID
+    pub fn conversation_attachment_path(&self, chat_id: Option<i32>) -> String {
+        if let Some(chat_id) = chat_id {
+            if let Some(real_id) = self.real_chatrooms.get(&chat_id) {
+                return real_id.to_string();
+            }
+        }
+        String::from(ORPHANED)
     }
 
     /// Get a filename for a chat, possibly using cached data.
@@ -160,22 +171,23 @@ impl<'a> Config<'a> {
     /// let options = Options::from_args(&args);
     /// let app = State::new(options).unwrap();
     /// ```
-    pub fn new(options: Options) -> Result<Config, String> {
+    pub fn new(options: Options) -> Result<Config, RuntimeError> {
         // Escape early if options are invalid
         if !options.valid {
-            return Err(String::from("Invalid options!"));
+            return Err(RuntimeError::InvalidOptions);
         }
 
-        let conn = get_connection(&options.db_path)?;
+        let conn = get_connection(&options.db_path).map_err(RuntimeError::DatabaseError)?;
         eprintln!("Building cache...");
         eprintln!("[1/4] Caching chats...");
-        let chatrooms = Chat::cache(&conn)?;
+        let chatrooms = Chat::cache(&conn).map_err(RuntimeError::DatabaseError)?;
         eprintln!("[2/4] Caching chatrooms...");
-        let chatroom_participants = ChatToHandle::cache(&conn)?;
+        let chatroom_participants =
+            ChatToHandle::cache(&conn).map_err(RuntimeError::DatabaseError)?;
         eprintln!("[3/4] Caching participants...");
-        let participants = Handle::cache(&conn)?;
+        let participants = Handle::cache(&conn).map_err(RuntimeError::DatabaseError)?;
         eprintln!("[4/4] Caching reactions...");
-        let reactions = Message::cache(&conn)?;
+        let reactions = Message::cache(&conn).map_err(RuntimeError::DatabaseError)?;
         eprintln!("Cache built!");
         Ok(Config {
             chatrooms,
@@ -229,7 +241,7 @@ impl<'a> Config<'a> {
     /// let app = State::new(options).unwrap();
     /// app.start();
     /// ```
-    pub fn start(&self) -> Result<(), TableError> {
+    pub fn start(&self) -> Result<(), RuntimeError> {
         if self.options.diagnostic {
             self.run_diagnostic();
         } else if self.options.export_type.is_some() {
@@ -270,7 +282,7 @@ impl<'a> Config<'a> {
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use crate::{Config, Options};
     use imessage_database::{
         tables::{
@@ -571,5 +583,44 @@ mod tests {
         // Get filename
         let room = app.conversation(None);
         assert!(room.is_none());
+    }
+
+    #[test]
+    fn can_get_valid_attachment_sub_dir() {
+        let options = fake_options();
+        let mut app = fake_app(options);
+
+        // Create chatroom ID
+        app.real_chatrooms.insert(0, 0);
+
+        // Get subdirectory
+        let sub_dir = app.conversation_attachment_path(Some(0));
+        assert_eq!(String::from("0"), sub_dir)
+    }
+
+    #[test]
+    fn can_get_invalid_attachment_sub_dir() {
+        let options = fake_options();
+        let mut app = fake_app(options);
+
+        // Create chatroom ID
+        app.real_chatrooms.insert(0, 0);
+
+        // Get subdirectory
+        let sub_dir = app.conversation_attachment_path(Some(1));
+        assert_eq!(String::from("orphaned"), sub_dir)
+    }
+
+    #[test]
+    fn can_get_missing_attachment_sub_dir() {
+        let options = fake_options();
+        let mut app = fake_app(options);
+
+        // Create chatroom ID
+        app.real_chatrooms.insert(0, 0);
+
+        // Get subdirectory
+        let sub_dir = app.conversation_attachment_path(None);
+        assert_eq!(String::from("orphaned"), sub_dir)
     }
 }

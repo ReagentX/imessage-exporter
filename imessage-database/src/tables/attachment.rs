@@ -3,7 +3,7 @@
 */
 
 use rusqlite::{Connection, Error, Error as E, Result, Row, Statement};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::{
     error::table::TableError,
@@ -37,9 +37,8 @@ pub struct Attachment {
     pub mime_type: Option<String>,
     pub transfer_name: Option<String>,
     pub total_bytes: i32,
-    pub attribution_info: Option<Vec<u8>>,
     pub hide_attachment: i32,
-    pub copied_path: Option<String>,
+    pub copied_path: Option<PathBuf>,
 }
 
 impl Table for Attachment {
@@ -50,15 +49,14 @@ impl Table for Attachment {
             mime_type: row.get("mime_type").unwrap_or(None),
             transfer_name: row.get("transfer_name").unwrap_or(None),
             total_bytes: row.get("total_bytes").unwrap_or_default(),
-            attribution_info: row.get("attribution_info").unwrap_or(None),
             hide_attachment: row.get("hide_attachment").unwrap_or(0),
             copied_path: None,
         })
     }
 
-    fn get(db: &Connection) -> Statement {
+    fn get(db: &Connection) -> Result<Statement, TableError> {
         db.prepare(&format!("SELECT * from {}", ATTACHMENT))
-            .unwrap()
+            .map_err(TableError::Attachment)
     }
 
     fn extract(attachment: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
@@ -227,7 +225,6 @@ mod tests {
             mime_type: Some("image".to_string()),
             transfer_name: Some("c.png".to_string()),
             total_bytes: 100,
-            attribution_info: None,
             hide_attachment: 0,
             copied_path: None,
         }
