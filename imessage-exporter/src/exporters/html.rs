@@ -412,12 +412,9 @@ impl<'a> Writer<'a> for HTML<'a> {
                                 let mut copy_path = self.config.attachment_path();
 
                                 // Add the subdirectory
-                                let sub_dir = message.get_chat_id();
-                                if !sub_dir.is_empty() {
-                                    copy_path.push(sub_dir);
-                                } else {
-                                    copy_path.push(ORPHANED);
-                                }
+                                let sub_dir =
+                                    self.config.conversation_attachment_path(message.chat_id);
+                                copy_path.push(sub_dir);
 
                                 // Add the random filename
                                 copy_path.push(Uuid::new_v4().to_string());
@@ -492,14 +489,11 @@ impl<'a> Writer<'a> for HTML<'a> {
                     // Build a relative filepath from the fully qualified one on the `Attachment`
                     let embed_path = match &attachment.copied_path {
                         Some(path) => {
-                            let sub_dir = &message.get_chat_id();
+                            let sub_dir =
+                                &self.config.conversation_attachment_path(message.chat_id);
                             format!(
                                 "{ATTACHMENTS_DIR}/{}/{}",
-                                if !sub_dir.is_empty() {
-                                    sub_dir
-                                } else {
-                                    ORPHANED
-                                },
+                                sub_dir,
                                 path.file_name()
                                     .ok_or(attachment.filename())?
                                     .to_str()

@@ -20,7 +20,7 @@ use imessage_database::{
         messages::Message,
         table::{
             get_connection, Cacheable, Deduplicate, Diagnostic, ATTACHMENTS_DIR,
-            DEFAULT_OUTPUT_DIR, MAX_LENGTH, ME, UNKNOWN,
+            DEFAULT_OUTPUT_DIR, MAX_LENGTH, ME, ORPHANED, UNKNOWN,
         },
     },
     util::{dates::get_offset, dirs::home},
@@ -80,6 +80,16 @@ impl<'a> Config<'a> {
         let mut path = self.export_path();
         path.push(ATTACHMENTS_DIR);
         path
+    }
+
+    /// Get the attachment path for a specific chat ID
+    pub fn conversation_attachment_path(&self, chat_id: Option<i32>) -> String {
+        if let Some(chat_id) = chat_id {
+            if let Some(real_id) = self.real_chatrooms.get(&chat_id) {
+                return real_id.to_string();
+            }
+        }
+        String::from(ORPHANED)
     }
 
     /// Get a filename for a chat, possibly using cached data.
@@ -272,7 +282,7 @@ impl<'a> Config<'a> {
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use crate::{Config, Options};
     use imessage_database::{
         tables::{
@@ -573,5 +583,44 @@ mod tests {
         // Get filename
         let room = app.conversation(None);
         assert!(room.is_none());
+    }
+
+    #[test]
+    fn can_get_valid_attachment_sub_dir() {
+        let options = fake_options();
+        let mut app = fake_app(options);
+
+        // Create chatroom ID
+        app.real_chatrooms.insert(0, 0);
+
+        // Get subdirectory
+        let sub_dir = app.conversation_attachment_path(Some(0));
+        assert_eq!(String::from("0"), sub_dir)
+    }
+
+    #[test]
+    fn can_get_invalid_attachment_sub_dir() {
+        let options = fake_options();
+        let mut app = fake_app(options);
+
+        // Create chatroom ID
+        app.real_chatrooms.insert(0, 0);
+
+        // Get subdirectory
+        let sub_dir = app.conversation_attachment_path(Some(1));
+        assert_eq!(String::from("orphaned"), sub_dir)
+    }
+
+    #[test]
+    fn can_get_missing_attachment_sub_dir() {
+        let options = fake_options();
+        let mut app = fake_app(options);
+
+        // Create chatroom ID
+        app.real_chatrooms.insert(0, 0);
+
+        // Get subdirectory
+        let sub_dir = app.conversation_attachment_path(None);
+        assert_eq!(String::from("orphaned"), sub_dir)
     }
 }

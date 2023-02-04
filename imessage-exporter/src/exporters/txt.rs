@@ -130,7 +130,6 @@ impl<'a> Writer<'a> for TXT<'a> {
         let message_parts = message.body();
         let mut attachments = Attachment::from_message(&self.config.db, message)?;
         let mut replies = message.get_replies(&self.config.db)?;
-        // let reactions = message.get_reactions(&self.config.db, &self.config.reactions)?;
 
         // Index of where we are in the attachment Vector
         let mut attachment_index: usize = 0;
