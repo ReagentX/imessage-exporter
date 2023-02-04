@@ -414,11 +414,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                 // Add the subdirectory
                                 let sub_dir =
                                     self.config.conversation_attachment_path(message.chat_id);
-                                if !sub_dir.is_empty() {
-                                    copy_path.push(sub_dir);
-                                } else {
-                                    copy_path.push(ORPHANED);
-                                }
+                                copy_path.push(sub_dir);
 
                                 // Add the random filename
                                 copy_path.push(Uuid::new_v4().to_string());
@@ -497,11 +493,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                 &self.config.conversation_attachment_path(message.chat_id);
                             format!(
                                 "{ATTACHMENTS_DIR}/{}/{}",
-                                if !sub_dir.is_empty() {
-                                    sub_dir
-                                } else {
-                                    ORPHANED
-                                },
+                                sub_dir,
                                 path.file_name()
                                     .ok_or(attachment.filename())?
                                     .to_str()
