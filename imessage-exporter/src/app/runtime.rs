@@ -82,6 +82,16 @@ impl<'a> Config<'a> {
         path
     }
 
+    /// Get the attachment path for a specific chat ID
+    pub fn conversation_attachment_path(&self, chat_id: Option<i32>) -> String {
+        if let Some(chat_id) = chat_id {
+            if let Some(real_id) = self.real_chatrooms.get(&chat_id) {
+                return real_id.to_string();
+            }
+        }
+        String::from("0")
+    }
+
     /// Get a filename for a chat, possibly using cached data.
     ///
     /// If the chat has an assigned name, use that, truncating if necessary.
