@@ -9,10 +9,11 @@ use crate::{
 };
 
 #[derive(Debug, Default)]
+/// Represents filter configurations for a SQL query.`
 pub struct QueryContext {
-    /// The start date filter. Only messages sent on or after this date will be included
+    /// The start date filter. Only messages sent on or after this date will be included.
     pub start: Option<i64>,
-    /// The end date filter. Only messages sent before this date will be included
+    /// The end date filter. Only messages sent before this date will be included.
     pub end: Option<i64>,
 }
 
@@ -80,12 +81,33 @@ impl QueryContext {
         Some(stamp - (get_offset() * TIMESTAMP_FACTOR))
     }
 
+
+    /// Determine if the current QueryContext has any filters present
+    /// 
+    /// # Example:
+    ///
+    /// ```
+    /// use imessage_database::util::query_context::QueryContext;
+    ///
+    /// let mut context = QueryContext::default();
+    /// assert!(!context.has_filters());
+    /// context.set_start("2023-01-01");
+    /// assert!(context.has_filters());
     pub fn has_filters(&self) -> bool {
         [self.start, self.end]
             .iter()
             .any(|maybe_date| maybe_date.is_some())
     }
 
+/// Generate the SQL `WHERE` clause described by this QueryContext
+/// # Example:
+///
+/// ```
+/// use imessage_database::util::query_context::QueryContext;
+///
+/// let mut context = QueryContext::default();
+/// context.set_start("2023-01-01");
+/// let filters = context.generate_filter_statement();
     pub fn generate_filter_statement(&self) -> String {
         let mut filters = String::new();
         if let Some(start) = self.start {
