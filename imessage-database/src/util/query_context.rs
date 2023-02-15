@@ -11,9 +11,9 @@ use crate::{
 #[derive(Debug, Default)]
 pub struct QueryContext {
     /// The start date filter. Only messages sent on or after this date will be included
-    start: Option<i64>,
-    /// The end date filter. Only messages sent before or on this date will be included
-    end: Option<i64>,
+    pub start: Option<i64>,
+    /// The end date filter. Only messages sent before this date will be included
+    pub end: Option<i64>,
 }
 
 impl QueryContext {
@@ -79,6 +79,33 @@ impl QueryContext {
 
         Some(stamp - (get_offset() * TIMESTAMP_FACTOR))
     }
+
+    pub fn has_filters(&self) -> bool {
+        [self.start, self.end]
+            .iter()
+            .any(|maybe_date| maybe_date.is_some())
+    }
+
+    pub fn generate_filter_statement(&self) -> String {
+        let mut filters = String::new();
+        if let Some(start) = self.start {
+            filters.push_str(&format!("    m.date >= {start}"))
+        }
+        if let Some(end) = self.end {
+            if !filters.is_empty() {
+                filters.push_str(" AND ")
+            }
+            filters.push_str(&format!("    m.date <= {end}"));
+        }
+
+        if !filters.is_empty() {
+            return format!(
+                " WHERE
+                 {filters}"
+            );
+        }
+        filters
+    }
 }
 
 #[cfg(test)]
@@ -95,6 +122,7 @@ mod use_tests {
         let context = QueryContext::default();
         assert!(context.start.is_none());
         assert!(context.end.is_none());
+        assert!(!context.has_filters());
     }
 
     #[test]
@@ -110,9 +138,13 @@ mod use_tests {
         let local = Local.from_utc_datetime(&from_timestamp);
 
         assert_eq!(format(&Ok(local)), "Jan 01, 2020 12:00:00 AM");
-
+        assert_eq!(
+            context.generate_filter_statement(),
+            " WHERE\n                     m.date >= 599558400000000000"
+        );
         assert!(context.start.is_some());
         assert!(context.end.is_none());
+        assert!(context.has_filters());
     }
 
     #[test]
@@ -128,9 +160,13 @@ mod use_tests {
         let local = Local.from_utc_datetime(&from_timestamp);
 
         assert_eq!(format(&Ok(local)), "Jan 01, 2020 12:00:00 AM");
-
+        assert_eq!(
+            context.generate_filter_statement(),
+            " WHERE\n                     m.date <= 599558400000000000"
+        );
         assert!(context.start.is_none());
         assert!(context.end.is_some());
+        assert!(context.has_filters());
     }
 
     #[test]
@@ -155,20 +191,29 @@ mod use_tests {
 
         assert_eq!(format(&Ok(local_start)), "Jan 01, 2020 12:00:00 AM");
         assert_eq!(format(&Ok(local_end)), "Feb 02, 2020 12:00:00 AM");
+        assert_eq!(
+            context.generate_filter_statement(),
+            " WHERE\n                     m.date >= 599558400000000000 AND     m.date <= 602323200000000000"
+        );
         assert!(context.start.is_some());
         assert!(context.end.is_some());
+        assert!(context.has_filters());
     }
 
     #[test]
     fn can_create_invalid_start() {
         let mut context = QueryContext::default();
-        assert!(context.set_start("2020-13-32").is_err())
+        assert!(context.set_start("2020-13-32").is_err());
+        assert!(!context.has_filters());
+        assert_eq!(context.generate_filter_statement(), "");
     }
 
     #[test]
     fn can_create_invalid_end() {
         let mut context = QueryContext::default();
-        assert!(context.set_end("fake").is_err())
+        assert!(context.set_end("fake").is_err());
+        assert!(!context.has_filters());
+        assert_eq!(context.generate_filter_statement(), "");
     }
 }
 

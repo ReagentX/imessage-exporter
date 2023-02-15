@@ -176,7 +176,7 @@ pub fn from_command_line() -> ArgMatches {
             Arg::new(OPTION_END_DATE)
                 .short('e')
                 .long(OPTION_END_DATE)
-                .help("The end date filter. Only messages sent before or on this date will be included")
+                .help("The end date filter. Only messages sent before this date will be included")
                 .takes_value(true)
                 .display_order(6)
                 .value_name("YYYY-MM-DD"),
