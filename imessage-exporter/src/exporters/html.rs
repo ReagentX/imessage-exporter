@@ -1096,7 +1096,7 @@ impl<'a> HTML<'a> {
 #[cfg(test)]
 mod tests {
     use crate::{exporters::exporter::Writer, Config, Exporter, Options, HTML};
-    use imessage_database::{tables::messages::Message, util::dirs::default_db_path};
+    use imessage_database::{tables::messages::Message, util::{dirs::default_db_path, query_context::QueryContext}};
 
     pub fn blank() -> Message {
         Message {
@@ -1133,6 +1133,7 @@ mod tests {
             diagnostic: false,
             export_type: Some("html"),
             export_path: None,
+            query_context: QueryContext::default(),
             valid: true,
         }
     }
