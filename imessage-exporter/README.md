@@ -25,35 +25,34 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
 ## How To Use
 
 ```txt
-OPTIONS:
-    -d, --diagnostics
-            Print diagnostic information and exit
+-d, --diagnostics
+        Print diagnostic information and exit
 
-    -f, --format <txt, html>
-            Specify a single file format to export messages into
+-f, --format <txt, html>
+        Specify a single file format to export messages into
 
-    -n, --no-copy
-            Do not copy attachments, instead reference them in-place
+-n, --no-copy
+        Do not copy attachments, instead reference them in-place
 
-    -p, --db-path <path/to/chat.db>
-            Specify a custom path for the iMessage database file
-            If omitted, the default directory is ~/Library/Messages/chat.db
+-p, --db-path <path/to/chat.db>
+        Specify a custom path for the iMessage database file
+        If omitted, the default directory is ~/Library/Messages/chat.db
 
-    -o, --export-path <path/to/save/files>
-            Specify a custom directory for outputting exported data
-            If omitted, the default directory is ~/imessage_export
+-o, --export-path <path/to/save/files>
+        Specify a custom directory for outputting exported data
+        If omitted, the default directory is ~/imessage_export
 
-    -s, --start-date <YYYY-MM-DD>
-            The start date filter. Only messages sent on or after this date will be included
+-s, --start-date <YYYY-MM-DD>
+        The start date filter. Only messages sent on or after this date will be included
 
-    -e, --end-date <YYYY-MM-DD>
-            The end date filter. Only messages sent before this date will be included
+-e, --end-date <YYYY-MM-DD>
+        The end date filter. Only messages sent before this date will be included
 
-    -h, --help
-            Print help information
+-h, --help
+        Print help information
 
-    -V, --version
-            Print version information
+-V, --version
+        Print version information
 ```
 
 ### Examples
