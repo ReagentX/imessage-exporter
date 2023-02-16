@@ -22,6 +22,7 @@ pub const OPTION_START_DATE: &str = "start-date";
 pub const OPTION_END_DATE: &str = "end-date";
 pub const OPTION_DISABLE_LAZY_LOADING: &str = "no-lazy";
 pub const OPTION_CUSTOM_ME: &str = "custom-me";
+pub const OPTION_DISABLE_LAZY_LOADING: &str = "no-lazy";
 
 // Other CLI Text
 pub const SUPPORTED_FILE_TYPES: &str = "txt, html";
@@ -47,7 +48,11 @@ pub struct Options<'a> {
     /// If true, do not include `loading="lazy"` in HTML exports
     pub no_lazy: bool,
     /// Custom name for ME in output
-    pub custom_me: Option<&'a str>,
+    pub custom_me: Option<&'a str>,    
+    /// If true, do not include `loading="lazy"` in HTML exports
+    pub no_lazy: bool,
+    /// Whether the options created are valid or not
+    pub valid: bool,
 }
 
 impl<'a> Options<'a> {
@@ -137,6 +142,8 @@ impl<'a> Options<'a> {
             query_context,
             no_lazy,
             custom_me,
+            no_lazy,
+            valid,
         })
     }
 }
@@ -181,6 +188,7 @@ fn validate_path(
     };
 
     Ok(resolved_path)
+    }
 }
 
 pub fn from_command_line() -> ArgMatches {
