@@ -517,7 +517,7 @@ impl Message {
         count
     }
 
-    /// Stream rows from the database with optional filters
+    /// Stream messages from the database with optional filters
     ///
     /// # Example:
     ///
