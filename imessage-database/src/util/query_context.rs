@@ -99,15 +99,15 @@ impl QueryContext {
             .any(|maybe_date| maybe_date.is_some())
     }
 
-/// Generate the SQL `WHERE` clause described by this QueryContext
-/// # Example:
-///
-/// ```
-/// use imessage_database::util::query_context::QueryContext;
-///
-/// let mut context = QueryContext::default();
-/// context.set_start("2023-01-01");
-/// let filters = context.generate_filter_statement();
+    /// Generate the SQL `WHERE` clause described by this QueryContext
+    /// # Example:
+    ///
+    /// ```
+    /// use imessage_database::util::query_context::QueryContext;
+    ///
+    /// let mut context = QueryContext::default();
+    /// context.set_start("2023-01-01");
+    /// let filters = context.generate_filter_statement();
     pub fn generate_filter_statement(&self) -> String {
         let mut filters = String::new();
         if let Some(start) = self.start {
