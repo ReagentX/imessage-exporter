@@ -48,6 +48,10 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
 -e, --end-date <YYYY-MM-DD>
         The end date filter. Only messages sent before this date will be included
 
+-l, --no-lazy
+        Do not include `loading="lazy"` in HTML export `img` tags
+        This will make pages load slower but PDF generation work
+
 -h, --help
         Print help information
 
