@@ -94,6 +94,11 @@ impl<'a> Options<'a> {
             valid = false;
         }
 
+        if no_lazy && export_type != Some("html") {
+            println!("Option {OPTION_DISABLE_LAZY_LOADING} is enabled, which requires `-f html`");
+            valid = false;
+        }
+
         // Build query context
         let mut query_context = QueryContext::default();
         if let Some(start) = start_date {
