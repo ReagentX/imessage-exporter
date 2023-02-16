@@ -704,6 +704,7 @@ mod tests {
             export_type: Some("txt"),
             export_path: None,
             query_context: QueryContext::default(),
+            no_lazy: false,
             valid: true,
         }
     }
