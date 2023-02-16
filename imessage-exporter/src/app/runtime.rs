@@ -289,7 +289,7 @@ mod test {
             chat::Chat,
             table::{get_connection, MAX_LENGTH},
         },
-        util::dirs::default_db_path,
+        util::{dirs::default_db_path, query_context::QueryContext},
     };
     use std::collections::{BTreeSet, HashMap};
 
@@ -300,6 +300,7 @@ mod test {
             diagnostic: false,
             export_type: None,
             export_path: None,
+            query_context: QueryContext::default(),
             valid: true,
         }
     }

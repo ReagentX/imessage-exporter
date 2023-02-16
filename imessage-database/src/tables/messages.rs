@@ -21,6 +21,7 @@ use crate::{
     util::{
         dates::{readable_diff, TIMESTAMP_FACTOR},
         output::{done_processing, processing},
+        query_context::QueryContext,
         streamtyped,
     },
 };
@@ -129,28 +130,28 @@ impl Table for Message {
     fn get(db: &Connection) -> Result<Statement, TableError> {
         // If database has `thread_originator_guid`, we can parse replies, otherwise default to 0
         Ok(db.prepare(&format!(
-            "SELECT 
+            "SELECT
                  *,
-                 c.chat_id, 
+                 c.chat_id,
                  (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
                  (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
-             FROM 
-                 message as m 
-                 LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id 
-             ORDER BY 
+             FROM
+                 message as m
+                 LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
+             ORDER BY
                  m.date;
             "
         ))
         .unwrap_or(db.prepare(&format!(
-            "SELECT 
+            "SELECT
                  *,
-                 c.chat_id, 
+                 c.chat_id,
                  (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
                  (SELECT 0) as num_replies
-             FROM 
-                 message as m 
-                 LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id 
-             ORDER BY 
+             FROM
+                 message as m
+                 LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
+             ORDER BY
                  m.date;
             "
         )).map_err(TableError::Messages)?)
@@ -493,18 +494,82 @@ impl Message {
     /// use imessage_database::util::dirs::default_db_path;
     /// use imessage_database::tables::table::{Diagnostic, get_connection};
     /// use imessage_database::tables::messages::Message;
+    /// use imessage_database::util::query_context::QueryContext;
     ///
     /// let db_path = default_db_path();
     /// let conn = get_connection(&db_path).unwrap();
-    /// Message::get_count(&conn);
+    /// let context = QueryContext::default();
+    /// Message::get_count(&conn, &context);
     /// ```
-    pub fn get_count(db: &Connection) -> u64 {
-        let mut statement = db
-            .prepare(&format!("SELECT COUNT(*) FROM {}", MESSAGE))
-            .unwrap();
+    pub fn get_count(db: &Connection, context: &QueryContext) -> u64 {
+        let mut statement = if context.has_filters() {
+            db.prepare(&format!(
+                "SELECT COUNT(*) FROM {MESSAGE} as m {}",
+                context.generate_filter_statement()
+            ))
+            .unwrap()
+        } else {
+            db.prepare(&format!("SELECT COUNT(*) FROM {MESSAGE}"))
+                .unwrap()
+        };
         // Execute query to build the Handles
         let count: u64 = statement.query_row([], |r| r.get(0)).unwrap_or(0);
         count
+    }
+
+    /// Stream messages from the database with optional filters
+    ///
+    /// # Example:
+    ///
+    /// ```
+    /// use imessage_database::util::dirs::default_db_path;
+    /// use imessage_database::tables::table::{Diagnostic, get_connection};
+    /// use imessage_database::tables::messages::Message;
+    /// use imessage_database::util::query_context::QueryContext;
+    ///
+    /// let db_path = default_db_path();
+    /// let conn = get_connection(&db_path).unwrap();
+    /// let context = QueryContext::default();
+    /// Message::stream_rows(&conn, &context).unwrap();
+    pub fn stream_rows<'a>(
+        db: &'a Connection,
+        context: &'a QueryContext,
+    ) -> Result<Statement<'a>, TableError> {
+        if !context.has_filters() {
+            return Self::get(db);
+        } else {
+            let filters = context.generate_filter_statement();
+
+            // If database has `thread_originator_guid`, we can parse replies, otherwise default to 0
+            Ok(db.prepare(&format!(
+                "SELECT
+                     *,
+                     c.chat_id,
+                     (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                     (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
+                 FROM
+                     message as m
+                     LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
+                 {filters}
+                 ORDER BY
+                     m.date;
+                "
+            ))
+            .unwrap_or(db.prepare(&format!(
+                "SELECT
+                     *,
+                     c.chat_id,
+                     (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                     (SELECT 0) as num_replies
+                 FROM
+                     message as m
+                     LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
+                 {filters}
+                 ORDER BY
+                     m.date;
+                "
+            )).map_err(TableError::Messages)?))
+        }
     }
 
     /// See [Reaction](crate::message_types::variants::Reaction) for details on this data.
@@ -535,14 +600,14 @@ impl Message {
     }
 
     /// Build a HashMap of message component index to messages that react to that component
-    pub fn get_reactions<'a>(
+    pub fn get_reactions(
         &self,
         db: &Connection,
-        reactions: &'a HashMap<String, Vec<String>>,
+        reactions: &HashMap<String, Vec<String>>,
     ) -> Result<HashMap<usize, Vec<Self>>, TableError> {
         let mut out_h: HashMap<usize, Vec<Self>> = HashMap::new();
         if let Some(rxs) = reactions.get(&self.guid) {
-            let filter: Vec<String> = rxs.iter().map(|guid| format!("\"{}\"", guid)).collect();
+            let filter: Vec<String> = rxs.iter().map(|guid| format!("\"{guid}\"")).collect();
             // Create query
             let mut statement = db.prepare(&format!(
                 "SELECT 

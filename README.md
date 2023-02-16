@@ -18,7 +18,7 @@ Documentation for the library is located [here](imessage-database/README.md).
 
 ### Supported Features
 
-This crate supports every iMessage feature as of MacOS 13.1 (22C65):
+This crate supports every iMessage feature as of MacOS 13.2.1 (22D68):
 
 - Multi-part messages
 - Replies/Threads

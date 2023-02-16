@@ -63,10 +63,13 @@ impl<'a> Exporter<'a> for TXT<'a> {
 
         // Set up progress bar
         let mut current_message = 0;
-        let total_messages = Message::get_count(&self.config.db);
+        let total_messages =
+            Message::get_count(&self.config.db, &self.config.options.query_context);
         let pb = build_progress_bar_export(total_messages);
 
-        let mut statement = Message::get(&self.config.db).map_err(RuntimeError::DatabaseError)?;
+        let mut statement =
+            Message::stream_rows(&self.config.db, &self.config.options.query_context)
+                .map_err(RuntimeError::DatabaseError)?;
 
         let messages = statement
             .query_map([], |row| Ok(Message::from_row(row)))
@@ -660,7 +663,10 @@ impl<'a> TXT<'a> {
 #[cfg(test)]
 mod tests {
     use crate::{exporters::exporter::Writer, Config, Exporter, Options, TXT};
-    use imessage_database::{tables::messages::Message, util::dirs::default_db_path};
+    use imessage_database::{
+        tables::messages::Message,
+        util::{dirs::default_db_path, query_context::QueryContext},
+    };
 
     fn blank() -> Message {
         Message {
@@ -697,6 +703,7 @@ mod tests {
             diagnostic: false,
             export_type: Some("txt"),
             export_path: None,
+            query_context: QueryContext::default(),
             valid: true,
         }
     }
