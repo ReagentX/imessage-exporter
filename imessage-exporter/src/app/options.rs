@@ -23,6 +23,7 @@ pub const OPTION_END_DATE: &str = "end-date";
 pub const OPTION_DISABLE_LAZY_LOADING: &str = "no-lazy";
 pub const OPTION_CUSTOM_ME: &str = "custom-me";
 pub const OPTION_DISABLE_LAZY_LOADING: &str = "no-lazy";
+pub const OPTION_CUSTOM_ME: &str = "custom-me";
 
 // Other CLI Text
 pub const SUPPORTED_FILE_TYPES: &str = "txt, html";
@@ -51,6 +52,8 @@ pub struct Options<'a> {
     pub custom_me: Option<&'a str>,    
     /// If true, do not include `loading="lazy"` in HTML exports
     pub no_lazy: bool,
+    /// Custom name for ME in output
+    pub custom_me: Option<&'a str>,    
     /// Whether the options created are valid or not
     pub valid: bool,
 }
@@ -65,6 +68,7 @@ impl<'a> Options<'a> {
         let start_date = args.value_of(OPTION_START_DATE);
         let end_date = args.value_of(OPTION_END_DATE);
         let no_lazy = args.is_present(OPTION_DISABLE_LAZY_LOADING);
+        let custom_me = args.value_of(OPTION_CUSTOM_ME);
         let custom_me = args.value_of(OPTION_CUSTOM_ME);
 
         // Ensure export type is allowed
@@ -143,6 +147,7 @@ impl<'a> Options<'a> {
             no_lazy,
             custom_me,
             no_lazy,
+            custom_me,
             valid,
         })
     }
@@ -269,6 +274,15 @@ pub fn from_command_line() -> ArgMatches {
                 .help(&*format!("Specify a Custom name for ME (your name) in output\nIf omitted, the default string is You"))
                 .takes_value(true)
                 .display_order(7)
+                .default_value("You"),
+        )
+        .arg(
+            Arg::new(OPTION_CUSTOM_ME)
+                .short('m')
+                .long(OPTION_CUSTOM_ME)
+                .help(&*format!("Specify a Custom name for ME (your name) in output\nIf omitted, the default string is You"))
+                .takes_value(true)
+                .display_order(8)
                 .default_value("You"),
         )
         .get_matches();
