@@ -502,16 +502,15 @@ impl Message {
     /// Message::get_count(&conn, &context);
     /// ```
     pub fn get_count(db: &Connection, context: &QueryContext) -> u64 {
-        let mut statement = match context.has_filters() {
-            true => db
-                .prepare(&format!(
-                    "SELECT COUNT(*) FROM {MESSAGE} as m {}",
-                    context.generate_filter_statement()
-                ))
-                .unwrap(),
-            false => db
-                .prepare(&format!("SELECT COUNT(*) FROM {MESSAGE}"))
-                .unwrap(),
+        let mut statement = if context.has_filters() {
+            db.prepare(&format!(
+                "SELECT COUNT(*) FROM {MESSAGE} as m {}",
+                context.generate_filter_statement()
+            ))
+            .unwrap()
+        } else {
+            db.prepare(&format!("SELECT COUNT(*) FROM {MESSAGE}"))
+                .unwrap()
         };
         // Execute query to build the Handles
         let count: u64 = statement.query_row([], |r| r.get(0)).unwrap_or(0);
