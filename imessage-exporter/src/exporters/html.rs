@@ -1160,6 +1160,7 @@ mod tests {
             no_lazy: false,
             custom_me: None,
             no_lazy: false,
+            custom_me: None,
             valid: true,
         }
     }
