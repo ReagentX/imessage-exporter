@@ -98,7 +98,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
             }
             // Message replies and reactions are rendered in context, so no need to render them separately
             else if !msg.is_reaction() {
-                msg.gen_text(&self.config.db);
+                msg.gen_text(&self.config.db).unwrap();
                 let message = self
                     .format_message(&msg, 0)
                     .map_err(RuntimeError::DatabaseError)?;
@@ -355,7 +355,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                 replies
                     .iter_mut()
                     .try_for_each(|reply| -> Result<(), TableError> {
-                        reply.gen_text(&self.config.db);
+                        reply.gen_text(&self.config.db).unwrap();
                         if !reply.is_reaction() {
                             // Set indent to 1 so we know this is a recursive call
                             self.add_line(
