@@ -82,7 +82,7 @@ Export as `html` from `/Volumes/external/chat.db` to `/Volumes/external/export` 
 Export messages from `2020-01-01` to `2020-12-31` as `txt` the default iMessage Database location to `~/export-2020`:
 
 ```zsh
-% imessage-exporter -f html -o ~/export-2020 -s 2020-01-01 -e 2021-01-01
+% imessage-exporter -f txt -o ~/export-2020 -s 2020-01-01 -e 2021-01-01
 ```
 
 ## Features
