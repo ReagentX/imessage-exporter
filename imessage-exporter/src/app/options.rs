@@ -139,8 +139,6 @@ impl<'a> Options<'a> {
             query_context,
             no_lazy,
             custom_me,
-            no_lazy,
-            custom_me,
             valid,
         })
     }
