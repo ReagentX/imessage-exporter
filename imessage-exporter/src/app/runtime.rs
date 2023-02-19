@@ -301,6 +301,7 @@ mod test {
             export_type: None,
             export_path: None,
             query_context: QueryContext::default(),
+            no_lazy: false,
             valid: true,
         }
     }

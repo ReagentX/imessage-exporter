@@ -81,9 +81,8 @@ impl QueryContext {
         Some(stamp - (get_offset() * TIMESTAMP_FACTOR))
     }
 
-
     /// Determine if the current QueryContext has any filters present
-    /// 
+    ///
     /// # Example:
     ///
     /// ```
