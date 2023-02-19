@@ -574,18 +574,17 @@ impl Message {
 
     /// See [Reaction](crate::message_types::variants::Reaction) for details on this data.
     fn clean_associated_guid(&self) -> Option<(usize, &str)> {
-        // TODO: Test that the GUID length is correct!
         if let Some(guid) = &self.associated_message_guid {
             if guid.starts_with("p:") {
                 let mut split = guid.split('/');
-                let index_str = split.next();
-                let message_id = split.next();
-                let index = str::parse::<usize>(&index_str.unwrap().replace("p:", "")).unwrap_or(0);
-                return Some((index, message_id.unwrap()));
+                let index_str = split.next()?;
+                let message_id = split.next()?;
+                let index = str::parse::<usize>(&index_str.replace("p:", "")).unwrap_or(0);
+                return Some((index, message_id.get(0..36)?));
             } else if guid.starts_with("bp:") {
-                return Some((0, &guid[3..guid.len()]));
+                return Some((0, guid.get(3..39)?));
             } else {
-                return Some((0, guid.as_str()));
+                return Some((0, guid.get(0..36)?));
             }
         }
         None
@@ -1104,5 +1103,62 @@ mod tests {
                 "com.contextoptional.OpenTable.Messages"
             ))
         ));
+    }
+
+    #[test]
+    fn can_get_valid_guid() {
+        let mut m = blank();
+        m.associated_message_guid = Some("A44CE9D7-AAAA-BBBB-CCCC-23C54E1A9B6A".to_string());
+
+        assert_eq!(
+            Some((0usize, "A44CE9D7-AAAA-BBBB-CCCC-23C54E1A9B6A")),
+            m.clean_associated_guid()
+        );
+    }
+
+    #[test]
+    fn cant_get_invalid_guid() {
+        let mut m = blank();
+        m.associated_message_guid = Some("FAKE_GUID".to_string());
+
+        assert_eq!(None, m.clean_associated_guid());
+    }
+
+    #[test]
+    fn can_get_valid_guid_p() {
+        let mut m = blank();
+        m.associated_message_guid = Some("p:1/A44CE9D7-AAAA-BBBB-CCCC-23C54E1A9B6A".to_string());
+
+        assert_eq!(
+            Some((1usize, "A44CE9D7-AAAA-BBBB-CCCC-23C54E1A9B6A")),
+            m.clean_associated_guid()
+        );
+    }
+
+    #[test]
+    fn cant_get_invalid_guid_p() {
+        let mut m = blank();
+        m.associated_message_guid = Some("p:1/FAKE_GUID".to_string());
+
+        assert_eq!(None, m.clean_associated_guid());
+    }
+
+    #[test]
+    fn can_get_valid_guid_bp() {
+        let mut m = blank();
+        m.associated_message_guid = Some("bp:A44CE9D7-AAAA-BBBB-CCCC-23C54E1A9B6A".to_string());
+
+        assert_eq!(
+            Some((0usize, "A44CE9D7-AAAA-BBBB-CCCC-23C54E1A9B6A")),
+            m.clean_associated_guid()
+        );
+    }
+
+    #[test]
+    fn cant_get_invalid_guid_bp() {
+        let mut m = blank();
+        m.associated_message_guid = Some("bp:FAKE_GUID".to_string());
+
+        assert_eq!(None, m.clean_associated_guid());
     }
 }
