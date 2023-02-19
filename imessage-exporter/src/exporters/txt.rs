@@ -709,8 +709,6 @@ mod tests {
             query_context: QueryContext::default(),
             no_lazy: false,
             custom_me: None,
-            no_lazy: false,
-            custom_me: None,
             valid: true,
         }
     }
