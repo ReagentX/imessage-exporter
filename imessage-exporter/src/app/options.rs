@@ -64,7 +64,9 @@ impl<'a> Options<'a> {
                 .split(',')
                 .any(|allowed_type| allowed_type.trim() == found_type)
             {
-                return Err(RuntimeError::InvalidOptions(format!("{found_type} is not a valid export type! Must be one of <{SUPPORTED_FILE_TYPES}>")));
+                return Err(RuntimeError::InvalidOptions(format!(
+                    "{found_type} is not a valid export type! Must be one of <{SUPPORTED_FILE_TYPES}>"
+                )));
             }
         }
 
