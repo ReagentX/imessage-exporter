@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::{crate_version, Arg, ArgMatches, Command};
 
 use imessage_database::{
@@ -11,7 +13,7 @@ use imessage_database::{
 use super::error::RuntimeError;
 
 // CLI Arg Names
-pub const OPTION_PATH: &str = "db-path";
+pub const OPTION_DB_PATH: &str = "db-path";
 pub const OPTION_COPY: &str = "no-copy";
 pub const OPTION_DIAGNOSTIC: &str = "diagnostics";
 pub const OPTION_EXPORT_TYPE: &str = "format";
@@ -30,7 +32,7 @@ pub const ABOUT: &str = concat!(
 
 pub struct Options<'a> {
     /// Path to database file
-    pub db_path: String,
+    pub db_path: PathBuf,
     /// If true, do not copy files from ~/Library to the export
     pub no_copy: bool,
     /// If true, emit diagnostic information to stdout
@@ -38,7 +40,7 @@ pub struct Options<'a> {
     /// The type of file we are exporting data to
     pub export_type: Option<&'a str>,
     /// Where the app will save exported data
-    pub export_path: Option<&'a str>,
+    pub export_path: PathBuf,
     /// Query context describing SQL query filters
     pub query_context: QueryContext,
     /// If true, do not include `loading="lazy"` in HTML exports
@@ -47,7 +49,7 @@ pub struct Options<'a> {
 
 impl<'a> Options<'a> {
     pub fn from_args(args: &'a ArgMatches) -> Result<Self, RuntimeError> {
-        let user_path = args.value_of(OPTION_PATH);
+        let user_path = args.value_of(OPTION_DB_PATH);
         let no_copy = args.is_present(OPTION_COPY);
         let diagnostic = args.is_present(OPTION_DIAGNOSTIC);
         let export_type = args.value_of(OPTION_EXPORT_TYPE);
@@ -114,12 +116,52 @@ impl<'a> Options<'a> {
             }
         }
 
+        // Ensure export path is empty or does not contain files of the existing export type
+        // We have to use a PathBuf here because it can be created from data owned by this function in the default state
+        let resolved_path =
+            PathBuf::from(export_path.unwrap_or(&format!("{}/{DEFAULT_OUTPUT_DIR}", home())));
+        if let Some(export_type) = export_type {
+            if resolved_path.exists() {
+                let path_word = match export_path {
+                    Some(_) => "Specified",
+                    None => "Default",
+                };
+
+                match resolved_path.read_dir() {
+                    Ok(files) => {
+                        for file in files.flatten() {
+                            if file
+                                .path()
+                                .extension()
+                                .map(|s| s.to_str().unwrap_or("") == export_type)
+                                .unwrap_or(false)
+                            {
+                                return Err(RuntimeError::InvalidOptions(format!(
+                                        "{path_word} export path {resolved_path:?} contains existing \"{export_type}\" export data!"
+                                    )));
+                            }
+                        }
+                    }
+                    Err(why) => {
+                        return Err(RuntimeError::InvalidOptions(format!(
+                            "{path_word} export path {resolved_path:?} is not a valid directory: {why}"
+                        )));
+                    }
+                }
+            }
+        }
+
+        let db_path = match user_path {
+            Some(path) => PathBuf::from(path),
+            None => default_db_path(),
+        };
+
         Ok(Options {
-            db_path: user_path.unwrap_or(&default_db_path()).to_string(),
+            db_path,
             no_copy,
             diagnostic,
             export_type,
-            export_path,
+            export_path: resolved_path,
             query_context,
             no_lazy,
         })
@@ -155,10 +197,10 @@ pub fn from_command_line() -> ArgMatches {
             .display_order(2),
         )
         .arg(
-            Arg::new(OPTION_PATH)
+            Arg::new(OPTION_DB_PATH)
                 .short('p')
-                .long(OPTION_PATH)
-                .help(&*format!("Specify a custom path for the iMessage database file\nIf omitted, the default directory is {}", default_db_path()))
+                .long(OPTION_DB_PATH)
+                .help(&*format!("Specify a custom path for the iMessage database file\nIf omitted, the default directory is {}", default_db_path().display()))
                 .takes_value(true)
                 .display_order(3)
                 .value_name("path/to/chat.db"),
