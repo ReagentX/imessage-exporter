@@ -156,12 +156,12 @@ impl<'a> Config<'a> {
     /// ```
     /// use crate::app::{
     ///    options::{from_command_line, Options},
-    ///    runtime::State,
+    ///    runtime::Config,
     /// };
     ///
     /// let args = from_command_line();
     /// let options = Options::from_args(&args);
-    /// let app = State::new(options).unwrap();
+    /// let app = Config::new(options).unwrap();
     /// ```
     pub fn new(options: Options) -> Result<Config, RuntimeError> {
         let conn = get_connection(&options.db_path).map_err(RuntimeError::DatabaseError)?;
@@ -220,12 +220,12 @@ impl<'a> Config<'a> {
     /// ```
     /// use crate::app::{
     ///    options::{from_command_line, Options},
-    ///    runtime::State,
+    ///    runtime::Config,
     /// };
     ///
     /// let args = from_command_line();
     /// let options = Options::from_args(&args);
-    /// let app = State::new(options).unwrap();
+    /// let app = Config::new(options).unwrap();
     /// app.start();
     /// ```
     pub fn start(&self) -> Result<(), RuntimeError> {
