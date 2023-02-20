@@ -17,13 +17,17 @@ fn main() {
     let options = Options::from_args(&args);
 
     // Create app state and start
-    match Config::new(options) {
-        Ok(app) => match app.start() {
-            Ok(()) => (),
-            Err(why) => eprintln!("Unable to launch: {why}"),
-        },
-        Err(why) => {
-            eprintln!("Unable to launch: {why}")
+    if let Err(why) = &options {
+        eprintln!("{why}");
+    } else {
+        match Config::new(options.unwrap()) {
+            Ok(app) => match app.start() {
+                Ok(()) => (),
+                Err(why) => eprintln!("Unable to launch: {why}"),
+            },
+            Err(why) => {
+                eprintln!("Unable to launch: {why}")
+            }
         }
     }
 }

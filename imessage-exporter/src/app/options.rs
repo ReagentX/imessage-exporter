@@ -8,6 +8,8 @@ use imessage_database::{
     },
 };
 
+use super::error::RuntimeError;
+
 // CLI Arg Names
 pub const OPTION_PATH: &str = "db-path";
 pub const OPTION_COPY: &str = "no-copy";
@@ -41,12 +43,10 @@ pub struct Options<'a> {
     pub query_context: QueryContext,
     /// If true, do not include `loading="lazy"` in HTML exports
     pub no_lazy: bool,
-    /// Whether the options created are valid or not
-    pub valid: bool,
 }
 
 impl<'a> Options<'a> {
-    pub fn from_args(args: &'a ArgMatches) -> Self {
+    pub fn from_args(args: &'a ArgMatches) -> Result<Self, RuntimeError> {
         let user_path = args.value_of(OPTION_PATH);
         let no_copy = args.is_present(OPTION_COPY);
         let diagnostic = args.is_present(OPTION_DIAGNOSTIC);
@@ -56,65 +56,65 @@ impl<'a> Options<'a> {
         let end_date = args.value_of(OPTION_END_DATE);
         let no_lazy = args.is_present(OPTION_DISABLE_LAZY_LOADING);
 
-        // Validation layer
-        let mut valid = true;
-
         // Ensure export type is allowed
         if let Some(found_type) = export_type {
             if !SUPPORTED_FILE_TYPES
                 .split(',')
                 .any(|allowed_type| allowed_type.trim() == found_type)
             {
-                println!("{found_type} is not a valid export type! Must be one of <{SUPPORTED_FILE_TYPES}>");
-                valid = false;
+                return Err(RuntimeError::InvalidOptions(format!("{found_type} is not a valid export type! Must be one of <{SUPPORTED_FILE_TYPES}>")));
             }
         }
 
         // Ensure an export type is specified if other export options are selected
         if no_copy && export_type.is_none() {
-            println!("No export type selected, required by {OPTION_COPY}");
-            valid = false;
+            return Err(RuntimeError::InvalidOptions(format!(
+                "No export type selected, required by {OPTION_COPY}"
+            )));
         }
         if export_path.is_some() && export_type.is_none() {
-            println!("No export type selected, required by {OPTION_EXPORT_PATH}");
-            valid = false;
+            return Err(RuntimeError::InvalidOptions(format!(
+                "No export type selected, required by {OPTION_EXPORT_PATH}"
+            )));
         }
 
         // Ensure that if diagnostics are enabled, no other options are
         if diagnostic && no_copy {
-            println!("Diagnostics are enabled; {OPTION_COPY} is disallowed");
-            valid = false;
+            return Err(RuntimeError::InvalidOptions(format!(
+                "Diagnostics are enabled; {OPTION_COPY} is disallowed"
+            )));
         }
         if diagnostic && export_path.is_some() {
-            println!("Diagnostics are enabled; {OPTION_EXPORT_PATH} is disallowed");
-            valid = false;
+            return Err(RuntimeError::InvalidOptions(format!(
+                "Diagnostics are enabled; {OPTION_EXPORT_PATH} is disallowed"
+            )));
         }
         if diagnostic && export_type.is_some() {
-            println!("Diagnostics are enabled; {OPTION_EXPORT_TYPE} is disallowed");
-            valid = false;
+            return Err(RuntimeError::InvalidOptions(format!(
+                "Diagnostics are enabled; {OPTION_EXPORT_TYPE} is disallowed"
+            )));
         }
 
         if no_lazy && export_type != Some("html") {
-            println!("Option {OPTION_DISABLE_LAZY_LOADING} is enabled, which requires `-f html`");
-            valid = false;
+            return Err(RuntimeError::InvalidOptions(format!(
+                "Option {OPTION_DISABLE_LAZY_LOADING} is enabled, which requires `--{OPTION_EXPORT_TYPE}`"
+            )));
         }
 
         // Build query context
         let mut query_context = QueryContext::default();
         if let Some(start) = start_date {
             if let Err(why) = query_context.set_start(start) {
-                eprintln!("{why}");
-                valid = false;
+                return Err(RuntimeError::InvalidOptions(format!("{why}")));
             }
         }
         if let Some(end) = end_date {
             if let Err(why) = query_context.set_end(end) {
-                eprintln!("{why}");
-                valid = false;
+                return Err(RuntimeError::InvalidOptions(format!("{why}")));
             }
         }
 
-        Options {
+        Ok(Options {
             db_path: user_path.unwrap_or(&default_db_path()).to_string(),
             no_copy,
             diagnostic,
@@ -122,8 +122,7 @@ impl<'a> Options<'a> {
             export_path,
             query_context,
             no_lazy,
-            valid,
-        }
+        })
     }
 }
 

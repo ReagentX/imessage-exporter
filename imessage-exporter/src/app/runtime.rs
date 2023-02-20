@@ -172,11 +172,6 @@ impl<'a> Config<'a> {
     /// let app = State::new(options).unwrap();
     /// ```
     pub fn new(options: Options) -> Result<Config, RuntimeError> {
-        // Escape early if options are invalid
-        if !options.valid {
-            return Err(RuntimeError::InvalidOptions);
-        }
-
         let conn = get_connection(&options.db_path).map_err(RuntimeError::DatabaseError)?;
         eprintln!("Building cache...");
         eprintln!("[1/4] Caching chats...");
@@ -302,7 +297,6 @@ mod test {
             export_path: None,
             query_context: QueryContext::default(),
             no_lazy: false,
-            valid: true,
         }
     }
 
