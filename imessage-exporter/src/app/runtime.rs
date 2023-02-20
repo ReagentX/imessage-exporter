@@ -233,8 +233,7 @@ impl<'a> Config<'a> {
             self.run_diagnostic();
         } else if self.options.export_type.is_some() {
             // Ensure the path we want to export to exists
-            create_dir_all(&self.options.export_path)
-                .map_err(RuntimeError::DiskError)?;
+            create_dir_all(&self.options.export_path).map_err(RuntimeError::DiskError)?;
 
             match self.options.export_type.unwrap_or_default() {
                 "txt" => {
