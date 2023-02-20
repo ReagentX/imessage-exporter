@@ -19,11 +19,11 @@ use imessage_database::{
         handle::Handle,
         messages::Message,
         table::{
-            get_connection, Cacheable, Deduplicate, Diagnostic, ATTACHMENTS_DIR,
-            DEFAULT_OUTPUT_DIR, MAX_LENGTH, ME, ORPHANED, UNKNOWN,
+            get_connection, Cacheable, Deduplicate, Diagnostic, ATTACHMENTS_DIR, MAX_LENGTH, ME,
+            ORPHANED, UNKNOWN,
         },
     },
-    util::{dates::get_offset, dirs::home},
+    util::dates::get_offset,
 };
 
 use super::error::RuntimeError;
@@ -67,17 +67,9 @@ impl<'a> Config<'a> {
         }
     }
 
-    /// Get the export path for the current session
-    pub fn export_path(&self) -> PathBuf {
-        match self.options.export_path {
-            Some(path_str) => PathBuf::from(path_str),
-            None => PathBuf::from(&format!("{}/{DEFAULT_OUTPUT_DIR}", home())),
-        }
-    }
-
     /// Get the attachment path for the current session
     pub fn attachment_path(&self) -> PathBuf {
-        let mut path = self.export_path();
+        let mut path = self.options.export_path.clone();
         path.push(ATTACHMENTS_DIR);
         path
     }
@@ -241,9 +233,10 @@ impl<'a> Config<'a> {
             self.run_diagnostic();
         } else if self.options.export_type.is_some() {
             // Ensure the path we want to export to exists
-            create_dir_all(self.export_path()).unwrap();
+            create_dir_all(&self.options.export_path)
+                .map_err(RuntimeError::DiskError)?;
 
-            match self.options.export_type.unwrap() {
+            match self.options.export_type.unwrap_or_default() {
                 "txt" => {
                     // Create exporter, pass it data we care about, then kick it off
                     TXT::new(self).iter_messages()?;
@@ -286,7 +279,10 @@ mod test {
         },
         util::{dirs::default_db_path, query_context::QueryContext},
     };
-    use std::collections::{BTreeSet, HashMap};
+    use std::{
+        collections::{BTreeSet, HashMap},
+        path::PathBuf,
+    };
 
     fn fake_options<'a>() -> Options<'a> {
         Options {
@@ -294,7 +290,7 @@ mod test {
             no_copy: false,
             diagnostic: false,
             export_type: None,
-            export_path: None,
+            export_path: PathBuf::new(),
             query_context: QueryContext::default(),
             no_lazy: false,
         }

@@ -43,8 +43,7 @@ pub trait Diagnostic {
 }
 
 /// Get a connection to the iMessage SQLite database
-pub fn get_connection(path_str: &str) -> Result<Connection, TableError> {
-    let path = Path::new(path_str);
+pub fn get_connection(path: &Path) -> Result<Connection, TableError> {
     if path.exists() {
         return match Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
             Ok(res) => Ok(res),
