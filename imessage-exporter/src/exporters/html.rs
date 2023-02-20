@@ -508,7 +508,11 @@ impl<'a> Writer<'a> for HTML<'a> {
 
                     Ok(match attachment.mime_type() {
                         MediaType::Image(_) => {
-                            format!("<img src=\"{embed_path}\" loading=\"lazy\">")
+                            if self.config.options.no_lazy {
+                                format!("<img src=\"{embed_path}\">")
+                            } else {
+                                format!("<img src=\"{embed_path}\" loading=\"lazy\">")
+                            }
                         }
                         MediaType::Video(media_type) => {
                             // See https://github.com/ReagentX/imessage-exporter/issues/73 for why duplicate the source tag
@@ -766,7 +770,11 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
         balloon.images.iter().for_each(|image| {
             out_s.push_str("<img src=\"");
             out_s.push_str(image);
-            out_s.push_str("\" loading=\"lazy\", onerror=\"this.style.display='none'\">");
+            if self.config.options.no_lazy {
+                out_s.push_str("\" onerror=\"this.style.display='none'\">");
+            } else {
+                out_s.push_str("\" loading=\"lazy\", onerror=\"this.style.display='none'\">");
+            }
         });
 
         if let Some(site_name) = balloon.site_name {
@@ -1140,6 +1148,7 @@ mod tests {
             export_type: Some("html"),
             export_path: None,
             query_context: QueryContext::default(),
+            no_lazy: false,
             valid: true,
         }
     }
@@ -1432,6 +1441,32 @@ mod balloon_format_tests {
 
         let expected = exporter.format_url(&balloon, &blank());
         let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"images\" loading=\"lazy\", onerror=\"this.style.display='none'\"><div class=\"name\">site_name</div></div><div class=\"app_footer\"><div class=\"caption\"><xmp>title</xmp></div><div class=\"subcaption\"><xmp>summary</xmp></div></div></a>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_url_no_lazy() {
+        // Create exporter
+        let mut options = fake_options();
+        options.no_lazy = true;
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = URLMessage {
+            title: Some("title"),
+            summary: Some("summary"),
+            url: Some("url"),
+            original_url: Some("original_url"),
+            item_type: Some("item_type"),
+            images: vec!["images"],
+            icons: vec!["icons"],
+            site_name: Some("site_name"),
+            placeholder: false,
+        };
+
+        let expected = exporter.format_url(&balloon, &blank());
+        let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"images\" onerror=\"this.style.display='none'\"><div class=\"name\">site_name</div></div><div class=\"app_footer\"><div class=\"caption\"><xmp>title</xmp></div><div class=\"subcaption\"><xmp>summary</xmp></div></div></a>";
 
         assert_eq!(expected, actual);
     }
