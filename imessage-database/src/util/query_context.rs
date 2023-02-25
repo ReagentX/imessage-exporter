@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[derive(Debug, Default)]
-/// Represents filter configurations for a SQL query.`
+/// Represents filter configurations for a SQL query.
 pub struct QueryContext {
     /// The start date filter. Only messages sent on or after this date will be included.
     pub start: Option<i64>,
