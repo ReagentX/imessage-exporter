@@ -73,12 +73,17 @@ impl<'a> Options<'a> {
         // Ensure an export type is specified if other export options are selected
         if no_copy && export_type.is_none() {
             return Err(RuntimeError::InvalidOptions(format!(
-                "No export type selected, required by {OPTION_COPY}"
+                "Option {OPTION_COPY} is enabled, which requires `--{OPTION_EXPORT_TYPE}`"
             )));
         }
         if export_path.is_some() && export_type.is_none() {
             return Err(RuntimeError::InvalidOptions(format!(
-                "No export type selected, required by {OPTION_EXPORT_PATH}"
+                "Option {OPTION_EXPORT_PATH} is enabled, which requires `--{OPTION_EXPORT_TYPE}`"
+            )));
+        }
+        if no_lazy && export_type != Some("html") {
+            return Err(RuntimeError::InvalidOptions(format!(
+                "Option {OPTION_DISABLE_LAZY_LOADING} is enabled, which requires `--{OPTION_EXPORT_TYPE}`"
             )));
         }
 
@@ -96,12 +101,6 @@ impl<'a> Options<'a> {
         if diagnostic && export_type.is_some() {
             return Err(RuntimeError::InvalidOptions(format!(
                 "Diagnostics are enabled; {OPTION_EXPORT_TYPE} is disallowed"
-            )));
-        }
-
-        if no_lazy && export_type != Some("html") {
-            return Err(RuntimeError::InvalidOptions(format!(
-                "Option {OPTION_DISABLE_LAZY_LOADING} is enabled, which requires `--{OPTION_EXPORT_TYPE}`"
             )));
         }
 
