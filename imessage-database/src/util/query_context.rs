@@ -280,7 +280,7 @@ mod sanitize_tests {
 
     #[test]
     fn can_reject_wrong_hyphen() {
-        let res = QueryContext::sanitize_date("2020—AB—CD");
+        let res = QueryContext::sanitize_date("2020–01–01");
         assert!(res.is_none())
     }
 }
