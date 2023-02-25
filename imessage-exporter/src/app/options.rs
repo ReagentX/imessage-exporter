@@ -7,7 +7,7 @@ use imessage_database::util::{
     query_context::QueryContext,
 };
 
-use super::error::RuntimeError;
+use crate::app::error::RuntimeError;
 
 /// Default export directory name
 pub const DEFAULT_OUTPUT_DIR: &str = "imessage_export";
