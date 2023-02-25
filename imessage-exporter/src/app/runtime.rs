@@ -8,7 +8,7 @@ use std::{
 use rusqlite::Connection;
 
 use crate::{
-    app::{options::Options, sanitizers::sanitize_filename},
+    app::{error::RuntimeError, options::Options, sanitizers::sanitize_filename},
     Exporter, HTML, TXT,
 };
 use imessage_database::{
@@ -25,8 +25,6 @@ use imessage_database::{
     },
     util::dates::get_offset,
 };
-
-use super::error::RuntimeError;
 
 /// Stores the application state and handles application lifecycle
 pub struct Config<'a> {

@@ -7,7 +7,7 @@ use imessage_database::util::{
     query_context::QueryContext,
 };
 
-use super::error::RuntimeError;
+use crate::app::error::RuntimeError;
 
 /// Default export directory name
 pub const DEFAULT_OUTPUT_DIR: &str = "imessage_export";
@@ -119,7 +119,6 @@ impl<'a> Options<'a> {
 
         // Ensure export path is empty or does not contain files of the existing export type
         // We have to use a PathBuf here because it can be created from data owned by this function in the default state
-
         let db_path = match user_path {
             Some(path) => PathBuf::from(path),
             None => default_db_path(),
