@@ -93,8 +93,6 @@ pub const UNKNOWN: &str = "Unknown";
 pub const DEFAULT_PATH: &str = "Library/Messages/chat.db";
 /// Chat name reserved for messages that do not belong to a chat in the table
 pub const ORPHANED: &str = "orphaned";
-/// Default export directory name
-pub const DEFAULT_OUTPUT_DIR: &str = "imessage_export";
 /// Maximum length a filename can be
 pub const MAX_LENGTH: usize = 240;
 /// Replacement text sent in Fitness.app messages
