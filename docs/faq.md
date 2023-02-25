@@ -1,47 +1,47 @@
 # Frequently Asked Questions
 
-Q: I cannot connect to the messages database
+#### I cannot connect to the messages database. What do I do?
 
-A: Ensure your terminal emulator has [full disk access](https://kb.synology.com/en-us/C2/tutorial/How_to_enable_Full_Disk_Access_on_a_Mac) if using the default location or ensure that the path to the database file is correct.
-
-***
-
-Q: Does `imessage-exporter` export message conversations that are on a user's iPhone/iPad but not on the user's Mac?
-
-A: No, `imessage-exporter` only reads data present on the host system.
+Ensure your terminal emulator has [full disk access](https://kb.synology.com/en-us/C2/tutorial/How_to_enable_Full_Disk_Access_on_a_Mac) if using the default location or ensure that the path to the database file is correct.
 
 ***
 
-Q: How does the exporter handle previously exported messages?
+#### Does `imessage-exporter` export message conversations that are on a user's iPhone/iPad but not on the user's Mac?
 
-A: All messages are exported every time `imessage-exporter` runs. `imessage-exporter` appends to files when writing, so make sure to specify a different location!
-
-***
-
-Q: Is it possible to export a conversation and re-integrate it back onto another Apple ID?
-
-A: No, I do not want to be trusted with write access to your iMessage data. This software is *read only*.
+No, `imessage-exporter` only reads data present on the host system.
 
 ***
 
-Q: Is there a search function?
+#### How does the exporter handle previously exported messages?
 
-A: No, this software just builds exports. I use [`ripgrep`](https://github.com/BurntSushi/ripgrep) to search though the exported files.
-
-***
-
-Q: Will it run on Windows?
-
-A: I don't pre-build binaries for Windows, but it should compile to that target. As long as you can point it at an iMessage database, it should work.
+All messages are exported every time `imessage-exporter` runs. `imessage-exporter` appends to files when writing, so make sure to specify a different location!
 
 ***
 
-Q: Are voice messages be saved?
+#### Is it possible to export a conversation and re-integrate it back onto another Apple ID?
 
-A: Expired ones cannot because they are deleted. If you kept them then they are included in the exports.
+No, I do not want to be trusted with write access to your iMessage data. This software is *read only*.
 
 ***
 
-Q: Are messages deleted from the messages app erased from the database?
+#### Is there a search function?
 
-A: Yes, this tool cannot recover deleted messages.
+No, this software just builds exports. I use [`ripgrep`](https://github.com/BurntSushi/ripgrep) to search though the exported files.
+
+***
+
+#### Will it run on Windows/Linux?
+
+I don't pre-build binaries for Windows or Linux, but it should compile to those [targets](https://doc.rust-lang.org/nightly/rustc/platform-support.html). As long as you can point it at an iMessage database, it should work.
+
+***
+
+#### Are voice messages be saved?
+
+Expired ones cannot because they are deleted. If you kept them then they are included in the exports.
+
+***
+
+#### Are messages deleted from the messages app erased from the database?
+
+Yes, this tool cannot recover deleted messages.

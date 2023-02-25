@@ -2,7 +2,7 @@
  Contains functions that generate the correct path to the default iMessage database location.
 */
 
-use std::env::var;
+use std::{env::var, path::PathBuf};
 
 use crate::tables::table::DEFAULT_PATH;
 
@@ -31,8 +31,8 @@ pub fn home() -> String {
 /// use imessage_database::util::dirs::default_db_path;
 ///
 /// let path = default_db_path();
-/// println!("{path}");
+/// println!("{path:?}");
 /// ```
-pub fn default_db_path() -> String {
-    format!("{}/{DEFAULT_PATH}", home())
+pub fn default_db_path() -> PathBuf {
+    PathBuf::from(format!("{}/{DEFAULT_PATH}", home()))
 }

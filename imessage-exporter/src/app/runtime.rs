@@ -8,7 +8,7 @@ use std::{
 use rusqlite::Connection;
 
 use crate::{
-    app::{options::Options, sanitizers::sanitize_filename},
+    app::{error::RuntimeError, options::Options, sanitizers::sanitize_filename},
     Exporter, HTML, TXT,
 };
 use imessage_database::{
@@ -19,14 +19,12 @@ use imessage_database::{
         handle::Handle,
         messages::Message,
         table::{
-            get_connection, Cacheable, Deduplicate, Diagnostic, ATTACHMENTS_DIR,
-            DEFAULT_OUTPUT_DIR, MAX_LENGTH, ME, ORPHANED, UNKNOWN,
+            get_connection, Cacheable, Deduplicate, Diagnostic, ATTACHMENTS_DIR, MAX_LENGTH, ME,
+            ORPHANED, UNKNOWN,
         },
     },
-    util::{dates::get_offset, dirs::home},
+    util::dates::get_offset,
 };
-
-use super::error::RuntimeError;
 
 /// Stores the application state and handles application lifecycle
 pub struct Config<'a> {
@@ -67,17 +65,9 @@ impl<'a> Config<'a> {
         }
     }
 
-    /// Get the export path for the current session
-    pub fn export_path(&self) -> PathBuf {
-        match self.options.export_path {
-            Some(path_str) => PathBuf::from(path_str),
-            None => PathBuf::from(&format!("{}/{DEFAULT_OUTPUT_DIR}", home())),
-        }
-    }
-
     /// Get the attachment path for the current session
     pub fn attachment_path(&self) -> PathBuf {
-        let mut path = self.export_path();
+        let mut path = self.options.export_path.clone();
         path.push(ATTACHMENTS_DIR);
         path
     }
@@ -164,19 +154,14 @@ impl<'a> Config<'a> {
     /// ```
     /// use crate::app::{
     ///    options::{from_command_line, Options},
-    ///    runtime::State,
+    ///    runtime::Config,
     /// };
     ///
     /// let args = from_command_line();
     /// let options = Options::from_args(&args);
-    /// let app = State::new(options).unwrap();
+    /// let app = Config::new(options).unwrap();
     /// ```
     pub fn new(options: Options) -> Result<Config, RuntimeError> {
-        // Escape early if options are invalid
-        if !options.valid {
-            return Err(RuntimeError::InvalidOptions);
-        }
-
         let conn = get_connection(&options.db_path).map_err(RuntimeError::DatabaseError)?;
         eprintln!("Building cache...");
         eprintln!("[1/4] Caching chats...");
@@ -233,12 +218,12 @@ impl<'a> Config<'a> {
     /// ```
     /// use crate::app::{
     ///    options::{from_command_line, Options},
-    ///    runtime::State,
+    ///    runtime::Config,
     /// };
     ///
     /// let args = from_command_line();
     /// let options = Options::from_args(&args);
-    /// let app = State::new(options).unwrap();
+    /// let app = Config::new(options).unwrap();
     /// app.start();
     /// ```
     pub fn start(&self) -> Result<(), RuntimeError> {
@@ -246,9 +231,9 @@ impl<'a> Config<'a> {
             self.run_diagnostic();
         } else if self.options.export_type.is_some() {
             // Ensure the path we want to export to exists
-            create_dir_all(self.export_path()).unwrap();
+            create_dir_all(&self.options.export_path).map_err(RuntimeError::DiskError)?;
 
-            match self.options.export_type.unwrap() {
+            match self.options.export_type.unwrap_or_default() {
                 "txt" => {
                     // Create exporter, pass it data we care about, then kick it off
                     TXT::new(self).iter_messages()?;
@@ -289,9 +274,12 @@ mod test {
             chat::Chat,
             table::{get_connection, MAX_LENGTH},
         },
-        util::dirs::default_db_path,
+        util::{dirs::default_db_path, query_context::QueryContext},
     };
-    use std::collections::{BTreeSet, HashMap};
+    use std::{
+        collections::{BTreeSet, HashMap},
+        path::PathBuf,
+    };
 
     fn fake_options<'a>() -> Options<'a> {
         Options {
@@ -299,8 +287,9 @@ mod test {
             no_copy: false,
             diagnostic: false,
             export_type: None,
-            export_path: None,
-            valid: true,
+            export_path: PathBuf::new(),
+            query_context: QueryContext::default(),
+            no_lazy: false,
         }
     }
 
