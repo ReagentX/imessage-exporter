@@ -64,7 +64,8 @@ impl<'a> Exporter<'a> for TXT<'a> {
         // Set up progress bar
         let mut current_message = 0;
         let total_messages =
-            Message::get_count(&self.config.db, &self.config.options.query_context);
+            Message::get_count(&self.config.db, &self.config.options.query_context)
+                .map_err(RuntimeError::DatabaseError)?;
         let pb = build_progress_bar_export(total_messages);
 
         let mut statement =
