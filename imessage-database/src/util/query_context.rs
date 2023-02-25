@@ -55,6 +55,7 @@ impl QueryContext {
         if date.len() < 9 {
             return None;
         }
+
         let year = date.get(0..4)?.parse::<i32>().ok()?;
 
         if !date.get(4..5)?.eq("-") {
