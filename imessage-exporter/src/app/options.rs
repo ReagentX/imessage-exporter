@@ -2,15 +2,15 @@ use std::path::PathBuf;
 
 use clap::{crate_version, Arg, ArgMatches, Command};
 
-use imessage_database::{
-    tables::table::DEFAULT_OUTPUT_DIR,
-    util::{
-        dirs::{default_db_path, home},
-        query_context::QueryContext,
-    },
+use imessage_database::util::{
+    dirs::{default_db_path, home},
+    query_context::QueryContext,
 };
 
 use super::error::RuntimeError;
+
+/// Default export directory name
+pub const DEFAULT_OUTPUT_DIR: &str = "imessage_export";
 
 // CLI Arg Names
 pub const OPTION_DB_PATH: &str = "db-path";
@@ -119,38 +119,6 @@ impl<'a> Options<'a> {
 
         // Ensure export path is empty or does not contain files of the existing export type
         // We have to use a PathBuf here because it can be created from data owned by this function in the default state
-        let resolved_path =
-            PathBuf::from(export_path.unwrap_or(&format!("{}/{DEFAULT_OUTPUT_DIR}", home())));
-        if let Some(export_type) = export_type {
-            if resolved_path.exists() {
-                let path_word = match export_path {
-                    Some(_) => "Specified",
-                    None => "Default",
-                };
-
-                match resolved_path.read_dir() {
-                    Ok(files) => {
-                        for file in files.flatten() {
-                            if file
-                                .path()
-                                .extension()
-                                .map(|s| s.to_str().unwrap_or("") == export_type)
-                                .unwrap_or(false)
-                            {
-                                return Err(RuntimeError::InvalidOptions(format!(
-                                        "{path_word} export path {resolved_path:?} contains existing \"{export_type}\" export data!"
-                                    )));
-                            }
-                        }
-                    }
-                    Err(why) => {
-                        return Err(RuntimeError::InvalidOptions(format!(
-                            "{path_word} export path {resolved_path:?} is not a valid directory: {why}"
-                        )));
-                    }
-                }
-            }
-        }
 
         let db_path = match user_path {
             Some(path) => PathBuf::from(path),
@@ -162,11 +130,53 @@ impl<'a> Options<'a> {
             no_copy,
             diagnostic,
             export_type,
-            export_path: resolved_path,
+            export_path: validate_path(export_path, export_type)?,
             query_context,
             no_lazy,
         })
     }
+}
+
+/// Ensure export path is empty or does not contain files of the existing export type
+/// We have to use a PathBuf here because it can be created from data owned by this function in the default state
+fn validate_path(
+    export_path: Option<&str>,
+    export_type: Option<&str>,
+) -> Result<PathBuf, RuntimeError> {
+    let resolved_path =
+        PathBuf::from(export_path.unwrap_or(&format!("{}/{DEFAULT_OUTPUT_DIR}", home())));
+    if let Some(export_type) = export_type {
+        if resolved_path.exists() {
+            let path_word = match export_path {
+                Some(_) => "Specified",
+                None => "Default",
+            };
+
+            match resolved_path.read_dir() {
+                Ok(files) => {
+                    for file in files.flatten() {
+                        if file
+                            .path()
+                            .extension()
+                            .map(|s| s.to_str().unwrap_or("") == export_type)
+                            .unwrap_or(false)
+                        {
+                            return Err(RuntimeError::InvalidOptions(format!(
+                                        "{path_word} export path {resolved_path:?} contains existing \"{export_type}\" export data!"
+                                    )));
+                        }
+                    }
+                }
+                Err(why) => {
+                    return Err(RuntimeError::InvalidOptions(format!(
+                        "{path_word} export path {resolved_path:?} is not a valid directory: {why}"
+                    )));
+                }
+            }
+        }
+    };
+
+    Ok(resolved_path)
 }
 
 pub fn from_command_line() -> ArgMatches {
@@ -242,4 +252,69 @@ pub fn from_command_line() -> ArgMatches {
         )
         .get_matches();
     matches
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::io::Write;
+    use std::path::PathBuf;
+
+    use crate::app::options::{validate_path, DEFAULT_OUTPUT_DIR};
+    use imessage_database::util::dirs::home;
+
+    #[test]
+    fn can_validate_empty() {
+        let export_path = Some("/tmp");
+        let export_type = Some("txt");
+
+        let result = validate_path(export_path, export_type);
+
+        assert_eq!(result.unwrap(), PathBuf::from("/tmp"))
+    }
+
+    #[test]
+    fn can_validate_different_type() {
+        let export_path = Some("/tmp");
+        let export_type = Some("txt");
+
+        let result = validate_path(export_path, export_type);
+
+        let mut tmp = PathBuf::from("/tmp");
+        tmp.push("fake1.html");
+        let mut file = fs::File::create(&tmp).unwrap();
+        file.write_all(&[]).unwrap();
+
+        assert_eq!(result.unwrap(), PathBuf::from("/tmp"));
+        fs::remove_file(&tmp).unwrap();
+    }
+
+    #[test]
+    fn can_validate_same_type() {
+        let export_path = Some("/tmp");
+        let export_type = Some("html");
+
+        let result = validate_path(export_path, export_type);
+
+        let mut tmp = PathBuf::from("/tmp");
+        tmp.push("fake2.html");
+        let mut file = fs::File::create(&tmp).unwrap();
+        file.write_all(&[]).unwrap();
+
+        assert_eq!(result.unwrap(), PathBuf::from("/tmp"));
+        fs::remove_file(&tmp).unwrap();
+    }
+
+    #[test]
+    fn can_validate_none() {
+        let export_path = None;
+        let export_type = None;
+
+        let result = validate_path(export_path, export_type);
+
+        assert_eq!(
+            result.unwrap(),
+            PathBuf::from(&format!("{}/{DEFAULT_OUTPUT_DIR}", home()))
+        );
+    }
 }
