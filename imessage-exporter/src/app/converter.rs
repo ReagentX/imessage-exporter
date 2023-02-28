@@ -24,6 +24,7 @@ impl Converter {
     }
 }
 
+/// Determine if a shell program exists on the system
 fn exists(name: &str) -> bool {
     if let Ok(process) = Command::new("type")
         .args(&vec![name])
