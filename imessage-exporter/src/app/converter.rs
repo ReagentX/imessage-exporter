@@ -37,7 +37,6 @@ fn exists(name: &str) -> bool {
             return output.status.success();
         }
     };
-    eprintln!("No HEIC converter found, attachments will not be converted!");
     false
 }
 
