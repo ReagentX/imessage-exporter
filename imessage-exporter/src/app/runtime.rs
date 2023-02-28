@@ -295,6 +295,8 @@ mod test {
             export_path: PathBuf::new(),
             query_context: QueryContext::default(),
             no_lazy: false,
+            custom_me: None,
+            valid: true,
         }
     }
 
