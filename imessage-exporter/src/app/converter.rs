@@ -1,9 +1,44 @@
 use std::{
     fs::create_dir_all,
     path::Path,
-    process::{Command, Stdio}
+    process::{Command, Stdio},
 };
-use which::which;
+
+#[derive(Debug)]
+pub enum Converter {
+    Sips,
+    Imagemagick,
+}
+
+impl Converter {
+    /// Determine the converter type for the current shell environment
+    pub fn determine() -> Option<Converter> {
+        if exists("sips") {
+            return Some(Converter::Sips);
+        }
+        if exists("convert") {
+            return Some(Converter::Imagemagick);
+        }
+        eprintln!("No HEIC converter found, attachments will not be converted!");
+        None
+    }
+}
+
+fn exists(name: &str) -> bool {
+    if let Ok(process) = Command::new("type")
+        .args(&vec![name])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .stdin(Stdio::null())
+        .spawn()
+    {
+        if let Ok(output) = process.wait_with_output() {
+            return output.status.success();
+        }
+    };
+    eprintln!("No HEIC converter found, attachments will not be converted!");
+    false
+}
 
 /// Convert a HEIC image file to a JPEG
 ///
@@ -14,7 +49,7 @@ use which::which;
 /// of failing, `sips` will create a file called `fake` in `/`. Subsequent writes
 /// by `sips` to the same location will not fail, but since it is a file instead
 /// of a directory, this will fail for non-`sips` copies.
-pub fn heic_to_jpeg(from: &Path, to: &Path) -> Option<()> {
+pub fn heic_to_jpeg(from: &Path, to: &Path, converter: &Converter) -> Option<()> {
     // Get the path we want to copy from
     let from_path = from.to_str()?;
 
@@ -31,16 +66,15 @@ pub fn heic_to_jpeg(from: &Path, to: &Path) -> Option<()> {
         }
     }
 
-    // check if sips exists in the path
-    match which("sips") {
-        Ok(_) => {
+    match converter {
+        Converter::Sips => {
             // Build the command
             match Command::new("sips")
-            .args(&vec!["-s", "format", "jpeg", from_path, "-o", to_path])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .stdin(Stdio::null())
-            .spawn()
+                .args(&vec!["-s", "format", "jpeg", from_path, "-o", to_path])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .stdin(Stdio::null())
+                .spawn()
             {
                 Ok(mut sips) => match sips.wait() {
                     Ok(_) => Some(()),
@@ -54,39 +88,45 @@ pub fn heic_to_jpeg(from: &Path, to: &Path) -> Option<()> {
                     None
                 }
             }
-        },
-        // if sips isn't present
-        Err(_) => {
-            // check for imagemagick's convert
-            match which("convert") {
-                Ok(_) => {
-                    // Build the command
-                    match Command::new("convert")
-                    .args(&vec![from_path, to_path])
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .stdin(Stdio::null())
-                    .spawn()
-                    {
-                        Ok(mut convert) => match convert.wait() {
-                            Ok(_) => Some(()),
-                            Err(why) => {
-                                eprintln!("Conversion failed: {why}");
-                                None
-                            }
-                        },
-                        Err(why) => {
-                            eprintln!("Conversion failed: {why}");
-                            None
-                        }
+        }
+        Converter::Imagemagick => {
+            // Build the command
+            match Command::new("convert")
+                .args(&vec![from_path, to_path])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .stdin(Stdio::null())
+                .spawn()
+            {
+                Ok(mut convert) => match convert.wait() {
+                    Ok(_) => Some(()),
+                    Err(why) => {
+                        eprintln!("Conversion failed: {why}");
+                        None
                     }
                 },
-                // if convert isn't found error
-                Err(_) => {
-                    eprintln!("No suitable conversion tool found!");
+                Err(why) => {
+                    eprintln!("Conversion failed: {why}");
                     None
                 }
             }
         }
+    };
+
+    Some(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::exists;
+
+    #[test]
+    fn can_find_program() {
+        assert!(exists("ls"))
+    }
+
+    #[test]
+    fn can_miss_program() {
+        assert!(!exists("fake_name"))
     }
 }
