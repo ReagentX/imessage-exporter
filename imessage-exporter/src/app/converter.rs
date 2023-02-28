@@ -1,8 +1,9 @@
 use std::{
     fs::create_dir_all,
     path::Path,
-    process::{Command, Stdio},
+    process::{Command, Stdio}
 };
+use which::which;
 
 /// Convert a HEIC image file to a JPEG
 ///
@@ -30,24 +31,62 @@ pub fn heic_to_jpeg(from: &Path, to: &Path) -> Option<()> {
         }
     }
 
-    // Build the comment
-    match Command::new("sips")
-        .args(&vec!["-s", "format", "jpeg", from_path, "-o", to_path])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .stdin(Stdio::null())
-        .spawn()
-    {
-        Ok(mut sips) => match sips.wait() {
-            Ok(_) => Some(()),
-            Err(why) => {
-                eprintln!("Conversion failed: {why}");
-                None
+    // check if sips exists in the path
+    match which("sips") {
+        Ok(_) => {
+            // Build the command
+            match Command::new("sips")
+            .args(&vec!["-s", "format", "jpeg", from_path, "-o", to_path])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .stdin(Stdio::null())
+            .spawn()
+            {
+                Ok(mut sips) => match sips.wait() {
+                    Ok(_) => Some(()),
+                    Err(why) => {
+                        eprintln!("Conversion failed: {why}");
+                        None
+                    }
+                },
+                Err(why) => {
+                    eprintln!("Conversion failed: {why}");
+                    None
+                }
             }
         },
-        Err(why) => {
-            eprintln!("Conversion failed: {why}");
-            None
+        // if sips isn't present
+        Err(_) => {
+            // check for imagemagick's convert
+            match which("convert") {
+                Ok(_) => {
+                    // Build the command
+                    match Command::new("convert")
+                    .args(&vec![from_path, to_path])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .stdin(Stdio::null())
+                    .spawn()
+                    {
+                        Ok(mut convert) => match convert.wait() {
+                            Ok(_) => Some(()),
+                            Err(why) => {
+                                eprintln!("Conversion failed: {why}");
+                                None
+                            }
+                        },
+                        Err(why) => {
+                            eprintln!("Conversion failed: {why}");
+                            None
+                        }
+                    }
+                },
+                // if convert isn't found error
+                Err(_) => {
+                    eprintln!("No suitable conversion tool found!");
+                    None
+                }
+            }
         }
     }
 }
