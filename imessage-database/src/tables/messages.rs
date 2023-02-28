@@ -501,20 +501,20 @@ impl Message {
     /// let context = QueryContext::default();
     /// Message::get_count(&conn, &context);
     /// ```
-    pub fn get_count(db: &Connection, context: &QueryContext) -> u64 {
+    pub fn get_count(db: &Connection, context: &QueryContext) -> Result<u64, TableError> {
         let mut statement = if context.has_filters() {
             db.prepare(&format!(
                 "SELECT COUNT(*) FROM {MESSAGE} as m {}",
                 context.generate_filter_statement()
             ))
-            .unwrap()
+            .map_err(TableError::Messages)?
         } else {
             db.prepare(&format!("SELECT COUNT(*) FROM {MESSAGE}"))
-                .unwrap()
+                .map_err(TableError::Messages)?
         };
         // Execute query to build the Handles
         let count: u64 = statement.query_row([], |r| r.get(0)).unwrap_or(0);
-        count
+        Ok(count)
     }
 
     /// Stream messages from the database with optional filters

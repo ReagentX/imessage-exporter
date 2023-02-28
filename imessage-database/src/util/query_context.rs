@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[derive(Debug, Default)]
-/// Represents filter configurations for a SQL query.`
+/// Represents filter configurations for a SQL query.
 pub struct QueryContext {
     /// The start date filter. Only messages sent on or after this date will be included.
     pub start: Option<i64>,
@@ -55,6 +55,7 @@ impl QueryContext {
         if date.len() < 9 {
             return None;
         }
+
         let year = date.get(0..4)?.parse::<i32>().ok()?;
 
         if !date.get(4..5)?.eq("-") {
@@ -280,7 +281,7 @@ mod sanitize_tests {
 
     #[test]
     fn can_reject_wrong_hyphen() {
-        let res = QueryContext::sanitize_date("2020—AB—CD");
+        let res = QueryContext::sanitize_date("2020–01–01");
         assert!(res.is_none())
     }
 }

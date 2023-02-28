@@ -55,7 +55,7 @@ pub struct HTML<'a> {
 
 impl<'a> Exporter<'a> for HTML<'a> {
     fn new(config: &'a Config) -> Self {
-        let mut orphaned = config.export_path();
+        let mut orphaned = config.options.export_path.clone();
         orphaned.push(ORPHANED);
         orphaned.set_extension("html");
         HTML {
@@ -69,7 +69,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
         // Tell the user what we are doing
         eprintln!(
             "Exporting to {} as html...",
-            self.config.export_path().display()
+            self.config.options.export_path.display()
         );
 
         // Write orphaned file headers
@@ -78,7 +78,8 @@ impl<'a> Exporter<'a> for HTML<'a> {
         // Set up progress bar
         let mut current_message = 0;
         let total_messages =
-            Message::get_count(&self.config.db, &self.config.options.query_context);
+            Message::get_count(&self.config.db, &self.config.options.query_context)
+                .map_err(RuntimeError::DatabaseError)?;
         let pb = build_progress_bar_export(total_messages);
 
         let mut statement =
@@ -124,7 +125,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
     fn get_or_create_file(&mut self, message: &Message) -> &Path {
         match self.config.conversation(message.chat_id) {
             Some((chatroom, id)) => self.files.entry(*id).or_insert_with(|| {
-                let mut path = self.config.export_path();
+                let mut path = self.config.options.export_path.clone();
                 path.push(self.config.filename(chatroom));
                 path.set_extension("html");
 
@@ -1106,6 +1107,8 @@ impl<'a> HTML<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use crate::{exporters::exporter::Writer, Config, Exporter, Options, HTML};
     use imessage_database::{
         tables::messages::Message,
@@ -1143,13 +1146,12 @@ mod tests {
     pub fn fake_options() -> Options<'static> {
         Options {
             db_path: default_db_path(),
-            no_copy: true,
+            no_copy: false,
             diagnostic: false,
-            export_type: Some("html"),
-            export_path: None,
+            export_type: None,
+            export_path: PathBuf::new(),
             query_context: QueryContext::default(),
             no_lazy: false,
-            valid: true,
         }
     }
 
