@@ -424,21 +424,27 @@ impl<'a> Writer<'a> for HTML<'a> {
                                 copy_path.push(Uuid::new_v4().to_string());
 
                                 // If the image is a HEIC, convert it to PNG, otherwise perform the copy
-                                if ext == "heic" || ext == "HEIC" {
+                                // TODO: use `if let` binding when eRFC 2497 is merged: https://github.com/rust-lang/rust/issues/53667
+                                if (ext == "heic" || ext == "HEIC")
+                                    && self.config.converter.is_some()
+                                {
                                     // Write the converted file
                                     copy_path.set_extension("jpg");
-                                    match heic_to_jpeg(qualified_attachment_path, &copy_path) {
-                                        Some(_) => {}
-                                        None => {
-                                            // It is kind of odd to use Ok() on the failure here, but the Err()
-                                            // this function returns is used for when files are missing, not when
-                                            // conversion fails. Perhaps this should be a Result<String, Enum>
-                                            // of some kind, but this conversion failure is quite rare.
-                                            return Ok(format!(
-                                                "Unable to convert and display file: {}",
-                                                &attachment.filename()
-                                            ));
-                                        }
+                                    if heic_to_jpeg(
+                                        qualified_attachment_path,
+                                        &copy_path,
+                                        self.config.converter.as_ref().unwrap(),
+                                    )
+                                    .is_none()
+                                    {
+                                        // It is kind of odd to use Ok() on the failure here, but the Err()
+                                        // this function returns is used for when files are missing, not when
+                                        // conversion fails. Perhaps this should be a Result<String, Enum>
+                                        // of some kind, but this conversion failure is quite rare.
+                                        return Ok(format!(
+                                            "Unable to convert and display file: {}",
+                                            &attachment.filename()
+                                        ));
                                     }
                                 } else {
                                     // Just copy the file

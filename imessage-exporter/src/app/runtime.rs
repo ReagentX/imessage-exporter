@@ -8,7 +8,9 @@ use std::{
 use rusqlite::Connection;
 
 use crate::{
-    app::{error::RuntimeError, options::Options, sanitizers::sanitize_filename},
+    app::{
+        converter::Converter, error::RuntimeError, options::Options, sanitizers::sanitize_filename,
+    },
     Exporter, HTML, TXT,
 };
 use imessage_database::{
@@ -46,6 +48,8 @@ pub struct Config<'a> {
     pub offset: i64,
     /// The connection we use to query the database
     pub db: Connection,
+    /// Converter type used when converting image files
+    pub converter: Option<Converter>,
 }
 
 impl<'a> Config<'a> {
@@ -184,6 +188,7 @@ impl<'a> Config<'a> {
             options,
             offset: get_offset(),
             db: conn,
+            converter: Converter::determine(),
         })
     }
 
@@ -314,6 +319,7 @@ mod test {
             options,
             offset: 0,
             db: connection,
+            converter: Some(crate::app::converter::Converter::Sips),
         }
     }
 
