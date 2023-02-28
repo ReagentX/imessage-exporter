@@ -291,12 +291,12 @@ mod tests {
     #[test]
     fn can_validate_same_type() {
         let export_path = Some("/tmp");
-        let export_type = Some("html");
+        let export_type = Some("txt");
 
         let result = validate_path(export_path, export_type);
 
         let mut tmp = PathBuf::from("/tmp");
-        tmp.push("fake2.html");
+        tmp.push("fake2.txt");
         let mut file = fs::File::create(&tmp).unwrap();
         file.write_all(&[]).unwrap();
 
