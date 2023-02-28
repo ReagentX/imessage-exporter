@@ -47,9 +47,7 @@ pub struct Options<'a> {
     /// If true, do not include `loading="lazy"` in HTML exports
     pub no_lazy: bool,
     /// Custom name for ME in output
-    pub custom_me: Option<&'a str>,    
-    /// Whether the options created are valid or not
-    pub valid: bool,
+    pub custom_me: Option<&'a str>,
 }
 
 impl<'a> Options<'a> {
@@ -139,7 +137,6 @@ impl<'a> Options<'a> {
             query_context,
             no_lazy,
             custom_me,
-            valid,
         })
     }
 }
