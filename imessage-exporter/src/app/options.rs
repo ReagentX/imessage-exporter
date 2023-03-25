@@ -21,7 +21,7 @@ pub const OPTION_EXPORT_PATH: &str = "export-path";
 pub const OPTION_START_DATE: &str = "start-date";
 pub const OPTION_END_DATE: &str = "end-date";
 pub const OPTION_DISABLE_LAZY_LOADING: &str = "no-lazy";
-pub const OPTION_CUSTOM_ME: &str = "custom-me";
+pub const OPTION_CUSTOM_NAME: &str = "custom-name";
 
 // Other CLI Text
 pub const SUPPORTED_FILE_TYPES: &str = "txt, html";
@@ -46,7 +46,7 @@ pub struct Options<'a> {
     pub query_context: QueryContext,
     /// If true, do not include `loading="lazy"` in HTML exports
     pub no_lazy: bool,
-    /// Custom name for ME in output
+    /// Custom name for database owner in output
     pub custom_me: Option<&'a str>,
 }
 
@@ -60,7 +60,7 @@ impl<'a> Options<'a> {
         let start_date = args.value_of(OPTION_START_DATE);
         let end_date = args.value_of(OPTION_END_DATE);
         let no_lazy = args.is_present(OPTION_DISABLE_LAZY_LOADING);
-        let custom_me = args.value_of(OPTION_CUSTOM_ME);
+        let custom_me = args.value_of(OPTION_CUSTOM_NAME);
 
         // Ensure export type is allowed
         if let Some(found_type) = export_type {
@@ -249,19 +249,18 @@ pub fn from_command_line() -> ArgMatches {
         )
         .arg(
             Arg::new(OPTION_DISABLE_LAZY_LOADING)
-            .short('l')
-            .long(OPTION_DISABLE_LAZY_LOADING)
-            .help("Do not include `loading=\"lazy\"` in HTML export `img` tags\nThis will make pages load slower but PDF generation work")
-            .display_order(7),
+                .short('l')
+                .long(OPTION_DISABLE_LAZY_LOADING)
+                .help("Do not include `loading=\"lazy\"` in HTML export `img` tags\nThis will make pages load slower but PDF generation work")
+                .display_order(7),
         )
         .arg(
-            Arg::new(OPTION_CUSTOM_ME)
+            Arg::new(OPTION_CUSTOM_NAME)
                 .short('m')
-                .long(OPTION_CUSTOM_ME)
-                .help(&*format!("Specify a Custom name for ME (your name) in output\nIf omitted, the default string is You"))
+                .long(OPTION_CUSTOM_NAME)
+                .help("Specify an optional custom name for the database owner's messages in exports")
                 .takes_value(true)
-                .display_order(7)
-                .default_value("You"),
+                .display_order(8)
         )
         .get_matches();
     matches
