@@ -85,8 +85,9 @@ pub const MESSAGE_SUMMARY_INFO: &str = "message_summary_info";
 pub const ATTRIBUTED_BODY: &str = "attributedBody";
 
 // Default information
-/// Name used for messages sent by the database owner
+/// Names used for messages sent by the database owner
 pub const ME: &str = "Me";
+pub const YOU: &str = "You";
 /// Name used for contacts or chats where the name cannot be discovered
 pub const UNKNOWN: &str = "Unknown";
 /// Default location for the Messages database
