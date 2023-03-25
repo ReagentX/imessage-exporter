@@ -216,7 +216,7 @@ fn extract_string_idx(body: &[Value], idx: usize) -> Result<&str, PlistParseErro
         .ok_or_else(|| PlistParseError::InvalidTypeIndex(idx, "string".to_string()))
 }
 
-/// Extract a string from a key-value pair that looks like {key: String("value")}
+/// Extract a string from a key-value pair that looks like `{key: String("value")}`
 pub fn get_string_from_dict<'a>(payload: &'a Value, key: &'a str) -> Option<&'a str> {
     payload
         .as_dictionary()?
@@ -225,12 +225,12 @@ pub fn get_string_from_dict<'a>(payload: &'a Value, key: &'a str) -> Option<&'a 
         .filter(|s| !s.is_empty())
 }
 
-/// Extract a bool from a key-value pair that looks like {key: true}
+/// Extract a bool from a key-value pair that looks like `{key: true}`
 pub fn get_bool_from_dict<'a>(payload: &'a Value, key: &'a str) -> Option<bool> {
     payload.as_dictionary()?.get(key)?.as_boolean()
 }
 
-/// Extract a string from a key-value pair that looks like {key: {key: String("value")}}
+/// Extract a string from a key-value pair that looks like `{key: {key: String("value")}}`
 pub fn get_string_from_nested_dict<'a>(payload: &'a Value, key: &'a str) -> Option<&'a str> {
     payload
         .as_dictionary()?
@@ -241,7 +241,7 @@ pub fn get_string_from_nested_dict<'a>(payload: &'a Value, key: &'a str) -> Opti
         .filter(|s| !s.is_empty())
 }
 
-/// Extract a float from a key-value pair that looks like {key: {key: 1.2}}
+/// Extract a float from a key-value pair that looks like `{key: {key: 1.2}}`
 pub fn get_float_from_nested_dict<'a>(payload: &'a Value, key: &'a str) -> Option<f64> {
     payload
         .as_dictionary()?
