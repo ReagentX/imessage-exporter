@@ -261,7 +261,7 @@ impl<'a> Config<'a> {
     /// Determine who sent a message
     pub fn who(&self, handle_id: &i32, is_from_me: bool) -> &str {
         if is_from_me {
-            ME
+            self.options.custom_me.unwrap_or(ME)
         } else {
             match self.participants.get(handle_id) {
                 Some(contact) => contact,

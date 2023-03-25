@@ -27,7 +27,7 @@ use imessage_database::{
     tables::{
         attachment::{Attachment, MediaType},
         messages::{BubbleType, Message},
-        table::{Table, ATTACHMENTS_DIR, FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN},
+        table::{Table, ATTACHMENTS_DIR, FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN, YOU},
     },
     util::{
         dates::{format, readable_diff},
@@ -250,7 +250,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                     } else if text.starts_with(FITNESS_RECEIVER) {
                         self.add_line(
                             &mut formatted_message,
-                            &text.replace(FITNESS_RECEIVER, "You"),
+                            &text.replace(FITNESS_RECEIVER, YOU),
                             "<span class=\"bubble\">",
                             "</span>",
                         );
@@ -710,7 +710,11 @@ impl<'a> Writer<'a> for HTML<'a> {
             let mut previous_timestamp: Option<&i64> = None;
 
             if edited_message.is_deleted() {
-                let who = if msg.is_from_me { "You" } else { "They" };
+                let who = if msg.is_from_me {
+                    self.config.options.custom_me.unwrap_or(YOU)
+                } else {
+                    "They"
+                };
                 let timestamp = format(&msg.date(&self.config.offset));
 
                 out_s.push_str(&format!(
@@ -975,7 +979,11 @@ impl<'a> HTML<'a> {
         let read_after = message.time_until_read(&self.config.offset);
         if let Some(time) = read_after {
             if !time.is_empty() {
-                let who = if message.is_from_me { "them" } else { "you" };
+                let who = if message.is_from_me {
+                    "them"
+                } else {
+                    self.config.options.custom_me.unwrap_or("you")
+                };
                 date.push_str(&format!(" (Read by {who} after {time})"));
             }
         }
