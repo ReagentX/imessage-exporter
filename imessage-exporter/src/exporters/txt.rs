@@ -399,7 +399,7 @@ impl<'a> Writer<'a> for TXT<'a> {
         let mut who = self.config.who(&msg.handle_id, msg.is_from_me);
         // Rename yourself so we render the proper grammar here
         if who == ME {
-            who = self.config.options.custom_me.unwrap_or(YOU)
+            who = self.config.options.custom_name.unwrap_or(YOU)
         }
 
         let timestamp = format(&msg.date(&self.config.offset));
@@ -424,7 +424,7 @@ impl<'a> Writer<'a> for TXT<'a> {
 
             if edited_message.is_deleted() {
                 let who = if msg.is_from_me {
-                    self.config.options.custom_me.unwrap_or(YOU)
+                    self.config.options.custom_name.unwrap_or(YOU)
                 } else {
                     "They"
                 };
@@ -652,7 +652,7 @@ impl<'a> TXT<'a> {
                 let who = if message.is_from_me {
                     "them"
                 } else {
-                    self.config.options.custom_me.unwrap_or("you")
+                    self.config.options.custom_name.unwrap_or("you")
                 };
                 date.push_str(&format!(" (Read by {who} after {time})"));
             }
@@ -716,7 +716,7 @@ mod tests {
             export_path: PathBuf::new(),
             query_context: QueryContext::default(),
             no_lazy: false,
-            custom_me: None,
+            custom_name: None,
         }
     }
 
@@ -887,6 +887,34 @@ mod tests {
     }
 
     #[test]
+    fn can_format_txt_from_them_custom_name_read() {
+        // Create exporter
+        let mut options = fake_options();
+        options.custom_name = Some("Name");
+        let mut config = Config::new(options).unwrap();
+        config
+            .participants
+            .insert(999999, "Sample Contact".to_string());
+        let exporter = TXT::new(&config);
+
+        let mut message = blank();
+        message.handle_id = 999999;
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.text = Some("Hello world".to_string());
+        // May 17, 2022  8:29:42 PM
+        message.date_delivered = 674526582885055488;
+        // May 17, 2022  9:30:31 PM
+        message.date_read = 674530231992568192;
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected =
+            "May 17, 2022  5:29:42 PM (Read by Name after 1 hour, 49 seconds)\nSample Contact\nHello world\n\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
     fn can_format_txt_shareplay() {
         // Create exporter
         let options = fake_options();
@@ -923,7 +951,26 @@ mod tests {
     }
 
     #[test]
-    fn can_format_txt_reaction_me() {
+    fn can_format_txt_announcement_custom_name() {
+        // Create exporter
+        let mut options = fake_options();
+        options.custom_name = Some("Name");
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.group_title = Some("Hello world".to_string());
+
+        let actual = exporter.format_announcement(&message);
+        let expected = "May 17, 2022  5:29:42 PM Name renamed the conversation to Hello world\n\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_txt_reaction_name() {
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
