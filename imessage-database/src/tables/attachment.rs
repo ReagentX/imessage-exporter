@@ -164,7 +164,7 @@ impl Attachment {
     pub fn mime_type(&'_ self) -> MediaType<'_> {
         match &self.mime_type {
             Some(mime) => {
-                if let Some(mime_str) = mime.split('/').into_iter().next() {
+                if let Some(mime_str) = mime.split('/').next() {
                     match mime_str {
                         "image" => MediaType::Image(mime),
                         "video" => MediaType::Video(mime),
