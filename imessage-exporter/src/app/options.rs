@@ -47,7 +47,7 @@ pub struct Options<'a> {
     /// If true, do not include `loading="lazy"` in HTML exports
     pub no_lazy: bool,
     /// Custom name for database owner in output
-    pub custom_me: Option<&'a str>,
+    pub custom_name: Option<&'a str>,
 }
 
 impl<'a> Options<'a> {
@@ -60,7 +60,7 @@ impl<'a> Options<'a> {
         let start_date = args.value_of(OPTION_START_DATE);
         let end_date = args.value_of(OPTION_END_DATE);
         let no_lazy = args.is_present(OPTION_DISABLE_LAZY_LOADING);
-        let custom_me = args.value_of(OPTION_CUSTOM_NAME);
+        let custom_name = args.value_of(OPTION_CUSTOM_NAME);
 
         // Ensure export type is allowed
         if let Some(found_type) = export_type {
@@ -136,7 +136,7 @@ impl<'a> Options<'a> {
             export_path: validate_path(export_path, export_type)?,
             query_context,
             no_lazy,
-            custom_me,
+            custom_name,
         })
     }
 }
