@@ -689,7 +689,7 @@ impl<'a> Writer<'a> for HTML<'a> {
         let mut who = self.config.who(&msg.handle_id, msg.is_from_me);
         // Rename yourself so we render the proper grammar here
         if who == ME {
-            who = "You"
+            who = self.config.options.custom_me.unwrap_or("You")
         }
         let timestamp = format(&msg.date(&self.config.offset));
         format!(
@@ -1158,6 +1158,7 @@ mod tests {
             export_path: PathBuf::new(),
             query_context: QueryContext::default(),
             no_lazy: false,
+            custom_me: None,
         }
     }
 
