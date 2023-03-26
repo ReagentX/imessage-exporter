@@ -766,6 +766,7 @@ impl Message {
         Variant::Normal
     }
 
+    /// Determine the type of announcement a message contains, if it contains one
     pub fn get_announcement(&self) -> Option<Announcement> {
         if let Some(name) = &self.group_title {
             return Some(Announcement::NameChange(name));
