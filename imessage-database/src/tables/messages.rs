@@ -86,6 +86,7 @@ pub struct Message {
     pub is_read: bool,
     pub item_type: i32,
     pub group_title: Option<String>,
+    pub group_action_type: i32,
     pub associated_message_guid: Option<String>,
     pub associated_message_type: Option<i32>,
     pub balloon_bundle_id: Option<String>,
@@ -114,6 +115,7 @@ impl Table for Message {
             is_read: row.get("is_read")?,
             item_type: row.get("item_type").unwrap_or_default(),
             group_title: row.get("group_title").unwrap_or(None),
+            group_action_type: row.get("group_action_type").unwrap_or(0),
             associated_message_guid: row.get("associated_message_guid").unwrap_or(None),
             associated_message_type: row.get("associated_message_type").unwrap_or(None),
             balloon_bundle_id: row.get("balloon_bundle_id").unwrap_or(None),
@@ -431,7 +433,7 @@ impl Message {
 
     /// `true` if the message renames a thread, else `false`
     pub fn is_announcement(&self) -> bool {
-        self.group_title.is_some()
+        self.group_title.is_some() || self.group_action_type != 0
     }
 
     /// `true` if the message is a reaction to another message, else `false`
@@ -894,6 +896,7 @@ mod tests {
             is_read: false,
             item_type: 0,
             group_title: None,
+            group_action_type: 0,
             associated_message_guid: None,
             associated_message_type: Some(i32::default()),
             balloon_bundle_id: None,
