@@ -52,6 +52,9 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         Do not include `loading="lazy"` in HTML export `img` tags
         This will make pages load slower but PDF generation work
 
+-m, --custom-name <custom-name>
+        Specify an optional custom name for the database owner's messages in exports
+
 -h, --help
         Print help information
 

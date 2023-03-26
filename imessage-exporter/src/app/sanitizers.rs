@@ -5,7 +5,7 @@ const DISALLOWED_CHARS: [char; 3] = ['/', '\\', ':'];
 
 /// Remove unsafe chars in [this list](DISALLOWED_CHARS).
 pub fn sanitize_filename(filename: String) -> String {
-    filename.chars().into_iter().map(|letter| match DISALLOWED_CHARS.contains(&letter){
+    filename.chars().map(|letter| match DISALLOWED_CHARS.contains(&letter){
         true => REPLACEMENT_CHAR,
         false => letter,
     }).collect()

@@ -27,7 +27,7 @@ use imessage_database::{
     tables::{
         attachment::{Attachment, MediaType},
         messages::{BubbleType, Message},
-        table::{Table, ATTACHMENTS_DIR, FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN},
+        table::{Table, ATTACHMENTS_DIR, FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN, YOU},
     },
     util::{
         dates::{format, readable_diff},
@@ -250,7 +250,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                     } else if text.starts_with(FITNESS_RECEIVER) {
                         self.add_line(
                             &mut formatted_message,
-                            &text.replace(FITNESS_RECEIVER, "You"),
+                            &text.replace(FITNESS_RECEIVER, YOU),
                             "<span class=\"bubble\">",
                             "</span>",
                         );
@@ -689,7 +689,7 @@ impl<'a> Writer<'a> for HTML<'a> {
         let mut who = self.config.who(&msg.handle_id, msg.is_from_me);
         // Rename yourself so we render the proper grammar here
         if who == ME {
-            who = "You"
+            who = self.config.options.custom_name.unwrap_or("You")
         }
         let timestamp = format(&msg.date(&self.config.offset));
         format!(
@@ -710,7 +710,11 @@ impl<'a> Writer<'a> for HTML<'a> {
             let mut previous_timestamp: Option<&i64> = None;
 
             if edited_message.is_deleted() {
-                let who = if msg.is_from_me { "You" } else { "They" };
+                let who = if msg.is_from_me {
+                    self.config.options.custom_name.unwrap_or(YOU)
+                } else {
+                    "They"
+                };
                 let timestamp = format(&msg.date(&self.config.offset));
 
                 out_s.push_str(&format!(
@@ -975,7 +979,11 @@ impl<'a> HTML<'a> {
         let read_after = message.time_until_read(&self.config.offset);
         if let Some(time) = read_after {
             if !time.is_empty() {
-                let who = if message.is_from_me { "them" } else { "you" };
+                let who = if message.is_from_me {
+                    "them"
+                } else {
+                    self.config.options.custom_name.unwrap_or("you")
+                };
                 date.push_str(&format!(" (Read by {who} after {time})"));
             }
         }
@@ -1158,6 +1166,7 @@ mod tests {
             export_path: PathBuf::new(),
             query_context: QueryContext::default(),
             no_lazy: false,
+            custom_name: None,
         }
     }
 
@@ -1342,6 +1351,34 @@ mod tests {
     }
 
     #[test]
+    fn can_format_html_from_them_custom_name_read() {
+        // Create exporter
+        let mut options = fake_options();
+        options.custom_name = Some("Name");
+        let mut config = Config::new(options).unwrap();
+        config
+            .participants
+            .insert(999999, "Sample Contact".to_string());
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        message.handle_id = 999999;
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.text = Some("Hello world".to_string());
+        // May 17, 2022  8:29:42 PM
+        message.date_delivered = 674526582885055488;
+        // May 17, 2022  9:30:31 PM
+        message.date_read = 674530231992568192;
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected =
+            "<div class=\"message\">\n<div class=\"received\">\n<p><span class=\"timestamp\">May 17, 2022  5:29:42 PM (Read by Name after 1 hour, 49 seconds)</span>\n<span class=\"sender\">Sample Contact</span></p>\n<hr><div class=\"message_part\">\n<span class=\"bubble\">Hello world</span>\n</div>\n</div>\n</div>\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
     fn can_format_html_shareplay() {
         // Create exporter
         let options = fake_options();
@@ -1378,7 +1415,26 @@ mod tests {
     }
 
     #[test]
-    fn can_format_html_reaction_me() {
+    fn can_format_html_announcement_custom_name() {
+        // Create exporter
+        let mut options = fake_options();
+        options.custom_name = Some("Name");
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.group_title = Some("Hello world".to_string());
+
+        let actual = exporter.format_announcement(&message);
+        let expected = "\n<div class =\"announcement\"><p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span> Name named the conversation <b>Hello world</b></p></div>\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_html_reaction_name() {
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();

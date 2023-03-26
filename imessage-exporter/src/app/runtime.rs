@@ -261,7 +261,7 @@ impl<'a> Config<'a> {
     /// Determine who sent a message
     pub fn who(&self, handle_id: &i32, is_from_me: bool) -> &str {
         if is_from_me {
-            ME
+            self.options.custom_name.unwrap_or(ME)
         } else {
             match self.participants.get(handle_id) {
                 Some(contact) => contact,
@@ -295,6 +295,7 @@ mod test {
             export_path: PathBuf::new(),
             query_context: QueryContext::default(),
             no_lazy: false,
+            custom_name: None,
         }
     }
 
@@ -533,6 +534,17 @@ mod test {
         // Get filename
         let who = app.who(&0, true);
         assert_eq!(who, "Me".to_string());
+    }
+
+    #[test]
+    fn can_get_who_me_custom() {
+        let mut options = fake_options();
+        options.custom_name = Some("Name");
+        let app = fake_app(options);
+
+        // Get filename
+        let who = app.who(&0, true);
+        assert_eq!(who, "Name".to_string());
     }
 
     #[test]
