@@ -537,6 +537,17 @@ mod test {
     }
 
     #[test]
+    fn can_get_who_me_custom() {
+        let mut options = fake_options();
+        options.custom_name = Some("Name");
+        let app = fake_app(options);
+
+        // Get filename
+        let who = app.who(&0, true);
+        assert_eq!(who, "Name".to_string());
+    }
+
+    #[test]
     fn can_get_chat_valid() {
         let options = fake_options();
         let mut app = fake_app(options);
