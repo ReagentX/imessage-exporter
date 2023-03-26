@@ -20,7 +20,7 @@ use crate::{
 /// - 1 is the second image
 /// - 2 is the third image
 /// - 3 is the text of the message
-/// 
+///
 /// In this example, a Like on `p:2/` is a like on the third image
 ///
 /// Reactions are normal messages in the database, but only the latest reaction
@@ -81,6 +81,20 @@ pub enum URLOverride<'a> {
     AppleMusic(MusicMessage<'a>),
     /// [Collaboration](crate::message_types::collaboration) messages
     Collaboration(CollaborationMessage<'a>),
+}
+
+/// Announcement Message Types
+///
+/// Announcements are messages sent to the thread for actions that are not balloons, i.e.
+/// updating the name or changing the group photo
+#[derive(Debug)]
+pub enum Announcement<'a> {
+    /// Someone changed the name of the group
+    NameChange(&'a str),
+    /// Someone updated the group photo
+    PhotoChange,
+    /// Types that may occur in the future, i.e. someone leaving or joining a group
+    Unknown(&'a i32),
 }
 
 /// Message variant container
