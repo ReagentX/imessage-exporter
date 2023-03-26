@@ -692,11 +692,19 @@ impl<'a> Writer<'a> for HTML<'a> {
             who = self.config.options.custom_name.unwrap_or("You")
         }
         let timestamp = format(&msg.date(&self.config.offset));
+
+        if msg.group_action_type == 1 {
+            return format!(
+                "\n<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} changed the group photo.</p></div>\n",
+            );
+        }
+
         format!(
             "\n<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} named the conversation <b>{}</b></p></div>\n",
             msg.group_title.as_deref().unwrap_or(UNKNOWN)
         )
     }
+
     fn format_shareplay(&self) -> &str {
         "SharePlay Message Ended"
     }
@@ -1144,6 +1152,7 @@ mod tests {
             is_read: false,
             item_type: 0,
             group_title: None,
+            group_action_type: 0,
             associated_message_guid: None,
             associated_message_type: Some(i32::default()),
             balloon_bundle_id: None,

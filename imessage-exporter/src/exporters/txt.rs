@@ -403,6 +403,11 @@ impl<'a> Writer<'a> for TXT<'a> {
         }
 
         let timestamp = format(&msg.date(&self.config.offset));
+
+        if msg.group_action_type == 1 {
+            return format!("{timestamp} {who} changed the group photo.\n\n",);
+        }
+
         format!(
             "{timestamp} {who} renamed the conversation to {}\n\n",
             msg.group_title.as_deref().unwrap_or(UNKNOWN)
@@ -694,6 +699,7 @@ mod tests {
             is_read: false,
             item_type: 0,
             group_title: None,
+            group_action_type: 0,
             associated_message_guid: None,
             associated_message_type: Some(i32::default()),
             balloon_bundle_id: None,
