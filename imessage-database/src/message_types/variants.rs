@@ -85,8 +85,8 @@ pub enum URLOverride<'a> {
 
 /// Announcement Message Types
 ///
-/// Announcements are messages sent to the thread for actions that are not balloons, i.e.
-/// updating the name or changing the group photo
+/// Announcements are messages sent to a thread for actions that are not balloons, i.e.
+/// updating the name of the group or changing the group photo
 #[derive(Debug)]
 pub enum Announcement<'a> {
     /// Someone changed the name of the group
