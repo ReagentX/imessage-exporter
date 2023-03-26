@@ -19,7 +19,7 @@ use imessage_database::{
         expressives::{BubbleEffect, Expressive, ScreenEffect},
         music::MusicMessage,
         url::URLMessage,
-        variants::{BalloonProvider, CustomBalloon, URLOverride, Variant},
+        variants::{Announcement, BalloonProvider, CustomBalloon, URLOverride, Variant},
     },
     tables::{
         attachment::Attachment,
@@ -403,10 +403,21 @@ impl<'a> Writer<'a> for TXT<'a> {
         }
 
         let timestamp = format(&msg.date(&self.config.offset));
-        format!(
-            "{timestamp} {who} renamed the conversation to {}\n\n",
-            msg.group_title.as_deref().unwrap_or(UNKNOWN)
-        )
+
+        return match msg.get_announcement() {
+            Some(announcement) => match announcement {
+                Announcement::NameChange(name) => {
+                    format!("{timestamp} {who} renamed the conversation to {name}\n\n")
+                }
+                Announcement::PhotoChange => {
+                    format!("{timestamp} {who} changed the group photo.\n\n")
+                }
+                Announcement::Unknown(num) => {
+                    format!("{timestamp} {who} performed unknown action {num}.\n\n")
+                }
+            },
+            None => String::from("Unable to format announcement!\n\n"),
+        };
     }
 
     fn format_shareplay(&self) -> &str {
@@ -694,6 +705,7 @@ mod tests {
             is_read: false,
             item_type: 0,
             group_title: None,
+            group_action_type: 0,
             associated_message_guid: None,
             associated_message_type: Some(i32::default()),
             balloon_bundle_id: None,
