@@ -9,8 +9,8 @@ use crate::error::streamtyped::StreamTypedError;
 /// - <https://www.compart.com/en/unicode/U+002b>
 const START_PATTERN: [u8; 2] = [0x0001, 0x002b];
 
-/// Literal: `[<Start of Selected Area> (SSA), <Index> (IND)]`
-/// - https://www.compart.com/en/unicode/U+0086
+/// Literals: `[<Start of Selected Area> (SSA), <Index> (IND)]`
+/// - <https://www.compart.com/en/unicode/U+0086>
 /// - <https://www.compart.com/en/unicode/U+0084>
 const END_PATTERN: [u8; 2] = [0x0086, 0x0084];
 
