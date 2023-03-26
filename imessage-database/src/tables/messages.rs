@@ -12,7 +12,7 @@ use crate::{
     error::{message::MessageError, table::TableError},
     message_types::{
         expressives::{BubbleEffect, Expressive, ScreenEffect},
-        variants::{CustomBalloon, Reaction, Variant},
+        variants::{Announcement, CustomBalloon, Reaction, Variant},
     },
     tables::table::{
         Cacheable, Diagnostic, Table, ATTRIBUTED_BODY, CHAT_MESSAGE_JOIN, MESSAGE,
@@ -764,6 +764,18 @@ impl Message {
         }
 
         Variant::Normal
+    }
+
+    pub fn get_announcement(&self) -> Option<Announcement> {
+        if let Some(name) = &self.group_title {
+            return Some(Announcement::NameChange(name));
+        }
+
+        return match &self.group_action_type {
+            0 => None,
+            1 => Some(Announcement::PhotoChange),
+            other => Some(Announcement::Unknown(other)),
+        };
     }
 
     /// Determine the service the message was sent from, i.e. iMessage, SMS, IRC, etc.
