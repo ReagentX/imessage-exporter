@@ -22,7 +22,7 @@ use imessage_database::{
         expressives::{BubbleEffect, Expressive, ScreenEffect},
         music::MusicMessage,
         url::URLMessage,
-        variants::{BalloonProvider, CustomBalloon, URLOverride, Variant},
+        variants::{Announcement, BalloonProvider, CustomBalloon, URLOverride, Variant},
     },
     tables::{
         attachment::{Attachment, MediaType},
@@ -693,16 +693,26 @@ impl<'a> Writer<'a> for HTML<'a> {
         }
         let timestamp = format(&msg.date(&self.config.offset));
 
-        if msg.group_action_type == 1 {
-            return format!(
-                "\n<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} changed the group photo.</p></div>\n",
-            );
-        }
-
-        format!(
-            "\n<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} named the conversation <b>{}</b></p></div>\n",
-            msg.group_title.as_deref().unwrap_or(UNKNOWN)
-        )
+        return match msg.get_announcement() {
+            Some(announcement) => match announcement {
+                Announcement::NameChange(name) => {
+                    format!(
+                        "\n<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} named the conversation <b>{name}</b></p></div>\n"
+                    )
+                }
+                Announcement::PhotoChange => {
+                    format!(
+                        "\n<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} changed the group photo.</p></div>\n"
+                    )
+                }
+                Announcement::Unknown(num) => {
+                    format!(
+                        "\n<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} performed unknown action {num}</p></div>\n"
+                    )
+                }
+            },
+            None => String::from("\n<div class =\"announcement\"><p>Unable to format announcement!</p></div>\n"),
+        };
     }
 
     fn format_shareplay(&self) -> &str {
