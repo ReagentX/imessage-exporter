@@ -1453,7 +1453,7 @@ mod tests {
     }
 
     #[test]
-    fn can_format_html_reaction_name() {
+    fn can_format_html_reaction_me() {
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
