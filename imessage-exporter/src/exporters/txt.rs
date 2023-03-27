@@ -24,7 +24,7 @@ use imessage_database::{
     tables::{
         attachment::Attachment,
         messages::{BubbleType, Message},
-        table::{Table, FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN, YOU},
+        table::{Table, FITNESS_RECEIVER, ME, ORPHANED, YOU},
     },
     util::{
         dates::{format, readable_diff},
