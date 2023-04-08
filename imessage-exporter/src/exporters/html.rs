@@ -27,7 +27,7 @@ use imessage_database::{
     tables::{
         attachment::{Attachment, MediaType},
         messages::{BubbleType, Message},
-        table::{Table, ATTACHMENTS_DIR, FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN, YOU},
+        table::{Table, ATTACHMENTS_DIR, FITNESS_RECEIVER, ME, ORPHANED, YOU},
     },
     util::{
         dates::{format, readable_diff},
@@ -465,7 +465,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                             eprintln!("Unable to copy {qualified_attachment_path:?} to {copy_path:?}: {why}")
                                         };
                                     } else {
-                                        eprintln!("Unable to create {copy_path:?} from {qualified_attachment_path:?}");
+                                        eprintln!("Attachment not found at specified path: {qualified_attachment_path:?}");
                                         return Err(attachment.filename());
                                     }
                                 }
@@ -1453,7 +1453,7 @@ mod tests {
     }
 
     #[test]
-    fn can_format_html_reaction_name() {
+    fn can_format_html_reaction_me() {
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();

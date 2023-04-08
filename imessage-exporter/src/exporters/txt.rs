@@ -24,7 +24,7 @@ use imessage_database::{
     tables::{
         attachment::Attachment,
         messages::{BubbleType, Message},
-        table::{Table, FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN, YOU},
+        table::{Table, FITNESS_RECEIVER, ME, ORPHANED, YOU},
     },
     util::{
         dates::{format, readable_diff},
@@ -982,7 +982,7 @@ mod tests {
     }
 
     #[test]
-    fn can_format_txt_reaction_name() {
+    fn can_format_txt_reaction_me() {
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
