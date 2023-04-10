@@ -12,6 +12,12 @@ This binary is available on [crates.io](https://crates.io/crates/imessage-export
 
 `cargo install imessage-exporter` is the best way to install the app for normal use.
 
+### Homebrew
+
+This binary is available via [`brew`](https://formulae.brew.sh/formula/imessage-exporter).
+
+`brew install imessage-exporter` will install the app, but it may not be up to date with the latest release.
+
 ### Prebuilt Binaries
 
 The [releases page](https://github.com/ReagentX/imessage-exporter/releases) provides prebuilt binaries for both Apple Silicon and Intel-based Macs.
@@ -52,6 +58,9 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         Do not include `loading="lazy"` in HTML export `img` tags
         This will make pages load slower but PDF generation work
 
+-m, --custom-name <custom-name>
+        Specify an optional custom name for the database owner's messages in exports
+
 -h, --help
         Print help information
 
@@ -79,7 +88,7 @@ Export as `html` from `/Volumes/external/chat.db` to `/Volumes/external/export` 
 % imessage-exporter -f html --no-copy -p /Volumes/external/chat.db -o /Volumes/external/export
 ```
 
-Export messages from `2020-01-01` to `2020-12-31` as `txt` the default iMessage Database location to `~/export-2020`:
+Export messages from `2020-01-01` to `2020-12-31` as `txt` from the default iMessage Database location to `~/export-2020`:
 
 ```zsh
 % imessage-exporter -f txt -o ~/export-2020 -s 2020-01-01 -e 2021-01-01

@@ -8,7 +8,9 @@ use std::{
 use rusqlite::Connection;
 
 use crate::{
-    app::{error::RuntimeError, options::Options, sanitizers::sanitize_filename},
+    app::{
+        converter::Converter, error::RuntimeError, options::Options, sanitizers::sanitize_filename,
+    },
     Exporter, HTML, TXT,
 };
 use imessage_database::{
@@ -46,6 +48,8 @@ pub struct Config<'a> {
     pub offset: i64,
     /// The connection we use to query the database
     pub db: Connection,
+    /// Converter type used when converting image files
+    pub converter: Option<Converter>,
 }
 
 impl<'a> Config<'a> {
@@ -184,6 +188,7 @@ impl<'a> Config<'a> {
             options,
             offset: get_offset(),
             db: conn,
+            converter: Converter::determine(),
         })
     }
 
@@ -256,7 +261,7 @@ impl<'a> Config<'a> {
     /// Determine who sent a message
     pub fn who(&self, handle_id: &i32, is_from_me: bool) -> &str {
         if is_from_me {
-            ME
+            self.options.custom_name.unwrap_or(ME)
         } else {
             match self.participants.get(handle_id) {
                 Some(contact) => contact,
@@ -290,6 +295,7 @@ mod test {
             export_path: PathBuf::new(),
             query_context: QueryContext::default(),
             no_lazy: false,
+            custom_name: None,
         }
     }
 
@@ -314,6 +320,7 @@ mod test {
             options,
             offset: 0,
             db: connection,
+            converter: Some(crate::app::converter::Converter::Sips),
         }
     }
 
@@ -527,6 +534,17 @@ mod test {
         // Get filename
         let who = app.who(&0, true);
         assert_eq!(who, "Me".to_string());
+    }
+
+    #[test]
+    fn can_get_who_me_custom() {
+        let mut options = fake_options();
+        options.custom_name = Some("Name");
+        let app = fake_app(options);
+
+        // Get filename
+        let who = app.who(&0, true);
+        assert_eq!(who, "Name".to_string());
     }
 
     #[test]

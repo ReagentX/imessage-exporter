@@ -22,12 +22,12 @@ use imessage_database::{
         expressives::{BubbleEffect, Expressive, ScreenEffect},
         music::MusicMessage,
         url::URLMessage,
-        variants::{BalloonProvider, CustomBalloon, URLOverride, Variant},
+        variants::{Announcement, BalloonProvider, CustomBalloon, URLOverride, Variant},
     },
     tables::{
         attachment::{Attachment, MediaType},
         messages::{BubbleType, Message},
-        table::{Table, ATTACHMENTS_DIR, FITNESS_RECEIVER, ME, ORPHANED, UNKNOWN},
+        table::{Table, ATTACHMENTS_DIR, FITNESS_RECEIVER, ME, ORPHANED, YOU},
     },
     util::{
         dates::{format, readable_diff},
@@ -250,7 +250,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                     } else if text.starts_with(FITNESS_RECEIVER) {
                         self.add_line(
                             &mut formatted_message,
-                            &text.replace(FITNESS_RECEIVER, "You"),
+                            &text.replace(FITNESS_RECEIVER, YOU),
                             "<span class=\"bubble\">",
                             "</span>",
                         );
@@ -424,21 +424,27 @@ impl<'a> Writer<'a> for HTML<'a> {
                                 copy_path.push(Uuid::new_v4().to_string());
 
                                 // If the image is a HEIC, convert it to PNG, otherwise perform the copy
-                                if ext == "heic" || ext == "HEIC" {
+                                // TODO: use `if let` binding when eRFC 2497 is merged: https://github.com/rust-lang/rust/issues/53667
+                                if (ext == "heic" || ext == "HEIC")
+                                    && self.config.converter.is_some()
+                                {
                                     // Write the converted file
                                     copy_path.set_extension("jpg");
-                                    match heic_to_jpeg(qualified_attachment_path, &copy_path) {
-                                        Some(_) => {}
-                                        None => {
-                                            // It is kind of odd to use Ok() on the failure here, but the Err()
-                                            // this function returns is used for when files are missing, not when
-                                            // conversion fails. Perhaps this should be a Result<String, Enum>
-                                            // of some kind, but this conversion failure is quite rare.
-                                            return Ok(format!(
-                                                "Unable to convert and display file: {}",
-                                                &attachment.filename()
-                                            ));
-                                        }
+                                    if heic_to_jpeg(
+                                        qualified_attachment_path,
+                                        &copy_path,
+                                        self.config.converter.as_ref().unwrap(),
+                                    )
+                                    .is_none()
+                                    {
+                                        // It is kind of odd to use Ok() on the failure here, but the Err()
+                                        // this function returns is used for when files are missing, not when
+                                        // conversion fails. Perhaps this should be a Result<String, Enum>
+                                        // of some kind, but this conversion failure is quite rare.
+                                        return Ok(format!(
+                                            "Unable to convert and display file: {}",
+                                            &attachment.filename()
+                                        ));
                                     }
                                 } else {
                                     // Just copy the file
@@ -459,7 +465,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                             eprintln!("Unable to copy {qualified_attachment_path:?} to {copy_path:?}: {why}")
                                         };
                                     } else {
-                                        eprintln!("Unable to create {copy_path:?} from {qualified_attachment_path:?}");
+                                        eprintln!("Attachment not found at specified path: {qualified_attachment_path:?}");
                                         return Err(attachment.filename());
                                     }
                                 }
@@ -683,14 +689,32 @@ impl<'a> Writer<'a> for HTML<'a> {
         let mut who = self.config.who(&msg.handle_id, msg.is_from_me);
         // Rename yourself so we render the proper grammar here
         if who == ME {
-            who = "You"
+            who = self.config.options.custom_name.unwrap_or("You")
         }
         let timestamp = format(&msg.date(&self.config.offset));
-        format!(
-            "\n<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} named the conversation <b>{}</b></p></div>\n",
-            msg.group_title.as_deref().unwrap_or(UNKNOWN)
-        )
+
+        return match msg.get_announcement() {
+            Some(announcement) => match announcement {
+                Announcement::NameChange(name) => {
+                    format!(
+                        "\n<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} named the conversation <b>{name}</b></p></div>\n"
+                    )
+                }
+                Announcement::PhotoChange => {
+                    format!(
+                        "\n<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} changed the group photo.</p></div>\n"
+                    )
+                }
+                Announcement::Unknown(num) => {
+                    format!(
+                        "\n<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} performed unknown action {num}</p></div>\n"
+                    )
+                }
+            },
+            None => String::from("\n<div class =\"announcement\"><p>Unable to format announcement!</p></div>\n"),
+        };
     }
+
     fn format_shareplay(&self) -> &str {
         "SharePlay Message Ended"
     }
@@ -704,7 +728,11 @@ impl<'a> Writer<'a> for HTML<'a> {
             let mut previous_timestamp: Option<&i64> = None;
 
             if edited_message.is_deleted() {
-                let who = if msg.is_from_me { "You" } else { "They" };
+                let who = if msg.is_from_me {
+                    self.config.options.custom_name.unwrap_or(YOU)
+                } else {
+                    "They"
+                };
                 let timestamp = format(&msg.date(&self.config.offset));
 
                 out_s.push_str(&format!(
@@ -969,7 +997,11 @@ impl<'a> HTML<'a> {
         let read_after = message.time_until_read(&self.config.offset);
         if let Some(time) = read_after {
             if !time.is_empty() {
-                let who = if message.is_from_me { "them" } else { "you" };
+                let who = if message.is_from_me {
+                    "them"
+                } else {
+                    self.config.options.custom_name.unwrap_or("you")
+                };
                 date.push_str(&format!(" (Read by {who} after {time})"));
             }
         }
@@ -1130,6 +1162,7 @@ mod tests {
             is_read: false,
             item_type: 0,
             group_title: None,
+            group_action_type: 0,
             associated_message_guid: None,
             associated_message_type: Some(i32::default()),
             balloon_bundle_id: None,
@@ -1152,6 +1185,7 @@ mod tests {
             export_path: PathBuf::new(),
             query_context: QueryContext::default(),
             no_lazy: false,
+            custom_name: None,
         }
     }
 
@@ -1336,6 +1370,34 @@ mod tests {
     }
 
     #[test]
+    fn can_format_html_from_them_custom_name_read() {
+        // Create exporter
+        let mut options = fake_options();
+        options.custom_name = Some("Name");
+        let mut config = Config::new(options).unwrap();
+        config
+            .participants
+            .insert(999999, "Sample Contact".to_string());
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        message.handle_id = 999999;
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.text = Some("Hello world".to_string());
+        // May 17, 2022  8:29:42 PM
+        message.date_delivered = 674526582885055488;
+        // May 17, 2022  9:30:31 PM
+        message.date_read = 674530231992568192;
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected =
+            "<div class=\"message\">\n<div class=\"received\">\n<p><span class=\"timestamp\">May 17, 2022  5:29:42 PM (Read by Name after 1 hour, 49 seconds)</span>\n<span class=\"sender\">Sample Contact</span></p>\n<hr><div class=\"message_part\">\n<span class=\"bubble\">Hello world</span>\n</div>\n</div>\n</div>\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
     fn can_format_html_shareplay() {
         // Create exporter
         let options = fake_options();
@@ -1367,6 +1429,25 @@ mod tests {
 
         let actual = exporter.format_announcement(&message);
         let expected = "\n<div class =\"announcement\"><p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span> You named the conversation <b>Hello world</b></p></div>\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_html_announcement_custom_name() {
+        // Create exporter
+        let mut options = fake_options();
+        options.custom_name = Some("Name");
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.group_title = Some("Hello world".to_string());
+
+        let actual = exporter.format_announcement(&message);
+        let expected = "\n<div class =\"announcement\"><p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span> Name named the conversation <b>Hello world</b></p></div>\n";
 
         assert_eq!(actual, expected);
     }

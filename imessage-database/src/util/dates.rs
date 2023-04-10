@@ -127,7 +127,7 @@ mod tests {
         let date = Local
             .with_ymd_and_hms(2020, 5, 20, 9, 10, 11)
             .single()
-            .ok_or(MessageError::MissingData);
+            .ok_or(MessageError::InvalidTimestamp(0));
         assert_eq!(format(&date), "May 20, 2020  9:10:11 AM")
     }
 
@@ -136,7 +136,7 @@ mod tests {
         let date = Local
             .with_ymd_and_hms(2020, 5, 20, 10, 10, 11)
             .single()
-            .ok_or(MessageError::MissingData);
+            .ok_or(MessageError::InvalidTimestamp(0));
         assert_eq!(format(&date), "May 20, 2020 10:10:11 AM")
     }
 
