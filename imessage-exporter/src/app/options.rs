@@ -11,6 +11,10 @@ use crate::app::error::RuntimeError;
 
 /// Default export directory name
 pub const DEFAULT_OUTPUT_DIR: &str = "imessage_export";
+/// Default location in an iOS backup to find the iMessage database
+pub const DEFAULT_IOS_CHATDB_PATH: &str = "3d/3d0d7e5fb2ce288813306e4d4636395e047a3d28";
+/// Default location in an iOS backup to find the iMessage contacts database
+pub const DEFAULT_IOS_CONTACTSDB_PATH: &str = "31/31bb7ba8914766d4ba40d6dfb6113c8b614be442"; // unused
 
 // CLI Arg Names
 pub const OPTION_DB_PATH: &str = "db-path";
@@ -22,6 +26,7 @@ pub const OPTION_START_DATE: &str = "start-date";
 pub const OPTION_END_DATE: &str = "end-date";
 pub const OPTION_DISABLE_LAZY_LOADING: &str = "no-lazy";
 pub const OPTION_CUSTOM_NAME: &str = "custom-name";
+pub const OPTION_IOS: &str = "ios";
 
 // Other CLI Text
 pub const SUPPORTED_FILE_TYPES: &str = "txt, html";
@@ -48,6 +53,8 @@ pub struct Options<'a> {
     pub no_lazy: bool,
     /// Custom name for database owner in output
     pub custom_name: Option<&'a str>,
+    /// If true, enable iOS-specific features, db_path is to a backup, uses hashed filepaths
+    pub ios: bool,
 }
 
 impl<'a> Options<'a> {
@@ -61,6 +68,7 @@ impl<'a> Options<'a> {
         let end_date = args.value_of(OPTION_END_DATE);
         let no_lazy = args.is_present(OPTION_DISABLE_LAZY_LOADING);
         let custom_name = args.value_of(OPTION_CUSTOM_NAME);
+        let ios = args.is_present(OPTION_IOS);
 
         // Ensure export type is allowed
         if let Some(found_type) = export_type {
@@ -108,6 +116,18 @@ impl<'a> Options<'a> {
             )));
         }
 
+        // Ensure that if iOS is enabled, that the db_path is to a backup
+        if ios && user_path.is_some() {
+            let db_path = PathBuf::from(user_path.unwrap());
+            if !db_path.join(DEFAULT_IOS_CHATDB_PATH).exists() {
+                return Err(RuntimeError::InvalidOptions(format!(
+                    "Option {OPTION_IOS} is enabled, but the database path does not appear to be a valid iOS backup"
+                )));
+            }
+        }
+
+        
+
         // Build query context
         let mut query_context = QueryContext::default();
         if let Some(start) = start_date {
@@ -137,6 +157,7 @@ impl<'a> Options<'a> {
             query_context,
             no_lazy,
             custom_name,
+            ios,
         })
     }
 }
@@ -261,6 +282,13 @@ pub fn from_command_line() -> ArgMatches {
                 .help("Specify an optional custom name for the database owner's messages in exports")
                 .takes_value(true)
                 .display_order(8)
+        )
+        .arg(
+            Arg::new(OPTION_IOS)
+                .long(OPTION_IOS)
+                .help("Specify that the database is from an iOS backup\nUsing this option requires a custom path to the iPhone backup directory")
+                .takes_value(true)
+                .display_order(9)
         )
         .get_matches();
     matches
