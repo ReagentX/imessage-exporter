@@ -287,7 +287,6 @@ pub fn from_command_line() -> ArgMatches {
             Arg::new(OPTION_IOS)
                 .long(OPTION_IOS)
                 .help("Specify that the database is from an iOS backup\nUsing this option requires a custom path to the iPhone backup directory")
-                .takes_value(true)
                 .display_order(9)
                 .requires(OPTION_DB_PATH)
         )
