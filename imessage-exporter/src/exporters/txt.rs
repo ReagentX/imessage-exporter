@@ -285,9 +285,13 @@ impl<'a> Writer<'a> for TXT<'a> {
                     let hash = format!("{:x}", Sha1::digest(
                         format!("{}{}", salt, &filename[2..]).as_bytes()
                     ));
+                    // attempting to escape spaces in the path for easier copy-paste
+                    let db_path_os_string = self.config.options.db_path.to_str()
+                        .map(|s| s.replace(" ", r#"\ "#))
+                        .unwrap_or_else(|| self.config.options.db_path.display().to_string());
                     // <db_path>/<hash[0..2]>/<hash>/<filename> > <filename> allows for copy-paste conversion
-                    format!("{}/{}/{} > {}", self.config.options.db_path.display(), 
-                                            &hash[0..2], &hash, filename.rsplit_once("/").unwrap().1)
+                    format!("{}/{}/{} > {}", db_path_os_string, &hash[0..2], hash,
+                                             filename.rsplit_once("/").unwrap().1)
                 } else {
                     // macOS uses the filename as the path
                     filename.to_string()
