@@ -61,13 +61,8 @@ impl Table for Attachment {
 
     fn extract(attachment: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
         match attachment {
-            Ok(attachment) => match attachment {
-                Ok(att) => Ok(att),
-                // TODO: When does this occur?
-                Err(why) => Err(TableError::Attachment(why)),
-            },
-            // TODO: When does this occur?
-            Err(why) => Err(TableError::Attachment(why)),
+            Ok(Ok(attachment)) => Ok(attachment),
+            Err(why) | Ok(Err(why)) => Err(TableError::Attachment(why)),
         }
     }
 }

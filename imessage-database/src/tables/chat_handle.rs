@@ -34,13 +34,8 @@ impl Table for ChatToHandle {
 
     fn extract(chat_to_handle: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
         match chat_to_handle {
-            Ok(chat_to_handle) => match chat_to_handle {
-                Ok(c2h) => Ok(c2h),
-                // TODO: When does this occur?
-                Err(why) => Err(TableError::ChatToHandle(why)),
-            },
-            // TODO: When does this occur?
-            Err(why) => Err(TableError::ChatToHandle(why)),
+            Ok(Ok(chat_to_handle)) => Ok(chat_to_handle),
+            Err(why) | Ok(Err(why)) => Err(TableError::ChatToHandle(why)),
         }
     }
 }
