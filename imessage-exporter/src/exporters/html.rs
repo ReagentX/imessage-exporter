@@ -5,6 +5,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use sha1::{Digest, Sha1};
+
 use crate::{
     app::{
         converter::heic_to_jpeg, error::RuntimeError, progress::build_progress_bar_export,
@@ -399,12 +401,18 @@ impl<'a> Writer<'a> for HTML<'a> {
         match attachment.path() {
             Some(path) => {
                 if let Some(path_str) = path.as_os_str().to_str() {
-                    // Resolve the attachment path if necessary
-                    let resolved_attachment_path = if path.starts_with("~") {
-                        path_str.replace('~', &home())
-                    } else {
-                        path_str.to_owned()
-                    };
+                    let resolved_attachment_path = 
+                        // Resolve the relative attachment path to absolute for macOS
+                        if path.starts_with("~") & !self.config.options.ios {
+                            path_str.replace('~', &home())
+                        // Resolve the attachment path for iOS backup
+                        } else if self.config.options.ios {
+                            let salt = "MediaDomain-";
+                            let hash = format!("{:x}", Sha1::digest(format!("{}{}", salt, &path_str[2..]).as_bytes()));
+                            format!("{}/{}/{}", self.config.options.db_path.display(), &hash[0..2], &hash)
+                        } else {
+                            path_str.to_owned()
+                        };
 
                     // Perform optional copy + convert
                     if !self.config.options.no_copy {
@@ -1186,6 +1194,7 @@ mod tests {
             query_context: QueryContext::default(),
             no_lazy: false,
             custom_name: None,
+            ios: false,
         }
     }
 
