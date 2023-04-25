@@ -278,7 +278,7 @@ impl<'a> Writer<'a> for TXT<'a> {
     ) -> Result<String, &'a str> {
         match &attachment.filename {
             Some(filename) => match self.config.options.import_platform.get_attachment_path_txt(
-                    self.config.options.db_path, filename) 
+                    self.config.options.get_db_path(), filename) 
                 {
                     Ok(path) => Ok(path),
                     Err(_) => Err(attachment.filename()),
