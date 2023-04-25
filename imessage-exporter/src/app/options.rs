@@ -175,6 +175,13 @@ impl<'a> Options<'a> {
             import_platform,
         })
     }
+
+    pub fn get_db_path(&self) -> &PathBuf {
+        match self.import_platform {
+            ImportPlatform::IOS => &self.db_path.join(DEFAULT_IOS_CHATDB_PATH),
+            ImportPlatform::MacOS => &self.db_path,
+        }
+    }
 }
 
 /// Ensure export path is empty or does not contain files of the existing export type

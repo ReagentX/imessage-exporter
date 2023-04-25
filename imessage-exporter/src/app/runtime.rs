@@ -9,7 +9,7 @@ use rusqlite::Connection;
 
 use crate::{
     app::{
-        converter::Converter, error::RuntimeError, options::{Options, DEFAULT_IOS_CHATDB_PATH}, sanitizers::sanitize_filename,
+        converter::Converter, error::RuntimeError, options::Options, sanitizers::sanitize_filename,
     },
     Exporter, HTML, TXT,
 };
@@ -166,12 +166,7 @@ impl<'a> Config<'a> {
     /// let app = Config::new(options).unwrap();
     /// ```
     pub fn new(options: Options) -> Result<Config, RuntimeError> {
-        let conn = if options.ios {
-            let ios_db_path = options.db_path.join(DEFAULT_IOS_CHATDB_PATH);
-            get_connection(&ios_db_path).map_err(RuntimeError::DatabaseError)?
-        } else {
-            get_connection(&options.db_path).map_err(RuntimeError::DatabaseError)?
-        };
+        let conn = get_connection(&options.get_db_path()).map_err(RuntimeError::DatabaseError)?;
         eprintln!("Building cache...");
         eprintln!("[1/4] Caching chats...");
         let chatrooms = Chat::cache(&conn).map_err(RuntimeError::DatabaseError)?;
@@ -278,7 +273,7 @@ impl<'a> Config<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{Config, Options};
+    use crate::{Config, Options, app::options::ImportPlatform};
     use imessage_database::{
         tables::{
             chat::Chat,
@@ -301,7 +296,7 @@ mod test {
             query_context: QueryContext::default(),
             no_lazy: false,
             custom_name: None,
-            ios: false,
+            import_platform: ImportPlatform::MacOS,
         }
     }
 
