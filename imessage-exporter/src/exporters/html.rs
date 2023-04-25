@@ -5,8 +5,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use sha1::{Digest, Sha1};
-
 use crate::{
     app::{
         converter::heic_to_jpeg, error::RuntimeError, progress::build_progress_bar_export,
@@ -33,7 +31,6 @@ use imessage_database::{
     },
     util::{
         dates::{format, readable_diff},
-        dirs::home,
         plist::parse_plist,
     },
 };
@@ -401,18 +398,13 @@ impl<'a> Writer<'a> for HTML<'a> {
         match attachment.path() {
             Some(path) => {
                 if let Some(path_str) = path.as_os_str().to_str() {
-                    let resolved_attachment_path = 
-                        // Resolve the relative attachment path to absolute for macOS
-                        if path.starts_with("~") & !self.config.options.ios {
-                            path_str.replace('~', &home())
-                        // Resolve the attachment path for iOS backup
-                        } else if self.config.options.ios {
-                            let salt = "MediaDomain-";
-                            let hash = format!("{:x}", Sha1::digest(format!("{}{}", salt, &path_str[2..]).as_bytes()));
-                            format!("{}/{}/{}", self.config.options.db_path.display(), &hash[0..2], &hash)
-                        } else {
-                            path_str.to_owned()
-                        };
+                    let resolved_attachment_path = match self.config.options.import_platform.resolved_attachment_path(
+                        path_str, self.config.options.get_db_path()
+                    ) {
+                        Ok(path) => path,
+                        // not sure how to handle this error
+                        Err(_) => return Err(attachment.filename()),
+                    };
 
                     // Perform optional copy + convert
                     if !self.config.options.no_copy {
@@ -1149,7 +1141,7 @@ impl<'a> HTML<'a> {
 mod tests {
     use std::path::PathBuf;
 
-    use crate::{exporters::exporter::Writer, Config, Exporter, Options, HTML};
+    use crate::{exporters::exporter::Writer, Config, Exporter, Options, HTML, app::options::ImportPlatform};
     use imessage_database::{
         tables::messages::Message,
         util::{dirs::default_db_path, query_context::QueryContext},
@@ -1194,7 +1186,7 @@ mod tests {
             query_context: QueryContext::default(),
             no_lazy: false,
             custom_name: None,
-            ios: false,
+            import_platform: ImportPlatform::MacOS,
         }
     }
 

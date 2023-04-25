@@ -69,6 +69,31 @@ impl ImportPlatform {
                 }
         }
     }
+
+    pub fn resolved_attachment_path(&self, path_str:&str, db_path:PathBuf) -> Result<String, RuntimeError>{
+        match self {
+            ImportPlatform::MacOS => {
+                if path_str.starts_with("~") {
+                    return Ok(path_str.replace("~", &home()));
+                }
+                Ok(path_str.to_string())
+            }
+            ImportPlatform::IOS => {
+                let input = match path_str.get(2..) {
+                    Some(input) => input,
+                    None => return Err(RuntimeError::InvalidOptions(format!("Invalid attachment filename: {}", path_str))),
+                };
+                let hash_name = format!("{:x}", Sha1::digest(
+                                format!("{}{}", "MediaDomain-", input).as_bytes()
+                            ));
+                let hash_dir = match hash_name.get(0..2) {
+                    Some(dir) => dir,
+                    None => return Err(RuntimeError::InvalidOptions(format!("Invalid attachment filename: {}", path_str))),
+                };
+                Ok(format!("{}/{}/{}", db_path.display(), hash_dir, hash_name))
+            }
+        }
+    }
 }
 
 pub struct Options<'a> {
@@ -208,10 +233,10 @@ impl<'a> Options<'a> {
         })
     }
 
-    pub fn get_db_path(&self) -> &PathBuf {
+    pub fn get_db_path(&self) -> PathBuf {
         match self.import_platform {
-            ImportPlatform::IOS => &self.db_path.join(DEFAULT_IOS_CHATDB_PATH),
-            ImportPlatform::MacOS => &self.db_path,
+            ImportPlatform::IOS => self.db_path.join(DEFAULT_IOS_CHATDB_PATH).clone(),
+            ImportPlatform::MacOS => self.db_path.clone(),
         }
     }
 }
