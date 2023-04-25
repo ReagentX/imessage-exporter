@@ -34,6 +34,11 @@ pub const ABOUT: &str = concat!(
     "to find problems with the iMessage database."
 );
 
+pub enum ImportPlatform {
+    MacOS,
+    IOS,
+}
+
 pub struct Options<'a> {
     /// Path to database file
     pub db_path: PathBuf,
@@ -52,7 +57,7 @@ pub struct Options<'a> {
     /// Custom name for database owner in output
     pub custom_name: Option<&'a str>,
     /// If true, enable iOS-specific features, db_path is to a backup, uses hashed filepaths
-    pub ios: bool,
+    pub import_platform: ImportPlatform,
 }
 
 impl<'a> Options<'a> {
@@ -66,7 +71,11 @@ impl<'a> Options<'a> {
         let end_date = args.value_of(OPTION_END_DATE);
         let no_lazy = args.is_present(OPTION_DISABLE_LAZY_LOADING);
         let custom_name = args.value_of(OPTION_CUSTOM_NAME);
-        let ios = args.is_present(OPTION_IOS);
+        let import_platform = if args.is_present(OPTION_IOS) {
+                                                ImportPlatform::IOS
+                                            } else {
+                                                ImportPlatform::MacOS
+                                            };
 
         // Ensure export type is allowed
         if let Some(found_type) = export_type {
