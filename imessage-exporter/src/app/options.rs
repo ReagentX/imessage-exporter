@@ -13,8 +13,6 @@ use crate::app::error::RuntimeError;
 pub const DEFAULT_OUTPUT_DIR: &str = "imessage_export";
 /// Default location in an iOS backup to find the iMessage database
 pub const DEFAULT_IOS_CHATDB_PATH: &str = "3d/3d0d7e5fb2ce288813306e4d4636395e047a3d28";
-/// Default location in an iOS backup to find the iMessage contacts database
-pub const DEFAULT_IOS_CONTACTSDB_PATH: &str = "31/31bb7ba8914766d4ba40d6dfb6113c8b614be442"; // unused
 
 // CLI Arg Names
 pub const OPTION_DB_PATH: &str = "db-path";
