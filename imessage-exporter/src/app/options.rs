@@ -124,13 +124,20 @@ impl<'a> Options<'a> {
         }
 
         // Ensure that if iOS is enabled, that the db_path contains the chat.db file
-        if ios && user_path.is_some() {
-            let path_string = user_path.unwrap();
-            let db_path = PathBuf::from(path_string);
-            if !db_path.join(DEFAULT_IOS_CHATDB_PATH).exists() {
-                return Err(RuntimeError::InvalidOptions(format!(
-                    "Option {OPTION_IOS} is enabled, but could not find {DEFAULT_IOS_CHATDB_PATH} in {path_string}"
-                )));
+        if user_path.is_some() {
+            match import_platform {
+                ImportPlatform::IOS => {
+                    let path_string = user_path.unwrap();
+                    let db_path = PathBuf::from(path_string);
+                    if !db_path.join(DEFAULT_IOS_CHATDB_PATH).exists() {
+                        return Err(RuntimeError::InvalidOptions(format!(
+                            "Option {OPTION_IOS} is enabled, but could not find {DEFAULT_IOS_CHATDB_PATH} in {path_string}"
+                        )));
+                    }
+                }
+                // added space here to do MacOS path verification if wanted
+                // like validating the path given if the -p flag is used
+                _ => {}
             }
         }
 
@@ -165,7 +172,7 @@ impl<'a> Options<'a> {
             query_context,
             no_lazy,
             custom_name,
-            ios,
+            import_platform,
         })
     }
 }
