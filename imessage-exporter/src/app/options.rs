@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use clap::{crate_version, Arg, ArgMatches, Command};
 
+use sha1::{Digest, Sha1};
+
 use imessage_database::util::{
     dirs::{default_db_path, home},
     query_context::QueryContext,
@@ -37,6 +39,36 @@ pub const ABOUT: &str = concat!(
 pub enum ImportPlatform {
     MacOS,
     IOS,
+}
+
+impl ImportPlatform {
+    pub fn get_attachment_path_txt(&self, db_path:PathBuf, attachment_filename: &String) -> Result<String, RuntimeError> {
+        match self {
+            ImportPlatform::MacOS => Ok(attachment_filename.to_string()),
+            ImportPlatform::IOS => {
+                let input = match attachment_filename.get(2..) {
+                    Some(input) => input,
+                    None => return Err(RuntimeError::InvalidOptions(format!("Invalid attachment filename: {}", attachment_filename))),
+                };
+                let hash_name = format!("{:x}", Sha1::digest(
+                                format!("{}{}", "MediaDomain-", input).as_bytes()
+                            ));
+                let hash_dir = match hash_name.get(0..2) {
+                    Some(dir) => dir,
+                    None => return Err(RuntimeError::InvalidOptions(format!("Invalid attachment filename: {}", attachment_filename))),
+                };
+                let filename = match attachment_filename.rsplit_once("/") {
+                    Some((_, filename)) => filename,
+                    None => return Err(RuntimeError::InvalidOptions(format!("Invalid attachment filename: {}", attachment_filename))),
+                };
+                let db_path = match db_path.to_str() {
+                    Some(path) => path,
+                    None => return Err(RuntimeError::InvalidOptions(format!("Invalid database path: {}", db_path.display()))),
+                };
+                Ok(format!("{}/{}/{} > {}", db_path, hash_dir, hash_name, filename))
+                }
+        }
+    }
 }
 
 pub struct Options<'a> {

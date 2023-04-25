@@ -5,10 +5,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use sha1::{Digest, Sha1};
 
 use crate::{
-    app::{error::RuntimeError, progress::build_progress_bar_export, runtime::Config},
+    app::{error::RuntimeError, progress::build_progress_bar_export, runtime::Config, options::ImportPlatform},
     exporters::exporter::{BalloonFormatter, Exporter, Writer},
 };
 
@@ -278,27 +277,13 @@ impl<'a> Writer<'a> for TXT<'a> {
         _: &Message,
     ) -> Result<String, &'a str> {
         match &attachment.filename {
-            Some(filename) => Ok(
-                if self.config.options.ios {
-                    // iOS rehash the filename to a path in the backup
-                    let salt = "MediaDomain-";
-                    let hash = format!("{:x}", Sha1::digest(
-                        format!("{}{}", salt, &filename[2..]).as_bytes()
-                    ));
-                    // attempting to escape spaces in the path for easier copy-paste
-                    let db_path_os_string = self.config.options.db_path.to_str()
-                        .map(|s| s.replace(" ", r#"\ "#))
-                        .unwrap_or_else(|| self.config.options.db_path.display().to_string());
-                    // <db_path>/<hash[0..2]>/<hash>/<filename> > <filename> allows for copy-paste conversion
-                    format!("{}/{}/{} > {}", db_path_os_string, &hash[0..2], hash,
-                                             filename.rsplit_once("/").unwrap().1)
-                } else {
-                    // macOS uses the filename as the path
-                    filename.to_string()
-                }
-            ),
-            // Filepath missing!
-            None => Err(attachment.filename())
+            Some(filename) => match self.config.options.import_platform.get_attachment_path_txt(
+                    self.config.options.db_path, filename) 
+                {
+                    Ok(path) => Ok(path),
+                    Err(_) => Err(attachment.filename()),
+                },
+            None => Err(attachment.filename()),
         }
     }
 
@@ -704,7 +689,7 @@ impl<'a> TXT<'a> {
 mod tests {
     use std::path::PathBuf;
 
-    use crate::{exporters::exporter::Writer, Config, Exporter, Options, TXT};
+    use crate::{exporters::exporter::Writer, Config, Exporter, Options, TXT, app::options::ImportPlatform};
     use imessage_database::{
         tables::messages::Message,
         util::{dirs::default_db_path, query_context::QueryContext},
@@ -749,7 +734,7 @@ mod tests {
             query_context: QueryContext::default(),
             no_lazy: false,
             custom_name: None,
-            ios: false,
+            import_platform: ImportPlatform::MacOS,
         }
     }
 
