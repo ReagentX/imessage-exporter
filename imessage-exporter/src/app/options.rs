@@ -114,12 +114,13 @@ impl<'a> Options<'a> {
             )));
         }
 
-        // Ensure that if iOS is enabled, that the db_path is to a backup
+        // Ensure that if iOS is enabled, that the db_path contains the chat.db file
         if ios && user_path.is_some() {
-            let db_path = PathBuf::from(user_path.unwrap());
+            let path_string = user_path.unwrap();
+            let db_path = PathBuf::from(path_string);
             if !db_path.join(DEFAULT_IOS_CHATDB_PATH).exists() {
                 return Err(RuntimeError::InvalidOptions(format!(
-                    "Option {OPTION_IOS} is enabled, but the database path does not appear to be a valid iOS backup"
+                    "Option {OPTION_IOS} is enabled, but could not find {DEFAULT_IOS_CHATDB_PATH} in {path_string}"
                 )));
             }
         }
