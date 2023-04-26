@@ -40,9 +40,15 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
 -n, --no-copy
         Do not copy attachments, instead reference them in-place
 
--p, --db-path <path/to/chat.db>
-        Specify a custom path for the iMessage database file
+-p, --db-path <path/to/source>
+        Specify a custom path for the iMessage database location
+        For MacOS, specify the path to a `chat.db` file
+        For iOS, specify the path to the root of an unencrypted backup directory
         If omitted, the default directory is ~/Library/Messages/chat.db
+
+-a, --platform <MacOS, iOS>
+        Specify the platform the database was created on
+        If omitted, the default is MacOS
 
 -o, --export-path <path/to/save/files>
         Specify a custom directory for outputting exported data
@@ -80,6 +86,12 @@ Export as `txt` from the default iMessage Database location to a new folder in t
 
 ```zsh
 % imessage-exporter -f txt -o output
+```
+
+Export as `txt` from the an unencrypted iPhone backup located at `~/iphone_backup_latest` to a new folder in the current working directory called `backup_export`:
+
+```zsh
+% imessage-exporter -f txt -p ~/iphone_backup_latest -a iOS -o backup_export
 ```
 
 Export as `html` from `/Volumes/external/chat.db` to `/Volumes/external/export` without copying attachments:
