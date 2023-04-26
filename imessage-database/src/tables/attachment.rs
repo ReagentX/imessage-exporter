@@ -230,7 +230,7 @@ impl Attachment {
 
                     let filename = format!(
                         "{:x}",
-                        Sha1::digest(format!("{}{}", "MediaDomain-", input).as_bytes())
+                        Sha1::digest(format!("MediaDomain-{input}").as_bytes())
                     );
 
                     let directory = match filename.get(0..2) {
@@ -238,7 +238,7 @@ impl Attachment {
                         None => return None,
                     };
 
-                    return Some(format!("{}/{}/{}", db_path.display(), directory, filename));
+                    return Some(format!("{}/{directory}/{filename}", db_path.display()));
                 }
             }
         }
