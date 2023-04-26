@@ -399,7 +399,7 @@ impl<'a> Writer<'a> for HTML<'a> {
             Some(path) => {
                 if let Some(path_str) = path.as_os_str().to_str() {
                     let resolved_attachment_path = match self.config.options.import_platform.resolved_attachment_path(
-                        path_str, self.config.options.get_db_path()
+                        path_str, self.config.options.db_path.clone()
                     ) {
                         Ok(path) => path,
                         // not sure how to handle this error
