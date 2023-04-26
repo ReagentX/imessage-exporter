@@ -167,13 +167,8 @@ impl Table for Message {
 
     fn extract(message: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
         match message {
-            Ok(message) => match message {
-                Ok(msg) => Ok(msg),
-                // TODO: When does this occur?
-                Err(why) => Err(TableError::Messages(why)),
-            },
-            // TODO: When does this occur?
-            Err(why) => Err(TableError::Messages(why)),
+            Ok(Ok(message)) => Ok(message),
+            Err(why) | Ok(Err(why)) => Err(TableError::Messages(why)),
         }
     }
 }

@@ -2,9 +2,13 @@ use std::path::PathBuf;
 
 use clap::{crate_version, Arg, ArgMatches, Command};
 
-use imessage_database::util::{
-    dirs::{default_db_path, home},
-    query_context::QueryContext,
+use imessage_database::{
+    tables::table::DEFAULT_PATH_IOS,
+    util::{
+        dirs::{default_db_path, home},
+        platform::Platform,
+        query_context::QueryContext,
+    },
 };
 
 use crate::app::error::RuntimeError;
@@ -22,9 +26,11 @@ pub const OPTION_START_DATE: &str = "start-date";
 pub const OPTION_END_DATE: &str = "end-date";
 pub const OPTION_DISABLE_LAZY_LOADING: &str = "no-lazy";
 pub const OPTION_CUSTOM_NAME: &str = "custom-name";
+pub const OPTION_PLATFORM: &str = "platform";
 
 // Other CLI Text
 pub const SUPPORTED_FILE_TYPES: &str = "txt, html";
+pub const SUPPORTED_PLATFORMS: &str = "MacOS, iOS";
 pub const ABOUT: &str = concat!(
     "The `imessage-exporter` binary exports iMessage data to\n",
     "`txt` or `html` formats. It can also run diagnostics\n",
@@ -48,6 +54,8 @@ pub struct Options<'a> {
     pub no_lazy: bool,
     /// Custom name for database owner in output
     pub custom_name: Option<&'a str>,
+    /// The database source's platform
+    pub platform: Platform,
 }
 
 impl<'a> Options<'a> {
@@ -61,6 +69,7 @@ impl<'a> Options<'a> {
         let end_date = args.value_of(OPTION_END_DATE);
         let no_lazy = args.is_present(OPTION_DISABLE_LAZY_LOADING);
         let custom_name = args.value_of(OPTION_CUSTOM_NAME);
+        let platform_type = args.value_of(OPTION_PLATFORM);
 
         // Ensure export type is allowed
         if let Some(found_type) = export_type {
@@ -108,6 +117,19 @@ impl<'a> Options<'a> {
             )));
         }
 
+        // Build the Platform
+        let platform = match platform_type {
+            Some(platform_str) => {
+                Platform::from_cli(platform_str).ok_or(RuntimeError::InvalidOptions(format!(
+                    "{platform_str} is not a valid platform! Must be one of <{SUPPORTED_PLATFORMS}>"
+                )))?
+            }
+            None => {
+                eprintln!("Platform not set, defaulting to {}!", Platform::default());
+                Platform::default()
+            }
+        };
+
         // Build query context
         let mut query_context = QueryContext::default();
         if let Some(start) = start_date {
@@ -137,7 +159,16 @@ impl<'a> Options<'a> {
             query_context,
             no_lazy,
             custom_name,
+            platform,
         })
+    }
+
+    /// Generate a path to the database based on the currently selected platform
+    pub fn get_db_path(&self) -> PathBuf {
+        match self.platform {
+            Platform::iOS => self.db_path.join(DEFAULT_PATH_IOS),
+            Platform::MacOS => self.db_path.clone(),
+        }
     }
 }
 
@@ -215,10 +246,19 @@ pub fn from_command_line() -> ArgMatches {
             Arg::new(OPTION_DB_PATH)
                 .short('p')
                 .long(OPTION_DB_PATH)
-                .help(&*format!("Specify a custom path for the iMessage database file\nIf omitted, the default directory is {}", default_db_path().display()))
+                .help(&*format!("Specify a custom path for the iMessage database location\nFor MacOS, specify a path to a `chat.db` file\nFor iOS, specify a path to the root of an unencrypted backup directory\nIf omitted, the default directory is {}", default_db_path().display()))
                 .takes_value(true)
                 .display_order(3)
-                .value_name("path/to/chat.db"),
+                .value_name("path/to/source"),
+        )
+        .arg(
+            Arg::new(OPTION_PLATFORM)
+            .short('a')
+            .long(OPTION_PLATFORM)
+            .help(&*format!("Specify the platform the database was created on\nIf omitted, the default is {}", Platform::default()))
+            .takes_value(true)
+            .display_order(4)
+            .value_name(SUPPORTED_PLATFORMS),
         )
         .arg(
             Arg::new(OPTION_EXPORT_PATH)
@@ -226,7 +266,7 @@ pub fn from_command_line() -> ArgMatches {
                 .long(OPTION_EXPORT_PATH)
                 .help(&*format!("Specify a custom directory for outputting exported data\nIf omitted, the default directory is {}/{DEFAULT_OUTPUT_DIR}", home()))
                 .takes_value(true)
-                .display_order(4)
+                .display_order(5)
                 .value_name("path/to/save/files"),
         )
         .arg(
@@ -235,7 +275,7 @@ pub fn from_command_line() -> ArgMatches {
                 .long(OPTION_START_DATE)
                 .help("The start date filter. Only messages sent on or after this date will be included")
                 .takes_value(true)
-                .display_order(5)
+                .display_order(6)
                 .value_name("YYYY-MM-DD"),
         )
         .arg(
@@ -244,7 +284,7 @@ pub fn from_command_line() -> ArgMatches {
                 .long(OPTION_END_DATE)
                 .help("The end date filter. Only messages sent before this date will be included")
                 .takes_value(true)
-                .display_order(6)
+                .display_order(7)
                 .value_name("YYYY-MM-DD"),
         )
         .arg(
@@ -252,7 +292,7 @@ pub fn from_command_line() -> ArgMatches {
                 .short('l')
                 .long(OPTION_DISABLE_LAZY_LOADING)
                 .help("Do not include `loading=\"lazy\"` in HTML export `img` tags\nThis will make pages load slower but PDF generation work")
-                .display_order(7),
+                .display_order(8),
         )
         .arg(
             Arg::new(OPTION_CUSTOM_NAME)
@@ -260,7 +300,7 @@ pub fn from_command_line() -> ArgMatches {
                 .long(OPTION_CUSTOM_NAME)
                 .help("Specify an optional custom name for the database owner's messages in exports")
                 .takes_value(true)
-                .display_order(8)
+                .display_order(9)
         )
         .get_matches();
     matches

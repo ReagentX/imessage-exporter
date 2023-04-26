@@ -35,13 +35,8 @@ impl Table for Handle {
 
     fn extract(handle: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
         match handle {
-            Ok(handle) => match handle {
-                Ok(hdl) => Ok(hdl),
-                // TODO: When does this occur?
-                Err(why) => Err(TableError::Handle(why)),
-            },
-            // TODO: When does this occur?
-            Err(why) => Err(TableError::Handle(why)),
+            Ok(Ok(handle)) => Ok(handle),
+            Err(why) | Ok(Err(why)) => Err(TableError::Handle(why)),
         }
     }
 }
