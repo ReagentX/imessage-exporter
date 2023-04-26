@@ -1172,6 +1172,7 @@ mod tests {
             date_edited: 0,
             chat_id: None,
             num_attachments: 0,
+            deleted_from: None,
             num_replies: 0,
         }
     }
