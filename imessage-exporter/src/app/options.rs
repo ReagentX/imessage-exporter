@@ -246,7 +246,7 @@ pub fn from_command_line() -> ArgMatches {
             Arg::new(OPTION_DB_PATH)
                 .short('p')
                 .long(OPTION_DB_PATH)
-                .help(&*format!("Specify a custom path for the iMessage database location\nFor MacOS, specify the path to a `chat.db` file\nFor iOS, specify the path to the root of an unencrypted backup directory\nIf omitted, the default directory is {}", default_db_path().display()))
+                .help(&*format!("Specify a custom path for the iMessage database location\nFor MacOS, specify a path to a `chat.db` file\nFor iOS, specify a path to the root of an unencrypted backup directory\nIf omitted, the default directory is {}", default_db_path().display()))
                 .takes_value(true)
                 .display_order(3)
                 .value_name("path/to/source"),
