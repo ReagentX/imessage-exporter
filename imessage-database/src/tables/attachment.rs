@@ -350,6 +350,21 @@ mod tests {
     }
 
     #[test]
+    fn can_get_resolved_path_macos_raw() {
+        let db_path = PathBuf::from("fake_root");
+        let mut attachment = sample_attachment();
+        attachment.filename = Some("~/a/b/c.png".to_string());
+
+        assert!(
+            attachment
+                .resolved_attachment_path(&Platform::MacOS, &db_path)
+                .unwrap()
+                .len()
+                > attachment.filename.unwrap().len()
+        );
+    }
+
+    #[test]
     fn can_get_resolved_path_ios() {
         let db_path = PathBuf::from("fake_root");
         let attachment = sample_attachment();
