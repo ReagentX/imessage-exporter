@@ -395,8 +395,8 @@ impl<'a> Writer<'a> for HTML<'a> {
         attachment: &'a mut Attachment,
         message: &Message,
     ) -> Result<String, &'a str> {
-        if let Some(resolved_attachment_path) =
-            attachment.resolved_attachment_path(&self.config.options.platform, &self.config.db_path)
+        if let Some(resolved_attachment_path) = attachment
+            .resolved_attachment_path(&self.config.options.platform, &self.config.options.db_path)
         {
             // Perform optional copy + convert
             if !self.config.options.no_copy {
@@ -1127,7 +1127,7 @@ mod tests {
 
     use crate::{exporters::exporter::Writer, Config, Exporter, Options, HTML};
     use imessage_database::{
-        tables::messages::Message,
+        tables::{attachment::Attachment, messages::Message},
         util::{dirs::default_db_path, platform::Platform, query_context::QueryContext},
     };
 
@@ -1163,7 +1163,7 @@ mod tests {
     pub fn fake_options() -> Options<'static> {
         Options {
             db_path: default_db_path(),
-            no_copy: false,
+            no_copy: true,
             diagnostic: false,
             export_type: None,
             export_path: PathBuf::new(),
@@ -1171,6 +1171,18 @@ mod tests {
             no_lazy: false,
             custom_name: None,
             platform: Platform::MacOS,
+        }
+    }
+
+    pub fn fake_attachment() -> Attachment {
+        Attachment {
+            rowid: 0,
+            filename: Some("a/b/c/d.jpg".to_string()),
+            mime_type: Some("image/png".to_string()),
+            transfer_name: Some("d.jpg".to_string()),
+            total_bytes: 100,
+            hide_attachment: 0,
+            copied_path: None,
         }
     }
 
@@ -1477,6 +1489,77 @@ mod tests {
         let expected = "<span class=\"reaction\"><b>Loved</b> by Sample Contact</span>";
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_html_attachment_macos() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let message = blank();
+
+        let mut attachment = fake_attachment();
+
+        let actual = exporter
+            .format_attachment(&mut attachment, &message)
+            .unwrap();
+
+        assert_eq!(actual, "<img src=\"a/b/c/d.jpg\" loading=\"lazy\">");
+    }
+
+    #[test]
+    fn can_format_html_attachment_macos_invalid() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let message = blank();
+
+        let mut attachment = fake_attachment();
+        attachment.filename = None;
+
+        let actual = exporter.format_attachment(&mut attachment, &message);
+
+        assert_eq!(actual, Err("d.jpg"));
+    }
+
+    #[test]
+    fn can_format_html_attachment_ios() {
+        // Create exporter
+        let options = fake_options();
+        let mut config = Config::new(options).unwrap();
+        config.options.no_lazy = true;
+        config.options.platform = Platform::iOS;
+        let exporter = HTML::new(&config);
+        let message = blank();
+
+        let mut attachment = fake_attachment();
+
+        let actual = exporter
+            .format_attachment(&mut attachment, &message)
+            .unwrap();
+
+        assert!(actual.ends_with("33/33c81da8ae3194fc5a0ea993ef6ffe0b048baedb\">"));
+    }
+
+    #[test]
+    fn can_format_html_attachment_ios_invalid() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let message = blank();
+
+        let mut attachment = fake_attachment();
+        attachment.filename = None;
+
+        let actual = exporter.format_attachment(&mut attachment, &message);
+
+        assert_eq!(actual, Err("d.jpg"));
     }
 }
 

@@ -46,8 +46,6 @@ pub struct Config<'a> {
     pub options: Options<'a>,
     /// Global date offset used by the iMessage database:
     pub offset: i64,
-    /// The path to the database
-    pub db_path: PathBuf,
     /// The connection we use to query the database
     pub db: Connection,
     /// Converter type used when converting image files
@@ -168,8 +166,7 @@ impl<'a> Config<'a> {
     /// let app = Config::new(options).unwrap();
     /// ```
     pub fn new(options: Options) -> Result<Config, RuntimeError> {
-        let db_path = options.get_db_path();
-        let conn = get_connection(&db_path).map_err(RuntimeError::DatabaseError)?;
+        let conn = get_connection(&options.get_db_path()).map_err(RuntimeError::DatabaseError)?;
         eprintln!("Building cache...");
         eprintln!("[1/4] Caching chats...");
         let chatrooms = Chat::cache(&conn).map_err(RuntimeError::DatabaseError)?;
@@ -190,7 +187,6 @@ impl<'a> Config<'a> {
             reactions,
             options,
             offset: get_offset(),
-            db_path,
             db: conn,
             converter: Converter::determine(),
         })
@@ -324,7 +320,6 @@ mod tests {
             reactions: HashMap::new(),
             options,
             offset: 0,
-            db_path: PathBuf::new(),
             db: connection,
             converter: Some(crate::app::converter::Converter::Sips),
         }

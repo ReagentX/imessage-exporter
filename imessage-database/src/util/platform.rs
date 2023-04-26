@@ -9,7 +9,8 @@ pub enum Platform {
     /// MacOS-sourced data
     MacOS,
     /// iOS-sourced data
-    IOS,
+    #[allow(non_camel_case_types)]
+    iOS,
 }
 
 impl Platform {
@@ -17,7 +18,7 @@ impl Platform {
     pub fn from_cli(platform: &str) -> Option<Self> {
         match platform.to_lowercase().as_str() {
             "macos" => Some(Self::MacOS),
-            "ios" => Some(Self::IOS),
+            "ios" => Some(Self::iOS),
             _ => None,
         }
     }
@@ -34,7 +35,7 @@ impl Display for Platform {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Platform::MacOS => write!(fmt, "MacOS"),
-            Platform::IOS => write!(fmt, "iOS"),
+            Platform::iOS => write!(fmt, "iOS"),
         }
     }
 }
@@ -52,9 +53,9 @@ mod tests {
 
     #[test]
     fn can_parse_ios_any_case() {
-        assert!(matches!(Platform::from_cli("ios"), Some(Platform::IOS)));
-        assert!(matches!(Platform::from_cli("IOS"), Some(Platform::IOS)));
-        assert!(matches!(Platform::from_cli("iOS"), Some(Platform::IOS)));
+        assert!(matches!(Platform::from_cli("ios"), Some(Platform::iOS)));
+        assert!(matches!(Platform::from_cli("IOS"), Some(Platform::iOS)));
+        assert!(matches!(Platform::from_cli("iOS"), Some(Platform::iOS)));
     }
 
     #[test]

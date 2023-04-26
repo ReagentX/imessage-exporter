@@ -209,6 +209,9 @@ impl Attachment {
     }
 
     /// Given a platform and database source, resolve the path for the current attachment
+    ///
+    /// For MacOS, `db_path` is unused. For iOS, `db_path` is the path to the root of the backup directory.
+    ///
     /// iOS Parsing logic source is from [here](https://github.com/nprezant/iMessageBackup/blob/940d001fb7be557d5d57504eb26b3489e88de26e/imessage_backup_tools.py#L83-L85).
     pub fn resolved_attachment_path(&self, platform: &Platform, db_path: &Path) -> Option<String> {
         if let Some(path_str) = &self.filename {
@@ -219,7 +222,7 @@ impl Attachment {
                     }
                     return Some(path_str.to_string());
                 }
-                Platform::IOS => {
+                Platform::iOS => {
                     let input = match path_str.get(2..) {
                         Some(input) => input,
                         None => return None,
@@ -370,7 +373,7 @@ mod tests {
         let attachment = sample_attachment();
 
         assert_eq!(
-            attachment.resolved_attachment_path(&Platform::IOS, &db_path),
+            attachment.resolved_attachment_path(&Platform::iOS, &db_path),
             Some("fake_root/41/41746ffc65924078eae42725c979305626f57cca".to_string())
         );
     }
@@ -394,7 +397,7 @@ mod tests {
         attachment.filename = None;
 
         assert_eq!(
-            attachment.resolved_attachment_path(&Platform::IOS, &db_path),
+            attachment.resolved_attachment_path(&Platform::iOS, &db_path),
             None
         );
     }
