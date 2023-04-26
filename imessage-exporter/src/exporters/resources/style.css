@@ -221,6 +221,10 @@ span.sender {
 	opacity: 100%;
 }
 
+span.deleted {
+	opacity: 60%;
+}
+
 span.subject {
 	font-weight: 600;
 }
