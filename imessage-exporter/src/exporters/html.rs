@@ -31,7 +31,6 @@ use imessage_database::{
     },
     util::{
         dates::{format, readable_diff},
-        dirs::home,
         plist::parse_plist,
     },
 };
@@ -399,11 +398,12 @@ impl<'a> Writer<'a> for HTML<'a> {
         match attachment.path() {
             Some(path) => {
                 if let Some(path_str) = path.as_os_str().to_str() {
-                    // Resolve the attachment path if necessary
-                    let resolved_attachment_path = if path.starts_with("~") {
-                        path_str.replace('~', &home())
-                    } else {
-                        path_str.to_owned()
+                    let resolved_attachment_path = match self.config.options.import_platform.resolved_attachment_path(
+                        path_str, self.config.options.db_path.clone()
+                    ) {
+                        Ok(path) => path,
+                        // not sure how to handle this error
+                        Err(_) => return Err(attachment.filename()),
                     };
 
                     // Perform optional copy + convert
@@ -1141,7 +1141,7 @@ impl<'a> HTML<'a> {
 mod tests {
     use std::path::PathBuf;
 
-    use crate::{exporters::exporter::Writer, Config, Exporter, Options, HTML};
+    use crate::{exporters::exporter::Writer, Config, Exporter, Options, HTML, app::options::ImportPlatform};
     use imessage_database::{
         tables::messages::Message,
         util::{dirs::default_db_path, query_context::QueryContext},
@@ -1186,6 +1186,7 @@ mod tests {
             query_context: QueryContext::default(),
             no_lazy: false,
             custom_name: None,
+            import_platform: ImportPlatform::MacOS,
         }
     }
 

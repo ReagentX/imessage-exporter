@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use clap::{crate_version, Arg, ArgMatches, Command};
 
+use sha1::{Digest, Sha1};
+
 use imessage_database::util::{
     dirs::{default_db_path, home},
     query_context::QueryContext,
@@ -11,6 +13,8 @@ use crate::app::error::RuntimeError;
 
 /// Default export directory name
 pub const DEFAULT_OUTPUT_DIR: &str = "imessage_export";
+/// Default location in an iOS backup to find the iMessage database
+pub const DEFAULT_IOS_CHATDB_PATH: &str = "3d/3d0d7e5fb2ce288813306e4d4636395e047a3d28";
 
 // CLI Arg Names
 pub const OPTION_DB_PATH: &str = "db-path";
@@ -22,6 +26,7 @@ pub const OPTION_START_DATE: &str = "start-date";
 pub const OPTION_END_DATE: &str = "end-date";
 pub const OPTION_DISABLE_LAZY_LOADING: &str = "no-lazy";
 pub const OPTION_CUSTOM_NAME: &str = "custom-name";
+pub const OPTION_IOS: &str = "ios";
 
 // Other CLI Text
 pub const SUPPORTED_FILE_TYPES: &str = "txt, html";
@@ -30,6 +35,66 @@ pub const ABOUT: &str = concat!(
     "`txt` or `html` formats. It can also run diagnostics\n",
     "to find problems with the iMessage database."
 );
+
+pub enum ImportPlatform {
+    MacOS,
+    IOS,
+}
+
+impl ImportPlatform {
+    pub fn get_attachment_path_txt(&self, db_path:PathBuf, attachment_filename: &String) -> Result<String, RuntimeError> {
+        match self {
+            ImportPlatform::MacOS => Ok(attachment_filename.to_string()),
+            ImportPlatform::IOS => {
+                let input = match attachment_filename.get(2..) {
+                    Some(input) => input,
+                    None => return Err(RuntimeError::InvalidOptions(format!("Invalid attachment filename: {}", attachment_filename))),
+                };
+                let hash_name = format!("{:x}", Sha1::digest(
+                                format!("{}{}", "MediaDomain-", input).as_bytes()
+                            ));
+                let hash_dir = match hash_name.get(0..2) {
+                    Some(dir) => dir,
+                    None => return Err(RuntimeError::InvalidOptions(format!("Invalid attachment filename: {}", attachment_filename))),
+                };
+                let filename = match attachment_filename.rsplit_once("/") {
+                    Some((_, filename)) => filename,
+                    None => return Err(RuntimeError::InvalidOptions(format!("Invalid attachment filename: {}", attachment_filename))),
+                };
+                let db_path = match db_path.to_str() {
+                    Some(path) => path,
+                    None => return Err(RuntimeError::InvalidOptions(format!("Invalid database path: {}", db_path.display()))),
+                };
+                Ok(format!("{}/{}/{} > {}", db_path, hash_dir, hash_name, filename))
+                }
+        }
+    }
+
+    pub fn resolved_attachment_path(&self, path_str:&str, db_path:PathBuf) -> Result<String, RuntimeError>{
+        match self {
+            ImportPlatform::MacOS => {
+                if path_str.starts_with("~") {
+                    return Ok(path_str.replace("~", &home()));
+                }
+                Ok(path_str.to_string())
+            }
+            ImportPlatform::IOS => {
+                let input = match path_str.get(2..) {
+                    Some(input) => input,
+                    None => return Err(RuntimeError::InvalidOptions(format!("Invalid attachment filename: {}", path_str))),
+                };
+                let hash_name = format!("{:x}", Sha1::digest(
+                                format!("{}{}", "MediaDomain-", input).as_bytes()
+                            ));
+                let hash_dir = match hash_name.get(0..2) {
+                    Some(dir) => dir,
+                    None => return Err(RuntimeError::InvalidOptions(format!("Invalid attachment filename: {}", path_str))),
+                };
+                Ok(format!("{}/{}/{}", db_path.display(), hash_dir, hash_name))
+            }
+        }
+    }
+}
 
 pub struct Options<'a> {
     /// Path to database file
@@ -48,6 +113,8 @@ pub struct Options<'a> {
     pub no_lazy: bool,
     /// Custom name for database owner in output
     pub custom_name: Option<&'a str>,
+    /// If true, enable iOS-specific features, db_path is to a backup, uses hashed filepaths
+    pub import_platform: ImportPlatform,
 }
 
 impl<'a> Options<'a> {
@@ -61,6 +128,11 @@ impl<'a> Options<'a> {
         let end_date = args.value_of(OPTION_END_DATE);
         let no_lazy = args.is_present(OPTION_DISABLE_LAZY_LOADING);
         let custom_name = args.value_of(OPTION_CUSTOM_NAME);
+        let import_platform = if args.is_present(OPTION_IOS) {
+                                                ImportPlatform::IOS
+                                            } else {
+                                                ImportPlatform::MacOS
+                                            };
 
         // Ensure export type is allowed
         if let Some(found_type) = export_type {
@@ -108,6 +180,26 @@ impl<'a> Options<'a> {
             )));
         }
 
+        // Ensure that if iOS is enabled, that the db_path contains the chat.db file
+        if user_path.is_some() {
+            match import_platform {
+                ImportPlatform::IOS => {
+                    let path_string = user_path.unwrap();
+                    let db_path = PathBuf::from(path_string);
+                    if !db_path.join(DEFAULT_IOS_CHATDB_PATH).exists() {
+                        return Err(RuntimeError::InvalidOptions(format!(
+                            "Option {OPTION_IOS} is enabled, but could not find {DEFAULT_IOS_CHATDB_PATH} in {path_string}"
+                        )));
+                    }
+                }
+                // added space here to do MacOS path verification if wanted
+                // like validating the path given if the -p flag is used
+                _ => {}
+            }
+        }
+
+        
+
         // Build query context
         let mut query_context = QueryContext::default();
         if let Some(start) = start_date {
@@ -137,7 +229,15 @@ impl<'a> Options<'a> {
             query_context,
             no_lazy,
             custom_name,
+            import_platform,
         })
+    }
+
+    pub fn get_db_path(&self) -> PathBuf {
+        match self.import_platform {
+            ImportPlatform::IOS => self.db_path.join(DEFAULT_IOS_CHATDB_PATH).clone(),
+            ImportPlatform::MacOS => self.db_path.clone(),
+        }
     }
 }
 
@@ -261,6 +361,13 @@ pub fn from_command_line() -> ArgMatches {
                 .help("Specify an optional custom name for the database owner's messages in exports")
                 .takes_value(true)
                 .display_order(8)
+        )
+        .arg(
+            Arg::new(OPTION_IOS)
+                .long(OPTION_IOS)
+                .help("Specify that the database is from an iOS backup\nUsing this option requires a custom path to the iPhone backup directory")
+                .display_order(9)
+                .requires(OPTION_DB_PATH)
         )
         .get_matches();
     matches

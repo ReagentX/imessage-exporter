@@ -166,7 +166,7 @@ impl<'a> Config<'a> {
     /// let app = Config::new(options).unwrap();
     /// ```
     pub fn new(options: Options) -> Result<Config, RuntimeError> {
-        let conn = get_connection(&options.db_path).map_err(RuntimeError::DatabaseError)?;
+        let conn = get_connection(&options.get_db_path()).map_err(RuntimeError::DatabaseError)?;
         eprintln!("Building cache...");
         eprintln!("[1/4] Caching chats...");
         let chatrooms = Chat::cache(&conn).map_err(RuntimeError::DatabaseError)?;
@@ -273,7 +273,7 @@ impl<'a> Config<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{Config, Options};
+    use crate::{Config, Options, app::options::ImportPlatform};
     use imessage_database::{
         tables::{
             chat::Chat,
@@ -296,6 +296,7 @@ mod test {
             query_context: QueryContext::default(),
             no_lazy: false,
             custom_name: None,
+            import_platform: ImportPlatform::MacOS,
         }
     }
 
