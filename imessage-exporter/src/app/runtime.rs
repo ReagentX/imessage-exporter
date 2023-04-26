@@ -273,7 +273,7 @@ impl<'a> Config<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{Config, Options, app::options::ImportPlatform};
+    use crate::{Config, Options, app::options::Platform};
     use imessage_database::{
         tables::{
             chat::Chat,
@@ -296,7 +296,7 @@ mod test {
             query_context: QueryContext::default(),
             no_lazy: false,
             custom_name: None,
-            import_platform: ImportPlatform::MacOS,
+            import_platform: Platform::MacOS,
         }
     }
 

@@ -1141,7 +1141,7 @@ impl<'a> HTML<'a> {
 mod tests {
     use std::path::PathBuf;
 
-    use crate::{exporters::exporter::Writer, Config, Exporter, Options, HTML, app::options::ImportPlatform};
+    use crate::{exporters::exporter::Writer, Config, Exporter, Options, HTML, app::options::Platform};
     use imessage_database::{
         tables::messages::Message,
         util::{dirs::default_db_path, query_context::QueryContext},
@@ -1186,7 +1186,7 @@ mod tests {
             query_context: QueryContext::default(),
             no_lazy: false,
             custom_name: None,
-            import_platform: ImportPlatform::MacOS,
+            import_platform: Platform::MacOS,
         }
     }
 

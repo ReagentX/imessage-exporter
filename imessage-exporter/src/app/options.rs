@@ -36,20 +36,20 @@ pub const ABOUT: &str = concat!(
     "to find problems with the iMessage database."
 );
 
-pub enum ImportPlatform {
+pub enum Platform {
     MacOS,
     IOS,
 }
 
-impl ImportPlatform {
+impl Platform {
     pub fn get_attachment_path_txt(
         &self,
         db_path: PathBuf,
         attachment_filename: &String,
     ) -> Result<String, RuntimeError> {
         match self {
-            ImportPlatform::MacOS => Ok(attachment_filename.to_string()),
-            ImportPlatform::IOS => {
+            Platform::MacOS => Ok(attachment_filename.to_string()),
+            Platform::IOS => {
                 let input = match attachment_filename.get(2..) {
                     Some(input) => input,
                     None => {
@@ -104,13 +104,13 @@ impl ImportPlatform {
         db_path: PathBuf,
     ) -> Result<String, RuntimeError> {
         match self {
-            ImportPlatform::MacOS => {
+            Platform::MacOS => {
                 if path_str.starts_with("~") {
                     return Ok(path_str.replace("~", &home()));
                 }
                 Ok(path_str.to_string())
             }
-            ImportPlatform::IOS => {
+            Platform::IOS => {
                 let input = match path_str.get(2..) {
                     Some(input) => input,
                     None => {
@@ -157,7 +157,7 @@ pub struct Options<'a> {
     /// Custom name for database owner in output
     pub custom_name: Option<&'a str>,
     /// If true, enable iOS-specific features, db_path is to a backup, uses hashed filepaths
-    pub import_platform: ImportPlatform,
+    pub import_platform: Platform,
 }
 
 impl<'a> Options<'a> {
@@ -172,9 +172,9 @@ impl<'a> Options<'a> {
         let no_lazy = args.is_present(OPTION_DISABLE_LAZY_LOADING);
         let custom_name = args.value_of(OPTION_CUSTOM_NAME);
         let import_platform = if args.is_present(OPTION_IOS) {
-            ImportPlatform::IOS
+            Platform::IOS
         } else {
-            ImportPlatform::MacOS
+            Platform::MacOS
         };
 
         // Ensure export type is allowed
@@ -226,7 +226,7 @@ impl<'a> Options<'a> {
         // Ensure that if iOS is enabled, that the db_path contains the chat.db file
         if user_path.is_some() {
             match import_platform {
-                ImportPlatform::IOS => {
+                Platform::IOS => {
                     let path_string = user_path.unwrap();
                     let db_path = PathBuf::from(path_string);
                     if !db_path.join(DEFAULT_IOS_CHATDB_PATH).exists() {
@@ -276,8 +276,8 @@ impl<'a> Options<'a> {
 
     pub fn get_db_path(&self) -> PathBuf {
         match self.import_platform {
-            ImportPlatform::IOS => self.db_path.join(DEFAULT_IOS_CHATDB_PATH).clone(),
-            ImportPlatform::MacOS => self.db_path.clone(),
+            Platform::IOS => self.db_path.join(DEFAULT_IOS_CHATDB_PATH).clone(),
+            Platform::MacOS => self.db_path.clone(),
         }
     }
 }
