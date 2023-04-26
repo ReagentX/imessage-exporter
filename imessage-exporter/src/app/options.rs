@@ -42,35 +42,67 @@ pub enum ImportPlatform {
 }
 
 impl ImportPlatform {
-    pub fn get_attachment_path_txt(&self, db_path:PathBuf, attachment_filename: &String) -> Result<String, RuntimeError> {
+    pub fn get_attachment_path_txt(
+        &self,
+        db_path: PathBuf,
+        attachment_filename: &String,
+    ) -> Result<String, RuntimeError> {
         match self {
             ImportPlatform::MacOS => Ok(attachment_filename.to_string()),
             ImportPlatform::IOS => {
                 let input = match attachment_filename.get(2..) {
                     Some(input) => input,
-                    None => return Err(RuntimeError::InvalidOptions(format!("Invalid attachment filename: {}", attachment_filename))),
+                    None => {
+                        return Err(RuntimeError::InvalidOptions(format!(
+                            "Invalid attachment filename: {}",
+                            attachment_filename
+                        )))
+                    }
                 };
-                let hash_name = format!("{:x}", Sha1::digest(
-                                format!("{}{}", "MediaDomain-", input).as_bytes()
-                            ));
+                let hash_name = format!(
+                    "{:x}",
+                    Sha1::digest(format!("{}{}", "MediaDomain-", input).as_bytes())
+                );
                 let hash_dir = match hash_name.get(0..2) {
                     Some(dir) => dir,
-                    None => return Err(RuntimeError::InvalidOptions(format!("Invalid attachment filename: {}", attachment_filename))),
+                    None => {
+                        return Err(RuntimeError::InvalidOptions(format!(
+                            "Invalid attachment filename: {}",
+                            attachment_filename
+                        )))
+                    }
                 };
                 let filename = match attachment_filename.rsplit_once("/") {
                     Some((_, filename)) => filename,
-                    None => return Err(RuntimeError::InvalidOptions(format!("Invalid attachment filename: {}", attachment_filename))),
+                    None => {
+                        return Err(RuntimeError::InvalidOptions(format!(
+                            "Invalid attachment filename: {}",
+                            attachment_filename
+                        )))
+                    }
                 };
                 let db_path = match db_path.to_str() {
                     Some(path) => path,
-                    None => return Err(RuntimeError::InvalidOptions(format!("Invalid database path: {}", db_path.display()))),
+                    None => {
+                        return Err(RuntimeError::InvalidOptions(format!(
+                            "Invalid database path: {}",
+                            db_path.display()
+                        )))
+                    }
                 };
-                Ok(format!("{}/{}/{} > {}", db_path, hash_dir, hash_name, filename))
-                }
+                Ok(format!(
+                    "{}/{}/{} > {}",
+                    db_path, hash_dir, hash_name, filename
+                ))
+            }
         }
     }
 
-    pub fn resolved_attachment_path(&self, path_str:&str, db_path:PathBuf) -> Result<String, RuntimeError>{
+    pub fn resolved_attachment_path(
+        &self,
+        path_str: &str,
+        db_path: PathBuf,
+    ) -> Result<String, RuntimeError> {
         match self {
             ImportPlatform::MacOS => {
                 if path_str.starts_with("~") {
@@ -81,14 +113,25 @@ impl ImportPlatform {
             ImportPlatform::IOS => {
                 let input = match path_str.get(2..) {
                     Some(input) => input,
-                    None => return Err(RuntimeError::InvalidOptions(format!("Invalid attachment filename: {}", path_str))),
+                    None => {
+                        return Err(RuntimeError::InvalidOptions(format!(
+                            "Invalid attachment filename: {}",
+                            path_str
+                        )))
+                    }
                 };
-                let hash_name = format!("{:x}", Sha1::digest(
-                                format!("{}{}", "MediaDomain-", input).as_bytes()
-                            ));
+                let hash_name = format!(
+                    "{:x}",
+                    Sha1::digest(format!("{}{}", "MediaDomain-", input).as_bytes())
+                );
                 let hash_dir = match hash_name.get(0..2) {
                     Some(dir) => dir,
-                    None => return Err(RuntimeError::InvalidOptions(format!("Invalid attachment filename: {}", path_str))),
+                    None => {
+                        return Err(RuntimeError::InvalidOptions(format!(
+                            "Invalid attachment filename: {}",
+                            path_str
+                        )))
+                    }
                 };
                 Ok(format!("{}/{}/{}", db_path.display(), hash_dir, hash_name))
             }
@@ -129,10 +172,10 @@ impl<'a> Options<'a> {
         let no_lazy = args.is_present(OPTION_DISABLE_LAZY_LOADING);
         let custom_name = args.value_of(OPTION_CUSTOM_NAME);
         let import_platform = if args.is_present(OPTION_IOS) {
-                                                ImportPlatform::IOS
-                                            } else {
-                                                ImportPlatform::MacOS
-                                            };
+            ImportPlatform::IOS
+        } else {
+            ImportPlatform::MacOS
+        };
 
         // Ensure export type is allowed
         if let Some(found_type) = export_type {
@@ -197,8 +240,6 @@ impl<'a> Options<'a> {
                 _ => {}
             }
         }
-
-        
 
         // Build query context
         let mut query_context = QueryContext::default();
