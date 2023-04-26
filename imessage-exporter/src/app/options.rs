@@ -163,6 +163,7 @@ impl<'a> Options<'a> {
         })
     }
 
+    /// Generate a path to the database based on the currently selected platform
     pub fn get_db_path(&self) -> PathBuf {
         match self.platform {
             Platform::IOS => self.db_path.join(DEFAULT_PATH_IOS),

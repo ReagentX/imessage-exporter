@@ -1,9 +1,10 @@
 /*!
- Contains data structures used to describe database platforms.
+ Contains data structures used to describe database platforms
 */
 
 use std::fmt::Display;
 
+/// Represents the platform that created the database this library connects to
 pub enum Platform {
     /// MacOS-sourced data
     MacOS,
@@ -23,6 +24,7 @@ impl Platform {
 }
 
 impl Default for Platform {
+    /// The default Platform is [Platform::MacOS].
     fn default() -> Self {
         Self::MacOS
     }
