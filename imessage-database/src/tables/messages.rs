@@ -133,7 +133,7 @@ impl Table for Message {
 
     fn get(db: &Connection) -> Result<Statement, TableError> {
         // If database has `thread_originator_guid`, we can parse replies, otherwise default to 0
-        // TODO: The first sql statement is the "current" schema, the second one is the "most compatible" schema, i.e. supports older DBs
+        // The first sql statement is the "current" schema, the second one is the "most compatible" schema, i.e. supports older DBs
         Ok(db.prepare(&format!(
             "SELECT
                  *,
