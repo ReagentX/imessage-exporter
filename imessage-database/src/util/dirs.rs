@@ -1,10 +1,10 @@
 /*!
- Contains functions that generate the correct path to the default iMessage database location.
+ Contains functions that generate the correct path to the default iMessage database location
 */
 
 use std::{env::var, path::PathBuf};
 
-use crate::tables::table::DEFAULT_PATH;
+use crate::tables::table::DEFAULT_PATH_MACOS;
 
 /// Get the user's home directory (MacOS only)
 ///
@@ -34,5 +34,5 @@ pub fn home() -> String {
 /// println!("{path:?}");
 /// ```
 pub fn default_db_path() -> PathBuf {
-    PathBuf::from(format!("{}/{DEFAULT_PATH}", home()))
+    PathBuf::from(format!("{}/{DEFAULT_PATH_MACOS}", home()))
 }

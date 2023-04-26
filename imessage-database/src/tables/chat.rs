@@ -37,13 +37,8 @@ impl Table for Chat {
 
     fn extract(chat: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
         match chat {
-            Ok(chat) => match chat {
-                Ok(ch) => Ok(ch),
-                // TODO: When does this occur?
-                Err(why) => Err(TableError::Chat(why)),
-            },
-            // TODO: When does this occur?
-            Err(why) => Err(TableError::Chat(why)),
+            Ok(Ok(chat)) => Ok(chat),
+            Err(why) | Ok(Err(why)) => Err(TableError::Chat(why)),
         }
     }
 }

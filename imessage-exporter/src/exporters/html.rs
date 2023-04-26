@@ -31,7 +31,6 @@ use imessage_database::{
     },
     util::{
         dates::{format, readable_diff},
-        dirs::home,
         plist::parse_plist,
     },
 };
@@ -396,161 +395,144 @@ impl<'a> Writer<'a> for HTML<'a> {
         attachment: &'a mut Attachment,
         message: &Message,
     ) -> Result<String, &'a str> {
-        match attachment.path() {
-            Some(path) => {
-                if let Some(path_str) = path.as_os_str().to_str() {
-                    // Resolve the attachment path if necessary
-                    let resolved_attachment_path = if path.starts_with("~") {
-                        path_str.replace('~', &home())
-                    } else {
-                        path_str.to_owned()
-                    };
+        if let Some(resolved_attachment_path) = attachment
+            .resolved_attachment_path(&self.config.options.platform, &self.config.options.db_path)
+        {
+            // Perform optional copy + convert
+            if !self.config.options.no_copy {
+                let qualified_attachment_path = Path::new(&resolved_attachment_path);
 
-                    // Perform optional copy + convert
-                    if !self.config.options.no_copy {
-                        let qualified_attachment_path = Path::new(&resolved_attachment_path);
+                match attachment.extension() {
+                    Some(ext) => {
+                        // Create a path to copy the file to
+                        let mut copy_path = self.config.attachment_path();
 
-                        match attachment.extension() {
-                            Some(ext) => {
-                                // Create a path to copy the file to
-                                let mut copy_path = self.config.attachment_path();
+                        // Add the subdirectory
+                        let sub_dir = self.config.conversation_attachment_path(message.chat_id);
+                        copy_path.push(sub_dir);
 
-                                // Add the subdirectory
-                                let sub_dir =
-                                    self.config.conversation_attachment_path(message.chat_id);
-                                copy_path.push(sub_dir);
+                        // Add the random filename
+                        copy_path.push(Uuid::new_v4().to_string());
 
-                                // Add the random filename
-                                copy_path.push(Uuid::new_v4().to_string());
-
-                                // If the image is a HEIC, convert it to PNG, otherwise perform the copy
-                                // TODO: use `if let` binding when eRFC 2497 is merged: https://github.com/rust-lang/rust/issues/53667
-                                if (ext == "heic" || ext == "HEIC")
-                                    && self.config.converter.is_some()
-                                {
-                                    // Write the converted file
-                                    copy_path.set_extension("jpg");
-                                    if heic_to_jpeg(
-                                        qualified_attachment_path,
-                                        &copy_path,
-                                        self.config.converter.as_ref().unwrap(),
-                                    )
-                                    .is_none()
-                                    {
-                                        // It is kind of odd to use Ok() on the failure here, but the Err()
-                                        // this function returns is used for when files are missing, not when
-                                        // conversion fails. Perhaps this should be a Result<String, Enum>
-                                        // of some kind, but this conversion failure is quite rare.
-                                        return Ok(format!(
-                                            "Unable to convert and display file: {}",
-                                            &attachment.filename()
-                                        ));
-                                    }
-                                } else {
-                                    // Just copy the file
-                                    copy_path.set_extension(ext);
-                                    if qualified_attachment_path.exists() {
-                                        // Ensure the directory tree exists
-                                        if let Some(folder) = copy_path.parent() {
-                                            if !folder.exists() {
-                                                if let Err(why) = create_dir_all(folder) {
-                                                    eprintln!("Unable to create {folder:?}: {why}");
-                                                }
-                                            }
+                        // If the image is a HEIC, convert it to PNG, otherwise perform the copy
+                        // TODO: use `if let` binding when eRFC 2497 is merged: https://github.com/rust-lang/rust/issues/53667
+                        if (ext == "heic" || ext == "HEIC") && self.config.converter.is_some() {
+                            // Write the converted file
+                            copy_path.set_extension("jpg");
+                            if heic_to_jpeg(
+                                qualified_attachment_path,
+                                &copy_path,
+                                self.config.converter.as_ref().unwrap(),
+                            )
+                            .is_none()
+                            {
+                                // It is kind of odd to use Ok() on the failure here, but the Err()
+                                // this function returns is used for when files are missing, not when
+                                // conversion fails. Perhaps this should be a Result<String, Enum>
+                                // of some kind, but this conversion failure is quite rare.
+                                return Ok(format!(
+                                    "Unable to convert and display file: {}",
+                                    &attachment.filename()
+                                ));
+                            }
+                        } else {
+                            // Just copy the file
+                            copy_path.set_extension(ext);
+                            if qualified_attachment_path.exists() {
+                                // Ensure the directory tree exists
+                                if let Some(folder) = copy_path.parent() {
+                                    if !folder.exists() {
+                                        if let Err(why) = create_dir_all(folder) {
+                                            eprintln!("Unable to create {folder:?}: {why}");
                                         }
-
-                                        if let Err(why) =
-                                            copy(qualified_attachment_path, &copy_path)
-                                        {
-                                            eprintln!("Unable to copy {qualified_attachment_path:?} to {copy_path:?}: {why}")
-                                        };
-                                    } else {
-                                        eprintln!("Attachment not found at specified path: {qualified_attachment_path:?}");
-                                        return Err(attachment.filename());
                                     }
                                 }
 
-                                // Set the timestamps on the file's metadata to the original ones
-                                if let Ok(metadata) = metadata(qualified_attachment_path) {
-                                    let mtime = match &message.date(&self.config.offset) {
-                                        Ok(date) => FileTime::from_unix_time(
-                                            date.timestamp(),
-                                            date.timestamp_subsec_nanos(),
-                                        ),
-                                        Err(_) => FileTime::from_last_modification_time(&metadata),
-                                    };
-
-                                    let atime = FileTime::from_last_access_time(&metadata);
-
-                                    if let Err(why) = set_file_times(&copy_path, atime, mtime) {
-                                        eprintln!("Unable to update {copy_path:?} metadata: {why}")
-                                    }
+                                if let Err(why) = copy(qualified_attachment_path, &copy_path) {
+                                    eprintln!("Unable to copy {qualified_attachment_path:?} to {copy_path:?}: {why}")
                                 };
-
-                                // Update the attachment
-                                attachment.copied_path = Some(copy_path);
-                            }
-                            None => {
+                            } else {
+                                eprintln!("Attachment not found at specified path: {qualified_attachment_path:?}");
                                 return Err(attachment.filename());
                             }
                         }
-                    }
 
-                    // Build a relative filepath from the fully qualified one on the `Attachment`
-                    let embed_path = match &attachment.copied_path {
-                        Some(path) => {
-                            let sub_dir =
-                                &self.config.conversation_attachment_path(message.chat_id);
-                            format!(
-                                "{ATTACHMENTS_DIR}/{}/{}",
-                                sub_dir,
-                                path.file_name()
-                                    .ok_or(attachment.filename())?
-                                    .to_str()
-                                    .ok_or(attachment.filename())?
-                            )
-                        }
-                        None => resolved_attachment_path,
-                    };
+                        // Set the timestamps on the file's metadata to the original ones
+                        if let Ok(metadata) = metadata(qualified_attachment_path) {
+                            let mtime = match &message.date(&self.config.offset) {
+                                Ok(date) => FileTime::from_unix_time(
+                                    date.timestamp(),
+                                    date.timestamp_subsec_nanos(),
+                                ),
+                                Err(_) => FileTime::from_last_modification_time(&metadata),
+                            };
 
-                    Ok(match attachment.mime_type() {
-                        MediaType::Image(_) => {
-                            if self.config.options.no_lazy {
-                                format!("<img src=\"{embed_path}\">")
-                            } else {
-                                format!("<img src=\"{embed_path}\" loading=\"lazy\">")
+                            let atime = FileTime::from_last_access_time(&metadata);
+
+                            if let Err(why) = set_file_times(&copy_path, atime, mtime) {
+                                eprintln!("Unable to update {copy_path:?} metadata: {why}")
                             }
-                        }
-                        MediaType::Video(media_type) => {
-                            // See https://github.com/ReagentX/imessage-exporter/issues/73 for why duplicate the source tag
-                            format!("<video controls> <source src=\"{embed_path}\" type=\"{media_type}\"> <source src=\"{embed_path}\"> </video>")
-                        }
-                        MediaType::Audio(media_type) => {
-                            format!("<audio controls src=\"{embed_path}\" type=\"{media_type}\" </audio>")
-                        }
-                        MediaType::Text(_) => {
-                            format!(
-                                "<a href=\"file://{embed_path}\">Click to download {}</a>",
-                                attachment.filename()
-                            )
-                        }
-                        MediaType::Application(_) => format!(
-                            "<a href=\"file://{embed_path}\">Click to download {}</a>",
-                            attachment.filename()
-                        ),
-                        MediaType::Unknown => {
-                            format!("<p>Unknown attachment type: {embed_path}</p> <a href=\"file://{embed_path}\">Download</a>")
-                        }
-                        MediaType::Other(media_type) => {
-                            format!("<p>Unable to embed {media_type} attachments: {embed_path}</p>")
-                        }
-                    })
-                } else {
-                    Err(attachment.filename())
+                        };
+
+                        // Update the attachment
+                        attachment.copied_path = Some(copy_path);
+                    }
+                    None => {
+                        return Err(attachment.filename());
+                    }
                 }
             }
-            None => Err(attachment.filename()),
+
+            // Build a relative filepath from the fully qualified one on the `Attachment`
+            let embed_path = match &attachment.copied_path {
+                Some(path) => {
+                    let sub_dir = &self.config.conversation_attachment_path(message.chat_id);
+                    format!(
+                        "{ATTACHMENTS_DIR}/{}/{}",
+                        sub_dir,
+                        path.file_name()
+                            .ok_or(attachment.filename())?
+                            .to_str()
+                            .ok_or(attachment.filename())?
+                    )
+                }
+                None => resolved_attachment_path,
+            };
+
+            return Ok(match attachment.mime_type() {
+                MediaType::Image(_) => {
+                    if self.config.options.no_lazy {
+                        format!("<img src=\"{embed_path}\">")
+                    } else {
+                        format!("<img src=\"{embed_path}\" loading=\"lazy\">")
+                    }
+                }
+                MediaType::Video(media_type) => {
+                    // See https://github.com/ReagentX/imessage-exporter/issues/73 for why duplicate the source tag
+                    format!("<video controls> <source src=\"{embed_path}\" type=\"{media_type}\"> <source src=\"{embed_path}\"> </video>")
+                }
+                MediaType::Audio(media_type) => {
+                    format!("<audio controls src=\"{embed_path}\" type=\"{media_type}\" </audio>")
+                }
+                MediaType::Text(_) => {
+                    format!(
+                        "<a href=\"file://{embed_path}\">Click to download {}</a>",
+                        attachment.filename()
+                    )
+                }
+                MediaType::Application(_) => format!(
+                    "<a href=\"file://{embed_path}\">Click to download {}</a>",
+                    attachment.filename()
+                ),
+                MediaType::Unknown => {
+                    format!("<p>Unknown attachment type: {embed_path}</p> <a href=\"file://{embed_path}\">Download</a>")
+                }
+                MediaType::Other(media_type) => {
+                    format!("<p>Unable to embed {media_type} attachments: {embed_path}</p>")
+                }
+            });
         }
+        Err(attachment.filename())
     }
 
     fn format_app(
@@ -711,7 +693,9 @@ impl<'a> Writer<'a> for HTML<'a> {
                     )
                 }
             },
-            None => String::from("\n<div class =\"announcement\"><p>Unable to format announcement!</p></div>\n"),
+            None => String::from(
+                "\n<div class =\"announcement\"><p>Unable to format announcement!</p></div>\n",
+            ),
         };
     }
 
@@ -1143,8 +1127,8 @@ mod tests {
 
     use crate::{exporters::exporter::Writer, Config, Exporter, Options, HTML};
     use imessage_database::{
-        tables::messages::Message,
-        util::{dirs::default_db_path, query_context::QueryContext},
+        tables::{attachment::Attachment, messages::Message},
+        util::{dirs::default_db_path, platform::Platform, query_context::QueryContext},
     };
 
     pub fn blank() -> Message {
@@ -1179,13 +1163,26 @@ mod tests {
     pub fn fake_options() -> Options<'static> {
         Options {
             db_path: default_db_path(),
-            no_copy: false,
+            no_copy: true,
             diagnostic: false,
             export_type: None,
             export_path: PathBuf::new(),
             query_context: QueryContext::default(),
             no_lazy: false,
             custom_name: None,
+            platform: Platform::MacOS,
+        }
+    }
+
+    pub fn fake_attachment() -> Attachment {
+        Attachment {
+            rowid: 0,
+            filename: Some("a/b/c/d.jpg".to_string()),
+            mime_type: Some("image/png".to_string()),
+            transfer_name: Some("d.jpg".to_string()),
+            total_bytes: 100,
+            hide_attachment: 0,
+            copied_path: None,
         }
     }
 
@@ -1492,6 +1489,77 @@ mod tests {
         let expected = "<span class=\"reaction\"><b>Loved</b> by Sample Contact</span>";
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_html_attachment_macos() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let message = blank();
+
+        let mut attachment = fake_attachment();
+
+        let actual = exporter
+            .format_attachment(&mut attachment, &message)
+            .unwrap();
+
+        assert_eq!(actual, "<img src=\"a/b/c/d.jpg\" loading=\"lazy\">");
+    }
+
+    #[test]
+    fn can_format_html_attachment_macos_invalid() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let message = blank();
+
+        let mut attachment = fake_attachment();
+        attachment.filename = None;
+
+        let actual = exporter.format_attachment(&mut attachment, &message);
+
+        assert_eq!(actual, Err("d.jpg"));
+    }
+
+    #[test]
+    fn can_format_html_attachment_ios() {
+        // Create exporter
+        let options = fake_options();
+        let mut config = Config::new(options).unwrap();
+        config.options.no_lazy = true;
+        config.options.platform = Platform::iOS;
+        let exporter = HTML::new(&config);
+        let message = blank();
+
+        let mut attachment = fake_attachment();
+
+        let actual = exporter
+            .format_attachment(&mut attachment, &message)
+            .unwrap();
+
+        assert!(actual.ends_with("33/33c81da8ae3194fc5a0ea993ef6ffe0b048baedb\">"));
+    }
+
+    #[test]
+    fn can_format_html_attachment_ios_invalid() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let message = blank();
+
+        let mut attachment = fake_attachment();
+        attachment.filename = None;
+
+        let actual = exporter.format_attachment(&mut attachment, &message);
+
+        assert_eq!(actual, Err("d.jpg"));
     }
 }
 
