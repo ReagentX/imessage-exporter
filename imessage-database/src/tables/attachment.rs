@@ -3,6 +3,7 @@
 */
 
 use rusqlite::{Connection, Error, Error as E, Result, Row, Statement};
+use sha1::{Digest, Sha1};
 use std::path::{Path, PathBuf};
 
 use crate::{
@@ -14,6 +15,7 @@ use crate::{
     util::{
         dirs::home,
         output::{done_processing, processing},
+        platform::Platform,
     },
 };
 
@@ -205,13 +207,50 @@ impl Attachment {
         }
         "Attachment missing name metadata!"
     }
+
+    /// Given a platform and database source, resolve the path for the current attachment
+    /// iOS Parsing logic source is from [here](https://github.com/nprezant/iMessageBackup/blob/940d001fb7be557d5d57504eb26b3489e88de26e/imessage_backup_tools.py#L83-L85).
+    pub fn resolved_attachment_path(&self, platform: &Platform, db_path: &Path) -> Option<String> {
+        if let Some(path_str) = &self.filename {
+            match platform {
+                Platform::MacOS => {
+                    if path_str.starts_with('~') {
+                        return Some(path_str.replace('~', &home()));
+                    }
+                    return Some(path_str.to_string());
+                }
+                Platform::IOS => {
+                    let input = match path_str.get(2..) {
+                        Some(input) => input,
+                        None => return None,
+                    };
+
+                    let filename = format!(
+                        "{:x}",
+                        Sha1::digest(format!("{}{}", "MediaDomain-", input).as_bytes())
+                    );
+
+                    let directory = match filename.get(0..2) {
+                        Some(dir) => dir,
+                        None => return None,
+                    };
+
+                    return Some(format!("{}/{}/{}", db_path.display(), directory, filename));
+                }
+            }
+        }
+        None
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::tables::attachment::{Attachment, MediaType};
+    use crate::{
+        tables::attachment::{Attachment, MediaType},
+        util::platform::Platform,
+    };
 
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     fn sample_attachment() -> Attachment {
         Attachment {
@@ -297,5 +336,51 @@ mod tests {
         attachment.transfer_name = None;
         attachment.filename = None;
         assert_eq!(attachment.filename(), "Attachment missing name metadata!");
+    }
+
+    #[test]
+    fn can_get_resolved_path_macos() {
+        let db_path = PathBuf::from("fake_root");
+        let attachment = sample_attachment();
+
+        assert_eq!(
+            attachment.resolved_attachment_path(&Platform::MacOS, &db_path),
+            Some("a/b/c.png".to_string())
+        );
+    }
+
+    #[test]
+    fn can_get_resolved_path_ios() {
+        let db_path = PathBuf::from("fake_root");
+        let attachment = sample_attachment();
+
+        assert_eq!(
+            attachment.resolved_attachment_path(&Platform::IOS, &db_path),
+            Some("fake_root/41/41746ffc65924078eae42725c979305626f57cca".to_string())
+        );
+    }
+
+    #[test]
+    fn cant_get_missing_resolved_path_macos() {
+        let db_path = PathBuf::from("fake_root");
+        let mut attachment = sample_attachment();
+        attachment.filename = None;
+
+        assert_eq!(
+            attachment.resolved_attachment_path(&Platform::MacOS, &db_path),
+            None
+        );
+    }
+
+    #[test]
+    fn cant_get_missing_resolved_path_ios() {
+        let db_path = PathBuf::from("fake_root");
+        let mut attachment = sample_attachment();
+        attachment.filename = None;
+
+        assert_eq!(
+            attachment.resolved_attachment_path(&Platform::IOS, &db_path),
+            None
+        );
     }
 }

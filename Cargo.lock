@@ -337,6 +337,7 @@ dependencies = [
  "chrono",
  "plist",
  "rusqlite",
+ "sha1",
 ]
 
 [[package]]
@@ -348,7 +349,6 @@ dependencies = [
  "imessage-database",
  "indicatif",
  "rusqlite",
- "sha1",
  "uuid",
 ]
 

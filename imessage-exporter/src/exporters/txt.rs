@@ -5,9 +5,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-
 use crate::{
-    app::{error::RuntimeError, progress::build_progress_bar_export, runtime::Config, options::Platform},
+    app::{error::RuntimeError, progress::build_progress_bar_export, runtime::Config},
     exporters::exporter::{BalloonFormatter, Exporter, Writer},
 };
 
@@ -276,13 +275,10 @@ impl<'a> Writer<'a> for TXT<'a> {
         attachment: &'a mut Attachment,
         _: &Message,
     ) -> Result<String, &'a str> {
-        match &attachment.filename {
-            Some(filename) => match self.config.options.import_platform.get_attachment_path_txt(
-                    self.config.options.db_path.clone(), filename) 
-                {
-                    Ok(path) => Ok(path),
-                    Err(_) => Err(attachment.filename()),
-                },
+        match attachment
+            .resolved_attachment_path(&self.config.options.platform, &self.config.db_path)
+        {
+            Some(filepath) => Ok(filepath),
             None => Err(attachment.filename()),
         }
     }
@@ -689,10 +685,10 @@ impl<'a> TXT<'a> {
 mod tests {
     use std::path::PathBuf;
 
-    use crate::{exporters::exporter::Writer, Config, Exporter, Options, TXT, app::options::Platform};
+    use crate::{exporters::exporter::Writer, Config, Exporter, Options, TXT};
     use imessage_database::{
         tables::messages::Message,
-        util::{dirs::default_db_path, query_context::QueryContext},
+        util::{dirs::default_db_path, platform::Platform, query_context::QueryContext},
     };
 
     fn blank() -> Message {
@@ -734,7 +730,7 @@ mod tests {
             query_context: QueryContext::default(),
             no_lazy: false,
             custom_name: None,
-            import_platform: Platform::MacOS,
+            platform: Platform::MacOS,
         }
     }
 

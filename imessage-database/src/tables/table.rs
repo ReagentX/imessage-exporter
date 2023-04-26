@@ -90,8 +90,10 @@ pub const ME: &str = "Me";
 pub const YOU: &str = "You";
 /// Name used for contacts or chats where the name cannot be discovered
 pub const UNKNOWN: &str = "Unknown";
-/// Default location for the Messages database
+/// Default location for the Messages database on MacOS
 pub const DEFAULT_PATH_MACOS: &str = "Library/Messages/chat.db";
+/// Default location for the Messages database on iOS
+pub const DEFAULT_PATH_IOS: &str = "3d/3d0d7e5fb2ce288813306e4d4636395e047a3d28";
 /// Chat name reserved for messages that do not belong to a chat in the table
 pub const ORPHANED: &str = "orphaned";
 /// Maximum length a filename can be
