@@ -122,7 +122,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
 
     /// Create a file for the given chat, caching it so we don't need to build it later
     fn get_or_create_file(&mut self, message: &Message) -> &Path {
-        match self.config.conversation(message.chat_id) {
+        match self.config.conversation(message) {
             Some((chatroom, id)) => self.files.entry(*id).or_insert_with(|| {
                 let mut path = self.config.options.export_path.clone();
                 path.push(self.config.filename(chatroom));
@@ -177,6 +177,16 @@ impl<'a> Writer<'a> for HTML<'a> {
             "<span class=\"sender\">",
             "</span></p>",
         );
+
+        // If message was deleted, annotate it
+        if message.deleted_from.is_some() {
+            self.add_line(
+                &mut formatted_message,
+                "This message was deleted from the conversation!",
+                "<span class=\"deleted\">",
+                "</span></p>",
+            );
+        }
 
         // Useful message metadata
         let message_parts = message.body();
@@ -1289,9 +1299,30 @@ mod tests {
         message.date = 674526582885055488;
         message.text = Some("Hello world".to_string());
         message.is_from_me = true;
+        message.chat_id = Some(0);
 
         let actual = exporter.format_message(&message, 0).unwrap();
         let expected = "<div class=\"message\">\n<div class=\"sent iMessage\">\n<p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span>\n<span class=\"sender\">Me</span></p>\n<hr><div class=\"message_part\">\n<span class=\"bubble\">Hello world</span>\n</div>\n</div>\n</div>\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_html_from_me_normal_deleted() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.text = Some("Hello world".to_string());
+        message.is_from_me = true;
+        message.deleted_from = Some(0);
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected = "<div class=\"message\">\n<div class=\"sent iMessage\">\n<p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span>\n<span class=\"sender\">Me</span></p>\n<span class=\"deleted\">This message was deleted from the conversation!</span></p>\n<hr><div class=\"message_part\">\n<span class=\"bubble\">Hello world</span>\n</div>\n</div>\n</div>\n";
 
         assert_eq!(actual, expected);
     }

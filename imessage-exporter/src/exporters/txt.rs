@@ -102,7 +102,7 @@ impl<'a> Exporter<'a> for TXT<'a> {
 
     /// Create a file for the given chat, caching it so we don't need to build it later
     fn get_or_create_file(&mut self, message: &Message) -> &Path {
-        match self.config.conversation(message.chat_id) {
+        match self.config.conversation(message) {
             Some((chatroom, id)) => self.files.entry(*id).or_insert_with(|| {
                 let mut path = self.config.options.export_path.clone();
                 path.push(self.config.filename(chatroom));
@@ -129,6 +129,15 @@ impl<'a> Writer<'a> for TXT<'a> {
             self.config.who(&message.handle_id, message.is_from_me),
             &indent,
         );
+
+        // If message was deleted, annotate it
+        if message.deleted_from.is_some() {
+            self.add_line(
+                &mut formatted_message,
+                "This message was deleted from the conversation!",
+                &indent,
+            );
+        }
 
         // Useful message metadata
         let message_parts = message.body();
@@ -835,9 +844,30 @@ mod tests {
         message.date = 674526582885055488;
         message.text = Some("Hello world".to_string());
         message.is_from_me = true;
+        message.chat_id = Some(0);
 
         let actual = exporter.format_message(&message, 0).unwrap();
         let expected = "May 17, 2022  5:29:42 PM\nMe\nHello world\n\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_format_txt_from_me_normal_deleted() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.text = Some("Hello world".to_string());
+        message.is_from_me = true;
+        message.deleted_from = Some(0);
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected = "May 17, 2022  5:29:42 PM\nMe\nThis message was deleted from the conversation!\nHello world\n\n";
 
         assert_eq!(actual, expected);
     }
