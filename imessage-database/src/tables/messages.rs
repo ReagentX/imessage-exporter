@@ -478,6 +478,11 @@ impl Message {
         self.item_type == 6
     }
 
+    /// `true` if the message was deleted and is recoverable, else `false`
+    pub fn is_deleted(&self) -> bool {
+        self.deleted_from.is_some()
+    }
+
     /// Get the index of the part of a message a reply is pointing to
     fn get_reply_index(&self) -> usize {
         if let Some(parts) = &self.thread_originator_part {
