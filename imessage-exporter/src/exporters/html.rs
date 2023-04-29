@@ -179,7 +179,7 @@ impl<'a> Writer<'a> for HTML<'a> {
         );
 
         // If message was deleted, annotate it
-        if message.deleted_from.is_some() {
+        if message.is_deleted() {
             self.add_line(
                 &mut formatted_message,
                 "This message was deleted from the conversation!",
