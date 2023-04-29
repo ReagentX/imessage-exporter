@@ -75,6 +75,8 @@ pub const CHAT_MESSAGE_JOIN: &str = "chat_message_join";
 pub const MESSAGE_ATTACHMENT_JOIN: &str = "message_attachment_join";
 /// Chat to handle join table name
 pub const CHAT_HANDLE_JOIN: &str = "chat_handle_join";
+/// Recently deleted messages table
+pub const RECENTLY_DELETED: &str = "chat_recoverable_message_join";
 
 // Column names
 /// The payload data column contains app message data

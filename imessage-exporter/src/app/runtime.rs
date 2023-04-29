@@ -54,8 +54,8 @@ pub struct Config<'a> {
 
 impl<'a> Config<'a> {
     /// Get a deduplicated chat ID or a default value
-    pub fn conversation(&self, chat_id: Option<i32>) -> Option<(&Chat, &i32)> {
-        match chat_id {
+    pub fn conversation(&self, message: &Message) -> Option<(&Chat, &i32)> {
+        match message.chat_id.or(message.deleted_from) {
             Some(chat_id) => match self.chatrooms.get(&chat_id) {
                 Some(chatroom) => self.real_chatrooms.get(&chat_id).map(|id| (chatroom, id)),
                 // No chatroom for the given chat_id
@@ -277,6 +277,7 @@ mod tests {
     use imessage_database::{
         tables::{
             chat::Chat,
+            messages::Message,
             table::{get_connection, MAX_LENGTH},
         },
         util::{dirs::default_db_path, platform::Platform, query_context::QueryContext},
@@ -322,6 +323,36 @@ mod tests {
             offset: 0,
             db: connection,
             converter: Some(crate::app::converter::Converter::Sips),
+        }
+    }
+
+    fn blank() -> Message {
+        Message {
+            rowid: i32::default(),
+            guid: String::default(),
+            text: None,
+            service: Some("iMessage".to_string()),
+            handle_id: i32::default(),
+            subject: None,
+            date: i64::default(),
+            date_read: i64::default(),
+            date_delivered: i64::default(),
+            is_from_me: false,
+            is_read: false,
+            item_type: 0,
+            group_title: None,
+            group_action_type: 0,
+            associated_message_guid: None,
+            associated_message_type: Some(i32::default()),
+            balloon_bundle_id: None,
+            expressive_send_style_id: None,
+            thread_originator_guid: None,
+            thread_originator_part: None,
+            date_edited: 0,
+            chat_id: None,
+            num_attachments: 0,
+            deleted_from: None,
+            num_replies: 0,
         }
     }
 
@@ -558,8 +589,32 @@ mod tests {
         app.chatrooms.insert(chat.rowid, chat);
         app.real_chatrooms.insert(0, 0);
 
+        // Create message
+        let mut message = blank();
+        message.chat_id = Some(0);
+
         // Get filename
-        let (_, id) = app.conversation(Some(0)).unwrap();
+        let (_, id) = app.conversation(&message).unwrap();
+        assert_eq!(id, &0);
+    }
+
+    #[test]
+    fn can_get_chat_valid_deleted() {
+        let options = fake_options();
+        let mut app = fake_app(options);
+
+        // Create chat
+        let chat = fake_chat();
+        app.chatrooms.insert(chat.rowid, chat);
+        app.real_chatrooms.insert(0, 0);
+
+        // Create message
+        let mut message = blank();
+        message.chat_id = None;
+        message.deleted_from = Some(0);
+
+        // Get filename
+        let (_, id) = app.conversation(&message).unwrap();
         assert_eq!(id, &0);
     }
 
@@ -573,8 +628,12 @@ mod tests {
         app.chatrooms.insert(chat.rowid, chat);
         app.real_chatrooms.insert(0, 0);
 
+        // Create message
+        let mut message = blank();
+        message.chat_id = Some(1);
+
         // Get filename
-        let room = app.conversation(Some(1));
+        let room = app.conversation(&message);
         assert!(room.is_none());
     }
 
@@ -588,8 +647,13 @@ mod tests {
         app.chatrooms.insert(chat.rowid, chat);
         app.real_chatrooms.insert(0, 0);
 
+        // Create message
+        let mut message = blank();
+        message.chat_id = None;
+        message.deleted_from = None;
+
         // Get filename
-        let room = app.conversation(None);
+        let room = app.conversation(&message);
         assert!(room.is_none());
     }
 
