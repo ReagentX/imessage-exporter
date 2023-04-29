@@ -16,7 +16,7 @@ use crate::{
     },
     tables::table::{
         Cacheable, Diagnostic, Table, ATTRIBUTED_BODY, CHAT_MESSAGE_JOIN, MESSAGE,
-        MESSAGE_ATTACHMENT_JOIN, MESSAGE_PAYLOAD, MESSAGE_SUMMARY_INFO,
+        MESSAGE_ATTACHMENT_JOIN, MESSAGE_PAYLOAD, MESSAGE_SUMMARY_INFO, RECENTLY_DELETED,
     },
     util::{
         dates::{readable_diff, TIMESTAMP_FACTOR},
@@ -96,6 +96,7 @@ pub struct Message {
     pub date_edited: i64,
     pub chat_id: Option<i32>,
     pub num_attachments: i32,
+    pub deleted_from: Option<i32>,
     pub num_replies: i32,
 }
 
@@ -125,17 +126,20 @@ impl Table for Message {
             date_edited: row.get("date_edited").unwrap_or(0),
             chat_id: row.get("chat_id").unwrap_or(None),
             num_attachments: row.get("num_attachments")?,
+            deleted_from: row.get("deleted_from").unwrap_or(None),
             num_replies: row.get("num_replies")?,
         })
     }
 
     fn get(db: &Connection) -> Result<Statement, TableError> {
         // If database has `thread_originator_guid`, we can parse replies, otherwise default to 0
+        // The first sql statement is the "current" schema, the second one is the "most compatible" schema, i.e. supports older DBs
         Ok(db.prepare(&format!(
             "SELECT
                  *,
                  c.chat_id,
                  (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                 (SELECT b.chat_id FROM {RECENTLY_DELETED} b WHERE m.ROWID = b.message_id) as deleted_from,
                  (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
              FROM
                  message as m
@@ -149,6 +153,7 @@ impl Table for Message {
                  *,
                  c.chat_id,
                  (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                 (SELECT NULL) as deleted_from,
                  (SELECT 0) as num_replies
              FROM
                  message as m
@@ -162,13 +167,8 @@ impl Table for Message {
 
     fn extract(message: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
         match message {
-            Ok(message) => match message {
-                Ok(msg) => Ok(msg),
-                // TODO: When does this occur?
-                Err(why) => Err(TableError::Messages(why)),
-            },
-            // TODO: When does this occur?
-            Err(why) => Err(TableError::Messages(why)),
+            Ok(Ok(message)) => Ok(message),
+            Err(why) | Ok(Err(why)) => Err(TableError::Messages(why)),
         }
     }
 }
@@ -290,6 +290,7 @@ impl Cacheable for Message {
 
 impl Message {
     /// Get the body text of a message, parsing it as [`streamtyped`](crate::util::streamtyped) data if necessary.
+    /// TODO: resolve the compiler warnings with this method
     pub fn gen_text<'a>(&'a mut self, db: &'a Connection) -> Result<&'a str, MessageError> {
         if self.text.is_none() {
             let body = self.attributed_body(db).ok_or(MessageError::MissingData)?;
@@ -475,6 +476,11 @@ impl Message {
     /// `true` if the message is a SharePlay/FaceTime message, else `false`
     pub fn is_shareplay(&self) -> bool {
         self.item_type == 6
+    }
+
+    /// `true` if the message was deleted and is recoverable, else `false`
+    pub fn is_deleted(&self) -> bool {
+        self.deleted_from.is_some()
     }
 
     /// Get the index of the part of a message a reply is pointing to
@@ -919,6 +925,7 @@ mod tests {
             date_edited: 0,
             chat_id: None,
             num_attachments: 0,
+            deleted_from: None,
             num_replies: 0,
         }
     }
