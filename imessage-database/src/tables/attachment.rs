@@ -223,20 +223,12 @@ impl Attachment {
                     return Some(path_str.to_string());
                 }
                 Platform::iOS => {
-                    let input = match path_str.get(2..) {
-                        Some(input) => input,
-                        None => return None,
-                    };
-
+                    let input = path_str.get(2..)?;
                     let filename = format!(
                         "{:x}",
                         Sha1::digest(format!("MediaDomain-{input}").as_bytes())
                     );
-
-                    let directory = match filename.get(0..2) {
-                        Some(dir) => dir,
-                        None => return None,
-                    };
+                    let directory = filename.get(0..2)?;
 
                     return Some(format!("{}/{directory}/{filename}", db_path.display()));
                 }
