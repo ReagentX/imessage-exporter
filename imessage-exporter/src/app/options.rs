@@ -143,8 +143,7 @@ impl<'a> Options<'a> {
             }
         }
 
-        // Ensure export path is empty or does not contain files of the existing export type
-        // We have to use a PathBuf here because it can be created from data owned by this function in the default state
+        // We have to allocate a PathBuf here because it can be created from data owned by this function in the default state
         let db_path = match user_path {
             Some(path) => PathBuf::from(path),
             None => default_db_path(),
@@ -173,7 +172,8 @@ impl<'a> Options<'a> {
 }
 
 /// Ensure export path is empty or does not contain files of the existing export type
-/// We have to use a PathBuf here because it can be created from data owned by this function in the default state
+/// 
+/// We have to allocate a PathBuf here because it can be created from data owned by this function in the default state
 fn validate_path(
     export_path: Option<&str>,
     export_type: Option<&str>,

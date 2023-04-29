@@ -23,7 +23,7 @@ pub fn home() -> String {
     }
 }
 
-/// Get the default path the iMessage database is located at
+/// Get the default path the MacOS iMessage database is located at (MacOS only)
 ///
 /// # Example:
 ///

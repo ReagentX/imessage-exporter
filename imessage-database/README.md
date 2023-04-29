@@ -1,6 +1,6 @@
 # imessage-database
 
-This library represents interfaces used to interact with the iMessage Database.
+This library provides interfaces to interact with iMessage Databases.
 
 ## Installation
 
@@ -23,7 +23,7 @@ use imessage_database::{
 };
 
 fn iter_messages() -> Result<(), TableError> {
-    /// Create a read-only connection to the iMessage database
+    /// Create a read-only connection to an iMessage database
     let db = get_connection(&default_db_path()).unwrap();
 
     /// Create SQL statement
