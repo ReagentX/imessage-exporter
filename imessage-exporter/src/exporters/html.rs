@@ -425,7 +425,6 @@ impl<'a> Writer<'a> for HTML<'a> {
                         copy_path.push(Uuid::new_v4().to_string());
 
                         // If the image is a HEIC, convert it to PNG, otherwise perform the copy
-                        // TODO: use `if let` binding when eRFC 2497 is merged: https://github.com/rust-lang/rust/issues/53667
                         if (ext == "heic" || ext == "HEIC") && self.config.converter.is_some() {
                             // Write the converted file
                             copy_path.set_extension("jpg");
@@ -436,10 +435,6 @@ impl<'a> Writer<'a> for HTML<'a> {
                             )
                             .is_none()
                             {
-                                // It is kind of odd to use Ok() on the failure here, but the Err()
-                                // this function returns is used for when files are missing, not when
-                                // conversion fails. Perhaps this should be a Result<String, Enum>
-                                // of some kind, but this conversion failure is quite rare.
                                 return Ok(format!(
                                     "Unable to convert and display file: {}",
                                     &attachment.filename()
@@ -453,16 +448,22 @@ impl<'a> Writer<'a> for HTML<'a> {
                                 if let Some(folder) = copy_path.parent() {
                                     if !folder.exists() {
                                         if let Err(why) = create_dir_all(folder) {
-                                            eprintln!("Unable to create {folder:?}: {why}");
+                                            eprintln!("Unable to create {:?}: {}", folder, why);
                                         }
                                     }
                                 }
 
                                 if let Err(why) = copy(qualified_attachment_path, &copy_path) {
-                                    eprintln!("Unable to copy {qualified_attachment_path:?} to {copy_path:?}: {why}")
+                                    eprintln!(
+                                        "Unable to copy {:?} to {:?}: {}",
+                                        qualified_attachment_path, copy_path, why
+                                    )
                                 };
                             } else {
-                                eprintln!("Attachment not found at specified path: {qualified_attachment_path:?}");
+                                eprintln!(
+                                    "Attachment not found at specified path: {:?}",
+                                    qualified_attachment_path
+                                );
                                 return Err(attachment.filename());
                             }
                         }
@@ -480,7 +481,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                             let atime = FileTime::from_last_access_time(&metadata);
 
                             if let Err(why) = set_file_times(&copy_path, atime, mtime) {
-                                eprintln!("Unable to update {copy_path:?} metadata: {why}")
+                                eprintln!("Unable to update {:?} metadata: {}", copy_path, why)
                             }
                         };
 
@@ -503,47 +504,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                         path.file_name()
                             .ok_or(attachment.filename())?
                             .to_str()
-                            .ok_or(attachment.filename())?
-                    )
-                }
-                None => resolved_attachment_path,
-            };
-
-            return Ok(match attachment.mime_type() {
-                MediaType::Image(_) => {
-                    if self.config.options.no_lazy {
-                        format!("<img src=\"{embed_path}\">")
-                    } else {
-                        format!("<img src=\"{embed_path}\" loading=\"lazy\">")
-                    }
-                }
-                MediaType::Video(media_type) => {
-                    // See https://github.com/ReagentX/imessage-exporter/issues/73 for why duplicate the source tag
-                    format!("<video controls> <source src=\"{embed_path}\" type=\"{media_type}\"> <source src=\"{embed_path}\"> </video>")
-                }
-                MediaType::Audio(media_type) => {
-                    format!("<audio controls src=\"{embed_path}\" type=\"{media_type}\" </audio>")
-                }
-                MediaType::Text(_) => {
-                    format!(
-                        "<a href=\"file://{embed_path}\">Click to download {}</a>",
-                        attachment.filename()
-                    )
-                }
-                MediaType::Application(_) => format!(
-                    "<a href=\"file://{embed_path}\">Click to download {}</a>",
-                    attachment.filename()
-                ),
-                MediaType::Unknown => {
-                    format!("<p>Unknown attachment type: {embed_path}</p> <a href=\"file://{embed_path}\">Download</a>")
-                }
-                MediaType::Other(media_type) => {
-                    format!("<p>Unable to embed {media_type} attachments: {embed_path}</p>")
-                }
-            });
-        }
-        Err(attachment.filename())
-    }
+                            .ok_or(attachment
 
     fn format_app(
         &self,
