@@ -13,6 +13,7 @@ use crate::{
     },
     Exporter, HTML, TXT,
 };
+
 use imessage_database::{
     tables::{
         attachment::Attachment,
@@ -197,7 +198,7 @@ impl<'a> Config<'a> {
         println!("\niMessage Database Diagnostics\n");
         Handle::run_diagnostic(&self.db);
         Message::run_diagnostic(&self.db);
-        Attachment::run_diagnostic(&self.db);
+        Attachment::run_diagnostic(&self.db, &self.options.db_path, &self.options.platform);
         ChatToHandle::run_diagnostic(&self.db);
 
         // Global Diagnostics
