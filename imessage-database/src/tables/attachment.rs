@@ -194,6 +194,7 @@ impl Attachment {
         let num_blank_ck: i32 = statement_ck.query_row([], |r| r.get(0)).unwrap_or(0);
 
         let mut total_attachments = 0;
+        let mut null_attachments = 0;
         let mut statement_paths = db
             .prepare(&format!("SELECT filename FROM {ATTACHMENT}"))
             .unwrap();
@@ -205,15 +206,15 @@ impl Attachment {
                 // Keep track of the number of attachments in the table
                 total_attachments += 1;
                 if let Ok(filepath) = path {
-                    !match platform {
+                    match platform {
                         Platform::MacOS => {
-                            Path::new(&Attachment::gen_macos_attachment(filepath)).exists()
+                            !Path::new(&Attachment::gen_macos_attachment(filepath)).exists()
                         }
                         Platform::iOS => {
                             if let Some(parsed_path) =
                                 Attachment::gen_ios_attachment(filepath, db_path)
                             {
-                                return Path::new(&parsed_path).exists();
+                                return !Path::new(&parsed_path).exists();
                             }
                             // This hits if the attachment path doesn't get generated
                             true
@@ -221,6 +222,7 @@ impl Attachment {
                     }
                 } else {
                     // This hits if there is no path provided for the current attachment
+                    null_attachments += 1;
                     true
                 }
             })
@@ -231,11 +233,16 @@ impl Attachment {
             println!("\rMissing attachment data:");
         }
 
-        if missing_files > 0 {
-            println!("    Total attachments: {total_attachments:?}");
+        if missing_files > 0 && total_attachments > 0 {
+            println!("    Total attachments: {total_attachments}");
             println!(
                 "    Missing files: {missing_files:?} ({:.0}%)",
                 (missing_files as f64 / total_attachments as f64) * 100f64
+            );
+            println!("        No path provided: {null_attachments}");
+            println!(
+                "        No file located: {}",
+                missing_files.saturating_sub(null_attachments)
             );
         }
 
