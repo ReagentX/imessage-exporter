@@ -244,7 +244,7 @@ impl Attachment {
         }
     }
 
-    /// Generate a MacOS Path for an attachment
+    /// Generate a MacOS path for an attachment
     fn gen_macos_attachment(path: &str) -> String {
         if path.starts_with('~') {
             return path.replace('~', &home());
