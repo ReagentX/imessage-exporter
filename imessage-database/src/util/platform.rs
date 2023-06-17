@@ -20,8 +20,10 @@ impl Platform {
     pub fn determine(db_path: &Path) -> Self {
         if db_path.join(DEFAULT_PATH_IOS).exists() {
             return Self::iOS;
+        } else if db_path.is_file() {
+            return Self::MacOS;
         }
-        Self::MacOS
+        Self::default()
     }
 
     /// Given user's input, return a variant if the input matches one
