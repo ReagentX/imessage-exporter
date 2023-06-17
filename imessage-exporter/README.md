@@ -54,7 +54,7 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
 
 -a, --platform <MacOS, iOS>
         Specify the platform the database was created on
-        If omitted, the default is MacOS
+        If omitted, the platform type is determined automatically
 
 -o, --export-path <path/to/save/files>
         Specify a custom directory for outputting exported data
