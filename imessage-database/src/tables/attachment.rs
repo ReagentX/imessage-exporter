@@ -176,13 +176,13 @@ impl Attachment {
     /// # Example:
     ///
     /// ```
-    /// use imessage_database::util::dirs::default_db_path;
+    /// use imessage_database::util::{dirs::default_db_path, platform::Platform};
     /// use imessage_database::tables::table::{Diagnostic, get_connection};
     /// use imessage_database::tables::attachment::Attachment;
     ///
     /// let db_path = default_db_path();
     /// let conn = get_connection(&db_path).unwrap();
-    /// Attachment::run_diagnostic(&conn);
+    /// Attachment::run_diagnostic(&conn, &db_path, &Platform::MacOS);
     /// ```
     pub fn run_diagnostic(db: &Connection, db_path: &Path, platform: &Platform) {
         processing();
