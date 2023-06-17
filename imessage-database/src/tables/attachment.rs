@@ -2,7 +2,7 @@
  This module represents common (but not all) columns in the `attachment` table.
 */
 
-use rusqlite::{Connection, Error, Error as E, Result, Row, Statement};
+use rusqlite::{Connection, Error, Result, Row, Statement};
 use sha1::{Digest, Sha1};
 use std::path::{Path, PathBuf};
 
@@ -10,7 +10,7 @@ use crate::{
     error::table::TableError,
     tables::{
         messages::Message,
-        table::{Diagnostic, Table, ATTACHMENT},
+        table::{Table, ATTACHMENT},
     },
     util::{
         dirs::home,
@@ -65,66 +65,6 @@ impl Table for Attachment {
         match attachment {
             Ok(Ok(attachment)) => Ok(attachment),
             Err(why) | Ok(Err(why)) => Err(TableError::Attachment(why)),
-        }
-    }
-}
-
-impl Diagnostic for Attachment {
-    /// Emit diagnostic data for the Attachments table
-    ///
-    /// Get the number of attachments that are missing from the filesystem
-    /// or are missing one of the following columns:
-    ///
-    /// - ck_server_change_token_blob
-    /// - sr_ck_server_change_token_blob
-    ///
-    /// # Example:
-    ///
-    /// ```
-    /// use imessage_database::util::dirs::default_db_path;
-    /// use imessage_database::tables::table::{Diagnostic, get_connection};
-    /// use imessage_database::tables::attachment::Attachment;
-    ///
-    /// let db_path = default_db_path();
-    /// let conn = get_connection(&db_path).unwrap();
-    /// Attachment::run_diagnostic(&conn);
-    /// ```
-    fn run_diagnostic(db: &Connection) {
-        processing();
-        let mut statement_ck = db
-            .prepare(&format!(
-                "SELECT count(rowid) FROM {ATTACHMENT} WHERE typeof(ck_server_change_token_blob) == 'text'"
-            ))
-            .unwrap();
-        let num_blank_ck: i32 = statement_ck.query_row([], |r| r.get(0)).unwrap_or(0);
-
-        let mut statement_sr = db
-            .prepare(&format!("SELECT filename FROM {ATTACHMENT}"))
-            .unwrap();
-        let paths = statement_sr.query_map([], |r| Ok(r.get(0))).unwrap();
-
-        let home = home();
-        let missing_files = paths
-            .filter_map(Result::ok)
-            .filter(|path: &Result<String, E>| {
-                if let Ok(path) = path {
-                    !Path::new(&path.replace('~', &home)).exists()
-                } else {
-                    false
-                }
-            })
-            .count();
-
-        if num_blank_ck > 0 || missing_files > 0 {
-            println!("\rMissing attachment data:");
-        } else {
-            done_processing();
-        }
-        if missing_files > 0 {
-            println!("    Missing files: {missing_files:?}");
-        }
-        if num_blank_ck > 0 {
-            println!("    ck_server_change_token_blob: {num_blank_ck:?}");
         }
     }
 }
@@ -215,26 +155,112 @@ impl Attachment {
     /// iOS Parsing logic source is from [here](https://github.com/nprezant/iMessageBackup/blob/940d001fb7be557d5d57504eb26b3489e88de26e/imessage_backup_tools.py#L83-L85).
     pub fn resolved_attachment_path(&self, platform: &Platform, db_path: &Path) -> Option<String> {
         if let Some(path_str) = &self.filename {
-            match platform {
-                Platform::MacOS => {
-                    if path_str.starts_with('~') {
-                        return Some(path_str.replace('~', &home()));
-                    }
-                    return Some(path_str.to_string());
-                }
-                Platform::iOS => {
-                    let input = path_str.get(2..)?;
-                    let filename = format!(
-                        "{:x}",
-                        Sha1::digest(format!("MediaDomain-{input}").as_bytes())
-                    );
-                    let directory = filename.get(0..2)?;
-
-                    return Some(format!("{}/{directory}/{filename}", db_path.display()));
-                }
-            }
+            return match platform {
+                Platform::MacOS => Some(Attachment::gen_macos_attachment(path_str)),
+                Platform::iOS => Attachment::gen_ios_attachment(path_str, db_path),
+            };
         }
         None
+    }
+
+    /// Emit diagnostic data for the Attachments table
+    ///
+    /// This is outside of [crate::tables::table::Diagnostic] because it requires additional data.
+    ///
+    /// Get the number of attachments that are missing from the filesystem
+    /// or are missing one of the following columns:
+    ///
+    /// - ck_server_change_token_blob
+    /// - sr_ck_server_change_token_blob
+    ///
+    /// # Example:
+    ///
+    /// ```
+    /// use imessage_database::util::dirs::default_db_path;
+    /// use imessage_database::tables::table::{Diagnostic, get_connection};
+    /// use imessage_database::tables::attachment::Attachment;
+    ///
+    /// let db_path = default_db_path();
+    /// let conn = get_connection(&db_path).unwrap();
+    /// Attachment::run_diagnostic(&conn);
+    /// ```
+    pub fn run_diagnostic(db: &Connection, db_path: &Path, platform: &Platform) {
+        processing();
+        let mut statement_ck = db
+            .prepare(&format!(
+                "SELECT count(rowid) FROM {ATTACHMENT} WHERE typeof(ck_server_change_token_blob) == 'text'"
+            ))
+            .unwrap();
+        let num_blank_ck: i32 = statement_ck.query_row([], |r| r.get(0)).unwrap_or(0);
+
+        let mut total_attachments = 0;
+        let mut statement_sr = db
+            .prepare(&format!("SELECT filename FROM {ATTACHMENT}"))
+            .unwrap();
+        let paths = statement_sr.query_map([], |r| Ok(r.get(0))).unwrap();
+
+        let missing_files = paths
+            .filter_map(Result::ok)
+            .filter(|path: &Result<String, Error>| {
+                total_attachments += 1;
+                if let Ok(filepath) = path {
+                    !match platform {
+                        Platform::MacOS => {
+                            Path::new(&Attachment::gen_macos_attachment(filepath)).exists()
+                        }
+                        Platform::iOS => {
+                            if let Some(parsed_path) =
+                                Attachment::gen_ios_attachment(filepath, db_path)
+                            {
+                                // println!("{parsed_path}");
+                                return Path::new(&parsed_path).exists();
+                            }
+                            // This hits if the attachment path doesn't get generated
+                            true
+                        }
+                    }
+                } else {
+                    // This hits if there is no path provided
+                    true
+                }
+            })
+            .count();
+
+        done_processing();
+        if num_blank_ck > 0 || missing_files > 0 {
+            println!("\rMissing attachment data:");
+        }
+        if missing_files > 0 {
+            println!("    Total attachments: {total_attachments:?}");
+            println!(
+                "    Missing files: {missing_files:?} ({:.0}%)",
+                (missing_files as f64 / total_attachments as f64) * 100f64
+            );
+            // println!("    Ratio missing: {:.0}%", (missing_files as f64 / total_attachments as f64) * 100f64);
+        }
+        if num_blank_ck > 0 {
+            println!("    ck_server_change_token_blob: {num_blank_ck:?}");
+        }
+    }
+
+    /// Generate a MacOS Path for an attachment
+    fn gen_macos_attachment(path: &str) -> String {
+        if path.starts_with('~') {
+            return path.replace('~', &home());
+        }
+        path.to_string()
+    }
+
+    /// Generate an iOS path for an attachment
+    fn gen_ios_attachment(file_path: &str, db_path: &Path) -> Option<String> {
+        let input = file_path.get(2..)?;
+        let filename = format!(
+            "{:x}",
+            Sha1::digest(format!("MediaDomain-{input}").as_bytes())
+        );
+        let directory = filename.get(0..2)?;
+
+        Some(format!("{}/{directory}/{filename}", db_path.display()))
     }
 }
 
