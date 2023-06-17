@@ -117,19 +117,6 @@ impl<'a> Options<'a> {
             )));
         }
 
-        // Build the Platform
-        let platform = match platform_type {
-            Some(platform_str) => {
-                Platform::from_cli(platform_str).ok_or(RuntimeError::InvalidOptions(format!(
-                    "{platform_str} is not a valid platform! Must be one of <{SUPPORTED_PLATFORMS}>"
-                )))?
-            }
-            None => {
-                eprintln!("Platform not set, defaulting to {}!", Platform::default());
-                Platform::default()
-            }
-        };
-
         // Build query context
         let mut query_context = QueryContext::default();
         if let Some(start) = start_date {
@@ -147,6 +134,15 @@ impl<'a> Options<'a> {
         let db_path = match user_path {
             Some(path) => PathBuf::from(path),
             None => default_db_path(),
+        };
+
+        // Build the Platform
+        let platform = match platform_type {
+            Some(platform_str) => Platform::from_cli(platform_str).ok_or(
+                RuntimeError::InvalidOptions(format!(
+                "{platform_str} is not a valid platform! Must be one of <{SUPPORTED_PLATFORMS}>")),
+            )?,
+            None => Platform::determine(&db_path),
         };
 
         Ok(Options {
@@ -172,7 +168,7 @@ impl<'a> Options<'a> {
 }
 
 /// Ensure export path is empty or does not contain files of the existing export type
-/// 
+///
 /// We have to allocate a PathBuf here because it can be created from data owned by this function in the default state
 fn validate_path(
     export_path: Option<&str>,
@@ -255,7 +251,7 @@ pub fn from_command_line() -> ArgMatches {
             Arg::new(OPTION_PLATFORM)
             .short('a')
             .long(OPTION_PLATFORM)
-            .help(&*format!("Specify the platform the database was created on\nIf omitted, the default is {}", Platform::default()))
+            .help("Specify the platform the database was created on\nIf omitted, the platform type is determined automatically")
             .takes_value(true)
             .display_order(4)
             .value_name(SUPPORTED_PLATFORMS),
