@@ -165,7 +165,7 @@ impl Attachment {
 
     /// Emit diagnostic data for the Attachments table
     ///
-    /// This is outside of [crate::tables::table::Diagnostic] because it requires additional data.
+    /// This is defined outside of [crate::tables::table::Diagnostic] because it requires additional data.
     ///
     /// Get the number of attachments that are missing from the filesystem
     /// or are missing one of the following columns:
@@ -194,14 +194,15 @@ impl Attachment {
         let num_blank_ck: i32 = statement_ck.query_row([], |r| r.get(0)).unwrap_or(0);
 
         let mut total_attachments = 0;
-        let mut statement_sr = db
+        let mut statement_paths = db
             .prepare(&format!("SELECT filename FROM {ATTACHMENT}"))
             .unwrap();
-        let paths = statement_sr.query_map([], |r| Ok(r.get(0))).unwrap();
+        let paths = statement_paths.query_map([], |r| Ok(r.get(0))).unwrap();
 
         let missing_files = paths
             .filter_map(Result::ok)
             .filter(|path: &Result<String, Error>| {
+                // Keep track of the number of attachments in the table
                 total_attachments += 1;
                 if let Ok(filepath) = path {
                     !match platform {
@@ -212,7 +213,6 @@ impl Attachment {
                             if let Some(parsed_path) =
                                 Attachment::gen_ios_attachment(filepath, db_path)
                             {
-                                // println!("{parsed_path}");
                                 return Path::new(&parsed_path).exists();
                             }
                             // This hits if the attachment path doesn't get generated
@@ -220,7 +220,7 @@ impl Attachment {
                         }
                     }
                 } else {
-                    // This hits if there is no path provided
+                    // This hits if there is no path provided for the current attachment
                     true
                 }
             })
@@ -230,14 +230,15 @@ impl Attachment {
         if num_blank_ck > 0 || missing_files > 0 {
             println!("\rMissing attachment data:");
         }
+
         if missing_files > 0 {
             println!("    Total attachments: {total_attachments:?}");
             println!(
                 "    Missing files: {missing_files:?} ({:.0}%)",
                 (missing_files as f64 / total_attachments as f64) * 100f64
             );
-            // println!("    Ratio missing: {:.0}%", (missing_files as f64 / total_attachments as f64) * 100f64);
         }
+
         if num_blank_ck > 0 {
             println!("    ck_server_change_token_blob: {num_blank_ck:?}");
         }
