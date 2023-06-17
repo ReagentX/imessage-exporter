@@ -2,7 +2,9 @@
  Contains data structures used to describe database platforms
 */
 
-use std::fmt::Display;
+use std::{fmt::Display, path::Path};
+
+use crate::tables::table::DEFAULT_PATH_IOS;
 
 /// Represents the platform that created the database this library connects to
 pub enum Platform {
@@ -14,6 +16,14 @@ pub enum Platform {
 }
 
 impl Platform {
+    /// Try to determine the current platform, defaulting to MacOS.
+    pub fn determine(db_path: &Path) -> Self {
+        if db_path.join(DEFAULT_PATH_IOS).exists() {
+            return Self::iOS;
+        }
+        Self::MacOS
+    }
+
     /// Given user's input, return a variant if the input matches one
     pub fn from_cli(platform: &str) -> Option<Self> {
         match platform.to_lowercase().as_str() {
