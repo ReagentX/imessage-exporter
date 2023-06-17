@@ -23,6 +23,7 @@ impl Platform {
         } else if db_path.is_file() {
             return Self::MacOS;
         }
+        // If we get here, the database is missing; that error is handled in the connection lifecycle
         Self::default()
     }
 
