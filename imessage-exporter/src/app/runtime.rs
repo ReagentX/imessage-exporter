@@ -246,7 +246,7 @@ impl<'a> Config<'a> {
                     TXT::new(self).iter_messages()?;
                 }
                 "html" => {
-                    if !matches!(self.options.copy_format, AttachmentManager::Disabled) {
+                    if !matches!(self.options.attachment_manager, AttachmentManager::Disabled) {
                         create_dir_all(self.attachment_path()).map_err(RuntimeError::DiskError)?;
                     }
                     HTML::new(self).iter_messages()?;
@@ -292,7 +292,7 @@ mod tests {
     fn fake_options<'a>() -> Options<'a> {
         Options {
             db_path: default_db_path(),
-            copy_format: AttachmentManager::Disabled,
+            attachment_manager: AttachmentManager::Disabled,
             diagnostic: false,
             export_type: None,
             export_path: PathBuf::new(),

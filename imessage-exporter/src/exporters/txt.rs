@@ -733,7 +733,7 @@ mod tests {
     pub fn fake_options() -> Options<'static> {
         Options {
             db_path: default_db_path(),
-            copy_format: AttachmentManager::Disabled,
+            attachment_manager: AttachmentManager::Disabled,
             diagnostic: false,
             export_type: None,
             export_path: PathBuf::new(),

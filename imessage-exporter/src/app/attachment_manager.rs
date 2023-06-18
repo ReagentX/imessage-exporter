@@ -13,6 +13,7 @@ use crate::app::{
     runtime::Config,
 };
 
+/// Represents different ways the app can interact with attachment data
 pub enum AttachmentManager {
     /// Do not copy attachments
     Disabled,

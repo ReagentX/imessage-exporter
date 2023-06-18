@@ -42,7 +42,7 @@ pub struct Options<'a> {
     /// Path to database file
     pub db_path: PathBuf,
     /// The method used to copy files
-    pub copy_format: AttachmentManager,
+    pub attachment_manager: AttachmentManager,
     /// If true, emit diagnostic information to stdout
     pub diagnostic: bool,
     /// The type of file we are exporting data to
@@ -157,7 +157,7 @@ impl<'a> Options<'a> {
 
         Ok(Options {
             db_path,
-            copy_format: copy_state,
+            attachment_manager: copy_state,
             diagnostic,
             export_type,
             export_path: validate_path(export_path, export_type)?,

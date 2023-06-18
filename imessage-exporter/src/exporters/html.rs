@@ -407,12 +407,12 @@ impl<'a> Writer<'a> for HTML<'a> {
         match self
             .config
             .options
-            .copy_format
+            .attachment_manager
             .run(message, attachment, self.config)
         {
             Ok(success) => {
                 // Reference attachments in-place if copying is disabled
-                if !matches!(self.config.options.copy_format, AttachmentManager::Disabled) {
+                if !matches!(self.config.options.attachment_manager, AttachmentManager::Disabled) {
                     attachment.copied_path = Some(success);
                 }
             }
@@ -1105,7 +1105,7 @@ mod tests {
     pub fn fake_options() -> Options<'static> {
         Options {
             db_path: default_db_path(),
-            copy_format: AttachmentManager::Disabled,
+            attachment_manager: AttachmentManager::Disabled,
             diagnostic: false,
             export_type: None,
             export_path: PathBuf::new(),
