@@ -694,7 +694,7 @@ impl<'a> TXT<'a> {
 mod tests {
     use std::path::PathBuf;
 
-    use crate::{exporters::exporter::Writer, Config, Exporter, Options, TXT, app::attachment_manager::FileManager};
+    use crate::{exporters::exporter::Writer, Config, Exporter, Options, TXT, app::attachment_manager::AttachmentManager};
     use imessage_database::{
         tables::{attachment::Attachment, messages::Message},
         util::{dirs::default_db_path, platform::Platform, query_context::QueryContext},
@@ -733,7 +733,7 @@ mod tests {
     pub fn fake_options() -> Options<'static> {
         Options {
             db_path: default_db_path(),
-            copy_format: FileManager::Disabled,
+            copy_format: AttachmentManager::Disabled,
             diagnostic: false,
             export_type: None,
             export_path: PathBuf::new(),

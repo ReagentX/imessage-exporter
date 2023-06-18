@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     app::{
-        attachment_manager::FileManager, error::RuntimeError, progress::build_progress_bar_export,
+        attachment_manager::AttachmentManager, error::RuntimeError, progress::build_progress_bar_export,
         runtime::Config,
     },
     exporters::exporter::{BalloonFormatter, Exporter, Writer},
@@ -408,11 +408,11 @@ impl<'a> Writer<'a> for HTML<'a> {
             .config
             .options
             .copy_format
-            .copy(message, attachment, self.config)
+            .run(message, attachment, self.config)
         {
             Ok(success) => {
                 // Reference attachments in-place if copying is disabled
-                if !matches!(self.config.options.copy_format, FileManager::Disabled) {
+                if !matches!(self.config.options.copy_format, AttachmentManager::Disabled) {
                     attachment.copied_path = Some(success);
                 }
             }
@@ -1065,7 +1065,7 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::{
-        app::attachment_manager::FileManager, exporters::exporter::Writer, Config, Exporter, Options, HTML,
+        app::attachment_manager::AttachmentManager, exporters::exporter::Writer, Config, Exporter, Options, HTML,
     };
     use imessage_database::{
         tables::{attachment::Attachment, messages::Message},
@@ -1105,7 +1105,7 @@ mod tests {
     pub fn fake_options() -> Options<'static> {
         Options {
             db_path: default_db_path(),
-            copy_format: FileManager::Disabled,
+            copy_format: AttachmentManager::Disabled,
             diagnostic: false,
             export_type: None,
             export_path: PathBuf::new(),

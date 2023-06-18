@@ -13,7 +13,7 @@ use crate::app::{
     runtime::Config,
 };
 
-pub enum FileManager {
+pub enum AttachmentManager {
     /// Do not copy attachments
     Disabled,
     /// Copy and convert attachments to more compatible formats using a [crate::app::converter::Converter]
@@ -22,7 +22,8 @@ pub enum FileManager {
     Efficient,
 }
 
-impl FileManager {
+impl AttachmentManager {
+    /// Create an instance of the enum given user input
     pub fn from_cli(copy_state: &str) -> Option<Self> {
         match copy_state.to_lowercase().as_str() {
             "compatible" => Some(Self::Compatible),
@@ -32,7 +33,10 @@ impl FileManager {
         }
     }
 
-    pub fn copy<'a>(
+    /// Handle an attachment, copying and converting if requested
+    /// 
+    /// If this method fails at any point, it returns an `Err(&str)` that represents the attachment's filename
+    pub fn run<'a>(
         &'a self,
         message: &Message,
         attachment: &'a mut Attachment,
@@ -44,7 +48,7 @@ impl FileManager {
 
         let from = Path::new(&attachment_path);
 
-        if !matches!(self, FileManager::Disabled) {
+        if !matches!(self, AttachmentManager::Disabled) {
             if !from.exists() {
                 eprintln!("Attachment not found at specified path: {from:?}");
                 return Err(attachment.filename());
@@ -65,7 +69,7 @@ impl FileManager {
             to.set_extension(ext);
 
             match self {
-                FileManager::Compatible => match &config.converter {
+                AttachmentManager::Compatible => match &config.converter {
                     Some(converter) => {
                         // Update extension for conversion
                         to.set_extension("jpg");
@@ -73,8 +77,8 @@ impl FileManager {
                     }
                     None => Self::copy_raw(from, &to),
                 },
-                FileManager::Efficient => Self::copy_raw(from, &to),
-                FileManager::Disabled => unreachable!(),
+                AttachmentManager::Efficient => Self::copy_raw(from, &to),
+                AttachmentManager::Disabled => unreachable!(),
             };
 
             // Update file metadata
@@ -97,6 +101,7 @@ impl FileManager {
         Ok(from.to_path_buf())
     }
 
+    /// Copy a file without altering it
     fn copy_raw(from: &Path, to: &Path) {
         // Ensure the directory tree exists
         if let Some(folder) = to.parent() {
@@ -111,6 +116,7 @@ impl FileManager {
         };
     }
 
+    /// Copy a file, converting if possible
     fn copy_convert(from: &Path, to: &Path, converter: &Converter) {
         let ext = from.extension().unwrap_or_default();
         if ext == "heic" || ext == "HEIC" {
@@ -123,18 +129,18 @@ impl FileManager {
     }
 }
 
-impl Default for FileManager {
+impl Default for AttachmentManager {
     fn default() -> Self {
         Self::Compatible
     }
 }
 
-impl Display for FileManager {
+impl Display for AttachmentManager {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FileManager::Disabled => write!(fmt, "Disabled"),
-            FileManager::Compatible => write!(fmt, "Compatible"),
-            FileManager::Efficient => write!(fmt, "Efficient"),
+            AttachmentManager::Disabled => write!(fmt, "Disabled"),
+            AttachmentManager::Compatible => write!(fmt, "Compatible"),
+            AttachmentManager::Efficient => write!(fmt, "Efficient"),
         }
     }
 }

@@ -11,7 +11,7 @@ use imessage_database::{
     },
 };
 
-use crate::app::{error::RuntimeError, attachment_manager::FileManager};
+use crate::app::{error::RuntimeError, attachment_manager::AttachmentManager};
 
 /// Default export directory name
 pub const DEFAULT_OUTPUT_DIR: &str = "imessage_export";
@@ -42,7 +42,7 @@ pub struct Options<'a> {
     /// Path to database file
     pub db_path: PathBuf,
     /// The method used to copy files
-    pub copy_format: FileManager,
+    pub copy_format: AttachmentManager,
     /// If true, emit diagnostic information to stdout
     pub diagnostic: bool,
     /// The type of file we are exporting data to
@@ -139,11 +139,11 @@ impl<'a> Options<'a> {
 
         // Determine the copy state
         let copy_state = match copy_type {
-            Some(copy) => FileManager::from_cli(copy).ok_or(
+            Some(copy) => AttachmentManager::from_cli(copy).ok_or(
                 RuntimeError::InvalidOptions(format!(
                 "{copy} is not a valid copy type! Must be one of <{SUPPORTED_COPY_FORMATS}>")),
             )?,
-            None => FileManager::default(),
+            None => AttachmentManager::default(),
         };
 
         // Build the Platform
@@ -245,7 +245,7 @@ pub fn from_command_line() -> ArgMatches {
             Arg::new(OPTION_COPY)
             .short('c')
             .long(OPTION_COPY)
-            .help(&*format!("Specify a method to use when copying message attachments\nCompatible will convert HEIC files to JPEG\nEfficient will copy files without converting anything\nIf omitted, default is {}", FileManager::default()))
+            .help(&*format!("Specify a method to use when copying message attachments\nCompatible will convert HEIC files to JPEG\nEfficient will copy files without converting anything\nIf omitted, the default is `{}`", AttachmentManager::default()))
             .takes_value(true)
             .display_order(2)
             .value_name(SUPPORTED_COPY_FORMATS),
