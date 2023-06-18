@@ -9,7 +9,8 @@ use rusqlite::Connection;
 
 use crate::{
     app::{
-        converter::Converter, error::RuntimeError, options::Options, sanitizers::sanitize_filename,
+        converter::Converter, attachment_manager::FileManager, error::RuntimeError, options::Options,
+        sanitizers::sanitize_filename,
     },
     Exporter, HTML, TXT,
 };
@@ -245,8 +246,8 @@ impl<'a> Config<'a> {
                     TXT::new(self).iter_messages()?;
                 }
                 "html" => {
-                    if !self.options.no_copy {
-                        create_dir_all(self.attachment_path()).unwrap();
+                    if !matches!(self.options.copy_format, FileManager::Disabled) {
+                        create_dir_all(self.attachment_path()).map_err(RuntimeError::DiskError)?;
                     }
                     HTML::new(self).iter_messages()?;
                 }
@@ -274,7 +275,7 @@ impl<'a> Config<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Config, Options};
+    use crate::{app::attachment_manager::FileManager, Config, Options};
     use imessage_database::{
         tables::{
             chat::Chat,
@@ -291,7 +292,7 @@ mod tests {
     fn fake_options<'a>() -> Options<'a> {
         Options {
             db_path: default_db_path(),
-            no_copy: false,
+            copy_format: FileManager::Disabled,
             diagnostic: false,
             export_type: None,
             export_path: PathBuf::new(),

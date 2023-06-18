@@ -1,13 +1,13 @@
 use std::{
     collections::HashMap,
-    fs::{copy, create_dir_all, metadata, File},
+    fs::File,
     io::Write,
     path::{Path, PathBuf},
 };
 
 use crate::{
     app::{
-        converter::heic_to_jpeg, error::RuntimeError, progress::build_progress_bar_export,
+        attachment_manager::FileManager, error::RuntimeError, progress::build_progress_bar_export,
         runtime::Config,
     },
     exporters::exporter::{BalloonFormatter, Exporter, Writer},
@@ -35,7 +35,6 @@ use imessage_database::{
     },
 };
 
-use filetime::{set_file_times, FileTime};
 use uuid::Uuid;
 
 const HEADER: &str = "<html>\n<meta charset=\"UTF-8\">";
@@ -405,144 +404,74 @@ impl<'a> Writer<'a> for HTML<'a> {
         attachment: &'a mut Attachment,
         message: &Message,
     ) -> Result<String, &'a str> {
-        if let Some(resolved_attachment_path) = attachment
-            .resolved_attachment_path(&self.config.options.platform, &self.config.options.db_path)
+        match self
+            .config
+            .options
+            .copy_format
+            .copy(message, attachment, self.config)
         {
-            // Perform optional copy + convert
-            if !self.config.options.no_copy {
-                let qualified_attachment_path = Path::new(&resolved_attachment_path);
-
-                match attachment.extension() {
-                    Some(ext) => {
-                        // Create a path to copy the file to
-                        let mut copy_path = self.config.attachment_path();
-
-                        // Add the subdirectory
-                        let sub_dir = self.config.conversation_attachment_path(message.chat_id);
-                        copy_path.push(sub_dir);
-
-                        // Add the random filename
-                        copy_path.push(Uuid::new_v4().to_string());
-
-                        // If the image is a HEIC, convert it to PNG, otherwise perform the copy
-                        // TODO: use `if let` binding when eRFC 2497 is merged: https://github.com/rust-lang/rust/issues/53667
-                        if (ext == "heic" || ext == "HEIC") && self.config.converter.is_some() {
-                            // Write the converted file
-                            copy_path.set_extension("jpg");
-                            if heic_to_jpeg(
-                                qualified_attachment_path,
-                                &copy_path,
-                                self.config.converter.as_ref().unwrap(),
-                            )
-                            .is_none()
-                            {
-                                // It is kind of odd to use Ok() on the failure here, but the Err()
-                                // this function returns is used for when files are missing, not when
-                                // conversion fails. Perhaps this should be a Result<String, Enum>
-                                // of some kind, but this conversion failure is quite rare.
-                                return Ok(format!(
-                                    "Unable to convert and display file: {}",
-                                    &attachment.filename()
-                                ));
-                            }
-                        } else {
-                            // Just copy the file
-                            copy_path.set_extension(ext);
-                            if qualified_attachment_path.exists() {
-                                // Ensure the directory tree exists
-                                if let Some(folder) = copy_path.parent() {
-                                    if !folder.exists() {
-                                        if let Err(why) = create_dir_all(folder) {
-                                            eprintln!("Unable to create {folder:?}: {why}");
-                                        }
-                                    }
-                                }
-
-                                if let Err(why) = copy(qualified_attachment_path, &copy_path) {
-                                    eprintln!("Unable to copy {qualified_attachment_path:?} to {copy_path:?}: {why}")
-                                };
-                            } else {
-                                eprintln!("Attachment not found at specified path: {qualified_attachment_path:?}");
-                                return Err(attachment.filename());
-                            }
-                        }
-
-                        // Set the timestamps on the file's metadata to the original ones
-                        if let Ok(metadata) = metadata(qualified_attachment_path) {
-                            let mtime = match &message.date(&self.config.offset) {
-                                Ok(date) => FileTime::from_unix_time(
-                                    date.timestamp(),
-                                    date.timestamp_subsec_nanos(),
-                                ),
-                                Err(_) => FileTime::from_last_modification_time(&metadata),
-                            };
-
-                            let atime = FileTime::from_last_access_time(&metadata);
-
-                            if let Err(why) = set_file_times(&copy_path, atime, mtime) {
-                                eprintln!("Unable to update {copy_path:?} metadata: {why}")
-                            }
-                        };
-
-                        // Update the attachment
-                        attachment.copied_path = Some(copy_path);
-                    }
-                    None => {
-                        return Err(attachment.filename());
-                    }
+            Ok(success) => {
+                // Reference attachments in-place if copying is disabled
+                if !matches!(self.config.options.copy_format, FileManager::Disabled) {
+                    attachment.copied_path = Some(success);
                 }
             }
+            Err(_) => return Err(attachment.filename()),
+        }
 
-            // Build a relative filepath from the fully qualified one on the `Attachment`
-            let embed_path = match &attachment.copied_path {
-                Some(path) => {
-                    let sub_dir = &self.config.conversation_attachment_path(message.chat_id);
-                    format!(
-                        "{ATTACHMENTS_DIR}/{}/{}",
-                        sub_dir,
-                        path.file_name()
-                            .ok_or(attachment.filename())?
-                            .to_str()
-                            .ok_or(attachment.filename())?
-                    )
-                }
-                None => resolved_attachment_path,
-            };
+        // Build a relative filepath from the fully qualified one on the `Attachment`
+        let embed_path = match &attachment.copied_path {
+            Some(path) => {
+                let sub_dir = &self.config.conversation_attachment_path(message.chat_id);
+                format!(
+                    "{ATTACHMENTS_DIR}/{}/{}",
+                    sub_dir,
+                    path.file_name()
+                        .ok_or(attachment.filename())?
+                        .to_str()
+                        .ok_or(attachment.filename())?
+                )
+            }
+            None => attachment
+                .resolved_attachment_path(
+                    &self.config.options.platform,
+                    &self.config.options.db_path,
+                )
+                .ok_or(attachment.filename())?,
+        };
 
-            return Ok(match attachment.mime_type() {
-                MediaType::Image(_) => {
-                    if self.config.options.no_lazy {
-                        format!("<img src=\"{embed_path}\">")
-                    } else {
-                        format!("<img src=\"{embed_path}\" loading=\"lazy\">")
-                    }
+        return Ok(match attachment.mime_type() {
+            MediaType::Image(_) => {
+                if self.config.options.no_lazy {
+                    format!("<img src=\"{embed_path}\">")
+                } else {
+                    format!("<img src=\"{embed_path}\" loading=\"lazy\">")
                 }
-                MediaType::Video(media_type) => {
-                    // See https://github.com/ReagentX/imessage-exporter/issues/73 for why duplicate the source tag
-                    format!("<video controls> <source src=\"{embed_path}\" type=\"{media_type}\"> <source src=\"{embed_path}\"> </video>")
-                }
-                MediaType::Audio(media_type) => {
-                    format!("<audio controls src=\"{embed_path}\" type=\"{media_type}\" </audio>")
-                }
-                MediaType::Text(_) => {
-                    format!(
-                        "<a href=\"file://{embed_path}\">Click to download {}</a>",
-                        attachment.filename()
-                    )
-                }
-                MediaType::Application(_) => format!(
+            }
+            MediaType::Video(media_type) => {
+                // See https://github.com/ReagentX/imessage-exporter/issues/73 for why duplicate the source tag
+                format!("<video controls> <source src=\"{embed_path}\" type=\"{media_type}\"> <source src=\"{embed_path}\"> </video>")
+            }
+            MediaType::Audio(media_type) => {
+                format!("<audio controls src=\"{embed_path}\" type=\"{media_type}\" </audio>")
+            }
+            MediaType::Text(_) => {
+                format!(
                     "<a href=\"file://{embed_path}\">Click to download {}</a>",
                     attachment.filename()
-                ),
-                MediaType::Unknown => {
-                    format!("<p>Unknown attachment type: {embed_path}</p> <a href=\"file://{embed_path}\">Download</a>")
-                }
-                MediaType::Other(media_type) => {
-                    format!("<p>Unable to embed {media_type} attachments: {embed_path}</p>")
-                }
-            });
-        }
-        Err(attachment.filename())
+                )
+            }
+            MediaType::Application(_) => format!(
+                "<a href=\"file://{embed_path}\">Click to download {}</a>",
+                attachment.filename()
+            ),
+            MediaType::Unknown => {
+                format!("<p>Unknown attachment type: {embed_path}</p> <a href=\"file://{embed_path}\">Download</a>")
+            }
+            MediaType::Other(media_type) => {
+                format!("<p>Unable to embed {media_type} attachments: {embed_path}</p>")
+            }
+        });
     }
 
     fn format_app(
@@ -1135,7 +1064,9 @@ impl<'a> HTML<'a> {
 mod tests {
     use std::path::PathBuf;
 
-    use crate::{exporters::exporter::Writer, Config, Exporter, Options, HTML};
+    use crate::{
+        app::attachment_manager::FileManager, exporters::exporter::Writer, Config, Exporter, Options, HTML,
+    };
     use imessage_database::{
         tables::{attachment::Attachment, messages::Message},
         util::{dirs::default_db_path, platform::Platform, query_context::QueryContext},
@@ -1174,7 +1105,7 @@ mod tests {
     pub fn fake_options() -> Options<'static> {
         Options {
             db_path: default_db_path(),
-            no_copy: true,
+            copy_format: FileManager::Disabled,
             diagnostic: false,
             export_type: None,
             export_path: PathBuf::new(),

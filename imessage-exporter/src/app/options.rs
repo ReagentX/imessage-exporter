@@ -11,14 +11,14 @@ use imessage_database::{
     },
 };
 
-use crate::app::error::RuntimeError;
+use crate::app::{error::RuntimeError, attachment_manager::FileManager};
 
 /// Default export directory name
 pub const DEFAULT_OUTPUT_DIR: &str = "imessage_export";
 
 // CLI Arg Names
 pub const OPTION_DB_PATH: &str = "db-path";
-pub const OPTION_COPY: &str = "no-copy";
+pub const OPTION_COPY: &str = "copy-type";
 pub const OPTION_DIAGNOSTIC: &str = "diagnostics";
 pub const OPTION_EXPORT_TYPE: &str = "format";
 pub const OPTION_EXPORT_PATH: &str = "export-path";
@@ -31,6 +31,7 @@ pub const OPTION_PLATFORM: &str = "platform";
 // Other CLI Text
 pub const SUPPORTED_FILE_TYPES: &str = "txt, html";
 pub const SUPPORTED_PLATFORMS: &str = "MacOS, iOS";
+pub const SUPPORTED_COPY_FORMATS: &str = "compatible, efficient, disabled";
 pub const ABOUT: &str = concat!(
     "The `imessage-exporter` binary exports iMessage data to\n",
     "`txt` or `html` formats. It can also run diagnostics\n",
@@ -40,8 +41,8 @@ pub const ABOUT: &str = concat!(
 pub struct Options<'a> {
     /// Path to database file
     pub db_path: PathBuf,
-    /// If true, do not copy files from ~/Library to the export
-    pub no_copy: bool,
+    /// The method used to copy files
+    pub copy_format: FileManager,
     /// If true, emit diagnostic information to stdout
     pub diagnostic: bool,
     /// The type of file we are exporting data to
@@ -61,7 +62,7 @@ pub struct Options<'a> {
 impl<'a> Options<'a> {
     pub fn from_args(args: &'a ArgMatches) -> Result<Self, RuntimeError> {
         let user_path = args.value_of(OPTION_DB_PATH);
-        let no_copy = args.is_present(OPTION_COPY);
+        let copy_type = args.value_of(OPTION_COPY);
         let diagnostic = args.is_present(OPTION_DIAGNOSTIC);
         let export_type = args.value_of(OPTION_EXPORT_TYPE);
         let export_path = args.value_of(OPTION_EXPORT_PATH);
@@ -84,7 +85,7 @@ impl<'a> Options<'a> {
         }
 
         // Ensure an export type is specified if other export options are selected
-        if no_copy && export_type.is_none() {
+        if copy_type.is_some() && export_type.is_none() {
             return Err(RuntimeError::InvalidOptions(format!(
                 "Option {OPTION_COPY} is enabled, which requires `--{OPTION_EXPORT_TYPE}`"
             )));
@@ -101,7 +102,7 @@ impl<'a> Options<'a> {
         }
 
         // Ensure that if diagnostics are enabled, no other options are
-        if diagnostic && no_copy {
+        if diagnostic && copy_type.is_some() {
             return Err(RuntimeError::InvalidOptions(format!(
                 "Diagnostics are enabled; {OPTION_COPY} is disallowed"
             )));
@@ -136,6 +137,15 @@ impl<'a> Options<'a> {
             None => default_db_path(),
         };
 
+        // Determine the copy state
+        let copy_state = match copy_type {
+            Some(copy) => FileManager::from_cli(copy).ok_or(
+                RuntimeError::InvalidOptions(format!(
+                "{copy} is not a valid copy type! Must be one of <{SUPPORTED_COPY_FORMATS}>")),
+            )?,
+            None => FileManager::default(),
+        };
+
         // Build the Platform
         let platform = match platform_type {
             Some(platform_str) => Platform::from_cli(platform_str).ok_or(
@@ -147,7 +157,7 @@ impl<'a> Options<'a> {
 
         Ok(Options {
             db_path,
-            no_copy,
+            copy_format: copy_state,
             diagnostic,
             export_type,
             export_path: validate_path(export_path, export_type)?,
@@ -233,10 +243,12 @@ pub fn from_command_line() -> ArgMatches {
         )
         .arg(
             Arg::new(OPTION_COPY)
-            .short('n')
+            .short('c')
             .long(OPTION_COPY)
-            .help("Do not copy attachments, instead reference them in-place")
-            .display_order(2),
+            .help(&*format!("Specify a method to use when copying message attachments\nCompatible will convert HEIC files to JPEG\nEfficient will copy files without converting anything\nIf omitted, default is {}", FileManager::default()))
+            .takes_value(true)
+            .display_order(2)
+            .value_name(SUPPORTED_COPY_FORMATS),
         )
         .arg(
             Arg::new(OPTION_DB_PATH)
