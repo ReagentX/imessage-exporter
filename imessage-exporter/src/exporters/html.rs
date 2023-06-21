@@ -7,8 +7,8 @@ use std::{
 
 use crate::{
     app::{
-        attachment_manager::AttachmentManager, error::RuntimeError, progress::build_progress_bar_export,
-        runtime::Config,
+        attachment_manager::AttachmentManager, error::RuntimeError,
+        progress::build_progress_bar_export, runtime::Config,
     },
     exporters::exporter::{BalloonFormatter, Exporter, Writer},
 };
@@ -34,8 +34,6 @@ use imessage_database::{
         plist::parse_plist,
     },
 };
-
-use uuid::Uuid;
 
 const HEADER: &str = "<html>\n<meta charset=\"UTF-8\">";
 const FOOTER: &str = "</html>";
@@ -90,6 +88,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
 
         for message in messages {
             let mut msg = Message::extract(message).map_err(RuntimeError::DatabaseError)?;
+
             // Render the announcement in-line
             if msg.is_announcement() {
                 let announcement = self.format_announcement(&msg);
@@ -412,7 +411,10 @@ impl<'a> Writer<'a> for HTML<'a> {
         {
             Ok(success) => {
                 // Reference attachments in-place if copying is disabled
-                if !matches!(self.config.options.attachment_manager, AttachmentManager::Disabled) {
+                if !matches!(
+                    self.config.options.attachment_manager,
+                    AttachmentManager::Disabled
+                ) {
                     attachment.copied_path = Some(success);
                 }
             }
@@ -1065,7 +1067,8 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::{
-        app::attachment_manager::AttachmentManager, exporters::exporter::Writer, Config, Exporter, Options, HTML,
+        app::attachment_manager::AttachmentManager, exporters::exporter::Writer, Config, Exporter,
+        Options, HTML,
     };
     use imessage_database::{
         tables::{attachment::Attachment, messages::Message},

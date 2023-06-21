@@ -11,14 +11,14 @@ use imessage_database::{
     },
 };
 
-use crate::app::{error::RuntimeError, attachment_manager::AttachmentManager};
+use crate::app::{attachment_manager::AttachmentManager, error::RuntimeError};
 
 /// Default export directory name
 pub const DEFAULT_OUTPUT_DIR: &str = "imessage_export";
 
 // CLI Arg Names
 pub const OPTION_DB_PATH: &str = "db-path";
-pub const OPTION_COPY: &str = "copy-type";
+pub const OPTION_ATTACHMENT_MANAGER: &str = "copy-method";
 pub const OPTION_DIAGNOSTIC: &str = "diagnostics";
 pub const OPTION_EXPORT_TYPE: &str = "format";
 pub const OPTION_EXPORT_PATH: &str = "export-path";
@@ -31,7 +31,7 @@ pub const OPTION_PLATFORM: &str = "platform";
 // Other CLI Text
 pub const SUPPORTED_FILE_TYPES: &str = "txt, html";
 pub const SUPPORTED_PLATFORMS: &str = "MacOS, iOS";
-pub const SUPPORTED_COPY_FORMATS: &str = "compatible, efficient, disabled";
+pub const SUPPORTED_ATTACHMENT_MANAGER_MODES: &str = "compatible, efficient, disabled";
 pub const ABOUT: &str = concat!(
     "The `imessage-exporter` binary exports iMessage data to\n",
     "`txt` or `html` formats. It can also run diagnostics\n",
@@ -41,7 +41,7 @@ pub const ABOUT: &str = concat!(
 pub struct Options<'a> {
     /// Path to database file
     pub db_path: PathBuf,
-    /// The method used to copy files
+    /// The attachment manager type used to copy files
     pub attachment_manager: AttachmentManager,
     /// If true, emit diagnostic information to stdout
     pub diagnostic: bool,
@@ -62,7 +62,7 @@ pub struct Options<'a> {
 impl<'a> Options<'a> {
     pub fn from_args(args: &'a ArgMatches) -> Result<Self, RuntimeError> {
         let user_path = args.value_of(OPTION_DB_PATH);
-        let copy_type = args.value_of(OPTION_COPY);
+        let attachment_manager_type = args.value_of(OPTION_ATTACHMENT_MANAGER);
         let diagnostic = args.is_present(OPTION_DIAGNOSTIC);
         let export_type = args.value_of(OPTION_EXPORT_TYPE);
         let export_path = args.value_of(OPTION_EXPORT_PATH);
@@ -85,9 +85,9 @@ impl<'a> Options<'a> {
         }
 
         // Ensure an export type is specified if other export options are selected
-        if copy_type.is_some() && export_type.is_none() {
+        if attachment_manager_type.is_some() && export_type.is_none() {
             return Err(RuntimeError::InvalidOptions(format!(
-                "Option {OPTION_COPY} is enabled, which requires `--{OPTION_EXPORT_TYPE}`"
+                "Option {OPTION_ATTACHMENT_MANAGER} is enabled, which requires `--{OPTION_EXPORT_TYPE}`"
             )));
         }
         if export_path.is_some() && export_type.is_none() {
@@ -102,9 +102,9 @@ impl<'a> Options<'a> {
         }
 
         // Ensure that if diagnostics are enabled, no other options are
-        if diagnostic && copy_type.is_some() {
+        if diagnostic && attachment_manager_type.is_some() {
             return Err(RuntimeError::InvalidOptions(format!(
-                "Diagnostics are enabled; {OPTION_COPY} is disallowed"
+                "Diagnostics are enabled; {OPTION_ATTACHMENT_MANAGER} is disallowed"
             )));
         }
         if diagnostic && export_path.is_some() {
@@ -137,12 +137,13 @@ impl<'a> Options<'a> {
             None => default_db_path(),
         };
 
-        // Determine the copy state
-        let copy_state = match copy_type {
-            Some(copy) => AttachmentManager::from_cli(copy).ok_or(
-                RuntimeError::InvalidOptions(format!(
-                "{copy} is not a valid copy type! Must be one of <{SUPPORTED_COPY_FORMATS}>")),
-            )?,
+        // Determine the attachment manager mode
+        let attachment_manager_mode = match attachment_manager_type {
+            Some(manager) => {
+                AttachmentManager::from_cli(manager).ok_or(RuntimeError::InvalidOptions(format!(
+                    "{manager} is not a valid attachment manager mode! Must be one of <{SUPPORTED_ATTACHMENT_MANAGER_MODES}>"
+                )))?
+            }
             None => AttachmentManager::default(),
         };
 
@@ -157,7 +158,7 @@ impl<'a> Options<'a> {
 
         Ok(Options {
             db_path,
-            attachment_manager: copy_state,
+            attachment_manager: attachment_manager_mode,
             diagnostic,
             export_type,
             export_path: validate_path(export_path, export_type)?,
@@ -242,13 +243,13 @@ pub fn from_command_line() -> ArgMatches {
             .value_name(SUPPORTED_FILE_TYPES),
         )
         .arg(
-            Arg::new(OPTION_COPY)
+            Arg::new(OPTION_ATTACHMENT_MANAGER)
             .short('c')
-            .long(OPTION_COPY)
+            .long(OPTION_ATTACHMENT_MANAGER)
             .help(&*format!("Specify a method to use when copying message attachments\nCompatible will convert HEIC files to JPEG\nEfficient will copy files without converting anything\nIf omitted, the default is `{}`", AttachmentManager::default()))
             .takes_value(true)
             .display_order(2)
-            .value_name(SUPPORTED_COPY_FORMATS),
+            .value_name(SUPPORTED_ATTACHMENT_MANAGER_MODES),
         )
         .arg(
             Arg::new(OPTION_DB_PATH)

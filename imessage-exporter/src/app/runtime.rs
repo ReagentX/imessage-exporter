@@ -9,8 +9,8 @@ use rusqlite::Connection;
 
 use crate::{
     app::{
-        converter::Converter, attachment_manager::AttachmentManager, error::RuntimeError, options::Options,
-        sanitizers::sanitize_filename,
+        attachment_manager::AttachmentManager, converter::Converter, error::RuntimeError,
+        options::Options, sanitizers::sanitize_filename,
     },
     Exporter, HTML, TXT,
 };

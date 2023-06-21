@@ -35,7 +35,7 @@ impl AttachmentManager {
     }
 
     /// Handle an attachment, copying and converting if requested
-    /// 
+    ///
     /// If this method fails at any point, it returns an `Err(&str)` that represents the attachment's filename
     pub fn run<'a>(
         &'a self,
@@ -132,16 +132,16 @@ impl AttachmentManager {
 
 impl Default for AttachmentManager {
     fn default() -> Self {
-        Self::Compatible
+        Self::Disabled
     }
 }
 
 impl Display for AttachmentManager {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            AttachmentManager::Disabled => write!(fmt, "Disabled"),
-            AttachmentManager::Compatible => write!(fmt, "Compatible"),
-            AttachmentManager::Efficient => write!(fmt, "Efficient"),
+            AttachmentManager::Disabled => write!(fmt, "disabled"),
+            AttachmentManager::Compatible => write!(fmt, "compatible"),
+            AttachmentManager::Efficient => write!(fmt, "efficient"),
         }
     }
 }
