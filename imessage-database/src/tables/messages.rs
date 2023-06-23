@@ -205,15 +205,40 @@ impl Diagnostic for Message {
             ))
             .unwrap();
 
-        let num_dangling: Option<i32> = messages_without_chat
+        let num_dangling: i32 = messages_without_chat
             .query_row([], |r| r.get(0))
-            .unwrap_or(None);
+            .unwrap_or(0);
+
+        let mut messages_in_more_than_one_chat_q = db
+            .prepare(&format!(
+                "
+            SELECT
+                COUNT(*)
+            FROM (
+            SELECT DISTINCT
+                message_id
+              , COUNT(chat_id) AS c
+            FROM {CHAT_MESSAGE_JOIN}
+            GROUP BY
+                message_id
+            HAVING c > 1);
+            "
+            ))
+            .unwrap();
+
+        let messages_in_more_than_one_chat: i32 = messages_in_more_than_one_chat_q
+            .query_row([], |r| r.get(0))
+            .unwrap_or(0);
 
         done_processing();
 
-        if let Some(dangling) = num_dangling {
-            if dangling > 0 {
-                println!("\rMessages not associated with a chat: {dangling}");
+        if num_dangling > 0 || messages_in_more_than_one_chat > 0 {
+            println!("Message diagnostic data:");
+            if num_dangling > 0 {
+                println!("    Messages not associated with a chat: {num_dangling}");
+            }
+            if messages_in_more_than_one_chat > 0 {
+                println!("    Messages belonging to more than one chat: {messages_in_more_than_one_chat}");
             }
         }
     }
