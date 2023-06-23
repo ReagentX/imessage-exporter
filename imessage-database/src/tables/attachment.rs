@@ -186,13 +186,6 @@ impl Attachment {
     /// ```
     pub fn run_diagnostic(db: &Connection, db_path: &Path, platform: &Platform) {
         processing();
-        let mut statement_ck = db
-            .prepare(&format!(
-                "SELECT count(rowid) FROM {ATTACHMENT} WHERE typeof(ck_server_change_token_blob) == 'text'"
-            ))
-            .unwrap();
-        let num_blank_ck: i32 = statement_ck.query_row([], |r| r.get(0)).unwrap_or(0);
-
         let mut total_attachments = 0;
         let mut null_attachments = 0;
         let mut statement_paths = db
@@ -229,25 +222,22 @@ impl Attachment {
             .count();
 
         done_processing();
-        if num_blank_ck > 0 || missing_files > 0 {
-            println!("\rMissing attachment data:");
-        }
 
-        if missing_files > 0 && total_attachments > 0 {
-            println!("    Total attachments: {total_attachments}");
-            println!(
-                "    Missing files: {missing_files:?} ({:.0}%)",
-                (missing_files as f64 / total_attachments as f64) * 100f64
-            );
-            println!("        No path provided: {null_attachments}");
-            println!(
-                "        No file located: {}",
-                missing_files.saturating_sub(null_attachments)
-            );
-        }
+        if missing_files > 0 {
+            println!("\rAttachment diagnostic data:");
 
-        if num_blank_ck > 0 {
-            println!("    ck_server_change_token_blob: {num_blank_ck:?}");
+            if missing_files > 0 && total_attachments > 0 {
+                println!("    Total attachments: {total_attachments}");
+                println!(
+                    "    Missing files: {missing_files:?} ({:.0}%)",
+                    (missing_files as f64 / total_attachments as f64) * 100f64
+                );
+                println!("        No path provided: {null_attachments}");
+                println!(
+                    "        No file located: {}",
+                    missing_files.saturating_sub(null_attachments)
+                );
+            }
         }
     }
 
