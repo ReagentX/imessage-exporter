@@ -42,20 +42,19 @@ impl AttachmentManager {
         message: &Message,
         attachment: &'a mut Attachment,
         config: &Config,
-    ) -> Result<PathBuf, &'a str> {
+    ) -> Option<PathBuf> {
         let attachment_path = attachment
-            .resolved_attachment_path(&config.options.platform, &config.options.db_path)
-            .ok_or(attachment.filename())?;
+            .resolved_attachment_path(&config.options.platform, &config.options.db_path)?;
 
         let from = Path::new(&attachment_path);
 
         if !matches!(self, AttachmentManager::Disabled) {
             if !from.exists() {
                 eprintln!("Attachment not found at specified path: {from:?}");
-                return Err(attachment.filename());
+                return None;
             }
 
-            let ext = from.extension().ok_or(attachment.filename())?;
+            let ext = from.extension()?;
 
             // Create a path to copy the file to
             let mut to = config.attachment_path();
@@ -97,9 +96,9 @@ impl AttachmentManager {
                     eprintln!("Unable to update {to:?} metadata: {why}")
                 }
             }
-            return Ok(to);
+            return Some(to);
         }
-        Ok(from.to_path_buf())
+        Some(from.to_path_buf())
     }
 
     /// Copy a file without altering it

@@ -409,7 +409,7 @@ impl<'a> Writer<'a> for HTML<'a> {
             .attachment_manager
             .run(message, attachment, self.config)
         {
-            Ok(success) => {
+            Some(success) => {
                 // Reference attachments in-place if copying is disabled
                 if !matches!(
                     self.config.options.attachment_manager,
@@ -418,7 +418,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                     attachment.copied_path = Some(success);
                 }
             }
-            Err(_) => return Err(attachment.filename()),
+            None => return Err(attachment.filename()),
         }
 
         // Build a relative filepath from the fully qualified one on the `Attachment`
