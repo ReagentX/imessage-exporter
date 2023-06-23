@@ -6,7 +6,10 @@ use std::{
 };
 
 use crate::{
-    app::{error::RuntimeError, progress::build_progress_bar_export, runtime::Config},
+    app::{
+        attachment_manager::AttachmentManager, error::RuntimeError,
+        progress::build_progress_bar_export, runtime::Config,
+    },
     exporters::exporter::{BalloonFormatter, Exporter, Writer},
 };
 
@@ -282,14 +285,28 @@ impl<'a> Writer<'a> for TXT<'a> {
     fn format_attachment(
         &self,
         attachment: &'a mut Attachment,
-        _: &Message,
+        message: &Message,
     ) -> Result<String, &'a str> {
-        match attachment
-            .resolved_attachment_path(&self.config.options.platform, &self.config.options.db_path)
+        match self
+            .config
+            .options
+            .attachment_manager
+            .run(message, attachment, self.config)
         {
-            Some(filepath) => Ok(filepath),
-            None => Err(attachment.filename()),
+            Some(success) => {
+                // Reference attachments in-place if copying is disabled
+                if !matches!(
+                    self.config.options.attachment_manager,
+                    AttachmentManager::Disabled
+                ) {
+                    attachment.copied_path = Some(success);
+                }
+            }
+            None => return Err(attachment.filename()),
         }
+
+        // Build a relative filepath from the fully qualified one on the `Attachment`
+        Ok(self.config.message_attachment_path(attachment))
     }
 
     fn format_app(
@@ -694,7 +711,10 @@ impl<'a> TXT<'a> {
 mod tests {
     use std::path::PathBuf;
 
-    use crate::{exporters::exporter::Writer, Config, Exporter, Options, TXT, app::attachment_manager::AttachmentManager};
+    use crate::{
+        app::attachment_manager::AttachmentManager, exporters::exporter::Writer, Config, Exporter,
+        Options, TXT,
+    };
     use imessage_database::{
         tables::{attachment::Attachment, messages::Message},
         util::{dirs::default_db_path, platform::Platform, query_context::QueryContext},
