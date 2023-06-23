@@ -88,6 +88,20 @@ impl<'a> Config<'a> {
         String::from(ORPHANED)
     }
 
+    /// Generate a file path for an attachment
+    ///
+    /// If the attachment was copied, use that path
+    /// if not, default to the filename
+    pub fn message_attachment_path(&self, attachment: &Attachment) -> String {
+        // Build a relative filepath from the fully qualified one on the `Attachment`
+        match &attachment.copied_path {
+            Some(path) => path.display().to_string(),
+            None => attachment
+                .resolved_attachment_path(&self.options.platform, &self.options.db_path)
+                .unwrap_or(attachment.filename().to_string()),
+        }
+    }
+
     /// Get a filename for a chat, possibly using cached data.
     ///
     /// If the chat has an assigned name, use that, truncating if necessary.

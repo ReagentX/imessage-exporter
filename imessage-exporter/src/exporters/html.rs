@@ -422,25 +422,7 @@ impl<'a> Writer<'a> for HTML<'a> {
         }
 
         // Build a relative filepath from the fully qualified one on the `Attachment`
-        let embed_path = match &attachment.copied_path {
-            Some(path) => {
-                let sub_dir = &self.config.conversation_attachment_path(message.chat_id);
-                format!(
-                    "{ATTACHMENTS_DIR}/{}/{}",
-                    sub_dir,
-                    path.file_name()
-                        .ok_or(attachment.filename())?
-                        .to_str()
-                        .ok_or(attachment.filename())?
-                )
-            }
-            None => attachment
-                .resolved_attachment_path(
-                    &self.config.options.platform,
-                    &self.config.options.db_path,
-                )
-                .ok_or(attachment.filename())?,
-        };
+        let embed_path = self.config.message_attachment_path(attachment);
 
         return Ok(match attachment.mime_type() {
             MediaType::Image(_) => {
