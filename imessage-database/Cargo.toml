@@ -10,7 +10,7 @@ repository = "https://github.com/ReagentX/imessage-exporter"
 version = "0.0.0"
 
 [dependencies]
-chrono = "0.4.24"
+chrono = "0.4.26"
 plist = "1.4.3"
 rusqlite = {version = "0.29.0", features = ["blob", "bundled"]}
 sha1 = "0.10.5"
