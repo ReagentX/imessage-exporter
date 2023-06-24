@@ -70,7 +70,7 @@ impl Cacheable for Handle {
         // Execute query to build the Handles
         let handles = statement
             .query_map([], |row| Ok(Handle::from_row(row)))
-            .unwrap();
+            .map_err(TableError::Handle)?;
 
         // Iterate over the handles and update the map
         for handle in handles {
@@ -79,7 +79,7 @@ impl Cacheable for Handle {
         }
 
         // Condense contacts that share person_centric_id so their IDs map to the same strings
-        let dupe_contacts = Handle::get_person_id_map(db);
+        let dupe_contacts = Handle::get_person_id_map(db)?;
         for contact in dupe_contacts {
             let (id, new) = contact;
             map.insert(id, new);
@@ -169,7 +169,7 @@ impl Handle {
     /// This method generates a hashmap of each separate item in this table to a combined string
     /// that represents all of the copies, so any handle ID will always map to the same string
     /// for a given chat participant
-    fn get_person_id_map(db: &Connection) -> HashMap<i32, String> {
+    fn get_person_id_map(db: &Connection) -> Result<HashMap<i32, String>, TableError> {
         let mut person_to_id: HashMap<String, HashSet<String>> = HashMap::new();
         let mut row_to_id: HashMap<i32, String> = HashMap::new();
         let mut row_data: Vec<(String, i32, String)> = vec![];
@@ -188,12 +188,12 @@ impl Handle {
             // Cache the results of the query in memory
             let contacts = statement
                 .query_map([], |row| {
-                    let person_centric_id: String = row.get(0).unwrap();
-                    let rowid: i32 = row.get(1).unwrap();
-                    let id: String = row.get(2).unwrap();
+                    let person_centric_id: String = row.get(0)?;
+                    let rowid: i32 = row.get(1)?;
+                    let id: String = row.get(2)?;
                     Ok((person_centric_id, rowid, id))
                 })
-                .unwrap();
+                .map_err(TableError::Handle)?;
 
             for contact in contacts {
                 match contact {
@@ -232,7 +232,7 @@ impl Handle {
             }
         }
 
-        row_to_id
+        Ok(row_to_id)
     }
 }
 

@@ -16,6 +16,7 @@ use crate::{
 };
 
 use imessage_database::{
+    error::table::TableError,
     tables::{
         attachment::Attachment,
         chat::Chat,
@@ -209,12 +210,12 @@ impl<'a> Config<'a> {
     }
 
     /// Handles diagnostic tests for database
-    fn run_diagnostic(&self) {
+    fn run_diagnostic(&self) -> Result<(), TableError> {
         println!("\niMessage Database Diagnostics\n");
-        Handle::run_diagnostic(&self.db);
-        Message::run_diagnostic(&self.db);
-        Attachment::run_diagnostic(&self.db, &self.options.db_path, &self.options.platform);
-        ChatToHandle::run_diagnostic(&self.db);
+        Handle::run_diagnostic(&self.db)?;
+        Message::run_diagnostic(&self.db)?;
+        Attachment::run_diagnostic(&self.db, &self.options.db_path, &self.options.platform)?;
+        ChatToHandle::run_diagnostic(&self.db)?;
 
         // Global Diagnostics
         let unique_handles: HashSet<i32> =
@@ -229,6 +230,7 @@ impl<'a> Config<'a> {
         if duplicated_chats > 0 {
             println!("Duplicated chats: {duplicated_chats}");
         }
+        Ok(())
     }
 
     /// Start the app given the provided set of options. This will either run
@@ -249,7 +251,7 @@ impl<'a> Config<'a> {
     /// ```
     pub fn start(&self) -> Result<(), RuntimeError> {
         if self.options.diagnostic {
-            self.run_diagnostic();
+            self.run_diagnostic().map_err(RuntimeError::DatabaseError)?;
         } else if self.options.export_type.is_some() {
             // Ensure the path we want to export to exists
             create_dir_all(&self.options.export_path).map_err(RuntimeError::DiskError)?;

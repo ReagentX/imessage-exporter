@@ -69,7 +69,7 @@ impl Cacheable for Chat {
 
         let chats = statement
             .query_map([], |row| Ok(Chat::from_row(row)))
-            .unwrap();
+            .map_err(TableError::Chat)?;
 
         for chat in chats {
             let result = Chat::extract(chat)?;

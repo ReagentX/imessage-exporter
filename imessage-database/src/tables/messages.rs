@@ -282,7 +282,7 @@ impl Cacheable for Message {
             // Execute query to build the Handles
             let messages = statement
                 .query_map([], |row| Ok(Message::from_row(row)))
-                .unwrap();
+                .map_err(TableError::Messages)?;
 
             // Iterate over the messages and update the map
             for reaction in messages {
@@ -580,6 +580,7 @@ impl Message {
                      *,
                      c.chat_id,
                      (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                     (SELECT b.chat_id FROM {RECENTLY_DELETED} b WHERE m.ROWID = b.message_id) as deleted_from,
                      (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
                  FROM
                      message as m
@@ -594,6 +595,7 @@ impl Message {
                      *,
                      c.chat_id,
                      (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                     (SELECT NULL) as deleted_from,
                      (SELECT 0) as num_replies
                  FROM
                      message as m
@@ -656,12 +658,12 @@ impl Message {
                         m.date;
                     ",
                 filter.join(",")
-            )).unwrap();
+            )).map_err(TableError::Messages)?;
 
             // Execute query to build the Handles
             let messages = statement
                 .query_map([], |row| Ok(Message::from_row(row)))
-                .unwrap();
+                .map_err(TableError::Messages)?;
 
             for message in messages {
                 let msg = Message::extract(message)?;
@@ -698,11 +700,11 @@ impl Message {
                      m.date;
                 ", self.guid
             ))
-            .unwrap();
+            .map_err(TableError::Messages)?;
 
             let iter = statement
                 .query_map([], |row| Ok(Message::from_row(row)))
-                .unwrap();
+                .map_err(TableError::Messages)?;
 
             for message in iter {
                 let m = Message::extract(message)?;
