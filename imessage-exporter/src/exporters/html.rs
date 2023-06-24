@@ -68,6 +68,9 @@ impl<'a> Exporter<'a> for HTML<'a> {
         // Write orphaned file headers
         HTML::write_headers(&self.orphaned);
 
+        // Keep track of current message ROWID
+        let mut current_message_row = -1;
+
         // Set up progress bar
         let mut current_message = 0;
         let total_messages =
@@ -85,6 +88,14 @@ impl<'a> Exporter<'a> for HTML<'a> {
 
         for message in messages {
             let mut msg = Message::extract(message).map_err(RuntimeError::DatabaseError)?;
+
+            // Early escape if we try and render the same message GUID twice
+            // See https://github.com/ReagentX/imessage-exporter/issues/135 for rationale
+            if msg.rowid == current_message_row {
+                current_message += 1;
+                continue;
+            }
+            current_message_row = msg.rowid;
 
             // Render the announcement in-line
             if msg.is_announcement() {
