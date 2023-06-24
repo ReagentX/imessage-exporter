@@ -62,7 +62,7 @@ impl Cacheable for ChatToHandle {
         let mut rows = ChatToHandle::get(db)?;
         let mappings = rows
             .query_map([], |row| Ok(ChatToHandle::from_row(row)))
-            .unwrap();
+            .map_err(TableError::ChatToHandle)?;
 
         for mapping in mappings {
             let joiner = ChatToHandle::extract(mapping)?;

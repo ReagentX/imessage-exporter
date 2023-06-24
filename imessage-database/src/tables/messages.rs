@@ -282,7 +282,7 @@ impl Cacheable for Message {
             // Execute query to build the Handles
             let messages = statement
                 .query_map([], |row| Ok(Message::from_row(row)))
-                .unwrap();
+                .map_err(TableError::Messages)?;
 
             // Iterate over the messages and update the map
             for reaction in messages {
@@ -661,7 +661,7 @@ impl Message {
             // Execute query to build the Handles
             let messages = statement
                 .query_map([], |row| Ok(Message::from_row(row)))
-                .unwrap();
+                .map_err(TableError::Messages)?;
 
             for message in messages {
                 let msg = Message::extract(message)?;
@@ -702,7 +702,7 @@ impl Message {
 
             let iter = statement
                 .query_map([], |row| Ok(Message::from_row(row)))
-                .unwrap();
+                .map_err(TableError::Messages)?;
 
             for message in iter {
                 let m = Message::extract(message)?;

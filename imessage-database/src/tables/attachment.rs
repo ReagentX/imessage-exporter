@@ -87,7 +87,7 @@ impl Attachment {
 
             let iter = statement
                 .query_map([], |row| Ok(Attachment::from_row(row)))
-                .unwrap();
+                .map_err(TableError::Attachment)?;
 
             for attachment in iter {
                 let m = Attachment::extract(attachment)?;
@@ -184,14 +184,20 @@ impl Attachment {
     /// let conn = get_connection(&db_path).unwrap();
     /// Attachment::run_diagnostic(&conn, &db_path, &Platform::MacOS);
     /// ```
-    pub fn run_diagnostic(db: &Connection, db_path: &Path, platform: &Platform) {
+    pub fn run_diagnostic(
+        db: &Connection,
+        db_path: &Path,
+        platform: &Platform,
+    ) -> Result<(), TableError> {
         processing();
         let mut total_attachments = 0;
         let mut null_attachments = 0;
         let mut statement_paths = db
             .prepare(&format!("SELECT filename FROM {ATTACHMENT}"))
-            .unwrap();
-        let paths = statement_paths.query_map([], |r| Ok(r.get(0))).unwrap();
+            .map_err(TableError::Attachment)?;
+        let paths = statement_paths
+            .query_map([], |r| Ok(r.get(0)))
+            .map_err(TableError::Attachment)?;
 
         let missing_files = paths
             .filter_map(Result::ok)
@@ -239,6 +245,7 @@ impl Attachment {
                 );
             }
         }
+        Ok(())
     }
 
     /// Generate a MacOS path for an attachment

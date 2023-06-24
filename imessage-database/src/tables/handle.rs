@@ -70,7 +70,7 @@ impl Cacheable for Handle {
         // Execute query to build the Handles
         let handles = statement
             .query_map([], |row| Ok(Handle::from_row(row)))
-            .unwrap();
+            .map_err(TableError::Handle)?;
 
         // Iterate over the handles and update the map
         for handle in handles {
