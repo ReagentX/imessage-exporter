@@ -35,7 +35,7 @@ impl AttachmentManager {
     }
 
     /// Handle an attachment, copying and converting if requested
-    /// 
+    ///
     /// If copied, update attachment's `copied_path`
     pub fn handle_attachment<'a>(
         &'a self,
@@ -43,10 +43,11 @@ impl AttachmentManager {
         attachment: &'a mut Attachment,
         config: &Config,
     ) -> Option<()> {
+        // Resolve the path to the attachment
+        let attachment_path = attachment
+            .resolved_attachment_path(&config.options.platform, &config.options.db_path)?;
+
         if !matches!(self, AttachmentManager::Disabled) {
-            // Resolve the path to the attachment
-            let attachment_path = attachment
-                .resolved_attachment_path(&config.options.platform, &config.options.db_path)?;
             let from = Path::new(&attachment_path);
 
             // Ensure the file exists at the specified location
