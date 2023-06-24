@@ -83,7 +83,7 @@ impl Attachment {
                     ",
                     msg.rowid
                 ))
-                .unwrap();
+                .map_err(TableError::Attachment)?;
 
             let iter = statement
                 .query_map([], |row| Ok(Attachment::from_row(row)))
