@@ -1,7 +1,7 @@
 use std::{
     fmt::Display,
     fs::{copy, create_dir_all, metadata},
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use filetime::{set_file_times, FileTime};
@@ -35,20 +35,21 @@ impl AttachmentManager {
     }
 
     /// Handle an attachment, copying and converting if requested
-    ///
-    /// If this method fails at any point, it returns an `Err(&str)` that represents the attachment's filename
-    pub fn run<'a>(
+    /// 
+    /// If copied, update attachment's `copied_path`
+    pub fn handle_attachment<'a>(
         &'a self,
         message: &Message,
         attachment: &'a mut Attachment,
         config: &Config,
-    ) -> Option<PathBuf> {
-        let attachment_path = attachment
-            .resolved_attachment_path(&config.options.platform, &config.options.db_path)?;
-
-        let from = Path::new(&attachment_path);
-
+    ) -> Option<()> {
         if !matches!(self, AttachmentManager::Disabled) {
+            // Resolve the path to the attachment
+            let attachment_path = attachment
+                .resolved_attachment_path(&config.options.platform, &config.options.db_path)?;
+            let from = Path::new(&attachment_path);
+
+            // Ensure the file exists at the specified location
             if !from.exists() {
                 eprintln!("Attachment not found at specified path: {from:?}");
                 return None;
@@ -96,9 +97,9 @@ impl AttachmentManager {
                     eprintln!("Unable to update {to:?} metadata: {why}")
                 }
             }
-            return Some(to);
+            attachment.copied_path = Some(to);
         }
-        Some(from.to_path_buf())
+        Some(())
     }
 
     /// Copy a file without altering it

@@ -6,10 +6,7 @@ use std::{
 };
 
 use crate::{
-    app::{
-        attachment_manager::AttachmentManager, error::RuntimeError,
-        progress::build_progress_bar_export, runtime::Config,
-    },
+    app::{error::RuntimeError, progress::build_progress_bar_export, runtime::Config},
     exporters::exporter::{BalloonFormatter, Exporter, Writer},
 };
 
@@ -287,23 +284,12 @@ impl<'a> Writer<'a> for TXT<'a> {
         attachment: &'a mut Attachment,
         message: &Message,
     ) -> Result<String, &'a str> {
-        match self
-            .config
+        // Copy the file, if requested
+        self.config
             .options
             .attachment_manager
-            .run(message, attachment, self.config)
-        {
-            Some(success) => {
-                // Reference attachments in-place if copying is disabled
-                if !matches!(
-                    self.config.options.attachment_manager,
-                    AttachmentManager::Disabled
-                ) {
-                    attachment.copied_path = Some(success);
-                }
-            }
-            None => return Err(attachment.filename()),
-        }
+            .handle_attachment(message, attachment, self.config)
+            .ok_or(attachment.filename())?;
 
         // Build a relative filepath from the fully qualified one on the `Attachment`
         Ok(self.config.message_attachment_path(attachment))
