@@ -140,15 +140,17 @@ impl Diagnostic for Handle {
     /// let conn = get_connection(&db_path).unwrap();
     /// Handle::run_diagnostic(&conn);
     /// ```
-    fn run_diagnostic(db: &Connection) {
+    fn run_diagnostic(db: &Connection) -> Result<(), TableError> {
         processing();
         let query = concat!(
             "SELECT COUNT(DISTINCT person_centric_id) ",
             "FROM handle ",
             "WHERE person_centric_id NOT NULL"
         );
-        let mut rows = db.prepare(query).unwrap();
-        let count_dupes: Option<i32> = rows.query_row([], |r| r.get(0)).unwrap_or(None);
+        let mut rows = db.prepare(query).map_err(TableError::Messages)?;
+        let count_dupes: Option<i32> = rows
+            .query_row([], |r| r.get(0))
+            .map_err(TableError::Handle)?;
 
         done_processing();
 
@@ -157,6 +159,7 @@ impl Diagnostic for Handle {
                 println!("\rContacts with more than one ID: {dupes}");
             }
         }
+        Ok(())
     }
 }
 

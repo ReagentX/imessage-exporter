@@ -11,8 +11,8 @@ version = "0.0.0"
 
 [dependencies]
 clap = {version = "3.2.23", features = ["cargo"]}
-filetime = "0.2.20"
+filetime = "0.2.21"
 imessage-database = {path = "../imessage-database"}
-indicatif = "0.17.3"
+indicatif = "0.17.5"
 rusqlite = {version = "0.29.0", features = ["blob", "bundled"]}
-uuid = {version = "1.3.0", features = ["v4", "fast-rng"]}
+uuid = {version = "1.3.4", features = ["v4", "fast-rng"]}

@@ -282,14 +282,17 @@ impl<'a> Writer<'a> for TXT<'a> {
     fn format_attachment(
         &self,
         attachment: &'a mut Attachment,
-        _: &Message,
+        message: &Message,
     ) -> Result<String, &'a str> {
-        match attachment
-            .resolved_attachment_path(&self.config.options.platform, &self.config.options.db_path)
-        {
-            Some(filepath) => Ok(filepath),
-            None => Err(attachment.filename()),
-        }
+        // Copy the file, if requested
+        self.config
+            .options
+            .attachment_manager
+            .handle_attachment(message, attachment, self.config)
+            .ok_or(attachment.filename())?;
+
+        // Build a relative filepath from the fully qualified one on the `Attachment`
+        Ok(self.config.message_attachment_path(attachment))
     }
 
     fn format_app(
@@ -694,7 +697,10 @@ impl<'a> TXT<'a> {
 mod tests {
     use std::path::PathBuf;
 
-    use crate::{exporters::exporter::Writer, Config, Exporter, Options, TXT};
+    use crate::{
+        app::attachment_manager::AttachmentManager, exporters::exporter::Writer, Config, Exporter,
+        Options, TXT,
+    };
     use imessage_database::{
         tables::{attachment::Attachment, messages::Message},
         util::{dirs::default_db_path, platform::Platform, query_context::QueryContext},
@@ -733,7 +739,7 @@ mod tests {
     pub fn fake_options() -> Options<'static> {
         Options {
             db_path: default_db_path(),
-            no_copy: false,
+            attachment_manager: AttachmentManager::Disabled,
             diagnostic: false,
             export_type: None,
             export_path: PathBuf::new(),
