@@ -580,6 +580,7 @@ impl Message {
                      *,
                      c.chat_id,
                      (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                     (SELECT b.chat_id FROM {RECENTLY_DELETED} b WHERE m.ROWID = b.message_id) as deleted_from,
                      (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
                  FROM
                      message as m
@@ -594,6 +595,7 @@ impl Message {
                      *,
                      c.chat_id,
                      (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                     (SELECT NULL) as deleted_from,
                      (SELECT 0) as num_replies
                  FROM
                      message as m
