@@ -658,7 +658,7 @@ impl Message {
                         m.date;
                     ",
                 filter.join(",")
-            )).unwrap();
+            )).map_err(TableError::Messages)?;
 
             // Execute query to build the Handles
             let messages = statement
@@ -700,7 +700,7 @@ impl Message {
                      m.date;
                 ", self.guid
             ))
-            .unwrap();
+            .map_err(TableError::Messages)?;
 
             let iter = statement
                 .query_map([], |row| Ok(Message::from_row(row)))
