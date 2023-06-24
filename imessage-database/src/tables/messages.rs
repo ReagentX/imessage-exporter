@@ -187,7 +187,7 @@ impl Diagnostic for Message {
     /// let conn = get_connection(&db_path).unwrap();
     /// Message::run_diagnostic(&conn);
     /// ```
-    fn run_diagnostic(db: &Connection) {
+    fn run_diagnostic(db: &Connection) -> Result<(), TableError> {
         processing();
         let mut messages_without_chat = db
             .prepare(&format!(
@@ -203,7 +203,7 @@ impl Diagnostic for Message {
                 m.date
             "
             ))
-            .unwrap();
+            .map_err(TableError::Messages)?;
 
         let num_dangling: i32 = messages_without_chat
             .query_row([], |r| r.get(0))
@@ -224,7 +224,7 @@ impl Diagnostic for Message {
             HAVING c > 1);
             "
             ))
-            .unwrap();
+            .map_err(TableError::Messages)?;
 
         let messages_in_more_than_one_chat: i32 = messages_in_more_than_one_chat_q
             .query_row([], |r| r.get(0))
@@ -241,6 +241,7 @@ impl Diagnostic for Message {
                 println!("    Messages belonging to more than one chat: {messages_in_more_than_one_chat}");
             }
         }
+        Ok(())
     }
 }
 
