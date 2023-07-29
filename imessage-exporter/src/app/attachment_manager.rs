@@ -5,7 +5,10 @@ use std::{
 };
 
 use filetime::{set_file_times, FileTime};
-use imessage_database::tables::{attachment::Attachment, messages::Message};
+use imessage_database::{
+    tables::{attachment::Attachment, messages::Message},
+    util::platform::Platform,
+};
 use uuid::Uuid;
 
 use crate::app::{
@@ -56,8 +59,6 @@ impl AttachmentManager {
                 return None;
             }
 
-            let ext = from.extension()?;
-
             // Create a path to copy the file to
             let mut to = config.attachment_path();
 
@@ -68,7 +69,8 @@ impl AttachmentManager {
             // Add a random filename
             to.push(Uuid::new_v4().to_string());
 
-            to.set_extension(ext);
+            // Set the new file's extension to the original one
+            to.set_extension(attachment.extension()?);
 
             match self {
                 AttachmentManager::Compatible => match &config.converter {
