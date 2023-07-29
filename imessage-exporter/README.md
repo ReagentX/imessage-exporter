@@ -43,11 +43,11 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
 -f, --format <txt, html>
         Specify a single file format to export messages into
 
--c, --copy-type <compatible, efficient, disabled>
+-c, --copy-method <compatible, efficient, disabled>
         Specify a method to use when copying message attachments
         Compatible will convert HEIC files to JPEG
         Efficient will copy files without converting anything
-        If omitted, the default is `Compatible`
+        If omitted, the default is `disabled`
 
 -p, --db-path <path/to/source>
         Specify a custom path for the iMessage database location
