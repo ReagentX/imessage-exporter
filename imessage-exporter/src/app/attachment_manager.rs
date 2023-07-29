@@ -5,10 +5,7 @@ use std::{
 };
 
 use filetime::{set_file_times, FileTime};
-use imessage_database::{
-    tables::{attachment::Attachment, messages::Message},
-    util::platform::Platform,
-};
+use imessage_database::tables::{attachment::Attachment, messages::Message};
 use uuid::Uuid;
 
 use crate::app::{
