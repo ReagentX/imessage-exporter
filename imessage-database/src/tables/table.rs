@@ -39,7 +39,7 @@ pub trait Deduplicate {
 /// Defines behavior for printing diagnostic information for a table
 pub trait Diagnostic {
     /// Emit diagnostic data about the table to `stdout`
-    fn run_diagnostic(db: &Connection);
+    fn run_diagnostic(db: &Connection) -> Result<(), TableError>;
 }
 
 /// Get a connection to the iMessage SQLite database

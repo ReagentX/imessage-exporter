@@ -62,7 +62,7 @@ impl Cacheable for ChatToHandle {
         let mut rows = ChatToHandle::get(db)?;
         let mappings = rows
             .query_map([], |row| Ok(ChatToHandle::from_row(row)))
-            .unwrap();
+            .map_err(TableError::ChatToHandle)?;
 
         for mapping in mappings {
             let joiner = ChatToHandle::extract(mapping)?;
@@ -128,16 +128,16 @@ impl Diagnostic for ChatToHandle {
     /// let conn = get_connection(&db_path).unwrap();
     /// ChatToHandle::run_diagnostic(&conn);
     /// ```
-    fn run_diagnostic(db: &Connection) {
+    fn run_diagnostic(db: &Connection) -> Result<(), TableError> {
         processing();
 
         // Get the Chat IDs that are associated with messages
         let mut statement_message_chats = db
             .prepare(&format!("SELECT DISTINCT chat_id from {CHAT_MESSAGE_JOIN}"))
-            .unwrap();
+            .map_err(TableError::ChatToHandle)?;
         let statement_message_chat_rows = statement_message_chats
             .query_map([], |row: &Row| -> Result<i32> { row.get(0) })
-            .unwrap();
+            .map_err(TableError::ChatToHandle)?;
         let mut unique_chats_from_messages: HashSet<i32> = HashSet::new();
         statement_message_chat_rows.into_iter().for_each(|row| {
             unique_chats_from_messages.insert(row.unwrap());
@@ -146,10 +146,10 @@ impl Diagnostic for ChatToHandle {
         // Get the Chat IDs that are associated with handles
         let mut statement_handle_chats = db
             .prepare(&format!("SELECT DISTINCT chat_id from {CHAT_HANDLE_JOIN}"))
-            .unwrap();
+            .map_err(TableError::ChatToHandle)?;
         let statement_handle_chat_rows = statement_handle_chats
             .query_map([], |row: &Row| -> Result<i32> { row.get(0) })
-            .unwrap();
+            .map_err(TableError::ChatToHandle)?;
         let mut unique_chats_from_handles: HashSet<i32> = HashSet::new();
         statement_handle_chat_rows.into_iter().for_each(|row| {
             unique_chats_from_handles.insert(row.unwrap());
@@ -164,5 +164,7 @@ impl Diagnostic for ChatToHandle {
         if chats_with_no_handles > 0 {
             println!("\rChats with no handles: {chats_with_no_handles:?}");
         }
+
+        Ok(())
     }
 }

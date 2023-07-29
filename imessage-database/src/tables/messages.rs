@@ -187,7 +187,7 @@ impl Diagnostic for Message {
     /// let conn = get_connection(&db_path).unwrap();
     /// Message::run_diagnostic(&conn);
     /// ```
-    fn run_diagnostic(db: &Connection) {
+    fn run_diagnostic(db: &Connection) -> Result<(), TableError> {
         processing();
         let mut messages_without_chat = db
             .prepare(&format!(
@@ -203,19 +203,45 @@ impl Diagnostic for Message {
                 m.date
             "
             ))
-            .unwrap();
+            .map_err(TableError::Messages)?;
 
-        let num_dangling: Option<i32> = messages_without_chat
+        let num_dangling: i32 = messages_without_chat
             .query_row([], |r| r.get(0))
-            .unwrap_or(None);
+            .unwrap_or(0);
+
+        let mut messages_in_more_than_one_chat_q = db
+            .prepare(&format!(
+                "
+            SELECT
+                COUNT(*)
+            FROM (
+            SELECT DISTINCT
+                message_id
+              , COUNT(chat_id) AS c
+            FROM {CHAT_MESSAGE_JOIN}
+            GROUP BY
+                message_id
+            HAVING c > 1);
+            "
+            ))
+            .map_err(TableError::Messages)?;
+
+        let messages_in_more_than_one_chat: i32 = messages_in_more_than_one_chat_q
+            .query_row([], |r| r.get(0))
+            .unwrap_or(0);
 
         done_processing();
 
-        if let Some(dangling) = num_dangling {
-            if dangling > 0 {
-                println!("\rMessages not associated with a chat: {dangling}");
+        if num_dangling > 0 || messages_in_more_than_one_chat > 0 {
+            println!("Message diagnostic data:");
+            if num_dangling > 0 {
+                println!("    Messages not associated with a chat: {num_dangling}");
+            }
+            if messages_in_more_than_one_chat > 0 {
+                println!("    Messages belonging to more than one chat: {messages_in_more_than_one_chat}");
             }
         }
+        Ok(())
     }
 }
 
@@ -256,7 +282,7 @@ impl Cacheable for Message {
             // Execute query to build the Handles
             let messages = statement
                 .query_map([], |row| Ok(Message::from_row(row)))
-                .unwrap();
+                .map_err(TableError::Messages)?;
 
             // Iterate over the messages and update the map
             for reaction in messages {
@@ -554,6 +580,7 @@ impl Message {
                      *,
                      c.chat_id,
                      (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                     (SELECT b.chat_id FROM {RECENTLY_DELETED} b WHERE m.ROWID = b.message_id) as deleted_from,
                      (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
                  FROM
                      message as m
@@ -568,6 +595,7 @@ impl Message {
                      *,
                      c.chat_id,
                      (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                     (SELECT NULL) as deleted_from,
                      (SELECT 0) as num_replies
                  FROM
                      message as m
@@ -630,12 +658,12 @@ impl Message {
                         m.date;
                     ",
                 filter.join(",")
-            )).unwrap();
+            )).map_err(TableError::Messages)?;
 
             // Execute query to build the Handles
             let messages = statement
                 .query_map([], |row| Ok(Message::from_row(row)))
-                .unwrap();
+                .map_err(TableError::Messages)?;
 
             for message in messages {
                 let msg = Message::extract(message)?;
@@ -672,11 +700,11 @@ impl Message {
                      m.date;
                 ", self.guid
             ))
-            .unwrap();
+            .map_err(TableError::Messages)?;
 
             let iter = statement
                 .query_map([], |row| Ok(Message::from_row(row)))
-                .unwrap();
+                .map_err(TableError::Messages)?;
 
             for message in iter {
                 let m = Message::extract(message)?;

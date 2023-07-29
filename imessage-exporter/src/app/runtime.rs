@@ -9,11 +9,14 @@ use rusqlite::Connection;
 
 use crate::{
     app::{
-        converter::Converter, error::RuntimeError, options::Options, sanitizers::sanitize_filename,
+        attachment_manager::AttachmentManager, converter::Converter, error::RuntimeError,
+        options::Options, sanitizers::sanitize_filename,
     },
     Exporter, HTML, TXT,
 };
+
 use imessage_database::{
+    error::table::TableError,
     tables::{
         attachment::Attachment,
         chat::Chat,
@@ -84,6 +87,20 @@ impl<'a> Config<'a> {
             }
         }
         String::from(ORPHANED)
+    }
+
+    /// Generate a file path for an attachment
+    ///
+    /// If the attachment was copied, use that path
+    /// if not, default to the filename
+    pub fn message_attachment_path(&self, attachment: &Attachment) -> String {
+        // Build a relative filepath from the fully qualified one on the `Attachment`
+        match &attachment.copied_path {
+            Some(path) => path.display().to_string(),
+            None => attachment
+                .resolved_attachment_path(&self.options.platform, &self.options.db_path)
+                .unwrap_or(attachment.filename().to_string()),
+        }
     }
 
     /// Get a filename for a chat, possibly using cached data.
@@ -193,12 +210,12 @@ impl<'a> Config<'a> {
     }
 
     /// Handles diagnostic tests for database
-    fn run_diagnostic(&self) {
+    fn run_diagnostic(&self) -> Result<(), TableError> {
         println!("\niMessage Database Diagnostics\n");
-        Handle::run_diagnostic(&self.db);
-        Message::run_diagnostic(&self.db);
-        Attachment::run_diagnostic(&self.db);
-        ChatToHandle::run_diagnostic(&self.db);
+        Handle::run_diagnostic(&self.db)?;
+        Message::run_diagnostic(&self.db)?;
+        Attachment::run_diagnostic(&self.db, &self.options.db_path, &self.options.platform)?;
+        ChatToHandle::run_diagnostic(&self.db)?;
 
         // Global Diagnostics
         let unique_handles: HashSet<i32> =
@@ -213,6 +230,7 @@ impl<'a> Config<'a> {
         if duplicated_chats > 0 {
             println!("Duplicated chats: {duplicated_chats}");
         }
+        Ok(())
     }
 
     /// Start the app given the provided set of options. This will either run
@@ -233,7 +251,7 @@ impl<'a> Config<'a> {
     /// ```
     pub fn start(&self) -> Result<(), RuntimeError> {
         if self.options.diagnostic {
-            self.run_diagnostic();
+            self.run_diagnostic().map_err(RuntimeError::DatabaseError)?;
         } else if self.options.export_type.is_some() {
             // Ensure the path we want to export to exists
             create_dir_all(&self.options.export_path).map_err(RuntimeError::DiskError)?;
@@ -244,8 +262,8 @@ impl<'a> Config<'a> {
                     TXT::new(self).iter_messages()?;
                 }
                 "html" => {
-                    if !self.options.no_copy {
-                        create_dir_all(self.attachment_path()).unwrap();
+                    if !matches!(self.options.attachment_manager, AttachmentManager::Disabled) {
+                        create_dir_all(self.attachment_path()).map_err(RuntimeError::DiskError)?;
                     }
                     HTML::new(self).iter_messages()?;
                 }
@@ -273,7 +291,7 @@ impl<'a> Config<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Config, Options};
+    use crate::{app::attachment_manager::AttachmentManager, Config, Options};
     use imessage_database::{
         tables::{
             chat::Chat,
@@ -290,7 +308,7 @@ mod tests {
     fn fake_options<'a>() -> Options<'a> {
         Options {
             db_path: default_db_path(),
-            no_copy: false,
+            attachment_manager: AttachmentManager::Disabled,
             diagnostic: false,
             export_type: None,
             export_path: PathBuf::new(),
