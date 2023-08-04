@@ -1,5 +1,5 @@
 /*!
- Contains method to emit a loading message while we do other work
+ Contains methods to emit a loading message while we do other work
 */
 
 use std::io::{stdout, Write};
