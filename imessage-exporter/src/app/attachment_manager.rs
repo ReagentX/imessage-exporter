@@ -98,8 +98,10 @@ impl AttachmentManager {
                 }
             }
             
-            if let Ok(relative_path) = to.stripe_prefix(&config.options.export_path) {
+            if let Ok(relative_path) = to.strip_prefix(&config.options.export_path) {
                 attachment.copied_path = Some(relative_path.to_path_buf());
+            } else {
+                attachment.copied_path = Some(to);
             }
         }
         Some(())
