@@ -192,7 +192,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                 self.add_line(
                     &mut formatted_message,
                     &format!("<a href=\"#r-{}\">⇲</a>", message.guid),
-                    "<span class=\"timestamp\">",
+                    "<span class=\"reply_anchor\">",
                     "</span>",
                 );
             } else {
@@ -200,7 +200,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                 self.add_line(
                     &mut formatted_message,
                     &format!("<a href=\"#{}\">⇱</a>", message.guid),
-                    "<span class=\"timestamp\">",
+                    "<span class=\"reply_anchor\">",
                     "</span>",
                 );
             }
