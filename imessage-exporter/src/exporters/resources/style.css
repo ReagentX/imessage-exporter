@@ -12,6 +12,11 @@ xmp {
 	margin: 0px;
 }
 
+a[href^="#"] {
+	text-decoration: none;
+	color: darkblue;
+}
+
 .message {
 	margin: 1%;
 	overflow-wrap: break-word;
