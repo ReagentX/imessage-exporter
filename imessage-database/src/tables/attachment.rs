@@ -157,7 +157,7 @@ impl Attachment {
     pub fn file_size(&self) -> String {
         let mut index = 0;
         let mut bytes = self.total_bytes as f64;
-        while index < UNITS.len() && bytes > DIVISOR {
+        while index < UNITS.len() - 1 && bytes > DIVISOR {
             index += 1;
             bytes /= DIVISOR;
         }
@@ -484,5 +484,13 @@ mod tests {
         attachment.total_bytes = 9234712394;
 
         assert_eq!(attachment.file_size(), String::from("8.60 GB"));
+    }
+
+    #[test]
+    fn can_get_file_size_cap() {
+        let mut attachment: Attachment = sample_attachment();
+        attachment.total_bytes = i64::MAX;
+
+        assert_eq!(attachment.file_size(), String::from("8388608.00 TB"));
     }
 }
