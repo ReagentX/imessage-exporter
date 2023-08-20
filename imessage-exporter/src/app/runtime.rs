@@ -145,7 +145,7 @@ impl<'a> Config<'a> {
         let mut added = 0;
         let mut out_s = String::with_capacity(MAX_LENGTH);
         for participant_id in participants.iter() {
-            let participant = self.who(participant_id, false);
+            let participant = self.who(&Some(*participant_id), false);
             if participant.len() + out_s.len() < MAX_LENGTH {
                 if !out_s.is_empty() {
                     out_s.push_str(", ")
@@ -277,15 +277,16 @@ impl<'a> Config<'a> {
     }
 
     /// Determine who sent a message
-    pub fn who(&self, handle_id: &i32, is_from_me: bool) -> &str {
+    pub fn who(&self, handle_id: &Option<i32>, is_from_me: bool) -> &str {
         if is_from_me {
-            self.options.custom_name.unwrap_or(ME)
-        } else {
-            match self.participants.get(handle_id) {
+            return self.options.custom_name.unwrap_or(ME);
+        } else if let Some(handle_id) = handle_id {
+            return match self.participants.get(handle_id) {
                 Some(contact) => contact,
                 None => UNKNOWN,
             }
         }
+        UNKNOWN
     }
 }
 
@@ -350,7 +351,7 @@ mod tests {
             guid: String::default(),
             text: None,
             service: Some("iMessage".to_string()),
-            handle_id: i32::default(),
+            handle_id: Some(i32::default()),
             subject: None,
             date: i64::default(),
             date_read: i64::default(),
@@ -561,8 +562,8 @@ mod tests {
         // Create participant data
         app.participants.insert(10, "Person 10".to_string());
 
-        // Get filename
-        let who = app.who(&10, false);
+        // Get participant name
+        let who = app.who(&Some(10), false);
         assert_eq!(who, "Person 10".to_string());
     }
 
@@ -571,8 +572,8 @@ mod tests {
         let options = fake_options();
         let app = fake_app(options);
 
-        // Get filename
-        let who = app.who(&10, false);
+        // Get participant name
+        let who = app.who(&Some(10), false);
         assert_eq!(who, "Unknown".to_string());
     }
 
@@ -581,8 +582,8 @@ mod tests {
         let options = fake_options();
         let app = fake_app(options);
 
-        // Get filename
-        let who = app.who(&0, true);
+        // Get participant name
+        let who = app.who(&Some(0), true);
         assert_eq!(who, "Me".to_string());
     }
 
@@ -592,9 +593,29 @@ mod tests {
         options.custom_name = Some("Name");
         let app = fake_app(options);
 
-        // Get filename
-        let who = app.who(&0, true);
+        // Get participant name
+        let who = app.who(&Some(0), true);
         assert_eq!(who, "Name".to_string());
+    }
+
+    #[test]
+    fn can_get_who_none_me() {
+        let options = fake_options();
+        let app = fake_app(options);
+
+        // Get participant name
+        let who = app.who(&None, true);
+        assert_eq!(who, "Me".to_string());
+    }
+
+    #[test]
+    fn can_get_who_none_them() {
+        let options = fake_options();
+        let app = fake_app(options);
+
+        // Get participant name
+        let who = app.who(&None, false);
+        assert_eq!(who, "Unknown".to_string());
     }
 
     #[test]

@@ -1060,7 +1060,7 @@ mod tests {
             guid: String::default(),
             text: None,
             service: Some("iMessage".to_string()),
-            handle_id: i32::default(),
+            handle_id: Some(i32::default()),
             subject: None,
             date: i64::default(),
             date_read: i64::default(),
@@ -1276,7 +1276,7 @@ mod tests {
         // May 17, 2022  8:29:42 PM
         message.date = 674526582885055488;
         message.text = Some("Hello world".to_string());
-        message.handle_id = 999999;
+        message.handle_id = Some(999999);
 
         let actual = exporter.format_message(&message, 0).unwrap();
         let expected = "<div class=\"message\">\n<div class=\"received\">\n<p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span>\n<span class=\"sender\">Sample Contact</span></p>\n<hr><div class=\"message_part\">\n<span class=\"bubble\">Hello world</span>\n</div>\n</div>\n</div>\n";
@@ -1295,7 +1295,7 @@ mod tests {
         let exporter = HTML::new(&config);
 
         let mut message = blank();
-        message.handle_id = 999999;
+        message.handle_id = Some(999999);
         // May 17, 2022  8:29:42 PM
         message.date = 674526582885055488;
         message.text = Some("Hello world".to_string());
@@ -1323,7 +1323,7 @@ mod tests {
         let exporter = HTML::new(&config);
 
         let mut message = blank();
-        message.handle_id = 999999;
+        message.handle_id = Some(999999);
         // May 17, 2022  8:29:42 PM
         message.date = 674526582885055488;
         message.text = Some("Hello world".to_string());
@@ -1428,7 +1428,7 @@ mod tests {
         message.date = 674526582885055488;
         message.associated_message_type = Some(2000);
         message.associated_message_guid = Some("fake_guid".to_string());
-        message.handle_id = 999999;
+        message.handle_id = Some(999999);
 
         let actual = exporter.format_reaction(&message).unwrap();
         let expected = "<span class=\"reaction\"><b>Loved</b> by Sample Contact</span>";

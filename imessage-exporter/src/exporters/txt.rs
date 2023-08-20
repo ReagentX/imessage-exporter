@@ -724,7 +724,7 @@ mod tests {
             guid: String::default(),
             text: None,
             service: Some("iMessage".to_string()),
-            handle_id: i32::default(),
+            handle_id: Some(i32::default()),
             subject: None,
             date: i64::default(),
             date_read: i64::default(),
@@ -926,7 +926,7 @@ mod tests {
         // May 17, 2022  8:29:42 PM
         message.date = 674526582885055488;
         message.text = Some("Hello world".to_string());
-        message.handle_id = 999999;
+        message.handle_id = Some(999999);
 
         let actual = exporter.format_message(&message, 0).unwrap();
         let expected = "May 17, 2022  5:29:42 PM\nSample Contact\nHello world\n\n";
@@ -945,7 +945,7 @@ mod tests {
         let exporter = TXT::new(&config);
 
         let mut message = blank();
-        message.handle_id = 999999;
+        message.handle_id = Some(999999);
         // May 17, 2022  8:29:42 PM
         message.date = 674526582885055488;
         message.text = Some("Hello world".to_string());
@@ -973,7 +973,7 @@ mod tests {
         let exporter = TXT::new(&config);
 
         let mut message = blank();
-        message.handle_id = 999999;
+        message.handle_id = Some(999999);
         // May 17, 2022  8:29:42 PM
         message.date = 674526582885055488;
         message.text = Some("Hello world".to_string());
@@ -1078,7 +1078,7 @@ mod tests {
         message.date = 674526582885055488;
         message.associated_message_type = Some(2000);
         message.associated_message_guid = Some("fake_guid".to_string());
-        message.handle_id = 999999;
+        message.handle_id = Some(999999);
 
         let actual = exporter.format_reaction(&message).unwrap();
         let expected = "Loved by Sample Contact";
