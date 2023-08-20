@@ -19,6 +19,9 @@ use crate::{
     },
 };
 
+const DIVISOR: i32 = 1024;
+const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+
 /// Represents the MIME type of a message's attachment data
 #[derive(Debug, PartialEq, Eq)]
 pub enum MediaType<'a> {
@@ -148,6 +151,18 @@ impl Attachment {
             return filename;
         }
         "Attachment missing name metadata!"
+    }
+
+    /// Get a human readable file size for an attachment
+    pub fn file_size(&self) -> String {
+        let mut index = 0;
+        let mut bytes = self.total_bytes;
+        while index < UNITS.len() && bytes > DIVISOR {
+            index += 1;
+            bytes /= DIVISOR;
+        }
+
+        format!("{bytes} {}", UNITS[index])
     }
 
     /// Given a platform and database source, resolve the path for the current attachment
