@@ -19,7 +19,7 @@ use crate::{
     },
 };
 
-const DIVISOR: i32 = 1024;
+const DIVISOR: f64 = 1024.;
 const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
 
 /// Represents the MIME type of a message's attachment data
@@ -42,7 +42,7 @@ pub struct Attachment {
     pub uti: Option<String>,
     pub mime_type: Option<String>,
     pub transfer_name: Option<String>,
-    pub total_bytes: i32,
+    pub total_bytes: i64,
     pub hide_attachment: i32,
     pub copied_path: Option<PathBuf>,
 }
@@ -156,13 +156,13 @@ impl Attachment {
     /// Get a human readable file size for an attachment
     pub fn file_size(&self) -> String {
         let mut index = 0;
-        let mut bytes = self.total_bytes;
+        let mut bytes = self.total_bytes as f64;
         while index < UNITS.len() && bytes > DIVISOR {
             index += 1;
             bytes /= DIVISOR;
         }
 
-        format!("{bytes} {}", UNITS[index])
+        format!("{bytes:.2} {}", UNITS[index])
     }
 
     /// Given a platform and database source, resolve the path for the current attachment
@@ -453,5 +453,36 @@ mod tests {
             attachment.resolved_attachment_path(&Platform::iOS, &db_path),
             None
         );
+    }
+
+    #[test]
+    fn can_get_file_size_bytes() {
+        let attachment = sample_attachment();
+
+        assert_eq!(attachment.file_size(), String::from("100.00 B"));
+    }
+
+    #[test]
+    fn can_get_file_size_kb() {
+        let mut attachment = sample_attachment();
+        attachment.total_bytes = 2300;
+
+        assert_eq!(attachment.file_size(), String::from("2.25 KB"));
+    }
+
+    #[test]
+    fn can_get_file_size_mb() {
+        let mut attachment = sample_attachment();
+        attachment.total_bytes = 5612000;
+
+        assert_eq!(attachment.file_size(), String::from("5.35 MB"));
+    }
+
+    #[test]
+    fn can_get_file_size_gb() {
+        let mut attachment: Attachment = sample_attachment();
+        attachment.total_bytes = 9234712394;
+
+        assert_eq!(attachment.file_size(), String::from("8.60 GB"));
     }
 }
