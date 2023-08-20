@@ -154,7 +154,18 @@ impl<'a> Writer<'a> for HTML<'a> {
         let mut formatted_message = String::new();
 
         // Message div
-        self.add_line(&mut formatted_message, "<div class=\"message\">", "", "");
+        if message.is_reply() && indent_size == 0 {
+            // Add an ID for any top-level message so we can link to them in threads
+            self.add_line(
+                &mut formatted_message,
+                &format!("<div class=\"message\", id=\"r-{}\">", message.guid),
+                "",
+                "",
+            );
+        } else {
+            // No ID needed if the message has no replies
+            self.add_line(&mut formatted_message, "<div class=\"message\">", "", "");
+        }
 
         // Start message div
         if message.is_from_me {
@@ -175,6 +186,27 @@ impl<'a> Writer<'a> for HTML<'a> {
             "<p><span class=\"timestamp\">",
             "</span>",
         );
+
+        // Add reply anchor if necessary
+        if message.is_reply() {
+            if indent_size > 0 {
+                // If we are indented it means we are rendering in a thread
+                self.add_line(
+                    &mut formatted_message,
+                    &format!("<a href=\"#r-{}\">⇲</a>", message.guid),
+                    "<span class=\"reply_anchor\">",
+                    "</span>",
+                );
+            } else {
+                // If there is no ident we are rendering a top-level message
+                self.add_line(
+                    &mut formatted_message,
+                    &format!("<a href=\"#{}\">⇱</a>", message.guid),
+                    "<span class=\"reply_anchor\">",
+                    "</span>",
+                );
+            }
+        }
 
         // Add message sender
         self.add_line(
@@ -377,7 +409,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                             self.add_line(
                                 &mut formatted_message,
                                 &self.format_message(reply, 1)?,
-                                "<div class=\"reply\">",
+                                &format!("<div class=\"reply\" id=\"{}\">", reply.guid),
                                 "</div>",
                             );
                         }
