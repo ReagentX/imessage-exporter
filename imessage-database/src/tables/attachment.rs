@@ -251,7 +251,7 @@ impl Attachment {
     /// Generate a MacOS path for an attachment
     fn gen_macos_attachment(path: &str) -> String {
         if path.starts_with('~') {
-            return path.replace('~', &home());
+            return path.replacen('~', &home(), 1);
         }
         path.to_string()
     }
@@ -388,6 +388,18 @@ mod tests {
                 .len()
                 > attachment.filename.unwrap().len()
         );
+    }
+
+    #[test]
+    fn can_get_resolved_path_macos_raw_tilde() {
+        let db_path = PathBuf::from("fake_root");
+        let mut attachment = sample_attachment();
+        attachment.filename = Some("~/a/b/c~d.png".to_string());
+
+        assert!(attachment
+            .resolved_attachment_path(&Platform::MacOS, &db_path)
+            .unwrap()
+            .ends_with("c~d.png"));
     }
 
     #[test]
