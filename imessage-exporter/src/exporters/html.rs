@@ -155,6 +155,7 @@ impl<'a> Writer<'a> for HTML<'a> {
 
         // Message div
         if message.is_reply() && indent_size == 0 {
+            // Add an ID for any top-level message so we can link to them in threads
             self.add_line(
                 &mut formatted_message,
                 &format!("<div class=\"message\", id=\"r-{}\">", message.guid),
@@ -162,6 +163,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                 "",
             );
         } else {
+            // No ID needed if the message has no replies
             self.add_line(&mut formatted_message, "<div class=\"message\">", "", "");
         }
 
