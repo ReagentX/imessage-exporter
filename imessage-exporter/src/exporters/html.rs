@@ -1134,6 +1134,7 @@ mod tests {
         Attachment {
             rowid: 0,
             filename: Some("a/b/c/d.jpg".to_string()),
+            uti: Some("public.png".to_string()),
             mime_type: Some("image/png".to_string()),
             transfer_name: Some("d.jpg".to_string()),
             total_bytes: 100,

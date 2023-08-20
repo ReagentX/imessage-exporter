@@ -36,6 +36,7 @@ pub enum MediaType<'a> {
 pub struct Attachment {
     pub rowid: i32,
     pub filename: Option<String>,
+    pub uti: Option<String>,
     pub mime_type: Option<String>,
     pub transfer_name: Option<String>,
     pub total_bytes: i32,
@@ -48,6 +49,7 @@ impl Table for Attachment {
         Ok(Attachment {
             rowid: row.get("rowid")?,
             filename: row.get("filename").unwrap_or(None),
+            uti: row.get("uti").unwrap_or(None),
             mime_type: row.get("mime_type").unwrap_or(None),
             transfer_name: row.get("transfer_name").unwrap_or(None),
             total_bytes: row.get("total_bytes").unwrap_or_default(),
@@ -282,6 +284,7 @@ mod tests {
         Attachment {
             rowid: 1,
             filename: Some("a/b/c.png".to_string()),
+            uti: Some("public.png".to_string()),
             mime_type: Some("image".to_string()),
             transfer_name: Some("c.png".to_string()),
             total_bytes: 100,
