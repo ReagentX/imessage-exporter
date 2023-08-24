@@ -22,7 +22,7 @@ a[href^="#"] {
 	overflow-wrap: break-word;
 }
 
-.message .sent.imessage {
+.message .sent.iMessage {
 	background-color: #1982FC;
 }
 
