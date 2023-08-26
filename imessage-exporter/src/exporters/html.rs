@@ -32,8 +32,8 @@ use imessage_database::{
     },
 };
 
-const HEADER: &str = "<html>\n<meta charset=\"UTF-8\">";
-const FOOTER: &str = "</html>";
+const HEADER: &str = "<html>\n<head>\n<meta charset=\"UTF-8\">";
+const FOOTER: &str = "</body></html>";
 const STYLE: &str = include_str!("resources/style.css");
 
 pub struct HTML<'a> {
@@ -961,6 +961,7 @@ impl<'a> HTML<'a> {
         HTML::write_to_file(path, "<style>\n");
         HTML::write_to_file(path, STYLE);
         HTML::write_to_file(path, "\n</style>");
+        HTML::write_to_file(path, "\n</head>\n<body>\n");
     }
 
     fn edited_to_html(&self, timestamp: &str, text: &str, last: bool) -> String {
