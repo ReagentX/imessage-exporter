@@ -470,13 +470,15 @@ impl<'a> Writer<'a> for HTML<'a> {
             }
             MediaType::Text(_) => {
                 format!(
-                    "<a href=\"file://{embed_path}\">Click to download {}</a>",
-                    attachment.filename()
+                    "<a href=\"file://{embed_path}\">Click to download {} ({})</a>",
+                    attachment.filename(),
+                    attachment.file_size()
                 )
             }
             MediaType::Application(_) => format!(
-                "<a href=\"file://{embed_path}\">Click to download {}</a>",
-                attachment.filename()
+                "<a href=\"file://{embed_path}\">Click to download {} ({})</a>",
+                attachment.filename(),
+                attachment.file_size()
             ),
             MediaType::Unknown => {
                 format!("<p>Unknown attachment type: {embed_path}</p> <a href=\"file://{embed_path}\">Download ({})</a>", attachment.file_size())
