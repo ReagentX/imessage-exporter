@@ -470,16 +470,18 @@ impl<'a> Writer<'a> for HTML<'a> {
             }
             MediaType::Text(_) => {
                 format!(
-                    "<a href=\"file://{embed_path}\">Click to download {}</a>",
-                    attachment.filename()
+                    "<a href=\"file://{embed_path}\">Click to download {} ({})</a>",
+                    attachment.filename(),
+                    attachment.file_size()
                 )
             }
             MediaType::Application(_) => format!(
-                "<a href=\"file://{embed_path}\">Click to download {}</a>",
-                attachment.filename()
+                "<a href=\"file://{embed_path}\">Click to download {} ({})</a>",
+                attachment.filename(),
+                attachment.file_size()
             ),
             MediaType::Unknown => {
-                format!("<p>Unknown attachment type: {embed_path}</p> <a href=\"file://{embed_path}\">Download</a>")
+                format!("<p>Unknown attachment type: {embed_path}</p> <a href=\"file://{embed_path}\">Download ({})</a>", attachment.file_size())
             }
             MediaType::Other(media_type) => {
                 format!("<p>Unable to embed {media_type} attachments: {embed_path}</p>")
@@ -1135,6 +1137,7 @@ mod tests {
         Attachment {
             rowid: 0,
             filename: Some("a/b/c/d.jpg".to_string()),
+            uti: Some("public.png".to_string()),
             mime_type: Some("image/png".to_string()),
             transfer_name: Some("d.jpg".to_string()),
             total_bytes: 100,
