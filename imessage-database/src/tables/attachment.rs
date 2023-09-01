@@ -23,6 +23,8 @@ const DIVISOR: f64 = 1024.;
 const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
 
 /// Represents the MIME type of a message's attachment data
+///
+/// The interior `str` contains the subtype, i.e. `x-m4a` for `audio/x-m4a`
 #[derive(Debug, PartialEq, Eq)]
 pub enum MediaType<'a> {
     Image(&'a str),
@@ -119,7 +121,19 @@ impl Attachment {
                     MediaType::Other(mime)
                 }
             }
-            None => MediaType::Unknown,
+            None => {
+                // Fallback to `uti` if the MIME type cannot be inferred
+                if let Some(uti) = &self.uti {
+                    match uti.as_str() {
+                        // This type is for audio messages, which are sent in `caf` format
+                        // https://developer.apple.com/library/archive/documentation/MusicAudio/Reference/CAFSpec/CAF_overview/CAF_overview.html
+                        "com.apple.coreaudio-format" => MediaType::Audio("x-caf; codecs=opus"),
+                        _ => MediaType::Unknown,
+                    }
+                } else {
+                    MediaType::Unknown
+                }
+            }
         }
     }
 
