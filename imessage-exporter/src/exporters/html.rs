@@ -479,7 +479,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                 attachment.filename()
             ),
             MediaType::Unknown => {
-                format!("<p>Unknown attachment type: {embed_path}</p> <a href=\"file://{embed_path}\">Download</a>")
+                format!("<p>Unknown attachment type: {embed_path}</p> <a href=\"file://{embed_path}\">Download ({})</a>", attachment.file_size())
             }
             MediaType::Other(media_type) => {
                 format!("<p>Unable to embed {media_type} attachments: {embed_path}</p>")
