@@ -169,8 +169,13 @@ impl Attachment {
 
     /// Get a human readable file size for an attachment
     pub fn file_size(&self) -> String {
-        let mut index = 0;
-        let mut bytes = self.total_bytes as f64;
+        Attachment::format_file_size(self.total_bytes)
+    }
+
+    /// Get a human readable file size for an arbitrary amount of bytes
+    fn format_file_size(total_bytes: i64) -> String {
+        let mut index: usize = 0;
+        let mut bytes = total_bytes as f64;
         while index < UNITS.len() - 1 && bytes > DIVISOR {
             index += 1;
             bytes /= DIVISOR;
@@ -258,13 +263,22 @@ impl Attachment {
             })
             .count();
 
+        let mut bytes_query = db
+            .prepare(&format!("SELECT SUM(total_bytes) FROM {ATTACHMENT}"))
+            .map_err(TableError::Messages)?;
+
+        let total_bytes: i64 = bytes_query.query_row([], |r| r.get(0)).unwrap_or(0);
+
         done_processing();
 
-        if missing_files > 0 {
+        if total_attachments > 0 {
             println!("\rAttachment diagnostic data:");
-
+            println!("    Total attachments: {total_attachments}");
+            println!(
+                "    Total attachment data: {}",
+                Attachment::format_file_size(total_bytes)
+            );
             if missing_files > 0 && total_attachments > 0 {
-                println!("    Total attachments: {total_attachments}");
                 println!(
                     "    Missing files: {missing_files:?} ({:.0}%)",
                     (missing_files as f64 / total_attachments as f64) * 100f64
