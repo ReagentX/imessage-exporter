@@ -300,9 +300,7 @@ mod filename_tests {
     use crate::{app::attachment_manager::AttachmentManager, Config, Options};
     use imessage_database::{
         tables::{
-            attachment::Attachment,
             chat::Chat,
-            messages::Message,
             table::{get_connection, MAX_LENGTH},
         },
         util::{dirs::default_db_path, platform::Platform, query_context::QueryContext},
@@ -535,7 +533,7 @@ mod filename_tests {
 mod who_tests {
     use crate::{app::attachment_manager::AttachmentManager, Config, Options};
     use imessage_database::{
-        tables::{attachment::Attachment, chat::Chat, messages::Message, table::get_connection},
+        tables::{chat::Chat, messages::Message, table::get_connection},
         util::{dirs::default_db_path, platform::Platform, query_context::QueryContext},
     };
     use std::{collections::HashMap, path::PathBuf};
@@ -606,19 +604,6 @@ mod who_tests {
             num_attachments: 0,
             deleted_from: None,
             num_replies: 0,
-        }
-    }
-
-    pub fn fake_attachment() -> Attachment {
-        Attachment {
-            rowid: 0,
-            filename: Some("a/b/c/d.jpg".to_string()),
-            uti: Some("public.png".to_string()),
-            mime_type: Some("image/png".to_string()),
-            transfer_name: Some("d.jpg".to_string()),
-            total_bytes: 100,
-            hide_attachment: 0,
-            copied_path: None,
         }
     }
 
@@ -769,7 +754,7 @@ mod who_tests {
 mod directory_tests {
     use crate::{app::attachment_manager::AttachmentManager, Config, Options};
     use imessage_database::{
-        tables::{attachment::Attachment, chat::Chat, messages::Message, table::get_connection},
+        tables::{attachment::Attachment, table::get_connection},
         util::{dirs::default_db_path, platform::Platform, query_context::QueryContext},
     };
     use std::{collections::HashMap, path::PathBuf};
@@ -788,15 +773,6 @@ mod directory_tests {
         }
     }
 
-    fn fake_chat() -> Chat {
-        Chat {
-            rowid: 0,
-            chat_identifier: "Default".to_string(),
-            service_name: "".to_string(),
-            display_name: None,
-        }
-    }
-
     fn fake_app(options: Options) -> Config {
         let connection = get_connection(&options.db_path).unwrap();
         Config {
@@ -810,36 +786,6 @@ mod directory_tests {
             offset: 0,
             db: connection,
             converter: Some(crate::app::converter::Converter::Sips),
-        }
-    }
-
-    fn blank() -> Message {
-        Message {
-            rowid: i32::default(),
-            guid: String::default(),
-            text: None,
-            service: Some("iMessage".to_string()),
-            handle_id: Some(i32::default()),
-            subject: None,
-            date: i64::default(),
-            date_read: i64::default(),
-            date_delivered: i64::default(),
-            is_from_me: false,
-            is_read: false,
-            item_type: 0,
-            group_title: None,
-            group_action_type: 0,
-            associated_message_guid: None,
-            associated_message_type: Some(i32::default()),
-            balloon_bundle_id: None,
-            expressive_send_style_id: None,
-            thread_originator_guid: None,
-            thread_originator_part: None,
-            date_edited: 0,
-            chat_id: None,
-            num_attachments: 0,
-            deleted_from: None,
-            num_replies: 0,
         }
     }
 
