@@ -97,7 +97,9 @@ impl<'a> Config<'a> {
         // Build a relative filepath from the fully qualified one on the `Attachment`
         match &attachment.copied_path {
             Some(path) => {
-                // TODO: Strip the fully qualified path here, make it relative to the Attachments directory
+                if let Ok(relative_path) = path.strip_prefix(&self.options.export_path) {
+                    return relative_path.display().to_string();
+                }
                 path.display().to_string()
             }
             None => attachment
@@ -903,6 +905,25 @@ mod directory_tests {
 
         let result = app.message_attachment_path(&attachment);
         let expected = String::from("a/b/c/d.jpg");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn can_get_path_copied() {
+        let mut options = fake_options();
+        // Set an export path
+        options.export_path = PathBuf::from("/Users/ReagentX/exports");
+
+        let app = fake_app(options);
+
+        // Create attachment
+        let mut attachment = fake_attachment();
+        let mut full_path = PathBuf::from("/Users/ReagentX/exports/attachments");
+        full_path.push(attachment.filename());
+        attachment.copied_path = Some(full_path);
+
+        let result = app.message_attachment_path(&attachment);
+        let expected = String::from("attachments/d.jpg");
         assert_eq!(result, expected);
     }
 }
