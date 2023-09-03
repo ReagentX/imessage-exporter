@@ -926,4 +926,21 @@ mod directory_tests {
         let expected = String::from("attachments/d.jpg");
         assert_eq!(result, expected);
     }
+
+    #[test]
+    fn can_get_path_copied_bad() {
+        let mut options = fake_options();
+        // Set an export path
+        options.export_path = PathBuf::from("/Users/ReagentX/exports");
+
+        let app = fake_app(options);
+
+        // Create attachment
+        let mut attachment = fake_attachment();
+        attachment.copied_path = Some(PathBuf::from(attachment.filename.as_ref().unwrap()));
+
+        let result = app.message_attachment_path(&attachment);
+        let expected = String::from("a/b/c/d.jpg");
+        assert_eq!(result, expected);
+    }
 }
