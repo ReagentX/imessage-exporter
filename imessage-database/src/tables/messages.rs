@@ -77,7 +77,7 @@ pub struct Message {
     pub guid: String,
     pub text: Option<String>,
     pub service: Option<String>,
-    pub handle_id: i32,
+    pub handle_id: Option<i32>,
     pub subject: Option<String>,
     pub date: i64,
     pub date_read: i64,
@@ -107,7 +107,7 @@ impl Table for Message {
             guid: row.get("guid")?,
             text: row.get("text").unwrap_or(None),
             service: row.get("service").unwrap_or(None),
-            handle_id: row.get("handle_id")?,
+            handle_id: row.get("handle_id").unwrap_or(None),
             subject: row.get("subject").unwrap_or(None),
             date: row.get("date")?,
             date_read: row.get("date_read").unwrap_or(0),
@@ -316,7 +316,7 @@ impl Cacheable for Message {
 
 impl Message {
     /// Get the body text of a message, parsing it as [`streamtyped`](crate::util::streamtyped) data if necessary.
-    /// TODO: resolve the compiler warnings with this method
+    // TODO: resolve the compiler warnings with this method
     pub fn gen_text<'a>(&'a mut self, db: &'a Connection) -> Result<&'a str, MessageError> {
         if self.text.is_none() {
             let body = self.attributed_body(db).ok_or(MessageError::MissingData)?;
@@ -934,7 +934,7 @@ mod tests {
             guid: String::default(),
             text: None,
             service: Some("iMessage".to_string()),
-            handle_id: i32::default(),
+            handle_id: Some(i32::default()),
             subject: None,
             date: i64::default(),
             date_read: i64::default(),

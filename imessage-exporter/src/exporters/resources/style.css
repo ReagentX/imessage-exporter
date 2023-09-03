@@ -12,12 +12,17 @@ xmp {
 	margin: 0px;
 }
 
+a[href^="#"] {
+	text-decoration: none;
+	color: darkblue;
+}
+
 .message {
 	margin: 1%;
 	overflow-wrap: break-word;
 }
 
-.message .sent.imessage {
+.message .sent.iMessage {
 	background-color: #1982FC;
 }
 
@@ -215,6 +220,10 @@ xmp {
 
 span.timestamp {
 	opacity: 60%;
+}
+
+span.reply_anchor {
+	opacity: 100%;
 }
 
 span.sender {
