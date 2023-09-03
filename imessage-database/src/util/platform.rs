@@ -73,8 +73,8 @@ mod tests {
 
     #[test]
     fn cant_parse_invalid() {
-        assert!(matches!(Platform::from_cli("mac"), None));
-        assert!(matches!(Platform::from_cli("iphone"), None));
-        assert!(matches!(Platform::from_cli(""), None));
+        assert!(Platform::from_cli("mac").is_none());
+        assert!(Platform::from_cli("iphone").is_none());
+        assert!(Platform::from_cli("").is_none());
     }
 }
