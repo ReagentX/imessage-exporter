@@ -1,7 +1,7 @@
 use std::{
     fmt::Display,
     fs::{copy, create_dir_all, metadata},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use filetime::{set_file_times, FileTime};
@@ -72,9 +72,7 @@ impl AttachmentManager {
             match self {
                 AttachmentManager::Compatible => match &config.converter {
                     Some(converter) => {
-                        // Update extension for conversion
-                        to.set_extension("jpg");
-                        Self::copy_convert(from, &to, converter);
+                        Self::copy_convert(from, &mut to, converter);
                     }
                     None => Self::copy_raw(from, &to),
                 },
@@ -123,9 +121,11 @@ impl AttachmentManager {
     }
 
     /// Copy a file, converting if possible
-    fn copy_convert(from: &Path, to: &Path, converter: &Converter) {
+    fn copy_convert(from: &Path, to: &mut PathBuf, converter: &Converter) {
         let ext = from.extension().unwrap_or_default();
         if ext == "heic" || ext == "HEIC" {
+            // Update extension for conversion
+            to.set_extension("jpg");
             if heic_to_jpeg(from, to, converter).is_none() {
                 eprintln!("Unable to convert {from:?}")
             }
