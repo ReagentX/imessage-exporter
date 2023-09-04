@@ -132,9 +132,10 @@ impl Table for Message {
     }
 
     fn get(db: &Connection) -> Result<Statement, TableError> {
+        // If the database has `chat_recoverable_message_join`, we can restore some deleted messages.
         // If database has `thread_originator_guid`, we can parse replies, otherwise default to 0
-        // The first sql statement is the "current" schema, the second one is the "most compatible" schema, i.e. supports older DBs
         Ok(db.prepare(&format!(
+            // i0S 16+ schema
             "SELECT
                  *,
                  c.chat_id,
@@ -147,8 +148,23 @@ impl Table for Message {
              ORDER BY
                  m.date;
             "
-        ))
+        )).or(db.prepare(&format!(
+            // iOS 14 to iOS 15 schema
+            "SELECT
+                 *,
+                 c.chat_id,
+                 (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                 (SELECT NULL) as deleted_from,
+                 (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
+             FROM
+                 message as m
+                 LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
+             ORDER BY
+                 m.date;
+            "
+        )))
         .unwrap_or(db.prepare(&format!(
+            // iOS 13 and older
             "SELECT
                  *,
                  c.chat_id,
