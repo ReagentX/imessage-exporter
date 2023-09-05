@@ -30,7 +30,7 @@ pub const OPTION_PLATFORM: &str = "platform";
 
 // Other CLI Text
 pub const SUPPORTED_FILE_TYPES: &str = "txt, html";
-pub const SUPPORTED_PLATFORMS: &str = "MacOS, iOS";
+pub const SUPPORTED_PLATFORMS: &str = "macOS, iOS";
 pub const SUPPORTED_ATTACHMENT_MANAGER_MODES: &str = "compatible, efficient, disabled";
 pub const ABOUT: &str = concat!(
     "The `imessage-exporter` binary exports iMessage data to\n",
@@ -173,7 +173,7 @@ impl<'a> Options<'a> {
     pub fn get_db_path(&self) -> PathBuf {
         match self.platform {
             Platform::iOS => self.db_path.join(DEFAULT_PATH_IOS),
-            Platform::MacOS => self.db_path.clone(),
+            Platform::macOS => self.db_path.clone(),
         }
     }
 }
@@ -255,7 +255,7 @@ pub fn from_command_line() -> ArgMatches {
             Arg::new(OPTION_DB_PATH)
                 .short('p')
                 .long(OPTION_DB_PATH)
-                .help(&*format!("Specify a custom path for the iMessage database location\nFor MacOS, specify a path to a `chat.db` file\nFor iOS, specify a path to the root of an unencrypted backup directory\nIf omitted, the default directory is {}", default_db_path().display()))
+                .help(&*format!("Specify a custom path for the iMessage database location\nFor macOS, specify a path to a `chat.db` file\nFor iOS, specify a path to the root of an unencrypted backup directory\nIf omitted, the default directory is {}", default_db_path().display()))
                 .takes_value(true)
                 .display_order(3)
                 .value_name("path/to/source"),

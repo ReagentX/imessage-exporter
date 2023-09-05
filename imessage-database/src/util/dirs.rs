@@ -6,7 +6,7 @@ use std::{env::var, path::PathBuf};
 
 use crate::tables::table::DEFAULT_PATH_MACOS;
 
-/// Get the user's home directory (MacOS only)
+/// Get the user's home directory (macOS only)
 ///
 /// # Example:
 ///
@@ -23,7 +23,7 @@ pub fn home() -> String {
     }
 }
 
-/// Get the default path the MacOS iMessage database is located at (MacOS only)
+/// Get the default path the macOS iMessage database is located at (macOS only)
 ///
 /// # Example:
 ///

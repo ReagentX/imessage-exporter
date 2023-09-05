@@ -758,7 +758,7 @@ mod tests {
             query_context: QueryContext::default(),
             no_lazy: false,
             custom_name: None,
-            platform: Platform::MacOS,
+            platform: Platform::macOS,
         }
     }
 
