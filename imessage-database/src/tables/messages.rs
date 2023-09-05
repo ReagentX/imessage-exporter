@@ -135,7 +135,7 @@ impl Table for Message {
         // If the database has `chat_recoverable_message_join`, we can restore some deleted messages.
         // If database has `thread_originator_guid`, we can parse replies, otherwise default to 0
         Ok(db.prepare(&format!(
-            // i0S 16+ schema
+            // macOS Ventura+ and i0S 16+ schema
             "SELECT
                  *,
                  c.chat_id,
@@ -149,7 +149,7 @@ impl Table for Message {
                  m.date;
             "
         )).or(db.prepare(&format!(
-            // iOS 14 to iOS 15 schema
+            // macOS Big Sur to Monterey, iOS 14 to iOS 15 schema
             "SELECT
                  *,
                  c.chat_id,
@@ -164,7 +164,7 @@ impl Table for Message {
             "
         )))
         .unwrap_or(db.prepare(&format!(
-            // iOS 13 and older
+            // macOS Catalina, iOS 13 and older 
             "SELECT
                  *,
                  c.chat_id,
