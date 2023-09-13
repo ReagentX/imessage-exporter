@@ -132,9 +132,10 @@ impl Table for Message {
     }
 
     fn get(db: &Connection) -> Result<Statement, TableError> {
+        // If the database has `chat_recoverable_message_join`, we can restore some deleted messages.
         // If database has `thread_originator_guid`, we can parse replies, otherwise default to 0
-        // The first sql statement is the "current" schema, the second one is the "most compatible" schema, i.e. supports older DBs
         Ok(db.prepare(&format!(
+            // macOS Ventura+ and i0S 16+ schema
             "SELECT
                  *,
                  c.chat_id,
@@ -147,14 +148,29 @@ impl Table for Message {
              ORDER BY
                  m.date;
             "
-        ))
-        .unwrap_or(db.prepare(&format!(
+        )).or(db.prepare(&format!(
+            // macOS Big Sur to Monterey, iOS 14 to iOS 15 schema
             "SELECT
                  *,
                  c.chat_id,
                  (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
-                 (SELECT NULL) as deleted_from,
-                 (SELECT 0) as num_replies
+                 NULL as deleted_from,
+                 (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
+             FROM
+                 message as m
+                 LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
+             ORDER BY
+                 m.date;
+            "
+        )))
+        .unwrap_or(db.prepare(&format!(
+            // macOS Catalina, iOS 13 and older 
+            "SELECT
+                 *,
+                 c.chat_id,
+                 (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
+                 NULL as deleted_from,
+                 0 as num_replies
              FROM
                  message as m
                  LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
@@ -505,6 +521,14 @@ impl Message {
     }
 
     /// `true` if the message was deleted and is recoverable, else `false`
+    ///
+    /// Messages removed by deleting an entire conversation or by deleting a single message
+    /// from a conversation are moved to a separate collection for up to 30 days. Messages
+    /// present in this collection are restored to the conversations they belong to. Apple
+    /// details this process [here](https://support.apple.com/en-us/HT202549#delete).
+    ///
+    /// Messages that have expired from this restoration process are permanently deleted and
+    /// cannot be recovered.
     pub fn is_deleted(&self) -> bool {
         self.deleted_from.is_some()
     }

@@ -186,13 +186,13 @@ impl Attachment {
 
     /// Given a platform and database source, resolve the path for the current attachment
     ///
-    /// For MacOS, `db_path` is unused. For iOS, `db_path` is the path to the root of the backup directory.
+    /// For macOS, `db_path` is unused. For iOS, `db_path` is the path to the root of the backup directory.
     ///
     /// iOS Parsing logic source is from [here](https://github.com/nprezant/iMessageBackup/blob/940d001fb7be557d5d57504eb26b3489e88de26e/imessage_backup_tools.py#L83-L85).
     pub fn resolved_attachment_path(&self, platform: &Platform, db_path: &Path) -> Option<String> {
         if let Some(path_str) = &self.filename {
             return match platform {
-                Platform::MacOS => Some(Attachment::gen_macos_attachment(path_str)),
+                Platform::macOS => Some(Attachment::gen_macos_attachment(path_str)),
                 Platform::iOS => Attachment::gen_ios_attachment(path_str, db_path),
             };
         }
@@ -218,7 +218,7 @@ impl Attachment {
     ///
     /// let db_path = default_db_path();
     /// let conn = get_connection(&db_path).unwrap();
-    /// Attachment::run_diagnostic(&conn, &db_path, &Platform::MacOS);
+    /// Attachment::run_diagnostic(&conn, &db_path, &Platform::macOS);
     /// ```
     pub fn run_diagnostic(
         db: &Connection,
@@ -242,7 +242,7 @@ impl Attachment {
                 total_attachments += 1;
                 if let Ok(filepath) = path {
                     match platform {
-                        Platform::MacOS => {
+                        Platform::macOS => {
                             !Path::new(&Attachment::gen_macos_attachment(filepath)).exists()
                         }
                         Platform::iOS => {
@@ -293,7 +293,7 @@ impl Attachment {
         Ok(())
     }
 
-    /// Generate a MacOS path for an attachment
+    /// Generate a macOS path for an attachment
     fn gen_macos_attachment(path: &str) -> String {
         if path.starts_with('~') {
             return path.replacen('~', &home(), 1);
@@ -416,7 +416,7 @@ mod tests {
         let attachment = sample_attachment();
 
         assert_eq!(
-            attachment.resolved_attachment_path(&Platform::MacOS, &db_path),
+            attachment.resolved_attachment_path(&Platform::macOS, &db_path),
             Some("a/b/c.png".to_string())
         );
     }
@@ -429,7 +429,7 @@ mod tests {
 
         assert!(
             attachment
-                .resolved_attachment_path(&Platform::MacOS, &db_path)
+                .resolved_attachment_path(&Platform::macOS, &db_path)
                 .unwrap()
                 .len()
                 > attachment.filename.unwrap().len()
@@ -443,7 +443,7 @@ mod tests {
         attachment.filename = Some("~/a/b/c~d.png".to_string());
 
         assert!(attachment
-            .resolved_attachment_path(&Platform::MacOS, &db_path)
+            .resolved_attachment_path(&Platform::macOS, &db_path)
             .unwrap()
             .ends_with("c~d.png"));
     }
@@ -466,7 +466,7 @@ mod tests {
         attachment.filename = None;
 
         assert_eq!(
-            attachment.resolved_attachment_path(&Platform::MacOS, &db_path),
+            attachment.resolved_attachment_path(&Platform::macOS, &db_path),
             None
         );
     }
