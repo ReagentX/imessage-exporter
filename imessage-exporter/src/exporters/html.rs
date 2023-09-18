@@ -32,8 +32,8 @@ use imessage_database::{
     },
 };
 
-const HEADER: &str = "<html>\n<meta charset=\"UTF-8\">";
-const FOOTER: &str = "</html>";
+const HEADER: &str = "<html>\n<head>\n<meta charset=\"UTF-8\">";
+const FOOTER: &str = "</body></html>";
 const STYLE: &str = include_str!("resources/style.css");
 
 pub struct HTML<'a> {
@@ -154,7 +154,18 @@ impl<'a> Writer<'a> for HTML<'a> {
         let mut formatted_message = String::new();
 
         // Message div
-        self.add_line(&mut formatted_message, "<div class=\"message\">", "", "");
+        if message.is_reply() && indent_size == 0 {
+            // Add an ID for any top-level message so we can link to them in threads
+            self.add_line(
+                &mut formatted_message,
+                &format!("<div class=\"message\", id=\"r-{}\">", message.guid),
+                "",
+                "",
+            );
+        } else {
+            // No ID needed if the message has no replies
+            self.add_line(&mut formatted_message, "<div class=\"message\">", "", "");
+        }
 
         // Start message div
         if message.is_from_me {
@@ -175,6 +186,27 @@ impl<'a> Writer<'a> for HTML<'a> {
             "<p><span class=\"timestamp\">",
             "</span>",
         );
+
+        // Add reply anchor if necessary
+        if message.is_reply() {
+            if indent_size > 0 {
+                // If we are indented it means we are rendering in a thread
+                self.add_line(
+                    &mut formatted_message,
+                    &format!("<a href=\"#r-{}\">⇲</a>", message.guid),
+                    "<span class=\"reply_anchor\">",
+                    "</span>",
+                );
+            } else {
+                // If there is no ident we are rendering a top-level message
+                self.add_line(
+                    &mut formatted_message,
+                    &format!("<a href=\"#{}\">⇱</a>", message.guid),
+                    "<span class=\"reply_anchor\">",
+                    "</span>",
+                );
+            }
+        }
 
         // Add message sender
         self.add_line(
@@ -377,7 +409,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                             self.add_line(
                                 &mut formatted_message,
                                 &self.format_message(reply, 1)?,
-                                "<div class=\"reply\">",
+                                &format!("<div class=\"reply\" id=\"{}\">", reply.guid),
                                 "</div>",
                             );
                         }
@@ -438,16 +470,18 @@ impl<'a> Writer<'a> for HTML<'a> {
             }
             MediaType::Text(_) => {
                 format!(
-                    "<a href=\"file://{embed_path}\">Click to download {}</a>",
-                    attachment.filename()
+                    "<a href=\"{embed_path}\">Click to download {} ({})</a>",
+                    attachment.filename(),
+                    attachment.file_size()
                 )
             }
             MediaType::Application(_) => format!(
-                "<a href=\"file://{embed_path}\">Click to download {}</a>",
-                attachment.filename()
+                "<a href=\"{embed_path}\">Click to download {} ({})</a>",
+                attachment.filename(),
+                attachment.file_size()
             ),
             MediaType::Unknown => {
-                format!("<p>Unknown attachment type: {embed_path}</p> <a href=\"file://{embed_path}\">Download</a>")
+                format!("<p>Unknown attachment type: {embed_path}</p> <a href=\"{embed_path}\">Download ({})</a>", attachment.file_size())
             }
             MediaType::Other(media_type) => {
                 format!("<p>Unable to embed {media_type} attachments: {embed_path}</p>")
@@ -929,6 +963,7 @@ impl<'a> HTML<'a> {
         HTML::write_to_file(path, "<style>\n");
         HTML::write_to_file(path, STYLE);
         HTML::write_to_file(path, "\n</style>");
+        HTML::write_to_file(path, "\n</head>\n<body>\n");
     }
 
     fn edited_to_html(&self, timestamp: &str, text: &str, last: bool) -> String {
@@ -1060,7 +1095,7 @@ mod tests {
             guid: String::default(),
             text: None,
             service: Some("iMessage".to_string()),
-            handle_id: i32::default(),
+            handle_id: Some(i32::default()),
             subject: None,
             date: i64::default(),
             date_read: i64::default(),
@@ -1094,7 +1129,7 @@ mod tests {
             query_context: QueryContext::default(),
             no_lazy: false,
             custom_name: None,
-            platform: Platform::MacOS,
+            platform: Platform::macOS,
         }
     }
 
@@ -1102,6 +1137,7 @@ mod tests {
         Attachment {
             rowid: 0,
             filename: Some("a/b/c/d.jpg".to_string()),
+            uti: Some("public.png".to_string()),
             mime_type: Some("image/png".to_string()),
             transfer_name: Some("d.jpg".to_string()),
             total_bytes: 100,
@@ -1276,7 +1312,7 @@ mod tests {
         // May 17, 2022  8:29:42 PM
         message.date = 674526582885055488;
         message.text = Some("Hello world".to_string());
-        message.handle_id = 999999;
+        message.handle_id = Some(999999);
 
         let actual = exporter.format_message(&message, 0).unwrap();
         let expected = "<div class=\"message\">\n<div class=\"received\">\n<p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span>\n<span class=\"sender\">Sample Contact</span></p>\n<hr><div class=\"message_part\">\n<span class=\"bubble\">Hello world</span>\n</div>\n</div>\n</div>\n";
@@ -1295,7 +1331,7 @@ mod tests {
         let exporter = HTML::new(&config);
 
         let mut message = blank();
-        message.handle_id = 999999;
+        message.handle_id = Some(999999);
         // May 17, 2022  8:29:42 PM
         message.date = 674526582885055488;
         message.text = Some("Hello world".to_string());
@@ -1323,7 +1359,7 @@ mod tests {
         let exporter = HTML::new(&config);
 
         let mut message = blank();
-        message.handle_id = 999999;
+        message.handle_id = Some(999999);
         // May 17, 2022  8:29:42 PM
         message.date = 674526582885055488;
         message.text = Some("Hello world".to_string());
@@ -1428,7 +1464,7 @@ mod tests {
         message.date = 674526582885055488;
         message.associated_message_type = Some(2000);
         message.associated_message_guid = Some("fake_guid".to_string());
-        message.handle_id = 999999;
+        message.handle_id = Some(999999);
 
         let actual = exporter.format_reaction(&message).unwrap();
         let expected = "<span class=\"reaction\"><b>Loved</b> by Sample Contact</span>";

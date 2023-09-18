@@ -19,7 +19,12 @@ use crate::{
     },
 };
 
+const DIVISOR: f64 = 1024.;
+const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+
 /// Represents the MIME type of a message's attachment data
+///
+/// The interior `str` contains the subtype, i.e. `x-m4a` for `audio/x-m4a`
 #[derive(Debug, PartialEq, Eq)]
 pub enum MediaType<'a> {
     Image(&'a str),
@@ -36,9 +41,10 @@ pub enum MediaType<'a> {
 pub struct Attachment {
     pub rowid: i32,
     pub filename: Option<String>,
+    pub uti: Option<String>,
     pub mime_type: Option<String>,
     pub transfer_name: Option<String>,
-    pub total_bytes: i32,
+    pub total_bytes: i64,
     pub hide_attachment: i32,
     pub copied_path: Option<PathBuf>,
 }
@@ -48,6 +54,7 @@ impl Table for Attachment {
         Ok(Attachment {
             rowid: row.get("rowid")?,
             filename: row.get("filename").unwrap_or(None),
+            uti: row.get("uti").unwrap_or(None),
             mime_type: row.get("mime_type").unwrap_or(None),
             transfer_name: row.get("transfer_name").unwrap_or(None),
             total_bytes: row.get("total_bytes").unwrap_or_default(),
@@ -114,7 +121,19 @@ impl Attachment {
                     MediaType::Other(mime)
                 }
             }
-            None => MediaType::Unknown,
+            None => {
+                // Fallback to `uti` if the MIME type cannot be inferred
+                if let Some(uti) = &self.uti {
+                    match uti.as_str() {
+                        // This type is for audio messages, which are sent in `caf` format
+                        // https://developer.apple.com/library/archive/documentation/MusicAudio/Reference/CAFSpec/CAF_overview/CAF_overview.html
+                        "com.apple.coreaudio-format" => MediaType::Audio("x-caf; codecs=opus"),
+                        _ => MediaType::Unknown,
+                    }
+                } else {
+                    MediaType::Unknown
+                }
+            }
         }
     }
 
@@ -148,15 +167,32 @@ impl Attachment {
         "Attachment missing name metadata!"
     }
 
+    /// Get a human readable file size for an attachment
+    pub fn file_size(&self) -> String {
+        Attachment::format_file_size(self.total_bytes)
+    }
+
+    /// Get a human readable file size for an arbitrary amount of bytes
+    fn format_file_size(total_bytes: i64) -> String {
+        let mut index: usize = 0;
+        let mut bytes = total_bytes as f64;
+        while index < UNITS.len() - 1 && bytes > DIVISOR {
+            index += 1;
+            bytes /= DIVISOR;
+        }
+
+        format!("{bytes:.2} {}", UNITS[index])
+    }
+
     /// Given a platform and database source, resolve the path for the current attachment
     ///
-    /// For MacOS, `db_path` is unused. For iOS, `db_path` is the path to the root of the backup directory.
+    /// For macOS, `db_path` is unused. For iOS, `db_path` is the path to the root of the backup directory.
     ///
     /// iOS Parsing logic source is from [here](https://github.com/nprezant/iMessageBackup/blob/940d001fb7be557d5d57504eb26b3489e88de26e/imessage_backup_tools.py#L83-L85).
     pub fn resolved_attachment_path(&self, platform: &Platform, db_path: &Path) -> Option<String> {
         if let Some(path_str) = &self.filename {
             return match platform {
-                Platform::MacOS => Some(Attachment::gen_macos_attachment(path_str)),
+                Platform::macOS => Some(Attachment::gen_macos_attachment(path_str)),
                 Platform::iOS => Attachment::gen_ios_attachment(path_str, db_path),
             };
         }
@@ -182,7 +218,7 @@ impl Attachment {
     ///
     /// let db_path = default_db_path();
     /// let conn = get_connection(&db_path).unwrap();
-    /// Attachment::run_diagnostic(&conn, &db_path, &Platform::MacOS);
+    /// Attachment::run_diagnostic(&conn, &db_path, &Platform::macOS);
     /// ```
     pub fn run_diagnostic(
         db: &Connection,
@@ -206,7 +242,7 @@ impl Attachment {
                 total_attachments += 1;
                 if let Ok(filepath) = path {
                     match platform {
-                        Platform::MacOS => {
+                        Platform::macOS => {
                             !Path::new(&Attachment::gen_macos_attachment(filepath)).exists()
                         }
                         Platform::iOS => {
@@ -227,13 +263,22 @@ impl Attachment {
             })
             .count();
 
+        let mut bytes_query = db
+            .prepare(&format!("SELECT SUM(total_bytes) FROM {ATTACHMENT}"))
+            .map_err(TableError::Messages)?;
+
+        let total_bytes: i64 = bytes_query.query_row([], |r| r.get(0)).unwrap_or(0);
+
         done_processing();
 
-        if missing_files > 0 {
+        if total_attachments > 0 {
             println!("\rAttachment diagnostic data:");
-
+            println!("    Total attachments: {total_attachments}");
+            println!(
+                "    Total attachment data: {}",
+                Attachment::format_file_size(total_bytes)
+            );
             if missing_files > 0 && total_attachments > 0 {
-                println!("    Total attachments: {total_attachments}");
                 println!(
                     "    Missing files: {missing_files:?} ({:.0}%)",
                     (missing_files as f64 / total_attachments as f64) * 100f64
@@ -248,10 +293,10 @@ impl Attachment {
         Ok(())
     }
 
-    /// Generate a MacOS path for an attachment
+    /// Generate a macOS path for an attachment
     fn gen_macos_attachment(path: &str) -> String {
         if path.starts_with('~') {
-            return path.replace('~', &home());
+            return path.replacen('~', &home(), 1);
         }
         path.to_string()
     }
@@ -282,6 +327,7 @@ mod tests {
         Attachment {
             rowid: 1,
             filename: Some("a/b/c.png".to_string()),
+            uti: Some("public.png".to_string()),
             mime_type: Some("image".to_string()),
             transfer_name: Some("c.png".to_string()),
             total_bytes: 100,
@@ -370,7 +416,7 @@ mod tests {
         let attachment = sample_attachment();
 
         assert_eq!(
-            attachment.resolved_attachment_path(&Platform::MacOS, &db_path),
+            attachment.resolved_attachment_path(&Platform::macOS, &db_path),
             Some("a/b/c.png".to_string())
         );
     }
@@ -383,11 +429,23 @@ mod tests {
 
         assert!(
             attachment
-                .resolved_attachment_path(&Platform::MacOS, &db_path)
+                .resolved_attachment_path(&Platform::macOS, &db_path)
                 .unwrap()
                 .len()
                 > attachment.filename.unwrap().len()
         );
+    }
+
+    #[test]
+    fn can_get_resolved_path_macos_raw_tilde() {
+        let db_path = PathBuf::from("fake_root");
+        let mut attachment = sample_attachment();
+        attachment.filename = Some("~/a/b/c~d.png".to_string());
+
+        assert!(attachment
+            .resolved_attachment_path(&Platform::macOS, &db_path)
+            .unwrap()
+            .ends_with("c~d.png"));
     }
 
     #[test]
@@ -408,7 +466,7 @@ mod tests {
         attachment.filename = None;
 
         assert_eq!(
-            attachment.resolved_attachment_path(&Platform::MacOS, &db_path),
+            attachment.resolved_attachment_path(&Platform::macOS, &db_path),
             None
         );
     }
@@ -423,5 +481,44 @@ mod tests {
             attachment.resolved_attachment_path(&Platform::iOS, &db_path),
             None
         );
+    }
+
+    #[test]
+    fn can_get_file_size_bytes() {
+        let attachment = sample_attachment();
+
+        assert_eq!(attachment.file_size(), String::from("100.00 B"));
+    }
+
+    #[test]
+    fn can_get_file_size_kb() {
+        let mut attachment = sample_attachment();
+        attachment.total_bytes = 2300;
+
+        assert_eq!(attachment.file_size(), String::from("2.25 KB"));
+    }
+
+    #[test]
+    fn can_get_file_size_mb() {
+        let mut attachment = sample_attachment();
+        attachment.total_bytes = 5612000;
+
+        assert_eq!(attachment.file_size(), String::from("5.35 MB"));
+    }
+
+    #[test]
+    fn can_get_file_size_gb() {
+        let mut attachment: Attachment = sample_attachment();
+        attachment.total_bytes = 9234712394;
+
+        assert_eq!(attachment.file_size(), String::from("8.60 GB"));
+    }
+
+    #[test]
+    fn can_get_file_size_cap() {
+        let mut attachment: Attachment = sample_attachment();
+        attachment.total_bytes = i64::MAX;
+
+        assert_eq!(attachment.file_size(), String::from("8388608.00 TB"));
     }
 }

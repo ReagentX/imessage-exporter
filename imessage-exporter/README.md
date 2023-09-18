@@ -12,7 +12,7 @@ This binary is available on [crates.io](https://crates.io/crates/imessage-export
 
 `cargo install imessage-exporter` is the best way to install the app for normal use.
 
-<details><summary>Uninstall steps</code></summary><p><pre>% cargo uninstall message-exporter</pre></p></details>
+<details><summary>Uninstall steps</code></summary><p><pre>% cargo uninstall imessage-exporter</pre></p></details>
 
 ### Homebrew
 
@@ -20,13 +20,13 @@ This binary is available via [`brew`](https://formulae.brew.sh/formula/imessage-
 
 `brew install imessage-exporter` will install the app, but it may not be up to date with the latest release.
 
-<details><summary>Uninstall steps</code></summary><p><pre>% brew uninstall message-exporter</pre></p></details>
+<details><summary>Uninstall steps</code></summary><p><pre>% brew uninstall imessage-exporter</pre></p></details>
 
 ### Prebuilt Binaries
 
 The [releases page](https://github.com/ReagentX/imessage-exporter/releases) provides prebuilt binaries for both Apple Silicon and Intel-based Macs.
 
-<details><summary>Uninstall steps</code></summary><p><pre>% rm path/to/message-exporter-binary</pre></p></details>
+<details><summary>Uninstall steps</code></summary><p><pre>% rm path/to/imessage-exporter-binary</pre></p></details>
 
 ### Installing manually
 
@@ -51,11 +51,11 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
 
 -p, --db-path <path/to/source>
         Specify a custom path for the iMessage database location
-        For MacOS, specify a path to a `chat.db` file
+        For macOS, specify a path to a `chat.db` file
         For iOS, specify a path to the root of an unencrypted backup directory
         If omitted, the default directory is ~/Library/Messages/chat.db
 
--a, --platform <MacOS, iOS>
+-a, --platform <macOS, iOS>
         Specify the platform the database was created on
         If omitted, the platform type is determined automatically
 
@@ -109,10 +109,10 @@ Export as `html` from `/Volumes/external/chat.db` to `/Volumes/external/export` 
 % imessage-exporter -f html -c disabled -p /Volumes/external/chat.db -o /Volumes/external/export
 ```
 
-Export messages from `2020-01-01` to `2020-12-31` as `txt` from the default MacOS iMessage Database location to `~/export-2020`:
+Export messages from `2020-01-01` to `2020-12-31` as `txt` from the default macOS iMessage Database location to `~/export-2020`:
 
 ```zsh
-% imessage-exporter -f txt -o ~/export-2020 -s 2020-01-01 -e 2021-01-01 -a MacOS
+% imessage-exporter -f txt -o ~/export-2020 -s 2020-01-01 -e 2021-01-01 -a macOS
 ```
 
 ## Features

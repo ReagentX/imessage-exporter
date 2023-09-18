@@ -92,7 +92,7 @@ pub const ME: &str = "Me";
 pub const YOU: &str = "You";
 /// Name used for contacts or chats where the name cannot be discovered
 pub const UNKNOWN: &str = "Unknown";
-/// Default location for the Messages database on MacOS
+/// Default location for the Messages database on macOS
 pub const DEFAULT_PATH_MACOS: &str = "Library/Messages/chat.db";
 /// Default location for the Messages database in an unencrypted iOS backup
 pub const DEFAULT_PATH_IOS: &str = "3d/3d0d7e5fb2ce288813306e4d4636395e047a3d28";

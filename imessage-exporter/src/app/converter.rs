@@ -42,7 +42,7 @@ fn exists(name: &str) -> bool {
 
 /// Convert a HEIC image file to a JPEG
 ///
-/// This uses the MacOS builtin `sips` program
+/// This uses the macOS builtin `sips` program
 /// Docs: <https://www.unix.com/man-page/osx/1/sips/> (or `man sips`)
 ///
 /// If `to` contains a directory that does not exist, i.e. `/fake/out.jpg`, instead

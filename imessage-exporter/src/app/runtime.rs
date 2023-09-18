@@ -96,7 +96,12 @@ impl<'a> Config<'a> {
     pub fn message_attachment_path(&self, attachment: &Attachment) -> String {
         // Build a relative filepath from the fully qualified one on the `Attachment`
         match &attachment.copied_path {
-            Some(path) => path.display().to_string(),
+            Some(path) => {
+                if let Ok(relative_path) = path.strip_prefix(&self.options.export_path) {
+                    return relative_path.display().to_string();
+                }
+                path.display().to_string()
+            }
             None => attachment
                 .resolved_attachment_path(&self.options.platform, &self.options.db_path)
                 .unwrap_or(attachment.filename().to_string()),
@@ -145,7 +150,7 @@ impl<'a> Config<'a> {
         let mut added = 0;
         let mut out_s = String::with_capacity(MAX_LENGTH);
         for participant_id in participants.iter() {
-            let participant = self.who(participant_id, false);
+            let participant = self.who(&Some(*participant_id), false);
             if participant.len() + out_s.len() < MAX_LENGTH {
                 if !out_s.is_empty() {
                     out_s.push_str(", ")
@@ -277,25 +282,25 @@ impl<'a> Config<'a> {
     }
 
     /// Determine who sent a message
-    pub fn who(&self, handle_id: &i32, is_from_me: bool) -> &str {
+    pub fn who(&self, handle_id: &Option<i32>, is_from_me: bool) -> &str {
         if is_from_me {
-            self.options.custom_name.unwrap_or(ME)
-        } else {
-            match self.participants.get(handle_id) {
+            return self.options.custom_name.unwrap_or(ME);
+        } else if let Some(handle_id) = handle_id {
+            return match self.participants.get(handle_id) {
                 Some(contact) => contact,
                 None => UNKNOWN,
-            }
+            };
         }
+        UNKNOWN
     }
 }
 
 #[cfg(test)]
-mod tests {
+mod filename_tests {
     use crate::{app::attachment_manager::AttachmentManager, Config, Options};
     use imessage_database::{
         tables::{
             chat::Chat,
-            messages::Message,
             table::{get_connection, MAX_LENGTH},
         },
         util::{dirs::default_db_path, platform::Platform, query_context::QueryContext},
@@ -315,7 +320,7 @@ mod tests {
             query_context: QueryContext::default(),
             no_lazy: false,
             custom_name: None,
-            platform: Platform::MacOS,
+            platform: Platform::macOS,
         }
     }
 
@@ -341,36 +346,6 @@ mod tests {
             offset: 0,
             db: connection,
             converter: Some(crate::app::converter::Converter::Sips),
-        }
-    }
-
-    fn blank() -> Message {
-        Message {
-            rowid: i32::default(),
-            guid: String::default(),
-            text: None,
-            service: Some("iMessage".to_string()),
-            handle_id: i32::default(),
-            subject: None,
-            date: i64::default(),
-            date_read: i64::default(),
-            date_delivered: i64::default(),
-            is_from_me: false,
-            is_read: false,
-            item_type: 0,
-            group_title: None,
-            group_action_type: 0,
-            associated_message_guid: None,
-            associated_message_type: Some(i32::default()),
-            balloon_bundle_id: None,
-            expressive_send_style_id: None,
-            thread_originator_guid: None,
-            thread_originator_part: None,
-            date_edited: 0,
-            chat_id: None,
-            num_attachments: 0,
-            deleted_from: None,
-            num_replies: 0,
         }
     }
 
@@ -552,6 +527,85 @@ mod tests {
         let filename = app.filename(&chat);
         assert_eq!(filename, "Default");
     }
+}
+
+#[cfg(test)]
+mod who_tests {
+    use crate::{app::attachment_manager::AttachmentManager, Config, Options};
+    use imessage_database::{
+        tables::{chat::Chat, messages::Message, table::get_connection},
+        util::{dirs::default_db_path, platform::Platform, query_context::QueryContext},
+    };
+    use std::{collections::HashMap, path::PathBuf};
+
+    fn fake_options<'a>() -> Options<'a> {
+        Options {
+            db_path: default_db_path(),
+            attachment_manager: AttachmentManager::Disabled,
+            diagnostic: false,
+            export_type: None,
+            export_path: PathBuf::new(),
+            query_context: QueryContext::default(),
+            no_lazy: false,
+            custom_name: None,
+            platform: Platform::macOS,
+        }
+    }
+
+    fn fake_chat() -> Chat {
+        Chat {
+            rowid: 0,
+            chat_identifier: "Default".to_string(),
+            service_name: "".to_string(),
+            display_name: None,
+        }
+    }
+
+    fn fake_app(options: Options) -> Config {
+        let connection = get_connection(&options.db_path).unwrap();
+        Config {
+            chatrooms: HashMap::new(),
+            real_chatrooms: HashMap::new(),
+            chatroom_participants: HashMap::new(),
+            participants: HashMap::new(),
+            real_participants: HashMap::new(),
+            reactions: HashMap::new(),
+            options,
+            offset: 0,
+            db: connection,
+            converter: Some(crate::app::converter::Converter::Sips),
+        }
+    }
+
+    fn blank() -> Message {
+        Message {
+            rowid: i32::default(),
+            guid: String::default(),
+            text: None,
+            service: Some("iMessage".to_string()),
+            handle_id: Some(i32::default()),
+            subject: None,
+            date: i64::default(),
+            date_read: i64::default(),
+            date_delivered: i64::default(),
+            is_from_me: false,
+            is_read: false,
+            item_type: 0,
+            group_title: None,
+            group_action_type: 0,
+            associated_message_guid: None,
+            associated_message_type: Some(i32::default()),
+            balloon_bundle_id: None,
+            expressive_send_style_id: None,
+            thread_originator_guid: None,
+            thread_originator_part: None,
+            date_edited: 0,
+            chat_id: None,
+            num_attachments: 0,
+            deleted_from: None,
+            num_replies: 0,
+        }
+    }
 
     #[test]
     fn can_get_who_them() {
@@ -561,8 +615,8 @@ mod tests {
         // Create participant data
         app.participants.insert(10, "Person 10".to_string());
 
-        // Get filename
-        let who = app.who(&10, false);
+        // Get participant name
+        let who = app.who(&Some(10), false);
         assert_eq!(who, "Person 10".to_string());
     }
 
@@ -571,8 +625,8 @@ mod tests {
         let options = fake_options();
         let app = fake_app(options);
 
-        // Get filename
-        let who = app.who(&10, false);
+        // Get participant name
+        let who = app.who(&Some(10), false);
         assert_eq!(who, "Unknown".to_string());
     }
 
@@ -581,8 +635,8 @@ mod tests {
         let options = fake_options();
         let app = fake_app(options);
 
-        // Get filename
-        let who = app.who(&0, true);
+        // Get participant name
+        let who = app.who(&Some(0), true);
         assert_eq!(who, "Me".to_string());
     }
 
@@ -592,9 +646,29 @@ mod tests {
         options.custom_name = Some("Name");
         let app = fake_app(options);
 
-        // Get filename
-        let who = app.who(&0, true);
+        // Get participant name
+        let who = app.who(&Some(0), true);
         assert_eq!(who, "Name".to_string());
+    }
+
+    #[test]
+    fn can_get_who_none_me() {
+        let options = fake_options();
+        let app = fake_app(options);
+
+        // Get participant name
+        let who = app.who(&None, true);
+        assert_eq!(who, "Me".to_string());
+    }
+
+    #[test]
+    fn can_get_who_none_them() {
+        let options = fake_options();
+        let app = fake_app(options);
+
+        // Get participant name
+        let who = app.who(&None, false);
+        assert_eq!(who, "Unknown".to_string());
     }
 
     #[test]
@@ -674,6 +748,59 @@ mod tests {
         let room = app.conversation(&message);
         assert!(room.is_none());
     }
+}
+
+#[cfg(test)]
+mod directory_tests {
+    use crate::{app::attachment_manager::AttachmentManager, Config, Options};
+    use imessage_database::{
+        tables::{attachment::Attachment, table::get_connection},
+        util::{dirs::default_db_path, platform::Platform, query_context::QueryContext},
+    };
+    use std::{collections::HashMap, path::PathBuf};
+
+    fn fake_options<'a>() -> Options<'a> {
+        Options {
+            db_path: default_db_path(),
+            attachment_manager: AttachmentManager::Disabled,
+            diagnostic: false,
+            export_type: None,
+            export_path: PathBuf::new(),
+            query_context: QueryContext::default(),
+            no_lazy: false,
+            custom_name: None,
+            platform: Platform::macOS,
+        }
+    }
+
+    fn fake_app(options: Options) -> Config {
+        let connection = get_connection(&options.db_path).unwrap();
+        Config {
+            chatrooms: HashMap::new(),
+            real_chatrooms: HashMap::new(),
+            chatroom_participants: HashMap::new(),
+            participants: HashMap::new(),
+            real_participants: HashMap::new(),
+            reactions: HashMap::new(),
+            options,
+            offset: 0,
+            db: connection,
+            converter: Some(crate::app::converter::Converter::Sips),
+        }
+    }
+
+    pub fn fake_attachment() -> Attachment {
+        Attachment {
+            rowid: 0,
+            filename: Some("a/b/c/d.jpg".to_string()),
+            uti: Some("public.png".to_string()),
+            mime_type: Some("image/png".to_string()),
+            transfer_name: Some("d.jpg".to_string()),
+            total_bytes: 100,
+            hide_attachment: 0,
+            copied_path: None,
+        }
+    }
 
     #[test]
     fn can_get_valid_attachment_sub_dir() {
@@ -712,5 +839,54 @@ mod tests {
         // Get subdirectory
         let sub_dir = app.conversation_attachment_path(None);
         assert_eq!(String::from("orphaned"), sub_dir)
+    }
+
+    #[test]
+    fn can_get_path_not_copied() {
+        let options = fake_options();
+        let app = fake_app(options);
+
+        // Create attachment
+        let attachment = fake_attachment();
+
+        let result = app.message_attachment_path(&attachment);
+        let expected = String::from("a/b/c/d.jpg");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn can_get_path_copied() {
+        let mut options = fake_options();
+        // Set an export path
+        options.export_path = PathBuf::from("/Users/ReagentX/exports");
+
+        let app = fake_app(options);
+
+        // Create attachment
+        let mut attachment = fake_attachment();
+        let mut full_path = PathBuf::from("/Users/ReagentX/exports/attachments");
+        full_path.push(attachment.filename());
+        attachment.copied_path = Some(full_path);
+
+        let result = app.message_attachment_path(&attachment);
+        let expected = String::from("attachments/d.jpg");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn can_get_path_copied_bad() {
+        let mut options = fake_options();
+        // Set an export path
+        options.export_path = PathBuf::from("/Users/ReagentX/exports");
+
+        let app = fake_app(options);
+
+        // Create attachment
+        let mut attachment = fake_attachment();
+        attachment.copied_path = Some(PathBuf::from(attachment.filename.as_ref().unwrap()));
+
+        let result = app.message_attachment_path(&attachment);
+        let expected = String::from("a/b/c/d.jpg");
+        assert_eq!(result, expected);
     }
 }

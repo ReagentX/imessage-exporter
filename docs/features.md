@@ -4,7 +4,7 @@ This exporter is fully-featured and well-documented.
 
 ## Targeted Versions
 
-This tool targets the current latest public release for MacOS and iMessage. It may work with older databases, but all features may not be available.
+This tool targets the current latest public release for macOS and iMessage. It may work with older databases, but all features may not be available.
 
 ## Supported Message Features
 
