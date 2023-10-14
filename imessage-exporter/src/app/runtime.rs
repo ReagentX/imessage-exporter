@@ -328,7 +328,7 @@ mod filename_tests {
         Chat {
             rowid: 0,
             chat_identifier: "Default".to_string(),
-            service_name: "".to_string(),
+            service_name: Some("".to_string()),
             display_name: None,
         }
     }
@@ -556,7 +556,7 @@ mod who_tests {
         Chat {
             rowid: 0,
             chat_identifier: "Default".to_string(),
-            service_name: "".to_string(),
+            service_name: Some("".to_string()),
             display_name: None,
         }
     }

@@ -16,7 +16,7 @@ use crate::{
 pub struct Chat {
     pub rowid: i32,
     pub chat_identifier: String,
-    pub service_name: String,
+    pub service_name: Option<String>,
     pub display_name: Option<String>,
 }
 
