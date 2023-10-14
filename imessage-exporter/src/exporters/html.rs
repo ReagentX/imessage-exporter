@@ -1105,7 +1105,7 @@ impl<'a> HTML<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::{env::current_dir, path::PathBuf};
 
     use crate::{
         app::attachment_manager::AttachmentManager, exporters::exporter::Writer, Config, Exporter,
@@ -1569,6 +1569,31 @@ mod tests {
         let actual = exporter.format_attachment(&mut attachment, &message);
 
         assert_eq!(actual, Err("d.jpg"));
+    }
+
+    #[test]
+    fn can_format_html_attachment_sticker() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        // Set message to sticker variant
+        message.associated_message_type = Some(1000);
+
+        let mut attachment = fake_attachment();
+        attachment.is_sticker = true;
+        let sticker_path = current_dir()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("imessage-database/test_data/stickers/outline.heic");
+        attachment.filename = Some(sticker_path.to_string_lossy().to_string());
+
+        let actual = exporter.format_sticker(&mut attachment, &message);
+
+        assert_eq!(actual, "<img src=\"/Users/chris/Documents/Code/Rust/imessage-exporter/imessage-database/test_data/stickers/outline.heic\" loading=\"lazy\">\n<div class=\"sticker_effect\">Sent with Outline effect</div>");
     }
 }
 
