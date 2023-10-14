@@ -67,6 +67,8 @@ pub enum CustomBalloon<'a> {
     Fitness,
     /// Photos.app slideshow messages
     Slideshow,
+    /// [Check In](https://support.apple.com/guide/iphone/use-check-in-iphc143bb7e9/ios) Message
+    CheckIn,
 }
 
 /// URL Message Types

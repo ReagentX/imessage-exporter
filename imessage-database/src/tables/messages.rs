@@ -407,11 +407,7 @@ impl Message {
     /// This is used to create date data for anywhere dates are stored in the table, including
     /// plist payload or [`streamtyped`](crate::util::streamtyped) data. In this struct, the
     /// other date methods invoke this method.
-    pub fn get_local_time(
-        &self,
-        date_stamp: &i64,
-        offset: &i64,
-    ) -> Result<DateTime<Local>, MessageError> {
+    pub fn get_local_time(date_stamp: &i64, offset: &i64) -> Result<DateTime<Local>, MessageError> {
         let utc_stamp =
             NaiveDateTime::from_timestamp_opt((date_stamp / TIMESTAMP_FACTOR) + offset, 0)
                 .ok_or(MessageError::InvalidTimestamp(*date_stamp))?;
@@ -422,28 +418,28 @@ impl Message {
     ///
     /// This field is stored as a unix timestamp with an epoch of `2001-01-01 00:00:00` in the local time zone
     pub fn date(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
-        self.get_local_time(&self.date, offset)
+        Self::get_local_time(&self.date, offset)
     }
 
     /// Calculates the date a message was marked as delivered.
     ///
     /// This field is stored as a unix timestamp with an epoch of `2001-01-01 00:00:00` in the local time zone
     pub fn date_delivered(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
-        self.get_local_time(&self.date_delivered, offset)
+        Self::get_local_time(&self.date_delivered, offset)
     }
 
     /// Calculates the date a message was marked as read.
     ///
     /// This field is stored as a unix timestamp with an epoch of `2001-01-01 00:00:00` in the local time zone
     pub fn date_read(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
-        self.get_local_time(&self.date_read, offset)
+        Self::get_local_time(&self.date_read, offset)
     }
 
     /// Calculates the date a message was most recently edited.
     ///
     /// This field is stored as a unix timestamp with an epoch of `2001-01-01 00:00:00` in the local time zone
     pub fn date_edited(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
-        self.get_local_time(&self.date_read, offset)
+        Self::get_local_time(&self.date_read, offset)
     }
 
     /// Gets the time until the message was read. This can happen in two ways:
@@ -746,6 +742,9 @@ impl Message {
     }
 
     /// Parse the App's Bundle ID out of the Balloon's Bundle ID
+    ///
+    /// For example, a Bundle ID like `com.apple.messages.MSMessageExtensionBalloonPlugin:0000000000:com.apple.SafetyMonitorApp.SafetyMonitorMessages`
+    /// should get parsed into `com.apple.SafetyMonitorApp.SafetyMonitorMessages`.
     fn parse_balloon_bundle_id(&self) -> Option<&str> {
         if let Some(bundle_id) = &self.balloon_bundle_id {
             let mut parts = bundle_id.split(':');
@@ -787,6 +786,9 @@ impl Message {
                         }
                         "com.apple.mobileslideshow.PhotosMessagesApp" => {
                             Variant::App(CustomBalloon::Slideshow)
+                        }
+                        "com.apple.SafetyMonitorApp.SafetyMonitorMessages" => {
+                            Variant::App(CustomBalloon::CheckIn)
                         }
                         _ => Variant::App(CustomBalloon::Application(bundle_id)),
                     },
