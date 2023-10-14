@@ -37,7 +37,10 @@ This tool targets the current latest public release for macOS and iMessage. It m
 - Attachments
   - Any type of attachment that can be displayed on the web is embedded in the HTML exports
   - Attachments can be copied to the export directory or referenced in-place
-  - Less-compatible HEIC images are converted to PNG for portable exports
+  - Less-compatible images are converted for portable exports:
+    - Attachment `HEIC` files convert to `JPEG`
+    - Sticker `HEIC` files convert to `PNG`
+    - Sticker `HEICS` files convert to `GIF`
   - Attachments are displayed as
     - File paths in TXT exports
     - Embeds in HTML exports (including `<img>`, `<video>`, and `<audio>`)

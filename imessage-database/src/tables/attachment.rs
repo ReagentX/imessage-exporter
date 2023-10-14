@@ -4,10 +4,15 @@
 
 use rusqlite::{Connection, Error, Result, Row, Statement};
 use sha1::{Digest, Sha1};
-use std::path::{Path, PathBuf};
+use std::{
+    fs::File,
+    io::Read,
+    path::{Path, PathBuf},
+};
 
 use crate::{
-    error::table::TableError,
+    error::{attachment::AttachmentError, table::TableError},
+    message_types::sticker::{get_sticker_effect, StickerEffect},
     tables::{
         messages::Message,
         table::{Table, ATTACHMENT},
@@ -45,6 +50,7 @@ pub struct Attachment {
     pub mime_type: Option<String>,
     pub transfer_name: Option<String>,
     pub total_bytes: i64,
+    pub is_sticker: bool,
     pub hide_attachment: i32,
     pub copied_path: Option<PathBuf>,
 }
@@ -58,6 +64,7 @@ impl Table for Attachment {
             mime_type: row.get("mime_type").unwrap_or(None),
             transfer_name: row.get("transfer_name").unwrap_or(None),
             total_bytes: row.get("total_bytes").unwrap_or_default(),
+            is_sticker: row.get("is_sticker").unwrap_or(false),
             hide_attachment: row.get("hide_attachment").unwrap_or(0),
             copied_path: None,
         })
@@ -135,6 +142,41 @@ impl Attachment {
                 }
             }
         }
+    }
+
+    pub fn as_bytes(
+        &self,
+        platform: &Platform,
+        db_path: &Path,
+    ) -> Result<Option<Vec<u8>>, AttachmentError> {
+        if let Some(file_path) = self.resolved_attachment_path(platform, db_path) {
+            let mut file = File::open(&file_path)
+                .map_err(|err| AttachmentError::Unreadable(file_path, err))?;
+            let mut bytes = vec![];
+            file.read_to_end(&mut bytes).unwrap();
+
+            return Ok(Some(bytes));
+        }
+        Ok(None)
+    }
+
+    pub fn get_sticker_effect(
+        &self,
+        platform: &Platform,
+        db_path: &Path,
+    ) -> Result<Option<StickerEffect>, AttachmentError> {
+        // Handle the non-sticker case
+        if !self.is_sticker {
+            return Ok(None);
+        }
+
+        // Try to parse the HEIC data
+        if let Some(data) = self.as_bytes(platform, db_path)? {
+            return Ok(Some(get_sticker_effect(data)));
+        }
+
+        // Default if the attachment is a sticker and cannot be parsed/read
+        Ok(Some(StickerEffect::default()))
     }
 
     /// Get the path to an attachment, if it exists
@@ -331,6 +373,7 @@ mod tests {
             mime_type: Some("image".to_string()),
             transfer_name: Some("c.png".to_string()),
             total_bytes: 100,
+            is_sticker: false,
             hide_attachment: 0,
             copied_path: None,
         }

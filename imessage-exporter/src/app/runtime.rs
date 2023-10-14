@@ -797,6 +797,7 @@ mod directory_tests {
             mime_type: Some("image/png".to_string()),
             transfer_name: Some("d.jpg".to_string()),
             total_bytes: 100,
+            is_sticker: false,
             hide_attachment: 0,
             copied_path: None,
         }

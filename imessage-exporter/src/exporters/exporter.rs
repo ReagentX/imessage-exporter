@@ -30,6 +30,8 @@ pub(super) trait Writer<'a> {
         attachment: &'a mut Attachment,
         msg: &'a Message,
     ) -> Result<String, &'a str>;
+    /// Format a sticker, possibly by reading the disk
+    fn format_sticker(&self, attachment: &'a mut Attachment, msg: &'a Message) -> String;
     /// Format an app message by parsing some of its fields
     fn format_app(
         &self,

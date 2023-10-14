@@ -5,6 +5,26 @@ use std::{
 };
 
 #[derive(Debug)]
+pub enum ImageType {
+    #[allow(non_camel_case_types)]
+    Jpeg,
+    #[allow(non_camel_case_types)]
+    Gif,
+    #[allow(non_camel_case_types)]
+    Png,
+}
+
+impl ImageType {
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            ImageType::Jpeg => "jpeg",
+            ImageType::Gif => "gif",
+            ImageType::Png => "png",
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum Converter {
     Sips,
     Imagemagick,
@@ -40,7 +60,7 @@ fn exists(name: &str) -> bool {
     false
 }
 
-/// Convert a HEIC image file to a JPEG
+/// Convert a HEIC image file to the provided format
 ///
 /// This uses the macOS builtin `sips` program
 /// Docs: <https://www.unix.com/man-page/osx/1/sips/> (or `man sips`)
@@ -49,7 +69,12 @@ fn exists(name: &str) -> bool {
 /// of failing, `sips` will create a file called `fake` in `/`. Subsequent writes
 /// by `sips` to the same location will not fail, but since it is a file instead
 /// of a directory, this will fail for non-`sips` copies.
-pub fn heic_to_jpeg(from: &Path, to: &Path, converter: &Converter) -> Option<()> {
+pub fn convert_heic(
+    from: &Path,
+    to: &Path,
+    converter: &Converter,
+    output_image_type: ImageType,
+) -> Option<()> {
     // Get the path we want to copy from
     let from_path = from.to_str()?;
 
@@ -70,7 +95,14 @@ pub fn heic_to_jpeg(from: &Path, to: &Path, converter: &Converter) -> Option<()>
         Converter::Sips => {
             // Build the command
             match Command::new("sips")
-                .args(&vec!["-s", "format", "jpeg", from_path, "-o", to_path])
+                .args(&vec![
+                    "-s",
+                    "format",
+                    output_image_type.to_str(),
+                    from_path,
+                    "-o",
+                    to_path,
+                ])
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .stdin(Stdio::null())
