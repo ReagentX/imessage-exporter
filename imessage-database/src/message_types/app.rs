@@ -348,4 +348,33 @@ mod tests {
 
         assert_eq!(balloon.parse_query_string(), expected);
     }
+
+    #[test]
+    fn test_parse_find_my() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/app_message/FindMy.plist");
+        let plist_data = File::open(plist_path).unwrap();
+        let plist = Value::from_reader(plist_data).unwrap();
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = AppMessage::from_map(&parsed).unwrap();
+        let expected = AppMessage {
+            image: None,
+            url: Some(
+                "?FindMyMessagePayloadVersionKey=v0&FindMyMessagePayloadZippedDataKey=FAKEDATA",
+            ),
+            title: None,
+            subtitle: None,
+            caption: None,
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Find My"),
+            ldtext: Some("Started Sharing Location"),
+        };
+
+        assert_eq!(balloon, expected);
+    }
 }
