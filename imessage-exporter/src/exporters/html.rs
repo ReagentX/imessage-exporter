@@ -27,7 +27,7 @@ use imessage_database::{
         table::{Table, FITNESS_RECEIVER, ME, ORPHANED, YOU},
     },
     util::{
-        dates::{format, get_offset, readable_diff, TIMESTAMP_FACTOR},
+        dates::{format, get_local_time, readable_diff, TIMESTAMP_FACTOR},
         plist::parse_plist,
     },
 };
@@ -714,9 +714,8 @@ impl<'a> Writer<'a> for HTML<'a> {
                         match previous_timestamp {
                             None => out_s.push_str(&self.edited_to_html("", text, last)),
                             Some(prev_timestamp) => {
-                                let end = Message::get_local_time(timestamp, &self.config.offset);
-                                let start =
-                                    Message::get_local_time(prev_timestamp, &self.config.offset);
+                                let end = get_local_time(timestamp, &self.config.offset);
+                                let start = get_local_time(prev_timestamp, &self.config.offset);
 
                                 let diff = readable_diff(start, end).unwrap_or_default();
                                 out_s.push_str(&self.edited_to_html(
@@ -947,7 +946,7 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
         self.balloon_to_html(balloon, "Slideshow", &mut [], message)
     }
 
-    fn format_check_in(&self, balloon: &AppMessage, message: &Message) -> String {
+    fn format_check_in(&self, balloon: &AppMessage, _: &Message) -> String {
         let mut out_s = String::new();
 
         out_s.push_str("<div class=\"app_header\">");
@@ -974,7 +973,7 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
         if let Some(date_str) = metadata.get("estimatedEndTime") {
             // Parse the estimated end time from the message's query string
             let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
-            let date_time = Message::get_local_time(&date_stamp, &self.config.offset);
+            let date_time = get_local_time(&date_stamp, &self.config.offset);
             let date_string = format(&date_time);
 
             out_s.push_str("<div class=\"app_footer\">");
@@ -989,7 +988,7 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
         else if let Some(date_str) = metadata.get("triggerTime") {
             // Parse the estimated end time from the message's query string
             let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
-            let date_time = Message::get_local_time(&date_stamp, &self.config.offset);
+            let date_time = get_local_time(&date_stamp, &self.config.offset);
             let date_string = format(&date_time);
 
             out_s.push_str("<div class=\"app_footer\">");
@@ -1004,7 +1003,7 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
         else if let Some(date_str) = metadata.get("sendDate") {
             // Parse the estimated end time from the message's query string
             let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
-            let date_time = Message::get_local_time(&date_stamp, &self.config.offset);
+            let date_time = get_local_time(&date_stamp, &self.config.offset);
             let date_string = format(&date_time);
 
             out_s.push_str("<div class=\"app_footer\">");

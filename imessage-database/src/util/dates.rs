@@ -4,7 +4,7 @@
  Dates are stored as nanosecond-precision unix timestamps with an epoch of `1/1/2001 00:00:00` in the local time zone.
 */
 
-use chrono::{DateTime, Duration, Local, TimeZone, Utc};
+use chrono::{DateTime, Duration, Local, NaiveDateTime, TimeZone, Utc};
 
 use crate::error::message::MessageError;
 
@@ -19,6 +19,17 @@ pub fn get_offset() -> i64 {
     Utc.with_ymd_and_hms(2001, 1, 1, 0, 0, 0)
         .unwrap()
         .timestamp()
+}
+
+/// Create a `DateTime<Local>` from an arbitrary date and offset
+///
+/// This is used to create date data for anywhere dates are stored in the table, including
+/// plist payload or [`streamtyped`](crate::util::streamtyped) data. In this struct, the
+/// other date methods invoke this method.
+pub fn get_local_time(date_stamp: &i64, offset: &i64) -> Result<DateTime<Local>, MessageError> {
+    let utc_stamp = NaiveDateTime::from_timestamp_opt((date_stamp / TIMESTAMP_FACTOR) + offset, 0)
+        .ok_or(MessageError::InvalidTimestamp(*date_stamp))?;
+    Ok(Local.from_utc_datetime(&utc_stamp))
 }
 
 /// Format a date from the iMessage table for reading

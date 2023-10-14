@@ -4,7 +4,7 @@
 
 use std::{collections::HashMap, io::Read};
 
-use chrono::{naive::NaiveDateTime, offset::Local, DateTime, TimeZone};
+use chrono::{offset::Local, DateTime};
 use plist::Value;
 use rusqlite::{blob::Blob, Connection, Error, Result, Row, Statement};
 
@@ -19,7 +19,7 @@ use crate::{
         MESSAGE_ATTACHMENT_JOIN, MESSAGE_PAYLOAD, MESSAGE_SUMMARY_INFO, RECENTLY_DELETED,
     },
     util::{
-        dates::{readable_diff, TIMESTAMP_FACTOR},
+        dates::{get_local_time, readable_diff},
         output::{done_processing, processing},
         query_context::QueryContext,
         streamtyped,
@@ -402,44 +402,32 @@ impl Message {
         }
     }
 
-    /// Create a `DateTime<Local>` from an arbitrary date and offset
-    ///
-    /// This is used to create date data for anywhere dates are stored in the table, including
-    /// plist payload or [`streamtyped`](crate::util::streamtyped) data. In this struct, the
-    /// other date methods invoke this method.
-    pub fn get_local_time(date_stamp: &i64, offset: &i64) -> Result<DateTime<Local>, MessageError> {
-        let utc_stamp =
-            NaiveDateTime::from_timestamp_opt((date_stamp / TIMESTAMP_FACTOR) + offset, 0)
-                .ok_or(MessageError::InvalidTimestamp(*date_stamp))?;
-        Ok(Local.from_utc_datetime(&utc_stamp))
-    }
-
     /// Calculates the date a message was written to the database.
     ///
     /// This field is stored as a unix timestamp with an epoch of `2001-01-01 00:00:00` in the local time zone
     pub fn date(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
-        Self::get_local_time(&self.date, offset)
+        get_local_time(&self.date, offset)
     }
 
     /// Calculates the date a message was marked as delivered.
     ///
     /// This field is stored as a unix timestamp with an epoch of `2001-01-01 00:00:00` in the local time zone
     pub fn date_delivered(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
-        Self::get_local_time(&self.date_delivered, offset)
+        get_local_time(&self.date_delivered, offset)
     }
 
     /// Calculates the date a message was marked as read.
     ///
     /// This field is stored as a unix timestamp with an epoch of `2001-01-01 00:00:00` in the local time zone
     pub fn date_read(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
-        Self::get_local_time(&self.date_read, offset)
+        get_local_time(&self.date_read, offset)
     }
 
     /// Calculates the date a message was most recently edited.
     ///
     /// This field is stored as a unix timestamp with an epoch of `2001-01-01 00:00:00` in the local time zone
     pub fn date_edited(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
-        Self::get_local_time(&self.date_read, offset)
+        get_local_time(&self.date_read, offset)
     }
 
     /// Gets the time until the message was read. This can happen in two ways:
