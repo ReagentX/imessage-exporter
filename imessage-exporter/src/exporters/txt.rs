@@ -27,7 +27,7 @@ use imessage_database::{
         table::{Table, FITNESS_RECEIVER, ME, ORPHANED, YOU},
     },
     util::{
-        dates::{format, readable_diff},
+        dates::{format, readable_diff, TIMESTAMP_FACTOR},
         plist::parse_plist,
     },
 };
@@ -369,6 +369,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                                 CustomBalloon::ApplePay => self.format_apple_pay(&bubble, indent),
                                 CustomBalloon::Fitness => self.format_fitness(&bubble, indent),
                                 CustomBalloon::Slideshow => self.format_slideshow(&bubble, indent),
+                                CustomBalloon::CheckIn => self.format_check_in(&bubble, indent),
                                 _ => unreachable!(),
                             },
                             Err(why) => return Err(why),
@@ -494,15 +495,18 @@ impl<'a> Writer<'a> for TXT<'a> {
                         match previous_timestamp {
                             // Original message get an absolute timestamp
                             None => {
-                                let parsed_timestamp =
-                                    format(&msg.get_local_time(timestamp, &self.config.offset));
+                                let parsed_timestamp = format(&Message::get_local_time(
+                                    timestamp,
+                                    &self.config.offset,
+                                ));
                                 out_s.push_str(&parsed_timestamp);
                                 out_s.push(' ');
                             }
                             // Subsequent edits get a relative timestamp
                             Some(prev_timestamp) => {
-                                let end = msg.get_local_time(timestamp, &self.config.offset);
-                                let start = msg.get_local_time(prev_timestamp, &self.config.offset);
+                                let end = Message::get_local_time(timestamp, &self.config.offset);
+                                let start =
+                                    Message::get_local_time(prev_timestamp, &self.config.offset);
                                 if let Some(diff) = readable_diff(start, end) {
                                     out_s.push_str(indent);
                                     out_s.push_str("Edited ");
@@ -698,6 +702,47 @@ impl<'a> BalloonFormatter<&'a str> for TXT<'a> {
         // We want to keep the newlines between blocks, but the last one should be removed
         out_s.strip_suffix('\n').unwrap_or(&out_s).to_string()
     }
+
+    fn format_check_in(&self, balloon: &AppMessage, indent: &'a str) -> String {
+        let mut out_s = String::from(indent);
+
+        out_s.push_str(balloon.caption.unwrap_or("Check In"));
+
+        let metadata: HashMap<&str, &str> = balloon.parse_query_string();
+
+        // Before manual check-in
+        if let Some(date_str) = metadata.get("estimatedEndTime") {
+            // Parse the estimated end time from the message's query string
+            let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
+            let date_time = Message::get_local_time(&date_stamp, &self.config.offset);
+            let date_string = format(&date_time);
+
+            out_s.push_str("\nExpected at ");
+            out_s.push_str(&date_string);
+        }
+        // Expired check-in
+        else if let Some(date_str) = metadata.get("triggerTime") {
+            // Parse the estimated end time from the message's query string
+            let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
+            let date_time = Message::get_local_time(&date_stamp, &self.config.offset);
+            let date_string = format(&date_time);
+
+            out_s.push_str("\nWas expected at ");
+            out_s.push_str(&date_string);
+        }
+        // Accepted check-in
+        else if let Some(date_str) = metadata.get("sendDate") {
+            // Parse the estimated end time from the message's query string
+            let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
+            let date_time = Message::get_local_time(&date_stamp, &self.config.offset);
+            let date_string = format(&date_time);
+
+            out_s.push_str("\nChecked in at ");
+            out_s.push_str(&date_string);
+        }
+
+        out_s
+    }
 }
 
 impl<'a> TXT<'a> {
@@ -728,7 +773,7 @@ impl<'a> TXT<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, env::current_dir};
+    use std::{env::current_dir, path::PathBuf};
 
     use crate::{
         app::attachment_manager::AttachmentManager, exporters::exporter::Writer, Config, Exporter,
