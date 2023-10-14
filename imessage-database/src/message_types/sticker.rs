@@ -21,7 +21,7 @@ pub enum StickerEffect {
 }
 
 impl StickerEffect {
-    fn from_exif(sticker_effect_type: &str) -> Self {
+    pub fn from_exif(sticker_effect_type: &str) -> Self {
         match sticker_effect_type {
             "stroke" => Self::Outline,
             "comic" => Self::Comic,
@@ -42,6 +42,12 @@ impl Display for StickerEffect {
             StickerEffect::Shiny => write!(fmt, "Shiny"),
             StickerEffect::Other(name) => write!(fmt, "{name}"),
         }
+    }
+}
+
+impl Default for StickerEffect {
+    fn default() -> Self {
+        Self::Normal
     }
 }
 
@@ -82,17 +88,16 @@ mod tests {
     use std::env::current_dir;
     use std::fs::File;
     use std::io::Read;
-    use std::vec;
 
     use crate::message_types::sticker::{get_sticker_effect, StickerEffect};
 
     #[test]
     fn test_parse_sticker_normal() {
-        let plist_path = current_dir()
+        let sticker_path = current_dir()
             .unwrap()
             .as_path()
             .join("test_data/stickers/no_effect.heic");
-        let mut file = File::open(plist_path).unwrap();
+        let mut file = File::open(sticker_path).unwrap();
         let mut bytes = vec![];
         file.read_to_end(&mut bytes).unwrap();
 
@@ -103,11 +108,11 @@ mod tests {
 
     #[test]
     fn test_parse_sticker_outline() {
-        let plist_path = current_dir()
+        let sticker_path = current_dir()
             .unwrap()
             .as_path()
             .join("test_data/stickers/outline.heic");
-        let mut file = File::open(plist_path).unwrap();
+        let mut file = File::open(sticker_path).unwrap();
         let mut bytes = vec![];
         file.read_to_end(&mut bytes).unwrap();
 
@@ -118,11 +123,11 @@ mod tests {
 
     #[test]
     fn test_parse_sticker_comic() {
-        let plist_path = current_dir()
+        let sticker_path = current_dir()
             .unwrap()
             .as_path()
             .join("test_data/stickers/comic.heic");
-        let mut file = File::open(plist_path).unwrap();
+        let mut file = File::open(sticker_path).unwrap();
         let mut bytes = vec![];
         file.read_to_end(&mut bytes).unwrap();
 
@@ -133,11 +138,11 @@ mod tests {
 
     #[test]
     fn test_parse_sticker_puffy() {
-        let plist_path = current_dir()
+        let sticker_path = current_dir()
             .unwrap()
             .as_path()
             .join("test_data/stickers/puffy.heic");
-        let mut file = File::open(plist_path).unwrap();
+        let mut file = File::open(sticker_path).unwrap();
         let mut bytes = vec![];
         file.read_to_end(&mut bytes).unwrap();
 
@@ -148,11 +153,11 @@ mod tests {
 
     #[test]
     fn test_parse_sticker_shiny() {
-        let plist_path = current_dir()
+        let sticker_path = current_dir()
             .unwrap()
             .as_path()
             .join("test_data/stickers/shiny.heic");
-        let mut file = File::open(plist_path).unwrap();
+        let mut file = File::open(sticker_path).unwrap();
         let mut bytes = vec![];
         file.read_to_end(&mut bytes).unwrap();
 

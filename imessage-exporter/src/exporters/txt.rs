@@ -201,13 +201,22 @@ impl<'a> Writer<'a> for TXT<'a> {
                     }
                 }
                 BubbleType::Attachment => match attachments.get_mut(attachment_index) {
-                    Some(attachment) => match self.format_attachment(attachment, message) {
-                        Ok(result) => {
-                            attachment_index += 1;
-                            self.add_line(&mut formatted_message, &result, &indent);
+                    Some(attachment) => {
+                        if attachment.is_sticker {
+                            let result = self.format_sticker(attachment, message);
+                            self.add_line(&mut formatted_message, &result, &indent)
+                        } else {
+                            match self.format_attachment(attachment, message) {
+                                Ok(result) => {
+                                    attachment_index += 1;
+                                    self.add_line(&mut formatted_message, &result, &indent);
+                                }
+                                Err(result) => {
+                                    self.add_line(&mut formatted_message, result, &indent)
+                                }
+                            }
                         }
-                        Err(result) => self.add_line(&mut formatted_message, result, &indent),
-                    },
+                    }
                     // Attachment does not exist in attachments table
                     None => self.add_line(&mut formatted_message, "Attachment missing!", &indent),
                 },
@@ -307,6 +316,23 @@ impl<'a> Writer<'a> for TXT<'a> {
         Ok(self.config.message_attachment_path(attachment))
     }
 
+    fn format_sticker(&self, sticker: &'a mut Attachment, message: &Message) -> String {
+        let who = self.config.who(&message.handle_id, message.is_from_me);
+        match self.format_attachment(sticker, message) {
+            Ok(path_to_sticker) => {
+                let sticker_effect = sticker.get_sticker_effect(
+                    &self.config.options.platform,
+                    &self.config.options.db_path,
+                );
+                if let Ok(Some(sticker_effect)) = sticker_effect {
+                    return format!("{sticker_effect} Sticker from {who}: {path_to_sticker}");
+                }
+                format!("Sticker from {who}: {path_to_sticker}")
+            }
+            Err(path) => format!("Sticker from {who}: {path}"),
+        }
+    }
+
     fn format_app(
         &self,
         message: &'a Message,
@@ -379,18 +405,13 @@ impl<'a> Writer<'a> for TXT<'a> {
                 ))
             }
             Variant::Sticker(_) => {
-                let paths = Attachment::from_message(&self.config.db, msg)?;
-                Ok(format!(
-                    "Sticker from {}: {}",
-                    self.config.who(&msg.handle_id, msg.is_from_me),
-                    match paths.get(0) {
-                        Some(sticker) => match sticker.filename.as_ref() {
-                            Some(path) => path,
-                            None => sticker.filename(),
-                        },
-                        None => "Sticker not found!",
-                    },
-                ))
+                let mut paths = Attachment::from_message(&self.config.db, msg)?;
+                let who = self.config.who(&msg.handle_id, msg.is_from_me);
+                // Sticker messages have only one attachment, the sticker image
+                Ok(match paths.get_mut(0) {
+                    Some(sticker) => self.format_sticker(sticker, msg),
+                    None => format!("Sticker from {who} not found!"),
+                })
             }
             _ => unreachable!(),
         }
@@ -405,7 +426,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                 ScreenEffect::Balloons => "Sent with Balloons",
                 ScreenEffect::Heart => "Sent with Heart",
                 ScreenEffect::Lasers => "Sent with Lasers",
-                ScreenEffect::ShootingStar => "Sent with Shooting Start",
+                ScreenEffect::ShootingStar => "Sent with Shooting Star",
                 ScreenEffect::Sparkles => "Sent with Sparkles",
                 ScreenEffect::Spotlight => "Sent with Spotlight",
             },
@@ -770,6 +791,7 @@ mod tests {
             mime_type: Some("image/png".to_string()),
             transfer_name: Some("d.jpg".to_string()),
             total_bytes: 100,
+            is_sticker: false,
             hide_attachment: 0,
             copied_path: None,
         }

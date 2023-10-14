@@ -487,7 +487,7 @@ impl Message {
 
     /// `true` if the message is sticker, else `false`
     pub fn is_sticker(&self) -> bool {
-        matches!(self.variant(), Variant::Sticker(_))
+        matches!(self.variant(), Variant::Sticker(..))
     }
 
     /// `true` if the message has an expressive presentation, else `false`
