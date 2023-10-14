@@ -24,8 +24,7 @@ pub fn get_offset() -> i64 {
 /// Create a `DateTime<Local>` from an arbitrary date and offset
 ///
 /// This is used to create date data for anywhere dates are stored in the table, including
-/// plist payload or [`streamtyped`](crate::util::streamtyped) data. In this struct, the
-/// other date methods invoke this method.
+/// `PLIST` payloads or [`streamtyped`](crate::util::streamtyped) data.
 pub fn get_local_time(date_stamp: &i64, offset: &i64) -> Result<DateTime<Local>, MessageError> {
     let utc_stamp = NaiveDateTime::from_timestamp_opt((date_stamp / TIMESTAMP_FACTOR) + offset, 0)
         .ok_or(MessageError::InvalidTimestamp(*date_stamp))?;
