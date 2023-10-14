@@ -27,7 +27,7 @@ use imessage_database::{
         table::{Table, FITNESS_RECEIVER, ME, ORPHANED, YOU},
     },
     util::{
-        dates::{format, readable_diff},
+        dates::{format, get_local_time, readable_diff, TIMESTAMP_FACTOR},
         plist::parse_plist,
     },
 };
@@ -561,6 +561,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                 CustomBalloon::ApplePay => self.format_apple_pay(&bubble, message),
                                 CustomBalloon::Fitness => self.format_fitness(&bubble, message),
                                 CustomBalloon::Slideshow => self.format_slideshow(&bubble, message),
+                                CustomBalloon::CheckIn => self.format_check_in(&bubble, message),
                                 _ => unreachable!(),
                             },
                             Err(why) => return Err(why),
@@ -713,8 +714,8 @@ impl<'a> Writer<'a> for HTML<'a> {
                         match previous_timestamp {
                             None => out_s.push_str(&self.edited_to_html("", text, last)),
                             Some(prev_timestamp) => {
-                                let end = msg.get_local_time(timestamp, &self.config.offset);
-                                let start = msg.get_local_time(prev_timestamp, &self.config.offset);
+                                let end = get_local_time(timestamp, &self.config.offset);
+                                let start = get_local_time(prev_timestamp, &self.config.offset);
 
                                 let diff = readable_diff(start, end).unwrap_or_default();
                                 out_s.push_str(&self.edited_to_html(
@@ -943,6 +944,78 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
 
     fn format_slideshow(&self, balloon: &AppMessage, message: &Message) -> String {
         self.balloon_to_html(balloon, "Slideshow", &mut [], message)
+    }
+
+    fn format_check_in(&self, balloon: &AppMessage, _: &Message) -> String {
+        let mut out_s = String::new();
+
+        out_s.push_str("<div class=\"app_header\">");
+
+        // Name
+        out_s.push_str("<div class=\"name\">");
+        out_s.push_str(balloon.app_name.unwrap_or("Check In"));
+        out_s.push_str("</div>");
+
+        // ldtext
+        if let Some(ldtext) = balloon.ldtext {
+            out_s.push_str("<div class=\"ldtext\">");
+            out_s.push_str(ldtext);
+            out_s.push_str("</div>");
+        }
+
+        // Header end, footer begin
+        out_s.push_str("</div>");
+
+        // Only write the footer if there is data to write
+        let metadata: HashMap<&str, &str> = balloon.parse_query_string();
+
+        // Before manual check-in
+        if let Some(date_str) = metadata.get("estimatedEndTime") {
+            // Parse the estimated end time from the message's query string
+            let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
+            let date_time = get_local_time(&date_stamp, &self.config.offset);
+            let date_string = format(&date_time);
+
+            out_s.push_str("<div class=\"app_footer\">");
+
+            out_s.push_str("<div class=\"caption\">Expected around ");
+            out_s.push_str(&date_string);
+            out_s.push_str("</div>");
+
+            out_s.push_str("</div>");
+        }
+        // Expired check-in
+        else if let Some(date_str) = metadata.get("triggerTime") {
+            // Parse the estimated end time from the message's query string
+            let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
+            let date_time = get_local_time(&date_stamp, &self.config.offset);
+            let date_string = format(&date_time);
+
+            out_s.push_str("<div class=\"app_footer\">");
+
+            out_s.push_str("<div class=\"caption\">Was expected around ");
+            out_s.push_str(&date_string);
+            out_s.push_str("</div>");
+
+            out_s.push_str("</div>");
+        }
+        // Accepted check-in
+        else if let Some(date_str) = metadata.get("sendDate") {
+            // Parse the estimated end time from the message's query string
+            let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
+            let date_time = get_local_time(&date_stamp, &self.config.offset);
+            let date_string = format(&date_time);
+
+            out_s.push_str("<div class=\"app_footer\">");
+
+            out_s.push_str("<div class=\"caption\">Checked in at ");
+            out_s.push_str(&date_string);
+            out_s.push_str("</div>");
+
+            out_s.push_str("</div>");
+        }
+
+        out_s
     }
 
     fn format_generic_app(
