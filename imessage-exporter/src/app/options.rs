@@ -96,9 +96,9 @@ impl<'a> Options<'a> {
             )));
         }
         if no_lazy && export_type != Some("html") {
-            return Err(RuntimeError::InvalidOptions(format!(
-                "Option {OPTION_DISABLE_LAZY_LOADING} is enabled, which requires `--{OPTION_EXPORT_TYPE}`"
-            )));
+            eprintln!(
+                "Option {OPTION_DISABLE_LAZY_LOADING} is enabled, but the format specified is not `html`!"
+            );
         }
 
         // Ensure that if diagnostics are enabled, no other options are
