@@ -4,7 +4,7 @@
 
 use std::{collections::HashMap, path::Path};
 
-use rusqlite::{Connection, Error, ErrorCode, OpenFlags, Result, Row, Statement};
+use rusqlite::{Connection, Error, OpenFlags, Result, Row, Statement};
 
 use crate::error::table::TableError;
 
