@@ -22,7 +22,8 @@ pub enum StickerEffect {
 }
 
 impl StickerEffect {
-    pub fn from_exif(sticker_effect_type: &str) -> Self {
+    /// Determine the type of a sticker from parsed `HEIC` `EXIF` data
+    fn from_exif(sticker_effect_type: &str) -> Self {
         match sticker_effect_type {
             "stroke" => Self::Outline,
             "comic" => Self::Comic,
