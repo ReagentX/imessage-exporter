@@ -121,6 +121,33 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_apple_pay_recurring_1() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/app_message/ApplePayRecurring.plist");
+        let plist_data = File::open(plist_path).unwrap();
+        let plist = Value::from_reader(plist_data).unwrap();
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = AppMessage::from_map(&parsed).unwrap();
+        let expected = AppMessage {
+            image: None,
+            url: Some("data:application/vnd.apple.pkppm;base64,FAKEDATA"),
+            title: None,
+            subtitle: None,
+            caption: None,
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Apple\u{a0}Cash"),
+            ldtext: Some("Sending you $1 weekly starting Nov 18, 2023"),
+        };
+
+        assert_eq!(balloon, expected);
+    }
+
+    #[test]
     fn test_parse_opentable_invite() {
         let plist_path = current_dir()
             .unwrap()
