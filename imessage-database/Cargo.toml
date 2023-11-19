@@ -13,4 +13,4 @@ version = "0.0.0"
 chrono = "0.4.26"
 plist = "1.6.0"
 rusqlite = {version = "0.30.0", features = ["blob", "bundled"]}
-sha1 = "0.10.5"
+sha1 = "0.10.6"
