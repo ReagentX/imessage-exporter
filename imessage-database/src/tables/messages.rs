@@ -749,7 +749,7 @@ impl Message {
         }
     }
 
-    /// Get the variant of a message, see [crate::message_types::variants] for detail.
+    /// Get the variant of a message, see [`variants`](crate::message_types::variants) for detail.
     pub fn variant(&self) -> Variant {
         // Check if a message was edited first as those have special properties
         if self.is_edited() {

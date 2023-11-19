@@ -17,7 +17,7 @@ use crate::app::{
 pub enum AttachmentManager {
     /// Do not copy attachments
     Disabled,
-    /// Copy and convert attachments to more compatible formats using a [crate::app::converter::Converter]
+    /// Copy and convert attachments to more compatible formats using a [`Converter`](crate::app::converter::Converter)
     Compatible,
     /// Copy attachments without converting; preserves quality but may not display correctly in all browsers
     Efficient,
@@ -44,8 +44,11 @@ impl AttachmentManager {
         config: &Config,
     ) -> Option<()> {
         // Resolve the path to the attachment
-        let attachment_path = attachment
-            .resolved_attachment_path(&config.options.platform, &config.options.db_path)?;
+        let attachment_path = attachment.resolved_attachment_path(
+            &config.options.platform,
+            &config.options.db_path,
+            config.options.attachment_root,
+        )?;
 
         if !matches!(self, AttachmentManager::Disabled) {
             let from = Path::new(&attachment_path);

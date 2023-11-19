@@ -323,6 +323,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                 let sticker_effect = sticker.get_sticker_effect(
                     &self.config.options.platform,
                     &self.config.options.db_path,
+                    self.config.options.attachment_root,
                 );
                 if let Ok(Some(sticker_effect)) = sticker_effect {
                     return format!("{sticker_effect} Sticker from {who}: {path_to_sticker}");
@@ -814,6 +815,7 @@ mod tests {
     pub fn fake_options() -> Options<'static> {
         Options {
             db_path: default_db_path(),
+            attachment_root: None,
             attachment_manager: AttachmentManager::Disabled,
             diagnostic: false,
             export_type: None,
