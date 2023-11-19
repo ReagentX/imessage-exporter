@@ -1,3 +1,4 @@
+use core::panic;
 use std::{
     collections::HashMap,
     fs::File,
@@ -1740,7 +1741,8 @@ mod balloon_format_tests {
     use super::tests::{blank, fake_options};
     use crate::{exporters::exporter::BalloonFormatter, Config, Exporter, HTML};
     use imessage_database::message_types::{
-        app::AppMessage, collaboration::CollaborationMessage, music::MusicMessage, url::URLMessage,
+        app::AppMessage, app_store::AppStoreMessage, collaboration::CollaborationMessage,
+        music::MusicMessage, url::URLMessage,
     };
 
     #[test]
@@ -1915,7 +1917,105 @@ mod balloon_format_tests {
         assert_eq!(expected, actual);
     }
 
-    // TODO: Test `format_check_in` and `format_app_store`
+    #[test]
+    fn can_format_html_check_in_timer() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = AppMessage {
+            image: None,
+            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+            title: None,
+            subtitle: None,
+            caption: Some("Check In: Timer Started"),
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Check In"),
+            ldtext: Some("Check In: Timer Started"),
+        };
+
+        let expected = exporter.format_check_in(&balloon, &blank());
+        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Timer Started</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2054  1:54:29 PM</div></div>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_check_in_timer_late() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = AppMessage {
+            image: None,
+            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+            title: None,
+            subtitle: None,
+            caption: Some("Check In: Has not checked in when expected, location shared"),
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Check In"),
+            ldtext: Some("Check In: Has not checked in when expected, location shared"),
+        };
+
+        let expected = exporter.format_check_in(&balloon, &blank());
+        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Has not checked in when expected, location shared</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2054  1:54:29 PM</div></div>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_accepted_check_in() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = AppMessage {
+            image: None,
+            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+            title: None,
+            subtitle: None,
+            caption: Some("Check In: Fake Location"),
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Check In"),
+            ldtext: Some("Check In: Fake Location"),
+        };
+
+        let expected = exporter.format_check_in(&balloon, &blank());
+        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Fake Location</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2054  1:54:29 PM</div></div>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_app_store() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = AppStoreMessage {
+            url: Some("url"),
+            app_name: Some("app_name"),
+            original_url: Some("original_url"),
+            description: Some("description"),
+            platform: Some("platform"),
+            genre: Some("genre"),
+        };
+
+        let expected = exporter.format_app_store(&balloon, &blank());
+        let actual = "<div class=\"app_header\"><div class=\"name\">app_name</div></div><a href=\"url\"><div class=\"app_footer\"><div class=\"caption\">description</div><div class=\"subcaption\">platform</div><div class=\"trailing_subcaption\">genre</div></div></a>";
+
+        assert_eq!(expected, actual);
+    }
 
     #[test]
     fn can_format_html_generic_app() {

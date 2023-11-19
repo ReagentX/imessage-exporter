@@ -750,26 +750,27 @@ impl<'a> BalloonFormatter<&'a str> for TXT<'a> {
         let mut out_s = String::from(indent);
 
         if let Some(name) = balloon.app_name {
-            out_s.push_str(name);
+            self.add_line(&mut out_s, name, indent);
         }
 
         if let Some(description) = balloon.description {
-            out_s.push_str(description);
+            self.add_line(&mut out_s, description, indent);
         }
 
         if let Some(platform) = balloon.platform {
-            out_s.push_str(platform);
+            self.add_line(&mut out_s, platform, indent);
         }
 
         if let Some(genre) = balloon.genre {
-            out_s.push_str(genre);
+            self.add_line(&mut out_s, genre, indent);
         }
 
         if let Some(url) = balloon.url {
-            out_s.push_str(url);
+            self.add_line(&mut out_s, url, indent);
         }
 
-        out_s
+        // We want to keep the newlines between blocks, but the last one should be removed
+        out_s.strip_suffix('\n').unwrap_or(&out_s).to_string()
     }
 }
 
@@ -1257,7 +1258,7 @@ mod tests {
     }
 
     #[test]
-    fn can_format_html_attachment_sticker() {
+    fn can_format_txt_attachment_sticker() {
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1287,7 +1288,8 @@ mod balloon_format_tests {
     use super::tests::fake_options;
     use crate::{exporters::exporter::BalloonFormatter, Config, Exporter, TXT};
     use imessage_database::message_types::{
-        app::AppMessage, collaboration::CollaborationMessage, music::MusicMessage, url::URLMessage,
+        app::AppMessage, app_store::AppStoreMessage, collaboration::CollaborationMessage,
+        music::MusicMessage, url::URLMessage,
     };
 
     #[test]
@@ -1432,6 +1434,106 @@ mod balloon_format_tests {
 
         let expected = exporter.format_slideshow(&balloon, "");
         let actual = "Photo album: ldtext url";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_check_in_timer() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = AppMessage {
+            image: None,
+            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+            title: None,
+            subtitle: None,
+            caption: Some("Check In: Timer Started"),
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Check In"),
+            ldtext: Some("Check In: Timer Started"),
+        };
+
+        let expected = exporter.format_check_in(&balloon, "");
+        let actual = "Check\u{a0}In: Timer Started\nChecked in at Oct 14, 2054  1:54:29 PM";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_check_in_timer_late() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = AppMessage {
+            image: None,
+            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+            title: None,
+            subtitle: None,
+            caption: Some("Check In: Has not checked in when expected, location shared"),
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Check In"),
+            ldtext: Some("Check In: Has not checked in when expected, location shared"),
+        };
+
+        let expected = exporter.format_check_in(&balloon, "");
+        let actual = "Check\u{a0}In: Has not checked in when expected, location shared\nChecked in at Oct 14, 2054  1:54:29 PM";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_accepted_check_in() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = AppMessage {
+            image: None,
+            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+            title: None,
+            subtitle: None,
+            caption: Some("Check In: Fake Location"),
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Check In"),
+            ldtext: Some("Check In: Fake Location"),
+        };
+
+        let expected = exporter.format_check_in(&balloon, "");
+        let actual = "Check\u{a0}In: Fake Location\nChecked in at Oct 14, 2054  1:54:29 PM";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_app_store() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = AppStoreMessage {
+            url: Some("url"),
+            app_name: Some("app_name"),
+            original_url: Some("original_url"),
+            description: Some("description"),
+            platform: Some("platform"),
+            genre: Some("genre"),
+        };
+
+        let expected = exporter.format_app_store(&balloon, "");
+        let actual = "app_name\ndescription\nplatform\ngenre\nurl";
 
         assert_eq!(expected, actual);
     }
