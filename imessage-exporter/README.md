@@ -56,7 +56,7 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         If omitted, the default directory is ~/Library/Messages/chat.db
 
 -r, --attachment-root <path/to/attachments>
-        Specify an optional custom path to look for attachments in.
+        Specify an optional custom path to look for attachments in (macOS only).
         Only use this if attachments are stored separately from the database's default location.
         The default location is ~/Library/Messages/Attachments
 
