@@ -123,7 +123,7 @@ impl AttachmentManager {
     /// - Sticker `HEIC` files convert to `PNG`
     /// - Sticker `HEICS` files convert to `GIF`
     /// - Attachment `HEIC` files convert to `JPEG`
-    /// - Other files are just copied with their original formats
+    /// - Other files are copied with their original formats
     fn copy_convert(from: &Path, to: &mut PathBuf, converter: &Converter, is_sticker: bool) {
         let original_extension = from.extension().unwrap_or_default();
 
