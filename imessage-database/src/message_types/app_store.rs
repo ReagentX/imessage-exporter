@@ -1,5 +1,5 @@
 /*!
-These are the link previews that iMessage generates when sending Apple Music links
+These are the link previews that iMessage generates when sending links to apps in the App Store
 */
 
 use plist::Value;
@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// This struct is not documented by Apple, but represents messages displayed as
-/// `com.apple.messages.URLBalloonProvider` but from the Music app
+/// `com.apple.messages.URLBalloonProvider` but for App Store apps
 #[derive(Debug, PartialEq, Eq)]
 pub struct AppStoreMessage<'a> {
     /// The URL that ended up serving content, after all redirects
@@ -85,7 +85,7 @@ mod tests {
     use std::fs::File;
 
     #[test]
-    fn test_parse_apple_music() {
+    fn test_parse_app_store_link() {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
