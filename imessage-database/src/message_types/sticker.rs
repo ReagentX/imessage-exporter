@@ -1,3 +1,7 @@
+/*
+These are [sticker messages](https://support.apple.com/guide/iphone/send-stickers-iph37b0bfe7b/ios), either from the user's sticker library or sticker apps.
+*/
+
 use std::fmt::Display;
 
 /// Bytes for `stickerEffect:type="`
