@@ -24,6 +24,7 @@ use crate::{
     },
 };
 
+/// The default root directory for iMessage attachment data
 pub const DEFAULT_ATTACHMENT_ROOT: &str = "~/Library/Messages/Attachments";
 const DIVISOR: f64 = 1024.;
 const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
@@ -145,6 +146,7 @@ impl Attachment {
         }
     }
 
+    /// Read the attachment from the disk into a vector of bytes in memory
     pub fn as_bytes(
         &self,
         platform: &Platform,
@@ -164,6 +166,7 @@ impl Attachment {
         Ok(None)
     }
 
+    /// Determine the [`StickerEffect`](crate::message_types::sticker::StickerEffect) of a sticker message
     pub fn get_sticker_effect(
         &self,
         platform: &Platform,

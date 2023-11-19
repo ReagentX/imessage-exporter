@@ -7,6 +7,7 @@ const STICKER_EFFECT_PREFIX: [u8; 20] = [
 /// Bytes for `"/>`
 const STICKER_EFFECT_SUFFIX: [u8; 3] = [34, 47, 62];
 
+/// Represents different types of [sticker effects](https://www.macrumors.com/how-to/add-effects-to-stickers-in-messages/) that can be applied to sticker iMessage balloons.
 #[derive(Debug, PartialEq, Eq)]
 pub enum StickerEffect {
     /// Sticker sent with no effect
