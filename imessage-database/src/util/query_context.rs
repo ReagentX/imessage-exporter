@@ -77,7 +77,7 @@ impl QueryContext {
         }
 
         let local = Local.with_ymd_and_hms(year, month, day, 0, 0, 0).single()?;
-        let stamp = local.timestamp_nanos();
+        let stamp = local.timestamp_nanos_opt().unwrap_or(0);
 
         Some(stamp - (get_offset() * TIMESTAMP_FACTOR))
     }
