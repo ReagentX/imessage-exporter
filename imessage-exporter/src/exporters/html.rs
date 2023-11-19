@@ -512,6 +512,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                 let sticker_effect = sticker.get_sticker_effect(
                     &self.config.options.platform,
                     &self.config.options.db_path,
+                    self.config.options.attachment_root,
                 );
                 if let Ok(Some(sticker_effect)) = sticker_effect {
                     return format!("{sticker_embed}\n<div class=\"sticker_effect\">Sent with {sticker_effect} effect</div>");
@@ -1222,6 +1223,7 @@ mod tests {
     pub fn fake_options() -> Options<'static> {
         Options {
             db_path: default_db_path(),
+            attachment_root: None,
             attachment_manager: AttachmentManager::Disabled,
             diagnostic: false,
             export_type: None,
