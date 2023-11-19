@@ -55,6 +55,11 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         For iOS, specify a path to the root of an unencrypted backup directory
         If omitted, the default directory is ~/Library/Messages/chat.db
 
+-r, --attachment-root <path/to/attachments>
+        Specify an optional custom path to look for attachments in.
+        Only use this if attachments are stored separately from the database's default location.
+        The default location is ~/Library/Messages/Attachments
+
 -a, --platform <macOS, iOS>
         Specify the platform the database was created on
         If omitted, the platform type is determined automatically
@@ -107,6 +112,12 @@ Export as `html` from `/Volumes/external/chat.db` to `/Volumes/external/export` 
 
 ```zsh
 % imessage-exporter -f html -c disabled -p /Volumes/external/chat.db -o /Volumes/external/export
+```
+
+Export as `html` from `/Volumes/external/chat.db` to `/Volumes/external/export` with attachments in `/Volumes/external/Attachments`:
+
+```zsh
+% imessage-exporter -f html -c efficient -p /Volumes/external/chat.db -r /Volumes/external/Attachments -o /Volumes/external/export 
 ```
 
 Export messages from `2020-01-01` to `2020-12-31` as `txt` from the default macOS iMessage Database location to `~/export-2020`:
