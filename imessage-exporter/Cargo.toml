@@ -10,7 +10,7 @@ repository = "https://github.com/ReagentX/imessage-exporter"
 version = "0.0.0"
 
 [dependencies]
-clap = {version = "3.2.25", features = ["cargo"]}
+clap = {version = "3.2.23", features = ["cargo"]}
 filetime = "0.2.22"
 imessage-database = {path = "../imessage-database"}
 indicatif = "0.17.7"
