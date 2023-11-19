@@ -14,6 +14,7 @@ use imessage_database::{
     error::{message::MessageError, plist::PlistParseError, table::TableError},
     message_types::{
         app::AppMessage,
+        app_store::AppStoreMessage,
         collaboration::CollaborationMessage,
         edited::EditedMessage,
         expressives::{BubbleEffect, Expressive, ScreenEffect},
@@ -355,6 +356,9 @@ impl<'a> Writer<'a> for TXT<'a> {
                             URLOverride::AppleMusic(balloon) => self.format_music(&balloon, indent),
                             URLOverride::Collaboration(balloon) => {
                                 self.format_collaboration(&balloon, indent)
+                            }
+                            URLOverride::AppStore(balloon) => {
+                                self.format_app_store(&balloon, indent)
                             }
                         }
                     } else {
@@ -737,6 +741,32 @@ impl<'a> BalloonFormatter<&'a str> for TXT<'a> {
 
             out_s.push_str("\nChecked in at ");
             out_s.push_str(&date_string);
+        }
+
+        out_s
+    }
+
+    fn format_app_store(&self, balloon: &AppStoreMessage, indent: &'a str) -> String {
+        let mut out_s = String::from(indent);
+
+        if let Some(name) = balloon.app_name {
+            out_s.push_str(name);
+        }
+
+        if let Some(description) = balloon.description {
+            out_s.push_str(description);
+        }
+
+        if let Some(platform) = balloon.platform {
+            out_s.push_str(platform);
+        }
+
+        if let Some(genre) = balloon.genre {
+            out_s.push_str(genre);
+        }
+
+        if let Some(url) = balloon.url {
+            out_s.push_str(url);
         }
 
         out_s

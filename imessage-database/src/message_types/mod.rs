@@ -3,6 +3,7 @@
 */
 
 pub mod app;
+pub mod app_store;
 pub mod collaboration;
 pub mod edited;
 pub mod expressives;

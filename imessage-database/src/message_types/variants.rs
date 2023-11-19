@@ -6,7 +6,10 @@ use plist::Value;
 
 use crate::{
     error::plist::PlistParseError,
-    message_types::{collaboration::CollaborationMessage, music::MusicMessage, url::URLMessage},
+    message_types::{
+        app_store::AppStoreMessage, collaboration::CollaborationMessage, music::MusicMessage,
+        url::URLMessage,
+    },
 };
 
 /// Reactions to iMessages
@@ -81,6 +84,8 @@ pub enum URLOverride<'a> {
     Normal(URLMessage<'a>),
     /// [Apple Music](crate::message_types::music) messages
     AppleMusic(MusicMessage<'a>),
+    /// [App Store](crate::message_types::app_store) messages
+    AppStore(AppStoreMessage<'a>),
     /// [Collaboration](crate::message_types::collaboration) messages
     Collaboration(CollaborationMessage<'a>),
 }

@@ -8,6 +8,7 @@ use plist::Value;
 use crate::{
     error::plist::PlistParseError,
     message_types::{
+        app_store::AppStoreMessage,
         collaboration::CollaborationMessage,
         music::MusicMessage,
         variants::{BalloonProvider, URLOverride},
@@ -66,6 +67,9 @@ impl<'a> URLMessage<'a> {
         if let Ok(balloon) = MusicMessage::from_map(payload) {
             return Ok(URLOverride::AppleMusic(balloon));
         }
+        if let Ok(balloon) = AppStoreMessage::from_map(payload) {
+            return Ok(URLOverride::AppStore(balloon));
+        }
         if let Ok(balloon) = URLMessage::from_map(payload) {
             return Ok(URLOverride::Normal(balloon));
         }
@@ -123,7 +127,7 @@ impl<'a> URLMessage<'a> {
 }
 
 #[cfg(test)]
-mod tests {
+mod url_tests {
     use crate::{
         message_types::{url::URLMessage, variants::BalloonProvider},
         util::plist::parse_plist,
@@ -295,5 +299,72 @@ mod tests {
             placeholder: false,
         };
         assert_eq!(expected.get_url(), None)
+    }
+}
+
+#[cfg(test)]
+mod url_override_tests {
+    use crate::{
+        message_types::{url::URLMessage, variants::URLOverride},
+        util::plist::parse_plist,
+    };
+    use plist::Value;
+    use std::env::current_dir;
+    use std::fs::File;
+
+    #[test]
+    fn can_parse_normal() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/url_message/URL.plist");
+        let plist_data = File::open(plist_path).unwrap();
+        let plist = Value::from_reader(plist_data).unwrap();
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = URLMessage::get_url_message_override(&parsed).unwrap();
+        assert!(matches!(balloon, URLOverride::Normal(_)))
+    }
+
+    #[test]
+    fn can_parse_music() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/music_message/AppleMusic.plist");
+        let plist_data = File::open(plist_path).unwrap();
+        let plist = Value::from_reader(plist_data).unwrap();
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = URLMessage::get_url_message_override(&parsed).unwrap();
+        assert!(matches!(balloon, URLOverride::AppleMusic(_)))
+    }
+
+    #[test]
+    fn can_parse_app_store() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/app_store/AppStoreLink.plist");
+        let plist_data = File::open(plist_path).unwrap();
+        let plist = Value::from_reader(plist_data).unwrap();
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = URLMessage::get_url_message_override(&parsed).unwrap();
+        assert!(matches!(balloon, URLOverride::AppStore(_)))
+    }
+
+    #[test]
+    fn can_parse_collaboration() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/collaboration_message/Freeform.plist");
+        let plist_data = File::open(plist_path).unwrap();
+        let plist = Value::from_reader(plist_data).unwrap();
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = URLMessage::get_url_message_override(&parsed).unwrap();
+        assert!(matches!(balloon, URLOverride::Collaboration(_)))
     }
 }

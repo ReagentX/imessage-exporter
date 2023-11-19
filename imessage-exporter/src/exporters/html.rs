@@ -14,6 +14,7 @@ use imessage_database::{
     error::{message::MessageError, plist::PlistParseError, table::TableError},
     message_types::{
         app::AppMessage,
+        app_store::AppStoreMessage,
         collaboration::CollaborationMessage,
         edited::EditedMessage,
         expressives::{BubbleEffect, Expressive, ScreenEffect},
@@ -546,6 +547,9 @@ impl<'a> Writer<'a> for HTML<'a> {
                             URLOverride::Collaboration(balloon) => {
                                 self.format_collaboration(&balloon, message)
                             }
+                            URLOverride::AppStore(balloon) => {
+                                self.format_app_store(&balloon, message)
+                            }
                         }
                     } else {
                         match AppMessage::from_map(&parsed) {
@@ -1027,6 +1031,65 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
         message: &Message,
     ) -> String {
         self.balloon_to_html(balloon, bundle_id, attachments, message)
+    }
+
+    fn format_app_store(&self, balloon: &AppStoreMessage, _: &'a Message) -> String {
+        let mut out_s = String::new();
+
+        // Header section
+        out_s.push_str("<div class=\"app_header\">");
+
+        // App name
+        if let Some(app_name) = balloon.app_name {
+            out_s.push_str("<div class=\"name\">");
+            out_s.push_str(app_name);
+            out_s.push_str("</div>");
+        }
+
+        // Header end
+        out_s.push_str("</div>");
+
+        // Make the footer clickable so we can interact with the preview
+        if let Some(url) = balloon.url {
+            out_s.push_str("<a href=\"");
+            out_s.push_str(url);
+            out_s.push_str("\">");
+        }
+
+        // Only write the footer if there is data to write
+        if balloon.description.is_some() || balloon.genre.is_some() {
+            out_s.push_str("<div class=\"app_footer\">");
+
+            // App description
+            if let Some(description) = balloon.description {
+                out_s.push_str("<div class=\"caption\">");
+                out_s.push_str(description);
+                out_s.push_str("</div>");
+            }
+
+            // App platform
+            if let Some(platform) = balloon.platform {
+                out_s.push_str("<div class=\"subcaption\">");
+                out_s.push_str(platform);
+                out_s.push_str("</div>");
+            }
+
+            // App genre
+            if let Some(genre) = balloon.genre {
+                out_s.push_str("<div class=\"trailing_subcaption\">");
+                out_s.push_str(genre);
+                out_s.push_str("</div>");
+            }
+
+            // End footer
+            out_s.push_str("</div>");
+        }
+
+        // End the link
+        if balloon.url.is_some() {
+            out_s.push_str("</a>");
+        }
+        out_s
     }
 }
 
@@ -1851,6 +1914,8 @@ mod balloon_format_tests {
 
         assert_eq!(expected, actual);
     }
+
+    // TODO: Test `format_check_in` and `format_app_store`
 
     #[test]
     fn can_format_html_generic_app() {
