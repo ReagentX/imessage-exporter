@@ -3,7 +3,8 @@ use std::path::Path;
 use imessage_database::{
     error::{message::MessageError, plist::PlistParseError, table::TableError},
     message_types::{
-        app::AppMessage, collaboration::CollaborationMessage, music::MusicMessage, url::URLMessage,
+        app::AppMessage, app_store::AppStoreMessage, collaboration::CollaborationMessage,
+        music::MusicMessage, url::URLMessage,
     },
     tables::{attachment::Attachment, messages::Message},
 };
@@ -60,6 +61,8 @@ pub(super) trait BalloonFormatter<T> {
     fn format_music(&self, balloon: &MusicMessage, indent: T) -> String;
     /// Format a Rich Collaboration message
     fn format_collaboration(&self, balloon: &CollaborationMessage, indent: T) -> String;
+    /// Format an App Store link
+    fn format_app_store(&self, balloon: &AppStoreMessage, indent: T) -> String;
     /// Format a handwritten note message
     fn format_handwriting(&self, balloon: &AppMessage, indent: T) -> String;
     /// Format an Apple Pay message

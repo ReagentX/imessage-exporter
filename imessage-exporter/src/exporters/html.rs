@@ -1,3 +1,4 @@
+use core::panic;
 use std::{
     collections::HashMap,
     fs::File,
@@ -14,6 +15,7 @@ use imessage_database::{
     error::{message::MessageError, plist::PlistParseError, table::TableError},
     message_types::{
         app::AppMessage,
+        app_store::AppStoreMessage,
         collaboration::CollaborationMessage,
         edited::EditedMessage,
         expressives::{BubbleEffect, Expressive, ScreenEffect},
@@ -546,6 +548,9 @@ impl<'a> Writer<'a> for HTML<'a> {
                             URLOverride::Collaboration(balloon) => {
                                 self.format_collaboration(&balloon, message)
                             }
+                            URLOverride::AppStore(balloon) => {
+                                self.format_app_store(&balloon, message)
+                            }
                         }
                     } else {
                         match AppMessage::from_map(&parsed) {
@@ -1027,6 +1032,65 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
         message: &Message,
     ) -> String {
         self.balloon_to_html(balloon, bundle_id, attachments, message)
+    }
+
+    fn format_app_store(&self, balloon: &AppStoreMessage, _: &'a Message) -> String {
+        let mut out_s = String::new();
+
+        // Header section
+        out_s.push_str("<div class=\"app_header\">");
+
+        // App name
+        if let Some(app_name) = balloon.app_name {
+            out_s.push_str("<div class=\"name\">");
+            out_s.push_str(app_name);
+            out_s.push_str("</div>");
+        }
+
+        // Header end
+        out_s.push_str("</div>");
+
+        // Make the footer clickable so we can interact with the preview
+        if let Some(url) = balloon.url {
+            out_s.push_str("<a href=\"");
+            out_s.push_str(url);
+            out_s.push_str("\">");
+        }
+
+        // Only write the footer if there is data to write
+        if balloon.description.is_some() || balloon.genre.is_some() {
+            out_s.push_str("<div class=\"app_footer\">");
+
+            // App description
+            if let Some(description) = balloon.description {
+                out_s.push_str("<div class=\"caption\">");
+                out_s.push_str(description);
+                out_s.push_str("</div>");
+            }
+
+            // App platform
+            if let Some(platform) = balloon.platform {
+                out_s.push_str("<div class=\"subcaption\">");
+                out_s.push_str(platform);
+                out_s.push_str("</div>");
+            }
+
+            // App genre
+            if let Some(genre) = balloon.genre {
+                out_s.push_str("<div class=\"trailing_subcaption\">");
+                out_s.push_str(genre);
+                out_s.push_str("</div>");
+            }
+
+            // End footer
+            out_s.push_str("</div>");
+        }
+
+        // End the link
+        if balloon.url.is_some() {
+            out_s.push_str("</a>");
+        }
+        out_s
     }
 }
 
@@ -1677,7 +1741,8 @@ mod balloon_format_tests {
     use super::tests::{blank, fake_options};
     use crate::{exporters::exporter::BalloonFormatter, Config, Exporter, HTML};
     use imessage_database::message_types::{
-        app::AppMessage, collaboration::CollaborationMessage, music::MusicMessage, url::URLMessage,
+        app::AppMessage, app_store::AppStoreMessage, collaboration::CollaborationMessage,
+        music::MusicMessage, url::URLMessage,
     };
 
     #[test]
@@ -1848,6 +1913,106 @@ mod balloon_format_tests {
 
         let expected = exporter.format_slideshow(&balloon, &blank());
         let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"image\"><div class=\"name\">app_name</div><div class=\"image_title\">title</div><div class=\"image_subtitle\">subtitle</div><div class=\"ldtext\">ldtext</div></div><div class=\"app_footer\"><div class=\"caption\">caption</div><div class=\"subcaption\">subcaption</div><div class=\"trailing_caption\">trailing_caption</div><div class=\"trailing_subcaption\">trailing_subcaption</div></div></a>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_check_in_timer() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = AppMessage {
+            image: None,
+            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+            title: None,
+            subtitle: None,
+            caption: Some("Check In: Timer Started"),
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Check In"),
+            ldtext: Some("Check In: Timer Started"),
+        };
+
+        let expected = exporter.format_check_in(&balloon, &blank());
+        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Timer Started</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2054  1:54:29 PM</div></div>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_check_in_timer_late() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = AppMessage {
+            image: None,
+            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+            title: None,
+            subtitle: None,
+            caption: Some("Check In: Has not checked in when expected, location shared"),
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Check In"),
+            ldtext: Some("Check In: Has not checked in when expected, location shared"),
+        };
+
+        let expected = exporter.format_check_in(&balloon, &blank());
+        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Has not checked in when expected, location shared</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2054  1:54:29 PM</div></div>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_accepted_check_in() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = AppMessage {
+            image: None,
+            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+            title: None,
+            subtitle: None,
+            caption: Some("Check In: Fake Location"),
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Check In"),
+            ldtext: Some("Check In: Fake Location"),
+        };
+
+        let expected = exporter.format_check_in(&balloon, &blank());
+        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Fake Location</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2054  1:54:29 PM</div></div>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_app_store() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = AppStoreMessage {
+            url: Some("url"),
+            app_name: Some("app_name"),
+            original_url: Some("original_url"),
+            description: Some("description"),
+            platform: Some("platform"),
+            genre: Some("genre"),
+        };
+
+        let expected = exporter.format_app_store(&balloon, &blank());
+        let actual = "<div class=\"app_header\"><div class=\"name\">app_name</div></div><a href=\"url\"><div class=\"app_footer\"><div class=\"caption\">description</div><div class=\"subcaption\">platform</div><div class=\"trailing_subcaption\">genre</div></div></a>";
 
         assert_eq!(expected, actual);
     }

@@ -7,6 +7,7 @@ const STICKER_EFFECT_PREFIX: [u8; 20] = [
 /// Bytes for `"/>`
 const STICKER_EFFECT_SUFFIX: [u8; 3] = [34, 47, 62];
 
+/// Represents different types of [sticker effects](https://www.macrumors.com/how-to/add-effects-to-stickers-in-messages/) that can be applied to sticker iMessage balloons.
 #[derive(Debug, PartialEq, Eq)]
 pub enum StickerEffect {
     /// Sticker sent with no effect
@@ -21,7 +22,8 @@ pub enum StickerEffect {
 }
 
 impl StickerEffect {
-    pub fn from_exif(sticker_effect_type: &str) -> Self {
+    /// Determine the type of a sticker from parsed `HEIC` `EXIF` data
+    fn from_exif(sticker_effect_type: &str) -> Self {
         match sticker_effect_type {
             "stroke" => Self::Outline,
             "comic" => Self::Comic,

@@ -1,5 +1,5 @@
 /*!
- Errors that can happen when parsing message data
+ Errors that can happen when parsing attachment data
 */
 
 use std::{

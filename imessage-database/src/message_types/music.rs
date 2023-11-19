@@ -29,6 +29,11 @@ pub struct MusicMessage<'a> {
 impl<'a> BalloonProvider<'a> for MusicMessage<'a> {
     fn from_map(payload: &'a Value) -> Result<Self, PlistParseError> {
         if let Ok((music_metadata, body)) = MusicMessage::get_body_and_url(payload) {
+            // Ensure the message is a Music message
+            if get_string_from_dict(music_metadata, "album").is_none() {
+                return Err(PlistParseError::WrongMessageType);
+            }
+
             return Ok(Self {
                 url: get_string_from_nested_dict(body, "URL"),
                 preview: get_string_from_nested_dict(music_metadata, "previewURL"),
