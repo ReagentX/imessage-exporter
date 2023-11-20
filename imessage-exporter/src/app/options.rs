@@ -1,11 +1,12 @@
 use std::path::PathBuf;
 
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgMatches, Command, ArgAction};
 
 use imessage_database::{
     tables::{attachment::DEFAULT_ATTACHMENT_ROOT, table::DEFAULT_PATH_IOS},
     util::{
         dirs::{default_db_path, home},
+        export_type::ExportType,
         platform::Platform,
         query_context::QueryContext,
     },
@@ -39,17 +40,17 @@ pub const ABOUT: &str = concat!(
     "to find problems with the iMessage database."
 );
 
-pub struct Options<'a> {
+pub struct Options {
     /// Path to database file
     pub db_path: PathBuf,
     /// Custom path to attachments
-    pub attachment_root: Option<&'a str>,
+    pub attachment_root: Option<String>,
     /// The attachment manager type used to copy files
     pub attachment_manager: AttachmentManager,
     /// If true, emit diagnostic information to stdout
     pub diagnostic: bool,
     /// The type of file we are exporting data to
-    pub export_type: Option<&'a str>,
+    pub export_type: Option<ExportType>,
     /// Where the app will save exported data
     pub export_path: PathBuf,
     /// Query context describing SQL query filters
@@ -57,49 +58,47 @@ pub struct Options<'a> {
     /// If true, do not include `loading="lazy"` in HTML exports
     pub no_lazy: bool,
     /// Custom name for database owner in output
-    pub custom_name: Option<&'a str>,
+    pub custom_name: Option<String>,
     /// The database source's platform
     pub platform: Platform,
 }
 
-impl<'a> Options<'a> {
-    pub fn from_args(args: &'a ArgMatches) -> Result<Self, RuntimeError> {
-        let user_path = args.value_of(OPTION_DB_PATH);
-        let attachment_root = args.value_of(OPTION_ATTACHMENT_ROOT);
-        let attachment_manager_type = args.value_of(OPTION_ATTACHMENT_MANAGER);
-        let diagnostic = args.is_present(OPTION_DIAGNOSTIC);
-        let export_type = args.value_of(OPTION_EXPORT_TYPE);
-        let export_path = args.value_of(OPTION_EXPORT_PATH);
-        let start_date = args.value_of(OPTION_START_DATE);
-        let end_date = args.value_of(OPTION_END_DATE);
-        let no_lazy = args.is_present(OPTION_DISABLE_LAZY_LOADING);
-        let custom_name = args.value_of(OPTION_CUSTOM_NAME);
-        let platform_type = args.value_of(OPTION_PLATFORM);
+impl Options {
+    pub fn from_args(args: &ArgMatches) -> Result<Self, RuntimeError> {
+        let user_path: Option<&String> = args.get_one(OPTION_DB_PATH);
+        let attachment_root: Option<&String> = args.get_one(OPTION_ATTACHMENT_ROOT);
+        let attachment_manager_type: Option<&String> = args.get_one(OPTION_ATTACHMENT_MANAGER);
+        let diagnostic = args.get_flag(OPTION_DIAGNOSTIC);
+        let export_file_type: Option<&String> = args.get_one(OPTION_EXPORT_TYPE);
+        let export_path: Option<&String> = args.get_one(OPTION_EXPORT_PATH);
+        let start_date: Option<&String> = args.get_one(OPTION_START_DATE);
+        let end_date: Option<&String> = args.get_one(OPTION_END_DATE);
+        let no_lazy = args.get_flag(OPTION_DISABLE_LAZY_LOADING);
+        let custom_name: Option<&String> = args.get_one(OPTION_CUSTOM_NAME);
+        let platform_type: Option<&String> = args.get_one(OPTION_PLATFORM);
 
-        // Ensure export type is allowed
-        if let Some(found_type) = export_type {
-            if !SUPPORTED_FILE_TYPES
-                .split(',')
-                .any(|allowed_type| allowed_type.trim() == found_type)
-            {
-                return Err(RuntimeError::InvalidOptions(format!(
-                    "{found_type} is not a valid export type! Must be one of <{SUPPORTED_FILE_TYPES}>"
-                )));
+        // Build the export type
+        let export_type: Option<ExportType> = match export_file_type {
+            Some(export_type_str) => {
+                Some(ExportType::from_cli(export_type_str).ok_or(RuntimeError::InvalidOptions(format!(
+                    "{export_type_str} is not a valid export type! Must be one of <{SUPPORTED_FILE_TYPES}>"
+                )))?)
             }
-        }
+            None => None,
+        };
 
         // Ensure an export type is specified if other export options are selected
-        if attachment_manager_type.is_some() && export_type.is_none() {
+        if attachment_manager_type.is_some() && export_file_type.is_none() {
             return Err(RuntimeError::InvalidOptions(format!(
                 "Option {OPTION_ATTACHMENT_MANAGER} is enabled, which requires `--{OPTION_EXPORT_TYPE}`"
             )));
         }
-        if export_path.is_some() && export_type.is_none() {
+        if export_path.is_some() && export_file_type.is_none() {
             return Err(RuntimeError::InvalidOptions(format!(
                 "Option {OPTION_EXPORT_PATH} is enabled, which requires `--{OPTION_EXPORT_TYPE}`"
             )));
         }
-        if no_lazy && export_type != Some("html") {
+        if no_lazy && export_file_type != Some(&"html".to_string()) {
             eprintln!(
                 "Option {OPTION_DISABLE_LAZY_LOADING} is enabled, but the format specified is not `html`!"
             );
@@ -116,7 +115,7 @@ impl<'a> Options<'a> {
                 "Diagnostics are enabled; {OPTION_EXPORT_PATH} is disallowed"
             )));
         }
-        if diagnostic && export_type.is_some() {
+        if diagnostic && export_file_type.is_some() {
             return Err(RuntimeError::InvalidOptions(format!(
                 "Diagnostics are enabled; {OPTION_EXPORT_TYPE} is disallowed"
             )));
@@ -179,14 +178,14 @@ impl<'a> Options<'a> {
 
         Ok(Options {
             db_path,
-            attachment_root,
+            attachment_root: attachment_root.cloned(),
             attachment_manager: attachment_manager_mode,
             diagnostic,
             export_type,
-            export_path: validate_path(export_path, export_type)?,
+            export_path: validate_path(export_path, export_file_type)?,
             query_context,
             no_lazy,
-            custom_name,
+            custom_name: custom_name.cloned(),
             platform,
         })
     }
@@ -204,8 +203,8 @@ impl<'a> Options<'a> {
 ///
 /// We have to allocate a PathBuf here because it can be created from data owned by this function in the default state
 fn validate_path(
-    export_path: Option<&str>,
-    export_type: Option<&str>,
+    export_path: Option<&String>,
+    export_type: Option<&String>,
 ) -> Result<PathBuf, RuntimeError> {
     let resolved_path =
         PathBuf::from(export_path.unwrap_or(&format!("{}/{DEFAULT_OUTPUT_DIR}", home())));
@@ -244,7 +243,7 @@ fn validate_path(
 }
 
 pub fn from_command_line() -> ArgMatches {
-    let matches = Command::new("iMessage Exporter")
+    Command::new("iMessage Exporter")
         .version(crate_version!())
         .about(ABOUT)
         .arg_required_else_help(true)
@@ -252,15 +251,15 @@ pub fn from_command_line() -> ArgMatches {
             Arg::new(OPTION_DIAGNOSTIC)
             .short('d')
             .long(OPTION_DIAGNOSTIC)
-            .help("Print diagnostic information and exit")
+            .help("Print diagnostic information and exit\n")
+            .action(ArgAction::SetTrue)
             .display_order(0),
         )
         .arg(
             Arg::new(OPTION_EXPORT_TYPE)
             .short('f')
             .long(OPTION_EXPORT_TYPE)
-            .help("Specify a single file format to export messages into")
-            .takes_value(true)
+            .help("Specify a single file format to export messages into\n")
             .display_order(1)
             .value_name(SUPPORTED_FILE_TYPES),
         )
@@ -268,8 +267,7 @@ pub fn from_command_line() -> ArgMatches {
             Arg::new(OPTION_ATTACHMENT_MANAGER)
             .short('c')
             .long(OPTION_ATTACHMENT_MANAGER)
-            .help(&*format!("Specify a method to use when copying message attachments\nCompatible will convert HEIC files to JPEG\nEfficient will copy files without converting anything\nIf omitted, the default is `{}`", AttachmentManager::default()))
-            .takes_value(true)
+            .help(format!("Specify a method to use when copying message attachments\nCompatible will convert HEIC files to JPEG\nEfficient will copy files without converting anything\nIf omitted, the default is `{}`\n", AttachmentManager::default()))
             .display_order(2)
             .value_name(SUPPORTED_ATTACHMENT_MANAGER_MODES),
         )
@@ -277,8 +275,7 @@ pub fn from_command_line() -> ArgMatches {
             Arg::new(OPTION_DB_PATH)
                 .short('p')
                 .long(OPTION_DB_PATH)
-                .help(&*format!("Specify a custom path for the iMessage database location\nFor macOS, specify a path to a `chat.db` file\nFor iOS, specify a path to the root of an unencrypted backup directory\nIf omitted, the default directory is {}", default_db_path().display()))
-                .takes_value(true)
+                .help(format!("Specify a custom path for the iMessage database location\nFor macOS, specify a path to a `chat.db` file\nFor iOS, specify a path to the root of an unencrypted backup directory\nIf omitted, the default directory is {}\n", default_db_path().display()))
                 .display_order(3)
                 .value_name("path/to/source"),
         )
@@ -286,8 +283,7 @@ pub fn from_command_line() -> ArgMatches {
             Arg::new(OPTION_ATTACHMENT_ROOT)
                 .short('r')
                 .long(OPTION_ATTACHMENT_ROOT)
-                .help(&*format!("Specify an optional custom path to look for attachments in (macOS only).\nOnly use this if attachments are stored separately from the database's default location.\nThe default location is {DEFAULT_ATTACHMENT_ROOT}"))
-                .takes_value(true)
+                .help(format!("Specify an optional custom path to look for attachments in (macOS only).\nOnly use this if attachments are stored separately from the database's default location.\nThe default location is {DEFAULT_ATTACHMENT_ROOT}\n"))
                 .display_order(4)
                 .value_name("path/to/attachments"),
         )
@@ -295,8 +291,7 @@ pub fn from_command_line() -> ArgMatches {
             Arg::new(OPTION_PLATFORM)
             .short('a')
             .long(OPTION_PLATFORM)
-            .help("Specify the platform the database was created on\nIf omitted, the platform type is determined automatically")
-            .takes_value(true)
+            .help("Specify the platform the database was created on\nIf omitted, the platform type is determined automatically\n")
             .display_order(5)
             .value_name(SUPPORTED_PLATFORMS),
         )
@@ -304,8 +299,7 @@ pub fn from_command_line() -> ArgMatches {
             Arg::new(OPTION_EXPORT_PATH)
                 .short('o')
                 .long(OPTION_EXPORT_PATH)
-                .help(&*format!("Specify a custom directory for outputting exported data\nIf omitted, the default directory is {}/{DEFAULT_OUTPUT_DIR}", home()))
-                .takes_value(true)
+                .help(format!("Specify a custom directory for outputting exported data\nIf omitted, the default directory is {}/{DEFAULT_OUTPUT_DIR}\n", home()))
                 .display_order(6)
                 .value_name("path/to/save/files"),
         )
@@ -313,8 +307,7 @@ pub fn from_command_line() -> ArgMatches {
             Arg::new(OPTION_START_DATE)
                 .short('s')
                 .long(OPTION_START_DATE)
-                .help("The start date filter. Only messages sent on or after this date will be included")
-                .takes_value(true)
+                .help("The start date filter. Only messages sent on or after this date will be included\n")
                 .display_order(7)
                 .value_name("YYYY-MM-DD"),
         )
@@ -322,8 +315,7 @@ pub fn from_command_line() -> ArgMatches {
             Arg::new(OPTION_END_DATE)
                 .short('e')
                 .long(OPTION_END_DATE)
-                .help("The end date filter. Only messages sent before this date will be included")
-                .takes_value(true)
+                .help("The end date filter. Only messages sent before this date will be included\n")
                 .display_order(8)
                 .value_name("YYYY-MM-DD"),
         )
@@ -331,19 +323,18 @@ pub fn from_command_line() -> ArgMatches {
             Arg::new(OPTION_DISABLE_LAZY_LOADING)
                 .short('l')
                 .long(OPTION_DISABLE_LAZY_LOADING)
-                .help("Do not include `loading=\"lazy\"` in HTML export `img` tags\nThis will make pages load slower but PDF generation work")
+                .help("Do not include `loading=\"lazy\"` in HTML export `img` tags\nThis will make pages load slower but PDF generation work\n")
+                .action(ArgAction::SetTrue)
                 .display_order(9),
         )
         .arg(
             Arg::new(OPTION_CUSTOM_NAME)
                 .short('m')
                 .long(OPTION_CUSTOM_NAME)
-                .help("Specify an optional custom name for the database owner's messages in exports")
-                .takes_value(true)
+                .help("Specify an optional custom name for the database owner's messages in exports\n")
                 .display_order(10)
         )
-        .get_matches();
-    matches
+        .get_matches()
 }
 
 #[cfg(test)]
@@ -357,8 +348,10 @@ mod tests {
 
     #[test]
     fn can_validate_empty() {
-        let export_path = Some("/tmp");
-        let export_type = Some("txt");
+        let tmp = String::from("/tmp");
+        let txt = String::from("txt");
+        let export_path = Some(&tmp);
+        let export_type = Some(&txt);
 
         let result = validate_path(export_path, export_type);
 
@@ -367,8 +360,10 @@ mod tests {
 
     #[test]
     fn can_validate_different_type() {
-        let export_path = Some("/tmp");
-        let export_type = Some("txt");
+        let tmp = String::from("/tmp");
+        let txt = String::from("txt");
+        let export_path = Some(&tmp);
+        let export_type = Some(&txt);
 
         let result = validate_path(export_path, export_type);
 
@@ -383,8 +378,10 @@ mod tests {
 
     #[test]
     fn can_validate_same_type() {
-        let export_path = Some("/tmp");
-        let export_type = Some("txt");
+        let tmp = String::from("/tmp");
+        let txt = String::from("txt");
+        let export_path = Some(&tmp);
+        let export_type = Some(&txt);
 
         let result = validate_path(export_path, export_type);
 

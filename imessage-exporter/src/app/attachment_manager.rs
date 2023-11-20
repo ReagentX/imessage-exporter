@@ -47,7 +47,7 @@ impl AttachmentManager {
         let attachment_path = attachment.resolved_attachment_path(
             &config.options.platform,
             &config.options.db_path,
-            config.options.attachment_root,
+            config.options.attachment_root.as_deref(),
         )?;
 
         if !matches!(self, AttachmentManager::Disabled) {

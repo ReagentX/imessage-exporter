@@ -35,7 +35,7 @@ use imessage_database::{
 
 pub struct TXT<'a> {
     /// Data that is setup from the application's runtime
-    pub config: &'a Config<'a>,
+    pub config: &'a Config,
     /// Handles to files we want to write messages to
     /// Map of internal unique chatroom ID to a filename
     pub files: HashMap<i32, PathBuf>,
@@ -324,7 +324,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                 let sticker_effect = sticker.get_sticker_effect(
                     &self.config.options.platform,
                     &self.config.options.db_path,
-                    self.config.options.attachment_root,
+                    self.config.options.attachment_root.as_deref(),
                 );
                 if let Ok(Some(sticker_effect)) = sticker_effect {
                     return format!("{sticker_effect} Sticker from {who}: {path_to_sticker}");
@@ -451,7 +451,7 @@ impl<'a> Writer<'a> for TXT<'a> {
         let mut who = self.config.who(&msg.handle_id, msg.is_from_me);
         // Rename yourself so we render the proper grammar here
         if who == ME {
-            who = self.config.options.custom_name.unwrap_or(YOU)
+            who = self.config.options.custom_name.as_deref().unwrap_or(YOU)
         }
 
         let timestamp = format(&msg.date(&self.config.offset));
@@ -487,7 +487,7 @@ impl<'a> Writer<'a> for TXT<'a> {
 
             if edited_message.is_deleted() {
                 let who = if msg.is_from_me {
-                    self.config.options.custom_name.unwrap_or(YOU)
+                    self.config.options.custom_name.as_deref().unwrap_or(YOU)
                 } else {
                     "They"
                 };
@@ -783,7 +783,7 @@ impl<'a> TXT<'a> {
                 let who = if message.is_from_me {
                     "them"
                 } else {
-                    self.config.options.custom_name.unwrap_or("you")
+                    self.config.options.custom_name.as_deref().unwrap_or("you")
                 };
                 date.push_str(&format!(" (Read by {who} after {time})"));
             }
@@ -843,7 +843,7 @@ mod tests {
         }
     }
 
-    pub fn fake_options() -> Options<'static> {
+    pub fn fake_options() -> Options {
         Options {
             db_path: default_db_path(),
             attachment_root: None,
@@ -1063,7 +1063,7 @@ mod tests {
     fn can_format_txt_from_them_custom_name_read() {
         // Create exporter
         let mut options = fake_options();
-        options.custom_name = Some("Name");
+        options.custom_name = Some("Name".to_string());
         let mut config = Config::new(options).unwrap();
         config
             .participants
@@ -1127,7 +1127,7 @@ mod tests {
     fn can_format_txt_announcement_custom_name() {
         // Create exporter
         let mut options = fake_options();
-        options.custom_name = Some("Name");
+        options.custom_name = Some("Name".to_string());
         let config = Config::new(options).unwrap();
         let exporter = TXT::new(&config);
 
