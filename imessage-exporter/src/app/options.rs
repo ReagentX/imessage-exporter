@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{crate_version, Arg, ArgMatches, Command, ArgAction};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 
 use imessage_database::{
     tables::{attachment::DEFAULT_ATTACHMENT_ROOT, table::DEFAULT_PATH_IOS},
@@ -70,7 +70,7 @@ impl Options {
         let attachment_manager_type: Option<&String> = args.get_one(OPTION_ATTACHMENT_MANAGER);
         let diagnostic = args.get_flag(OPTION_DIAGNOSTIC);
         let export_file_type: Option<&String> = args.get_one(OPTION_EXPORT_TYPE);
-        let export_path: Option<&String> = args.get_one(OPTION_EXPORT_PATH);
+        let user_export_path: Option<&String> = args.get_one(OPTION_EXPORT_PATH);
         let start_date: Option<&String> = args.get_one(OPTION_START_DATE);
         let end_date: Option<&String> = args.get_one(OPTION_END_DATE);
         let no_lazy = args.get_flag(OPTION_DISABLE_LAZY_LOADING);
@@ -93,7 +93,7 @@ impl Options {
                 "Option {OPTION_ATTACHMENT_MANAGER} is enabled, which requires `--{OPTION_EXPORT_TYPE}`"
             )));
         }
-        if export_path.is_some() && export_file_type.is_none() {
+        if user_export_path.is_some() && export_file_type.is_none() {
             return Err(RuntimeError::InvalidOptions(format!(
                 "Option {OPTION_EXPORT_PATH} is enabled, which requires `--{OPTION_EXPORT_TYPE}`"
             )));
@@ -110,7 +110,7 @@ impl Options {
                 "Diagnostics are enabled; {OPTION_ATTACHMENT_MANAGER} is disallowed"
             )));
         }
-        if diagnostic && export_path.is_some() {
+        if diagnostic && user_export_path.is_some() {
             return Err(RuntimeError::InvalidOptions(format!(
                 "Diagnostics are enabled; {OPTION_EXPORT_PATH} is disallowed"
             )));
@@ -176,13 +176,16 @@ impl Options {
             None => AttachmentManager::default(),
         };
 
+        // Validate the provided export path
+        let export_path = validate_path(user_export_path, &export_type.as_ref())?;
+
         Ok(Options {
             db_path,
             attachment_root: attachment_root.cloned(),
             attachment_manager: attachment_manager_mode,
             diagnostic,
             export_type,
-            export_path: validate_path(export_path, export_file_type)?,
+            export_path,
             query_context,
             no_lazy,
             custom_name: custom_name.cloned(),
@@ -204,7 +207,7 @@ impl Options {
 /// We have to allocate a PathBuf here because it can be created from data owned by this function in the default state
 fn validate_path(
     export_path: Option<&String>,
-    export_type: Option<&String>,
+    export_type: &Option<&ExportType>,
 ) -> Result<PathBuf, RuntimeError> {
     let resolved_path =
         PathBuf::from(export_path.unwrap_or(&format!("{}/{DEFAULT_OUTPUT_DIR}", home())));
@@ -217,16 +220,17 @@ fn validate_path(
 
             match resolved_path.read_dir() {
                 Ok(files) => {
+                    let export_type_extension = export_type.to_string();
                     for file in files.flatten() {
                         if file
                             .path()
                             .extension()
-                            .map(|s| s.to_str().unwrap_or("") == export_type)
+                            .map(|s| s.to_str().unwrap_or("") == export_type_extension)
                             .unwrap_or(false)
                         {
                             return Err(RuntimeError::InvalidOptions(format!(
-                                        "{path_word} export path {resolved_path:?} contains existing \"{export_type}\" export data!"
-                                    )));
+                                "{path_word} export path {resolved_path:?} contains existing \"{export_type}\" export data!"
+                            )));
                         }
                     }
                 }
@@ -344,16 +348,15 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::app::options::{validate_path, DEFAULT_OUTPUT_DIR};
-    use imessage_database::util::dirs::home;
+    use imessage_database::util::{dirs::home, export_type::ExportType};
 
     #[test]
     fn can_validate_empty() {
         let tmp = String::from("/tmp");
-        let txt = String::from("txt");
         let export_path = Some(&tmp);
-        let export_type = Some(&txt);
+        let export_type = Some(ExportType::TXT);
 
-        let result = validate_path(export_path, export_type);
+        let result = validate_path(export_path, &export_type.as_ref());
 
         assert_eq!(result.unwrap(), PathBuf::from("/tmp"))
     }
@@ -361,11 +364,10 @@ mod tests {
     #[test]
     fn can_validate_different_type() {
         let tmp = String::from("/tmp");
-        let txt = String::from("txt");
         let export_path = Some(&tmp);
-        let export_type = Some(&txt);
+        let export_type = Some(ExportType::TXT);
 
-        let result = validate_path(export_path, export_type);
+        let result = validate_path(export_path, &export_type.as_ref());
 
         let mut tmp = PathBuf::from("/tmp");
         tmp.push("fake1.html");
@@ -379,11 +381,10 @@ mod tests {
     #[test]
     fn can_validate_same_type() {
         let tmp = String::from("/tmp");
-        let txt = String::from("txt");
         let export_path = Some(&tmp);
-        let export_type = Some(&txt);
+        let export_type = Some(ExportType::TXT);
 
-        let result = validate_path(export_path, export_type);
+        let result = validate_path(export_path, &export_type.as_ref());
 
         let mut tmp = PathBuf::from("/tmp");
         tmp.push("fake2.txt");
@@ -399,7 +400,7 @@ mod tests {
         let export_path = None;
         let export_type = None;
 
-        let result = validate_path(export_path, export_type);
+        let result = validate_path(export_path, &export_type);
 
         assert_eq!(
             result.unwrap(),
