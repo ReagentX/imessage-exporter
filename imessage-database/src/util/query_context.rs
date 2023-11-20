@@ -8,7 +8,7 @@ use crate::{
     util::dates::{get_offset, TIMESTAMP_FACTOR},
 };
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 /// Represents filter configurations for a SQL query.
 pub struct QueryContext {
     /// The start date filter. Only messages sent on or after this date will be included.

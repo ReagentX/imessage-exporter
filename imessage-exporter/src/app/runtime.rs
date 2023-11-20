@@ -28,11 +28,11 @@ use imessage_database::{
             ORPHANED, UNKNOWN,
         },
     },
-    util::dates::get_offset,
+    util::{dates::get_offset, export_type::ExportType},
 };
 
 /// Stores the application state and handles application lifecycle
-pub struct Config<'a> {
+pub struct Config {
     /// Map of chatroom ID to chatroom information
     pub chatrooms: HashMap<i32, Chat>,
     // Map of chatroom ID to an internal unique chatroom ID
@@ -46,7 +46,7 @@ pub struct Config<'a> {
     /// Messages that are reactions to other messages
     pub reactions: HashMap<String, HashMap<usize, Vec<Message>>>,
     /// App configuration options
-    pub options: Options<'a>,
+    pub options: Options,
     /// Global date offset used by the iMessage database:
     pub offset: i64,
     /// The connection we use to query the database
@@ -55,7 +55,7 @@ pub struct Config<'a> {
     pub converter: Option<Converter>,
 }
 
-impl<'a> Config<'a> {
+impl Config {
     /// Get a deduplicated chat ID or a default value
     pub fn conversation(&self, message: &Message) -> Option<(&Chat, &i32)> {
         match message.chat_id.or(message.deleted_from) {
@@ -106,7 +106,7 @@ impl<'a> Config<'a> {
                 .resolved_attachment_path(
                     &self.options.platform,
                     &self.options.db_path,
-                    self.options.attachment_root,
+                    self.options.attachment_root.as_deref(),
                 )
                 .unwrap_or(attachment.filename().to_string()),
         }
@@ -261,23 +261,21 @@ impl<'a> Config<'a> {
     pub fn start(&self) -> Result<(), RuntimeError> {
         if self.options.diagnostic {
             self.run_diagnostic().map_err(RuntimeError::DatabaseError)?;
-        } else if self.options.export_type.is_some() {
+        } else if let Some(export_type) = &self.options.export_type {
             // Ensure the path we want to export to exists
             create_dir_all(&self.options.export_path).map_err(RuntimeError::DiskError)?;
+            // Ensure the path we want to copy attachments to exists, if requested
+            if !matches!(self.options.attachment_manager, AttachmentManager::Disabled) {
+                create_dir_all(self.attachment_path()).map_err(RuntimeError::DiskError)?;
+            }
 
-            match self.options.export_type.unwrap_or_default() {
-                "txt" => {
-                    // Create exporter, pass it data we care about, then kick it off
-                    TXT::new(self).iter_messages()?;
-                }
-                "html" => {
-                    if !matches!(self.options.attachment_manager, AttachmentManager::Disabled) {
-                        create_dir_all(self.attachment_path()).map_err(RuntimeError::DiskError)?;
-                    }
+            // Create exporter, pass it data we care about, then kick it off
+            match export_type {
+                ExportType::HTML => {
                     HTML::new(self).iter_messages()?;
                 }
-                _ => {
-                    unreachable!()
+                ExportType::TXT => {
+                    TXT::new(self).iter_messages()?;
                 }
             }
         }
@@ -288,7 +286,7 @@ impl<'a> Config<'a> {
     /// Determine who sent a message
     pub fn who(&self, handle_id: &Option<i32>, is_from_me: bool) -> &str {
         if is_from_me {
-            return self.options.custom_name.unwrap_or(ME);
+            return self.options.custom_name.as_deref().unwrap_or(ME);
         } else if let Some(handle_id) = handle_id {
             return match self.participants.get(handle_id) {
                 Some(contact) => contact,
@@ -314,7 +312,7 @@ mod filename_tests {
         path::PathBuf,
     };
 
-    fn fake_options<'a>() -> Options<'a> {
+    fn fake_options() -> Options {
         Options {
             db_path: default_db_path(),
             attachment_root: None,
@@ -543,7 +541,7 @@ mod who_tests {
     };
     use std::{collections::HashMap, path::PathBuf};
 
-    fn fake_options<'a>() -> Options<'a> {
+    fn fake_options() -> Options {
         Options {
             db_path: default_db_path(),
             attachment_root: None,
@@ -649,7 +647,7 @@ mod who_tests {
     #[test]
     fn can_get_who_me_custom() {
         let mut options = fake_options();
-        options.custom_name = Some("Name");
+        options.custom_name = Some("Name".to_string());
         let app = fake_app(options);
 
         // Get participant name
@@ -765,7 +763,7 @@ mod directory_tests {
     };
     use std::{collections::HashMap, path::PathBuf};
 
-    fn fake_options<'a>() -> Options<'a> {
+    fn fake_options() -> Options {
         Options {
             db_path: default_db_path(),
             attachment_root: None,

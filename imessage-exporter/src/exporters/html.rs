@@ -1,4 +1,3 @@
-use core::panic;
 use std::{
     collections::HashMap,
     fs::File,
@@ -40,7 +39,7 @@ const STYLE: &str = include_str!("resources/style.css");
 
 pub struct HTML<'a> {
     /// Data that is setup from the application's runtime
-    pub config: &'a Config<'a>,
+    pub config: &'a Config,
     /// Handles to files we want to write messages to
     /// Map of internal unique chatroom ID to a filename
     pub files: HashMap<i32, PathBuf>,
@@ -514,7 +513,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                 let sticker_effect = sticker.get_sticker_effect(
                     &self.config.options.platform,
                     &self.config.options.db_path,
-                    self.config.options.attachment_root,
+                    self.config.options.attachment_root.as_deref(),
                 );
                 if let Ok(Some(sticker_effect)) = sticker_effect {
                     return format!("{sticker_embed}\n<div class=\"sticker_effect\">Sent with {sticker_effect} effect</div>");
@@ -659,7 +658,7 @@ impl<'a> Writer<'a> for HTML<'a> {
         let mut who = self.config.who(&msg.handle_id, msg.is_from_me);
         // Rename yourself so we render the proper grammar here
         if who == ME {
-            who = self.config.options.custom_name.unwrap_or("You")
+            who = self.config.options.custom_name.as_deref().unwrap_or("You")
         }
         let timestamp = format(&msg.date(&self.config.offset));
 
@@ -701,7 +700,7 @@ impl<'a> Writer<'a> for HTML<'a> {
 
             if edited_message.is_deleted() {
                 let who = if msg.is_from_me {
-                    self.config.options.custom_name.unwrap_or(YOU)
+                    self.config.options.custom_name.as_deref().unwrap_or(YOU)
                 } else {
                     "They"
                 };
@@ -1103,7 +1102,7 @@ impl<'a> HTML<'a> {
                 let who = if message.is_from_me {
                     "them"
                 } else {
-                    self.config.options.custom_name.unwrap_or("you")
+                    self.config.options.custom_name.as_deref().unwrap_or("you")
                 };
                 date.push_str(&format!(" (Read by {who} after {time})"));
             }
@@ -1284,7 +1283,7 @@ mod tests {
         }
     }
 
-    pub fn fake_options() -> Options<'static> {
+    pub fn fake_options() -> Options {
         Options {
             db_path: default_db_path(),
             attachment_root: None,
@@ -1518,7 +1517,7 @@ mod tests {
     fn can_format_html_from_them_custom_name_read() {
         // Create exporter
         let mut options = fake_options();
-        options.custom_name = Some("Name");
+        options.custom_name = Some("Name".to_string());
         let mut config = Config::new(options).unwrap();
         config
             .participants
@@ -1582,7 +1581,7 @@ mod tests {
     fn can_format_html_announcement_custom_name() {
         // Create exporter
         let mut options = fake_options();
-        options.custom_name = Some("Name");
+        options.custom_name = Some("Name".to_string());
         let config = Config::new(options).unwrap();
         let exporter = HTML::new(&config);
 
@@ -1713,7 +1712,9 @@ mod tests {
     #[test]
     fn can_format_html_attachment_sticker() {
         // Create exporter
-        let options = fake_options();
+        let mut options = fake_options();
+        options.export_path = current_dir().unwrap().parent().unwrap().to_path_buf();
+
         let config = Config::new(options).unwrap();
         let exporter = HTML::new(&config);
 
@@ -1729,10 +1730,11 @@ mod tests {
             .unwrap()
             .join("imessage-database/test_data/stickers/outline.heic");
         attachment.filename = Some(sticker_path.to_string_lossy().to_string());
+        attachment.copied_path = Some(PathBuf::from(sticker_path.to_string_lossy().to_string()));
 
         let actual = exporter.format_sticker(&mut attachment, &message);
 
-        assert_eq!(actual, "<img src=\"/Users/chris/Documents/Code/Rust/imessage-exporter/imessage-database/test_data/stickers/outline.heic\" loading=\"lazy\">\n<div class=\"sticker_effect\">Sent with Outline effect</div>");
+        assert_eq!(actual, "<img src=\"imessage-database/test_data/stickers/outline.heic\" loading=\"lazy\">\n<div class=\"sticker_effect\">Sent with Outline effect</div>");
     }
 }
 

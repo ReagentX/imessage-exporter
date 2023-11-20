@@ -14,6 +14,7 @@ use crate::app::{
 };
 
 /// Represents different ways the app can interact with attachment data
+#[derive(Debug, PartialEq, Eq)]
 pub enum AttachmentManager {
     /// Do not copy attachments
     Disabled,
@@ -47,7 +48,7 @@ impl AttachmentManager {
         let attachment_path = attachment.resolved_attachment_path(
             &config.options.platform,
             &config.options.db_path,
-            config.options.attachment_root,
+            config.options.attachment_root.as_deref(),
         )?;
 
         if !matches!(self, AttachmentManager::Disabled) {
