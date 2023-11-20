@@ -49,3 +49,18 @@ This software can recover some, but not all, deleted messages.
 Messages removed by deleting an entire conversation or by deleting a single message from a conversation are moved to a separate collection for up to 30 days. Messages present in this collection are restored to the conversations they belong to. Apple details this process [here](https://support.apple.com/en-us/HT202549#delete).
 
 Messages that have expired from this restoration process are permanently deleted and cannot be recovered.
+
+***
+
+#### How fast is `imessage-exporter`?
+
+This is a complicated question that depends on CPU, database size, chosen export type, and chosen attachment handling style.
+
+On my M1 Max MacBook Pro, performance is as follows:
+
+- With `--copy-method disabled`, exports run at about `18k` messages per second
+- With `--copy-method efficient`, exports run at about `13k` messages per second
+- With `--copy-method compatible`, exports run at about `300` messages per second
+- For more information on `--copy-method`, see [here](../imessage-exporter/README.md#how-to-use) and [here](./features.md#supported-message-features)
+
+However, if you recently deleted a large amount of data from Messages, the database will be slow for awhile, and will result in significantly reduced performance from `imessage-exporter`.
