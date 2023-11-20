@@ -269,6 +269,7 @@ fn validate_path(
     Ok(resolved_path)
 }
 
+/// Build the command line argument parser
 fn get_command() -> Command {
     Command::new("iMessage Exporter")
         .version(crate_version!())
@@ -363,6 +364,7 @@ fn get_command() -> Command {
         )
 }
 
+/// Parse arguments from the command line
 pub fn from_command_line() -> ArgMatches {
     get_command().get_matches()
 }
