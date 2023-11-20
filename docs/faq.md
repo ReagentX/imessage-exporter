@@ -14,7 +14,9 @@ No, `imessage-exporter` only reads data present on the host system.
 
 #### How does the exporter handle previously exported messages?
 
-All messages are exported every time `imessage-exporter` runs. `imessage-exporter` appends to files when writing, so make sure to specify a different location!
+If files with the current output type exist in the output directory, `imessage-exporter` will alert the user that they will overwrite existing exported data and the export will be cancelled. If the export directory is clear, `imessage-exporter` will export all messages by default, or between the dates specified by the `--start-date` and `--end-date` arguments.
+
+See [here](../imessage-exporter/README.md#how-to-use) for details on `imessage-exporter` arguments.
 
 ***
 
