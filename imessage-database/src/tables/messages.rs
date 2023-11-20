@@ -246,16 +246,30 @@ impl Diagnostic for Message {
             .query_row([], |r| r.get(0))
             .unwrap_or(0);
 
+        let mut messages_count = db
+            .prepare(&format!(
+                "
+            SELECT
+                COUNT(rowid)
+            FROM
+                {MESSAGE}
+            "
+            ))
+            .map_err(TableError::Messages)?;
+
+        let total_messages: i64 = messages_count.query_row([], |r| r.get(0)).unwrap_or(0);
+
         done_processing();
 
-        if num_dangling > 0 || messages_in_more_than_one_chat > 0 {
-            println!("Message diagnostic data:");
-            if num_dangling > 0 {
-                println!("    Messages not associated with a chat: {num_dangling}");
-            }
-            if messages_in_more_than_one_chat > 0 {
-                println!("    Messages belonging to more than one chat: {messages_in_more_than_one_chat}");
-            }
+        println!("Message diagnostic data:");
+        println!("    Total messages: {total_messages}");
+        if num_dangling > 0 {
+            println!("    Messages not associated with a chat: {num_dangling}");
+        }
+        if messages_in_more_than_one_chat > 0 {
+            println!(
+                "    Messages belonging to more than one chat: {messages_in_more_than_one_chat}"
+            );
         }
         Ok(())
     }
