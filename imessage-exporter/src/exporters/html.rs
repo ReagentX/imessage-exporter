@@ -1712,7 +1712,9 @@ mod tests {
     #[test]
     fn can_format_html_attachment_sticker() {
         // Create exporter
-        let options = fake_options();
+        let mut options = fake_options();
+        options.export_path = current_dir().unwrap().parent().unwrap().to_path_buf();
+
         let config = Config::new(options).unwrap();
         let exporter = HTML::new(&config);
 
@@ -1728,10 +1730,11 @@ mod tests {
             .unwrap()
             .join("imessage-database/test_data/stickers/outline.heic");
         attachment.filename = Some(sticker_path.to_string_lossy().to_string());
+        attachment.copied_path = Some(PathBuf::from(sticker_path.to_string_lossy().to_string()));
 
         let actual = exporter.format_sticker(&mut attachment, &message);
 
-        assert_eq!(actual, "<img src=\"/Users/chris/Documents/Code/Rust/imessage-exporter/imessage-database/test_data/stickers/outline.heic\" loading=\"lazy\">\n<div class=\"sticker_effect\">Sent with Outline effect</div>");
+        assert_eq!(actual, "<img src=\"imessage-database/test_data/stickers/outline.heic\" loading=\"lazy\">\n<div class=\"sticker_effect\">Sent with Outline effect</div>");
     }
 }
 

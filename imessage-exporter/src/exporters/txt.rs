@@ -1260,7 +1260,9 @@ mod tests {
     #[test]
     fn can_format_txt_attachment_sticker() {
         // Create exporter
-        let options = fake_options();
+        let mut options = fake_options();
+        options.export_path = current_dir().unwrap().parent().unwrap().to_path_buf();
+
         let config = Config::new(options).unwrap();
         let exporter = TXT::new(&config);
 
@@ -1276,10 +1278,11 @@ mod tests {
             .unwrap()
             .join("imessage-database/test_data/stickers/outline.heic");
         attachment.filename = Some(sticker_path.to_string_lossy().to_string());
+        attachment.copied_path = Some(PathBuf::from(sticker_path.to_string_lossy().to_string()));
 
         let actual = exporter.format_sticker(&mut attachment, &message);
 
-        assert_eq!(actual, "Outline Sticker from Me: /Users/chris/Documents/Code/Rust/imessage-exporter/imessage-database/test_data/stickers/outline.heic");
+        assert_eq!(actual, "Outline Sticker from Me: imessage-database/test_data/stickers/outline.heic");
     }
 }
 

@@ -53,7 +53,7 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         Specify a custom path for the iMessage database location
         For macOS, specify a path to a `chat.db` file
         For iOS, specify a path to the root of an unencrypted backup directory
-        If omitted, the default directory is /Users/chris/Library/Messages/chat.db
+        If omitted, the default directory is ~/Library/Messages/chat.db
         
 -r, --attachment-root <path/to/attachments>
         Specify an optional custom path to look for attachments in (macOS only).
@@ -66,7 +66,7 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         
 -o, --export-path <path/to/save/files>
         Specify a custom directory for outputting exported data
-        If omitted, the default directory is /Users/chris/imessage_export
+        If omitted, the default directory is ~/imessage_export
         
 -s, --start-date <YYYY-MM-DD>
         The start date filter. Only messages sent on or after this date will be included
