@@ -978,7 +978,7 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
         if let Some(date_str) = metadata.get("estimatedEndTime") {
             // Parse the estimated end time from the message's query string
             let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
-            let date_time = get_local_time(&date_stamp, &self.config.offset);
+            let date_time = get_local_time(&date_stamp, &0);
             let date_string = format(&date_time);
 
             out_s.push_str("<div class=\"app_footer\">");
@@ -993,7 +993,7 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
         else if let Some(date_str) = metadata.get("triggerTime") {
             // Parse the estimated end time from the message's query string
             let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
-            let date_time = get_local_time(&date_stamp, &self.config.offset);
+            let date_time = get_local_time(&date_stamp, &0);
             let date_string = format(&date_time);
 
             out_s.push_str("<div class=\"app_footer\">");
@@ -1008,7 +1008,7 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
         else if let Some(date_str) = metadata.get("sendDate") {
             // Parse the estimated end time from the message's query string
             let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
-            let date_time = get_local_time(&date_stamp, &self.config.offset);
+            let date_time = get_local_time(&date_stamp, &0);
             let date_string = format(&date_time);
 
             out_s.push_str("<div class=\"app_footer\">");
@@ -1242,7 +1242,10 @@ impl<'a> HTML<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::{env::current_dir, path::PathBuf};
+    use std::{
+        env::{current_dir, set_var},
+        path::PathBuf,
+    };
 
     use crate::{
         app::attachment_manager::AttachmentManager, exporters::exporter::Writer, Config, Exporter,
@@ -1322,6 +1325,9 @@ mod tests {
 
     #[test]
     fn can_get_time_valid() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1344,6 +1350,9 @@ mod tests {
 
     #[test]
     fn can_get_time_invalid() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1404,6 +1413,9 @@ mod tests {
 
     #[test]
     fn can_format_html_from_me_normal() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1424,6 +1436,9 @@ mod tests {
 
     #[test]
     fn can_format_html_from_me_normal_deleted() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1444,6 +1459,9 @@ mod tests {
 
     #[test]
     fn can_format_html_from_me_normal_read() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1466,6 +1484,9 @@ mod tests {
 
     #[test]
     fn can_format_html_from_them_normal() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let mut config = Config::new(options).unwrap();
@@ -1488,6 +1509,9 @@ mod tests {
 
     #[test]
     fn can_format_html_from_them_normal_read() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let mut config = Config::new(options).unwrap();
@@ -1515,6 +1539,9 @@ mod tests {
 
     #[test]
     fn can_format_html_from_them_custom_name_read() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let mut options = fake_options();
         options.custom_name = Some("Name".to_string());
@@ -1543,6 +1570,9 @@ mod tests {
 
     #[test]
     fn can_format_html_shareplay() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1561,6 +1591,9 @@ mod tests {
 
     #[test]
     fn can_format_html_announcement() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1579,6 +1612,9 @@ mod tests {
 
     #[test]
     fn can_format_html_announcement_custom_name() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let mut options = fake_options();
         options.custom_name = Some("Name".to_string());
@@ -1598,6 +1634,9 @@ mod tests {
 
     #[test]
     fn can_format_html_reaction_me() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1617,6 +1656,9 @@ mod tests {
 
     #[test]
     fn can_format_html_reaction_them() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let mut config = Config::new(options).unwrap();
@@ -1740,6 +1782,8 @@ mod tests {
 
 #[cfg(test)]
 mod balloon_format_tests {
+    use std::env::set_var;
+
     use super::tests::{blank, fake_options};
     use crate::{exporters::exporter::BalloonFormatter, Config, Exporter, HTML};
     use imessage_database::message_types::{
@@ -1921,6 +1965,9 @@ mod balloon_format_tests {
 
     #[test]
     fn can_format_html_check_in_timer() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1940,13 +1987,16 @@ mod balloon_format_tests {
         };
 
         let expected = exporter.format_check_in(&balloon, &blank());
-        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Timer Started</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2054  1:54:29 PM</div></div>";
+        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Timer Started</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2023  1:54:29 PM</div></div>";
 
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn can_format_html_check_in_timer_late() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1966,13 +2016,16 @@ mod balloon_format_tests {
         };
 
         let expected = exporter.format_check_in(&balloon, &blank());
-        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Has not checked in when expected, location shared</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2054  1:54:29 PM</div></div>";
+        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Has not checked in when expected, location shared</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2023  1:54:29 PM</div></div>";
 
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn can_format_html_accepted_check_in() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1992,7 +2045,7 @@ mod balloon_format_tests {
         };
 
         let expected = exporter.format_check_in(&balloon, &blank());
-        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Fake Location</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2054  1:54:29 PM</div></div>";
+        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Fake Location</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2023  1:54:29 PM</div></div>";
 
         assert_eq!(expected, actual);
     }

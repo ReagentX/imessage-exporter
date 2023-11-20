@@ -132,6 +132,8 @@ impl QueryContext {
 
 #[cfg(test)]
 mod use_tests {
+    use std::env::set_var;
+
     use chrono::prelude::*;
 
     use crate::util::{
@@ -149,6 +151,9 @@ mod use_tests {
 
     #[test]
     fn can_create_start() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         let mut context = QueryContext::default();
         context.set_start("2020-01-01").unwrap();
 
@@ -171,6 +176,9 @@ mod use_tests {
 
     #[test]
     fn can_create_end() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         let mut context = QueryContext::default();
         context.set_end("2020-01-01").unwrap();
 
@@ -193,6 +201,9 @@ mod use_tests {
 
     #[test]
     fn can_create_both() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         let mut context = QueryContext::default();
         context.set_start("2020-01-01").unwrap();
         context.set_end("2020-02-02").unwrap();
