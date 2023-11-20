@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::{crate_version, Arg, ArgMatches, Command};
 
 use imessage_database::{
-    tables::table::DEFAULT_PATH_IOS,
+    tables::{attachment::DEFAULT_ATTACHMENT_ROOT, table::DEFAULT_PATH_IOS},
     util::{
         dirs::{default_db_path, home},
         platform::Platform,
@@ -18,6 +18,7 @@ pub const DEFAULT_OUTPUT_DIR: &str = "imessage_export";
 
 // CLI Arg Names
 pub const OPTION_DB_PATH: &str = "db-path";
+pub const OPTION_ATTACHMENT_ROOT: &str = "attachment-root";
 pub const OPTION_ATTACHMENT_MANAGER: &str = "copy-method";
 pub const OPTION_DIAGNOSTIC: &str = "diagnostics";
 pub const OPTION_EXPORT_TYPE: &str = "format";
@@ -41,6 +42,8 @@ pub const ABOUT: &str = concat!(
 pub struct Options<'a> {
     /// Path to database file
     pub db_path: PathBuf,
+    /// Custom path to attachments
+    pub attachment_root: Option<&'a str>,
     /// The attachment manager type used to copy files
     pub attachment_manager: AttachmentManager,
     /// If true, emit diagnostic information to stdout
@@ -62,6 +65,7 @@ pub struct Options<'a> {
 impl<'a> Options<'a> {
     pub fn from_args(args: &'a ArgMatches) -> Result<Self, RuntimeError> {
         let user_path = args.value_of(OPTION_DB_PATH);
+        let attachment_root = args.value_of(OPTION_ATTACHMENT_ROOT);
         let attachment_manager_type = args.value_of(OPTION_ATTACHMENT_MANAGER);
         let diagnostic = args.is_present(OPTION_DIAGNOSTIC);
         let export_type = args.value_of(OPTION_EXPORT_TYPE);
@@ -96,9 +100,9 @@ impl<'a> Options<'a> {
             )));
         }
         if no_lazy && export_type != Some("html") {
-            return Err(RuntimeError::InvalidOptions(format!(
-                "Option {OPTION_DISABLE_LAZY_LOADING} is enabled, which requires `--{OPTION_EXPORT_TYPE}`"
-            )));
+            eprintln!(
+                "Option {OPTION_DISABLE_LAZY_LOADING} is enabled, but the format specified is not `html`!"
+            );
         }
 
         // Ensure that if diagnostics are enabled, no other options are
@@ -137,6 +141,32 @@ impl<'a> Options<'a> {
             None => default_db_path(),
         };
 
+        // Build the Platform
+        let platform = match platform_type {
+            Some(platform_str) => Platform::from_cli(platform_str).ok_or(
+                RuntimeError::InvalidOptions(format!(
+                "{platform_str} is not a valid platform! Must be one of <{SUPPORTED_PLATFORMS}>")),
+            )?,
+            None => Platform::determine(&db_path),
+        };
+
+        // Validate that the custom attachment root exists, if provided
+        if let Some(path) = attachment_root {
+            let custom_attachment_path = PathBuf::from(path);
+            if !custom_attachment_path.exists() {
+                return Err(RuntimeError::InvalidOptions(format!(
+                    "Supplied {OPTION_ATTACHMENT_ROOT} `{path}` does not exist!"
+                )));
+            }
+        };
+
+        // Warn the user that custom attachment roots have no effect on iOS backups
+        if attachment_root.is_some() && platform == Platform::iOS {
+            eprintln!(
+                "Option {OPTION_ATTACHMENT_ROOT} is enabled, but the platform is {}, so the root will have no effect!", Platform::iOS
+            );
+        }
+
         // Determine the attachment manager mode
         let attachment_manager_mode = match attachment_manager_type {
             Some(manager) => {
@@ -147,17 +177,9 @@ impl<'a> Options<'a> {
             None => AttachmentManager::default(),
         };
 
-        // Build the Platform
-        let platform = match platform_type {
-            Some(platform_str) => Platform::from_cli(platform_str).ok_or(
-                RuntimeError::InvalidOptions(format!(
-                "{platform_str} is not a valid platform! Must be one of <{SUPPORTED_PLATFORMS}>")),
-            )?,
-            None => Platform::determine(&db_path),
-        };
-
         Ok(Options {
             db_path,
+            attachment_root,
             attachment_manager: attachment_manager_mode,
             diagnostic,
             export_type,
@@ -261,12 +283,21 @@ pub fn from_command_line() -> ArgMatches {
                 .value_name("path/to/source"),
         )
         .arg(
+            Arg::new(OPTION_ATTACHMENT_ROOT)
+                .short('r')
+                .long(OPTION_ATTACHMENT_ROOT)
+                .help(&*format!("Specify an optional custom path to look for attachments in (macOS only).\nOnly use this if attachments are stored separately from the database's default location.\nThe default location is {DEFAULT_ATTACHMENT_ROOT}"))
+                .takes_value(true)
+                .display_order(4)
+                .value_name("path/to/attachments"),
+        )
+        .arg(
             Arg::new(OPTION_PLATFORM)
             .short('a')
             .long(OPTION_PLATFORM)
             .help("Specify the platform the database was created on\nIf omitted, the platform type is determined automatically")
             .takes_value(true)
-            .display_order(4)
+            .display_order(5)
             .value_name(SUPPORTED_PLATFORMS),
         )
         .arg(
@@ -275,7 +306,7 @@ pub fn from_command_line() -> ArgMatches {
                 .long(OPTION_EXPORT_PATH)
                 .help(&*format!("Specify a custom directory for outputting exported data\nIf omitted, the default directory is {}/{DEFAULT_OUTPUT_DIR}", home()))
                 .takes_value(true)
-                .display_order(5)
+                .display_order(6)
                 .value_name("path/to/save/files"),
         )
         .arg(
@@ -284,7 +315,7 @@ pub fn from_command_line() -> ArgMatches {
                 .long(OPTION_START_DATE)
                 .help("The start date filter. Only messages sent on or after this date will be included")
                 .takes_value(true)
-                .display_order(6)
+                .display_order(7)
                 .value_name("YYYY-MM-DD"),
         )
         .arg(
@@ -293,7 +324,7 @@ pub fn from_command_line() -> ArgMatches {
                 .long(OPTION_END_DATE)
                 .help("The end date filter. Only messages sent before this date will be included")
                 .takes_value(true)
-                .display_order(7)
+                .display_order(8)
                 .value_name("YYYY-MM-DD"),
         )
         .arg(
@@ -301,7 +332,7 @@ pub fn from_command_line() -> ArgMatches {
                 .short('l')
                 .long(OPTION_DISABLE_LAZY_LOADING)
                 .help("Do not include `loading=\"lazy\"` in HTML export `img` tags\nThis will make pages load slower but PDF generation work")
-                .display_order(8),
+                .display_order(9),
         )
         .arg(
             Arg::new(OPTION_CUSTOM_NAME)
@@ -309,7 +340,7 @@ pub fn from_command_line() -> ArgMatches {
                 .long(OPTION_CUSTOM_NAME)
                 .help("Specify an optional custom name for the database owner's messages in exports")
                 .takes_value(true)
-                .display_order(9)
+                .display_order(10)
         )
         .get_matches();
     matches

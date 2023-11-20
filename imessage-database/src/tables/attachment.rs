@@ -4,10 +4,15 @@
 
 use rusqlite::{Connection, Error, Result, Row, Statement};
 use sha1::{Digest, Sha1};
-use std::path::{Path, PathBuf};
+use std::{
+    fs::File,
+    io::Read,
+    path::{Path, PathBuf},
+};
 
 use crate::{
-    error::table::TableError,
+    error::{attachment::AttachmentError, table::TableError},
+    message_types::sticker::{get_sticker_effect, StickerEffect},
     tables::{
         messages::Message,
         table::{Table, ATTACHMENT},
@@ -19,6 +24,8 @@ use crate::{
     },
 };
 
+/// The default root directory for iMessage attachment data
+pub const DEFAULT_ATTACHMENT_ROOT: &str = "~/Library/Messages/Attachments";
 const DIVISOR: f64 = 1024.;
 const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
 
@@ -45,6 +52,7 @@ pub struct Attachment {
     pub mime_type: Option<String>,
     pub transfer_name: Option<String>,
     pub total_bytes: i64,
+    pub is_sticker: bool,
     pub hide_attachment: i32,
     pub copied_path: Option<PathBuf>,
 }
@@ -58,6 +66,7 @@ impl Table for Attachment {
             mime_type: row.get("mime_type").unwrap_or(None),
             transfer_name: row.get("transfer_name").unwrap_or(None),
             total_bytes: row.get("total_bytes").unwrap_or_default(),
+            is_sticker: row.get("is_sticker").unwrap_or(false),
             hide_attachment: row.get("hide_attachment").unwrap_or(0),
             copied_path: None,
         })
@@ -137,6 +146,47 @@ impl Attachment {
         }
     }
 
+    /// Read the attachment from the disk into a vector of bytes in memory
+    pub fn as_bytes(
+        &self,
+        platform: &Platform,
+        db_path: &Path,
+        custom_attachment_root: Option<&str>,
+    ) -> Result<Option<Vec<u8>>, AttachmentError> {
+        if let Some(file_path) =
+            self.resolved_attachment_path(platform, db_path, custom_attachment_root)
+        {
+            let mut file = File::open(&file_path)
+                .map_err(|err| AttachmentError::Unreadable(file_path, err))?;
+            let mut bytes = vec![];
+            file.read_to_end(&mut bytes).unwrap();
+
+            return Ok(Some(bytes));
+        }
+        Ok(None)
+    }
+
+    /// Determine the [`StickerEffect`](crate::message_types::sticker::StickerEffect) of a sticker message
+    pub fn get_sticker_effect(
+        &self,
+        platform: &Platform,
+        db_path: &Path,
+        custom_attachment_root: Option<&str>,
+    ) -> Result<Option<StickerEffect>, AttachmentError> {
+        // Handle the non-sticker case
+        if !self.is_sticker {
+            return Ok(None);
+        }
+
+        // Try to parse the HEIC data
+        if let Some(data) = self.as_bytes(platform, db_path, custom_attachment_root)? {
+            return Ok(Some(get_sticker_effect(data)));
+        }
+
+        // Default if the attachment is a sticker and cannot be parsed/read
+        Ok(Some(StickerEffect::default()))
+    }
+
     /// Get the path to an attachment, if it exists
     pub fn path(&self) -> Option<&Path> {
         match &self.filename {
@@ -189,11 +239,23 @@ impl Attachment {
     /// For macOS, `db_path` is unused. For iOS, `db_path` is the path to the root of the backup directory.
     ///
     /// iOS Parsing logic source is from [here](https://github.com/nprezant/iMessageBackup/blob/940d001fb7be557d5d57504eb26b3489e88de26e/imessage_backup_tools.py#L83-L85).
-    pub fn resolved_attachment_path(&self, platform: &Platform, db_path: &Path) -> Option<String> {
-        if let Some(path_str) = &self.filename {
+    ///
+    /// Use the optional `custom_attachment_root` parameter when the attachments are not stored in the same place as the database expects. The expected location is [`DEFAULT_ATTACHMENT_ROOT`](crate::tables::attachment::DEFAULT_ATTACHMENT_ROOT).
+    /// A custom attachment root like `/custom/path` will overwrite a path like `~/Library/Messages/Attachments/3d/...` to `/custom/path/3d...`
+    pub fn resolved_attachment_path(
+        &self,
+        platform: &Platform,
+        db_path: &Path,
+        custom_attachment_root: Option<&str>,
+    ) -> Option<String> {
+        if let Some(mut path_str) = self.filename.clone() {
+            // Apply custom attachment path
+            if let Some(custom_attachment_path) = custom_attachment_root {
+                path_str = path_str.replace(DEFAULT_ATTACHMENT_ROOT, custom_attachment_path);
+            }
             return match platform {
-                Platform::macOS => Some(Attachment::gen_macos_attachment(path_str)),
-                Platform::iOS => Attachment::gen_ios_attachment(path_str, db_path),
+                Platform::macOS => Some(Attachment::gen_macos_attachment(&path_str)),
+                Platform::iOS => Attachment::gen_ios_attachment(&path_str, db_path),
             };
         }
         None
@@ -201,7 +263,7 @@ impl Attachment {
 
     /// Emit diagnostic data for the Attachments table
     ///
-    /// This is defined outside of [crate::tables::table::Diagnostic] because it requires additional data.
+    /// This is defined outside of [`Diagnostic`](crate::tables::table::Diagnostic) because it requires additional data.
     ///
     /// Get the number of attachments that are missing from the filesystem
     /// or are missing one of the following columns:
@@ -317,7 +379,7 @@ impl Attachment {
 #[cfg(test)]
 mod tests {
     use crate::{
-        tables::attachment::{Attachment, MediaType},
+        tables::attachment::{Attachment, MediaType, DEFAULT_ATTACHMENT_ROOT},
         util::platform::Platform,
     };
 
@@ -331,6 +393,7 @@ mod tests {
             mime_type: Some("image".to_string()),
             transfer_name: Some("c.png".to_string()),
             total_bytes: 100,
+            is_sticker: false,
             hide_attachment: 0,
             copied_path: None,
         }
@@ -416,8 +479,21 @@ mod tests {
         let attachment = sample_attachment();
 
         assert_eq!(
-            attachment.resolved_attachment_path(&Platform::macOS, &db_path),
+            attachment.resolved_attachment_path(&Platform::macOS, &db_path, None),
             Some("a/b/c.png".to_string())
+        );
+    }
+
+    #[test]
+    fn can_get_resolved_path_macos_custom() {
+        let db_path = PathBuf::from("fake_root");
+        let mut attachment = sample_attachment();
+        // Sample path like `~/Library/Messages/Attachments/0a/10/.../image.jpeg`
+        attachment.filename = Some(format!("{DEFAULT_ATTACHMENT_ROOT}/a/b/c.png"));
+
+        assert_eq!(
+            attachment.resolved_attachment_path(&Platform::macOS, &db_path, Some("custom/root")),
+            Some("custom/root/a/b/c.png".to_string())
         );
     }
 
@@ -429,7 +505,7 @@ mod tests {
 
         assert!(
             attachment
-                .resolved_attachment_path(&Platform::macOS, &db_path)
+                .resolved_attachment_path(&Platform::macOS, &db_path, None)
                 .unwrap()
                 .len()
                 > attachment.filename.unwrap().len()
@@ -443,7 +519,7 @@ mod tests {
         attachment.filename = Some("~/a/b/c~d.png".to_string());
 
         assert!(attachment
-            .resolved_attachment_path(&Platform::macOS, &db_path)
+            .resolved_attachment_path(&Platform::macOS, &db_path, None)
             .unwrap()
             .ends_with("c~d.png"));
     }
@@ -454,7 +530,20 @@ mod tests {
         let attachment = sample_attachment();
 
         assert_eq!(
-            attachment.resolved_attachment_path(&Platform::iOS, &db_path),
+            attachment.resolved_attachment_path(&Platform::iOS, &db_path, None),
+            Some("fake_root/41/41746ffc65924078eae42725c979305626f57cca".to_string())
+        );
+    }
+
+    #[test]
+    fn can_get_resolved_path_ios_custom() {
+        let db_path = PathBuf::from("fake_root");
+        let attachment = sample_attachment();
+
+        // iOS Backups store attachments at the same level as the database file, so if the backup
+        // is intact, the custom root is not relevant
+        assert_eq!(
+            attachment.resolved_attachment_path(&Platform::iOS, &db_path, Some("custom/root")),
             Some("fake_root/41/41746ffc65924078eae42725c979305626f57cca".to_string())
         );
     }
@@ -466,7 +555,7 @@ mod tests {
         attachment.filename = None;
 
         assert_eq!(
-            attachment.resolved_attachment_path(&Platform::macOS, &db_path),
+            attachment.resolved_attachment_path(&Platform::macOS, &db_path, None),
             None
         );
     }
@@ -478,7 +567,7 @@ mod tests {
         attachment.filename = None;
 
         assert_eq!(
-            attachment.resolved_attachment_path(&Platform::iOS, &db_path),
+            attachment.resolved_attachment_path(&Platform::iOS, &db_path, None),
             None
         );
     }

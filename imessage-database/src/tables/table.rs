@@ -44,16 +44,25 @@ pub trait Diagnostic {
 
 /// Get a connection to the iMessage SQLite database
 pub fn get_connection(path: &Path) -> Result<Connection, TableError> {
-    if path.exists() {
+    if path.exists() && path.is_file() {
         return match Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
             Ok(res) => Ok(res),
             Err(why) => Err(
                 TableError::CannotConnect(
                     format!("Unable to read from chat database: {}\nEnsure full disk access is enabled for your terminal emulator in System Settings > Security and Privacy > Full Disk Access", why)
-                )
-            ),
-        };
+                )),
+            };
+    };
+
+    // Path does not point to a file
+    if path.exists() && !path.is_file() {
+        return Err(TableError::CannotConnect(format!(
+            "Specified path `{}` is not a database!",
+            &path.to_str().unwrap_or("Unknown")
+        )));
     }
+
+    // File is missing
     Err(TableError::CannotConnect(format!(
         "Database not found at {}",
         &path.to_str().unwrap_or("Unknown")

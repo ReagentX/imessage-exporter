@@ -103,7 +103,11 @@ impl<'a> Config<'a> {
                 path.display().to_string()
             }
             None => attachment
-                .resolved_attachment_path(&self.options.platform, &self.options.db_path)
+                .resolved_attachment_path(
+                    &self.options.platform,
+                    &self.options.db_path,
+                    self.options.attachment_root,
+                )
                 .unwrap_or(attachment.filename().to_string()),
         }
     }
@@ -313,6 +317,7 @@ mod filename_tests {
     fn fake_options<'a>() -> Options<'a> {
         Options {
             db_path: default_db_path(),
+            attachment_root: None,
             attachment_manager: AttachmentManager::Disabled,
             diagnostic: false,
             export_type: None,
@@ -328,7 +333,7 @@ mod filename_tests {
         Chat {
             rowid: 0,
             chat_identifier: "Default".to_string(),
-            service_name: "".to_string(),
+            service_name: Some("".to_string()),
             display_name: None,
         }
     }
@@ -541,6 +546,7 @@ mod who_tests {
     fn fake_options<'a>() -> Options<'a> {
         Options {
             db_path: default_db_path(),
+            attachment_root: None,
             attachment_manager: AttachmentManager::Disabled,
             diagnostic: false,
             export_type: None,
@@ -556,7 +562,7 @@ mod who_tests {
         Chat {
             rowid: 0,
             chat_identifier: "Default".to_string(),
-            service_name: "".to_string(),
+            service_name: Some("".to_string()),
             display_name: None,
         }
     }
@@ -762,6 +768,7 @@ mod directory_tests {
     fn fake_options<'a>() -> Options<'a> {
         Options {
             db_path: default_db_path(),
+            attachment_root: None,
             attachment_manager: AttachmentManager::Disabled,
             diagnostic: false,
             export_type: None,
@@ -797,6 +804,7 @@ mod directory_tests {
             mime_type: Some("image/png".to_string()),
             transfer_name: Some("d.jpg".to_string()),
             total_bytes: 100,
+            is_sticker: false,
             hide_attachment: 0,
             copied_path: None,
         }

@@ -1,3 +1,4 @@
+use core::panic;
 use std::{
     collections::HashMap,
     fs::File,
@@ -14,6 +15,7 @@ use imessage_database::{
     error::{message::MessageError, plist::PlistParseError, table::TableError},
     message_types::{
         app::AppMessage,
+        app_store::AppStoreMessage,
         collaboration::CollaborationMessage,
         edited::EditedMessage,
         expressives::{BubbleEffect, Expressive, ScreenEffect},
@@ -27,7 +29,7 @@ use imessage_database::{
         table::{Table, FITNESS_RECEIVER, ME, ORPHANED, YOU},
     },
     util::{
-        dates::{format, readable_diff},
+        dates::{format, get_local_time, readable_diff, TIMESTAMP_FACTOR},
         plist::parse_plist,
     },
 };
@@ -312,20 +314,37 @@ impl<'a> Writer<'a> for HTML<'a> {
                 }
                 BubbleType::Attachment => {
                     match attachments.get_mut(attachment_index) {
-                        Some(attachment) => match self.format_attachment(attachment, message) {
-                            Ok(result) => {
-                                attachment_index += 1;
-                                self.add_line(&mut formatted_message, &result, "", "");
-                            }
-                            Err(result) => {
+                        Some(attachment) => {
+                            if attachment.is_sticker {
+                                let result = self.format_sticker(attachment, message);
                                 self.add_line(
                                     &mut formatted_message,
-                                    result,
-                                    "<span class=\"attachment_error\">Unable to locate attachment: ",
-                                    "</span>",
-                                );
+                                    &result,
+                                    "<div class=\"sticker\">",
+                                    "</div>",
+                                )
+                            } else {
+                                match self.format_attachment(attachment, message) {
+                                    Ok(result) => {
+                                        attachment_index += 1;
+                                        self.add_line(
+                                            &mut formatted_message,
+                                            &result,
+                                            "<div class=\"attachment\">",
+                                            "</div>",
+                                        );
+                                    }
+                                    Err(result) => {
+                                        self.add_line(
+                                        &mut formatted_message,
+                                        result,
+                                        "<span class=\"attachment_error\">Unable to locate attachment: ",
+                                        "</span>",
+                                    );
+                                    }
+                                }
                             }
-                        },
+                        }
                         // Attachment does not exist in attachments table
                         None => self.add_line(
                             &mut formatted_message,
@@ -489,6 +508,23 @@ impl<'a> Writer<'a> for HTML<'a> {
         });
     }
 
+    fn format_sticker(&self, sticker: &'a mut Attachment, message: &Message) -> String {
+        match self.format_attachment(sticker, message) {
+            Ok(sticker_embed) => {
+                let sticker_effect = sticker.get_sticker_effect(
+                    &self.config.options.platform,
+                    &self.config.options.db_path,
+                    self.config.options.attachment_root,
+                );
+                if let Ok(Some(sticker_effect)) = sticker_effect {
+                    return format!("{sticker_embed}\n<div class=\"sticker_effect\">Sent with {sticker_effect} effect</div>");
+                }
+                sticker_embed
+            }
+            Err(embed) => embed.to_string(),
+        }
+    }
+
     fn format_app(
         &self,
         message: &'a Message,
@@ -512,6 +548,9 @@ impl<'a> Writer<'a> for HTML<'a> {
                             URLOverride::Collaboration(balloon) => {
                                 self.format_collaboration(&balloon, message)
                             }
+                            URLOverride::AppStore(balloon) => {
+                                self.format_app_store(&balloon, message)
+                            }
                         }
                     } else {
                         match AppMessage::from_map(&parsed) {
@@ -528,6 +567,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                 CustomBalloon::ApplePay => self.format_apple_pay(&bubble, message),
                                 CustomBalloon::Fitness => self.format_fitness(&bubble, message),
                                 CustomBalloon::Slideshow => self.format_slideshow(&bubble, message),
+                                CustomBalloon::CheckIn => self.format_check_in(&bubble, message),
                                 _ => unreachable!(),
                             },
                             Err(why) => return Err(why),
@@ -581,17 +621,11 @@ impl<'a> Writer<'a> for HTML<'a> {
                 let who = self.config.who(&msg.handle_id, msg.is_from_me);
                 // Sticker messages have only one attachment, the sticker image
                 Ok(match paths.get_mut(0) {
-                    Some(sticker) => match self.format_attachment(sticker, msg) {
-                        Ok(img) => {
-                            Some(format!("{img}<span class=\"reaction\"> from {who}</span>"))
-                        }
-                        Err(_) => None,
-                    },
-                    None => None,
-                }
-                .unwrap_or_else(|| {
-                    format!("<span class=\"reaction\">Sticker from {who} not found!</span>")
-                }))
+                    Some(sticker) => self.format_sticker(sticker, msg),
+                    None => {
+                        format!("<span class=\"reaction\">Sticker from {who} not found!</span>")
+                    }
+                })
             }
             _ => unreachable!(),
         }
@@ -606,7 +640,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                 ScreenEffect::Balloons => "Sent with Balloons",
                 ScreenEffect::Heart => "Sent with Heart",
                 ScreenEffect::Lasers => "Sent with Lasers",
-                ScreenEffect::ShootingStar => "Sent with Shooting Start",
+                ScreenEffect::ShootingStar => "Sent with Shooting Star",
                 ScreenEffect::Sparkles => "Sent with Sparkles",
                 ScreenEffect::Spotlight => "Sent with Spotlight",
             },
@@ -686,8 +720,8 @@ impl<'a> Writer<'a> for HTML<'a> {
                         match previous_timestamp {
                             None => out_s.push_str(&self.edited_to_html("", text, last)),
                             Some(prev_timestamp) => {
-                                let end = msg.get_local_time(timestamp, &self.config.offset);
-                                let start = msg.get_local_time(prev_timestamp, &self.config.offset);
+                                let end = get_local_time(timestamp, &self.config.offset);
+                                let start = get_local_time(prev_timestamp, &self.config.offset);
 
                                 let diff = readable_diff(start, end).unwrap_or_default();
                                 out_s.push_str(&self.edited_to_html(
@@ -918,6 +952,78 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
         self.balloon_to_html(balloon, "Slideshow", &mut [], message)
     }
 
+    fn format_check_in(&self, balloon: &AppMessage, _: &Message) -> String {
+        let mut out_s = String::new();
+
+        out_s.push_str("<div class=\"app_header\">");
+
+        // Name
+        out_s.push_str("<div class=\"name\">");
+        out_s.push_str(balloon.app_name.unwrap_or("Check In"));
+        out_s.push_str("</div>");
+
+        // ldtext
+        if let Some(ldtext) = balloon.ldtext {
+            out_s.push_str("<div class=\"ldtext\">");
+            out_s.push_str(ldtext);
+            out_s.push_str("</div>");
+        }
+
+        // Header end, footer begin
+        out_s.push_str("</div>");
+
+        // Only write the footer if there is data to write
+        let metadata: HashMap<&str, &str> = balloon.parse_query_string();
+
+        // Before manual check-in
+        if let Some(date_str) = metadata.get("estimatedEndTime") {
+            // Parse the estimated end time from the message's query string
+            let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
+            let date_time = get_local_time(&date_stamp, &self.config.offset);
+            let date_string = format(&date_time);
+
+            out_s.push_str("<div class=\"app_footer\">");
+
+            out_s.push_str("<div class=\"caption\">Expected around ");
+            out_s.push_str(&date_string);
+            out_s.push_str("</div>");
+
+            out_s.push_str("</div>");
+        }
+        // Expired check-in
+        else if let Some(date_str) = metadata.get("triggerTime") {
+            // Parse the estimated end time from the message's query string
+            let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
+            let date_time = get_local_time(&date_stamp, &self.config.offset);
+            let date_string = format(&date_time);
+
+            out_s.push_str("<div class=\"app_footer\">");
+
+            out_s.push_str("<div class=\"caption\">Was expected around ");
+            out_s.push_str(&date_string);
+            out_s.push_str("</div>");
+
+            out_s.push_str("</div>");
+        }
+        // Accepted check-in
+        else if let Some(date_str) = metadata.get("sendDate") {
+            // Parse the estimated end time from the message's query string
+            let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
+            let date_time = get_local_time(&date_stamp, &self.config.offset);
+            let date_string = format(&date_time);
+
+            out_s.push_str("<div class=\"app_footer\">");
+
+            out_s.push_str("<div class=\"caption\">Checked in at ");
+            out_s.push_str(&date_string);
+            out_s.push_str("</div>");
+
+            out_s.push_str("</div>");
+        }
+
+        out_s
+    }
+
     fn format_generic_app(
         &self,
         balloon: &AppMessage,
@@ -926,6 +1032,65 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
         message: &Message,
     ) -> String {
         self.balloon_to_html(balloon, bundle_id, attachments, message)
+    }
+
+    fn format_app_store(&self, balloon: &AppStoreMessage, _: &'a Message) -> String {
+        let mut out_s = String::new();
+
+        // Header section
+        out_s.push_str("<div class=\"app_header\">");
+
+        // App name
+        if let Some(app_name) = balloon.app_name {
+            out_s.push_str("<div class=\"name\">");
+            out_s.push_str(app_name);
+            out_s.push_str("</div>");
+        }
+
+        // Header end
+        out_s.push_str("</div>");
+
+        // Make the footer clickable so we can interact with the preview
+        if let Some(url) = balloon.url {
+            out_s.push_str("<a href=\"");
+            out_s.push_str(url);
+            out_s.push_str("\">");
+        }
+
+        // Only write the footer if there is data to write
+        if balloon.description.is_some() || balloon.genre.is_some() {
+            out_s.push_str("<div class=\"app_footer\">");
+
+            // App description
+            if let Some(description) = balloon.description {
+                out_s.push_str("<div class=\"caption\">");
+                out_s.push_str(description);
+                out_s.push_str("</div>");
+            }
+
+            // App platform
+            if let Some(platform) = balloon.platform {
+                out_s.push_str("<div class=\"subcaption\">");
+                out_s.push_str(platform);
+                out_s.push_str("</div>");
+            }
+
+            // App genre
+            if let Some(genre) = balloon.genre {
+                out_s.push_str("<div class=\"trailing_subcaption\">");
+                out_s.push_str(genre);
+                out_s.push_str("</div>");
+            }
+
+            // End footer
+            out_s.push_str("</div>");
+        }
+
+        // End the link
+        if balloon.url.is_some() {
+            out_s.push_str("</a>");
+        }
+        out_s
     }
 }
 
@@ -1078,7 +1243,7 @@ impl<'a> HTML<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::{env::current_dir, path::PathBuf};
 
     use crate::{
         app::attachment_manager::AttachmentManager, exporters::exporter::Writer, Config, Exporter,
@@ -1122,6 +1287,7 @@ mod tests {
     pub fn fake_options() -> Options<'static> {
         Options {
             db_path: default_db_path(),
+            attachment_root: None,
             attachment_manager: AttachmentManager::Disabled,
             diagnostic: false,
             export_type: None,
@@ -1141,6 +1307,7 @@ mod tests {
             mime_type: Some("image/png".to_string()),
             transfer_name: Some("d.jpg".to_string()),
             total_bytes: 100,
+            is_sticker: false,
             hide_attachment: 0,
             copied_path: None,
         }
@@ -1542,6 +1709,31 @@ mod tests {
 
         assert_eq!(actual, Err("d.jpg"));
     }
+
+    #[test]
+    fn can_format_html_attachment_sticker() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        // Set message to sticker variant
+        message.associated_message_type = Some(1000);
+
+        let mut attachment = fake_attachment();
+        attachment.is_sticker = true;
+        let sticker_path = current_dir()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("imessage-database/test_data/stickers/outline.heic");
+        attachment.filename = Some(sticker_path.to_string_lossy().to_string());
+
+        let actual = exporter.format_sticker(&mut attachment, &message);
+
+        assert_eq!(actual, "<img src=\"/Users/chris/Documents/Code/Rust/imessage-exporter/imessage-database/test_data/stickers/outline.heic\" loading=\"lazy\">\n<div class=\"sticker_effect\">Sent with Outline effect</div>");
+    }
 }
 
 #[cfg(test)]
@@ -1549,7 +1741,8 @@ mod balloon_format_tests {
     use super::tests::{blank, fake_options};
     use crate::{exporters::exporter::BalloonFormatter, Config, Exporter, HTML};
     use imessage_database::message_types::{
-        app::AppMessage, collaboration::CollaborationMessage, music::MusicMessage, url::URLMessage,
+        app::AppMessage, app_store::AppStoreMessage, collaboration::CollaborationMessage,
+        music::MusicMessage, url::URLMessage,
     };
 
     #[test]
@@ -1720,6 +1913,106 @@ mod balloon_format_tests {
 
         let expected = exporter.format_slideshow(&balloon, &blank());
         let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"image\"><div class=\"name\">app_name</div><div class=\"image_title\">title</div><div class=\"image_subtitle\">subtitle</div><div class=\"ldtext\">ldtext</div></div><div class=\"app_footer\"><div class=\"caption\">caption</div><div class=\"subcaption\">subcaption</div><div class=\"trailing_caption\">trailing_caption</div><div class=\"trailing_subcaption\">trailing_subcaption</div></div></a>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_check_in_timer() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = AppMessage {
+            image: None,
+            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+            title: None,
+            subtitle: None,
+            caption: Some("Check In: Timer Started"),
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Check In"),
+            ldtext: Some("Check In: Timer Started"),
+        };
+
+        let expected = exporter.format_check_in(&balloon, &blank());
+        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Timer Started</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2054  1:54:29 PM</div></div>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_check_in_timer_late() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = AppMessage {
+            image: None,
+            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+            title: None,
+            subtitle: None,
+            caption: Some("Check In: Has not checked in when expected, location shared"),
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Check In"),
+            ldtext: Some("Check In: Has not checked in when expected, location shared"),
+        };
+
+        let expected = exporter.format_check_in(&balloon, &blank());
+        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Has not checked in when expected, location shared</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2054  1:54:29 PM</div></div>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_accepted_check_in() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = AppMessage {
+            image: None,
+            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+            title: None,
+            subtitle: None,
+            caption: Some("Check In: Fake Location"),
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Check In"),
+            ldtext: Some("Check In: Fake Location"),
+        };
+
+        let expected = exporter.format_check_in(&balloon, &blank());
+        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Fake Location</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2054  1:54:29 PM</div></div>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_app_store() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = AppStoreMessage {
+            url: Some("url"),
+            app_name: Some("app_name"),
+            original_url: Some("original_url"),
+            description: Some("description"),
+            platform: Some("platform"),
+            genre: Some("genre"),
+        };
+
+        let expected = exporter.format_app_store(&balloon, &blank());
+        let actual = "<div class=\"app_header\"><div class=\"name\">app_name</div></div><a href=\"url\"><div class=\"app_footer\"><div class=\"caption\">description</div><div class=\"subcaption\">platform</div><div class=\"trailing_subcaption\">genre</div></div></a>";
 
         assert_eq!(expected, actual);
     }

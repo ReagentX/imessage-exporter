@@ -264,6 +264,14 @@ div.reaction {
 	align-items: center;
 }
 
+div.sticker_effect {
+	opacity: 60%;
+}
+
+div.sticker img {
+	max-width: 5em;
+}
+
 .announcement {
 	text-align: center;
 	padding: 2vh 1vw 2vh 1vw;

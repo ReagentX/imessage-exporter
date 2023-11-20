@@ -9,7 +9,7 @@ use imessage_database::tables::{attachment::Attachment, messages::Message};
 use uuid::Uuid;
 
 use crate::app::{
-    converter::{heic_to_jpeg, Converter},
+    converter::{convert_heic, Converter, ImageType},
     runtime::Config,
 };
 
@@ -17,7 +17,7 @@ use crate::app::{
 pub enum AttachmentManager {
     /// Do not copy attachments
     Disabled,
-    /// Copy and convert attachments to more compatible formats using a [crate::app::converter::Converter]
+    /// Copy and convert attachments to more compatible formats using a [`Converter`](crate::app::converter::Converter)
     Compatible,
     /// Copy attachments without converting; preserves quality but may not display correctly in all browsers
     Efficient,
@@ -44,8 +44,11 @@ impl AttachmentManager {
         config: &Config,
     ) -> Option<()> {
         // Resolve the path to the attachment
-        let attachment_path = attachment
-            .resolved_attachment_path(&config.options.platform, &config.options.db_path)?;
+        let attachment_path = attachment.resolved_attachment_path(
+            &config.options.platform,
+            &config.options.db_path,
+            config.options.attachment_root,
+        )?;
 
         if !matches!(self, AttachmentManager::Disabled) {
             let from = Path::new(&attachment_path);
@@ -72,7 +75,7 @@ impl AttachmentManager {
             match self {
                 AttachmentManager::Compatible => match &config.converter {
                     Some(converter) => {
-                        Self::copy_convert(from, &mut to, converter);
+                        Self::copy_convert(from, &mut to, converter, attachment.is_sticker);
                     }
                     None => Self::copy_raw(from, &to),
                 },
@@ -116,12 +119,41 @@ impl AttachmentManager {
     }
 
     /// Copy a file, converting if possible
-    fn copy_convert(from: &Path, to: &mut PathBuf, converter: &Converter) {
-        let ext = from.extension().unwrap_or_default();
-        if ext == "heic" || ext == "HEIC" {
+    ///
+    /// - Sticker `HEIC` files convert to `PNG`
+    /// - Sticker `HEICS` files convert to `GIF`
+    /// - Attachment `HEIC` files convert to `JPEG`
+    /// - Other files are copied with their original formats
+    fn copy_convert(from: &Path, to: &mut PathBuf, converter: &Converter, is_sticker: bool) {
+        let original_extension = from.extension().unwrap_or_default();
+
+        // Handle sticker attachments
+        if is_sticker {
+            // Determine the output type of the sticker
+            let output_type: Option<ImageType> = match original_extension.to_str() {
+                // Normal stickers get converted to png
+                Some("heic") | Some("HEIC") => Some(ImageType::Png),
+                // Animated stickers get converted to gif
+                Some("heics") | Some("HEICS") => Some(ImageType::Gif),
+                _ => None,
+            };
+
+            match output_type {
+                Some(output_type) => {
+                    to.set_extension(output_type.to_str());
+                    if convert_heic(from, to, converter, output_type).is_none() {
+                        eprintln!("Unable to convert {from:?}")
+                    }
+                }
+                None => Self::copy_raw(from, to),
+            }
+        }
+        // Normal attachments always get converted to jpeg
+        else if original_extension == "heic" || original_extension == "HEIC" {
+            let output_type = ImageType::Jpeg;
             // Update extension for conversion
-            to.set_extension("jpg");
-            if heic_to_jpeg(from, to, converter).is_none() {
+            to.set_extension(output_type.to_str());
+            if convert_heic(from, to, converter, output_type).is_none() {
                 eprintln!("Unable to convert {from:?}")
             }
         } else {

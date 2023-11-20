@@ -3,7 +3,8 @@ use std::path::Path;
 use imessage_database::{
     error::{message::MessageError, plist::PlistParseError, table::TableError},
     message_types::{
-        app::AppMessage, collaboration::CollaborationMessage, music::MusicMessage, url::URLMessage,
+        app::AppMessage, app_store::AppStoreMessage, collaboration::CollaborationMessage,
+        music::MusicMessage, url::URLMessage,
     },
     tables::{attachment::Attachment, messages::Message},
 };
@@ -30,6 +31,8 @@ pub(super) trait Writer<'a> {
         attachment: &'a mut Attachment,
         msg: &'a Message,
     ) -> Result<String, &'a str>;
+    /// Format a sticker, possibly by reading the disk
+    fn format_sticker(&self, attachment: &'a mut Attachment, msg: &'a Message) -> String;
     /// Format an app message by parsing some of its fields
     fn format_app(
         &self,
@@ -58,6 +61,8 @@ pub(super) trait BalloonFormatter<T> {
     fn format_music(&self, balloon: &MusicMessage, indent: T) -> String;
     /// Format a Rich Collaboration message
     fn format_collaboration(&self, balloon: &CollaborationMessage, indent: T) -> String;
+    /// Format an App Store link
+    fn format_app_store(&self, balloon: &AppStoreMessage, indent: T) -> String;
     /// Format a handwritten note message
     fn format_handwriting(&self, balloon: &AppMessage, indent: T) -> String;
     /// Format an Apple Pay message
@@ -66,6 +71,8 @@ pub(super) trait BalloonFormatter<T> {
     fn format_fitness(&self, balloon: &AppMessage, indent: T) -> String;
     /// Format a Photo Slideshow message
     fn format_slideshow(&self, balloon: &AppMessage, indent: T) -> String;
+    /// Format a Check In message
+    fn format_check_in(&self, balloon: &AppMessage, indent: T) -> String;
     /// Format a generic app, generally third party
     fn format_generic_app(
         &self,

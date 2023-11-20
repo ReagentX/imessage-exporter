@@ -3,6 +3,8 @@
   Some built-in functionality also uses App Messages, like Apple Pay or Handwriting.
 */
 
+use std::collections::HashMap;
+
 use plist::Value;
 
 use crate::{
@@ -61,6 +63,27 @@ impl<'a> BalloonProvider<'a> for AppMessage<'a> {
     }
 }
 
+impl<'a> AppMessage<'a> {
+    /// Parse key/value pairs from the query string in the balloon's a URL
+    pub fn parse_query_string(&self) -> HashMap<&str, &str> {
+        let mut map = HashMap::new();
+
+        if let Some(url) = self.url {
+            if url.starts_with('?') {
+                let parts = url.strip_prefix('?').unwrap_or(url).split('&');
+                for part in parts {
+                    let key_val_split: Vec<&str> = part.split('=').collect();
+                    if key_val_split.len() == 2 {
+                        map.insert(key_val_split[0], key_val_split[1]);
+                    }
+                }
+            }
+        }
+
+        map
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -68,8 +91,8 @@ mod tests {
         util::plist::parse_plist,
     };
     use plist::Value;
-    use std::env::current_dir;
     use std::fs::File;
+    use std::{collections::HashMap, env::current_dir};
 
     #[test]
     fn test_parse_apple_pay_sent_265() {
@@ -93,6 +116,33 @@ mod tests {
             trailing_subcaption: None,
             app_name: Some("Apple\u{a0}Pay"),
             ldtext: Some("Sent $265 with Apple\u{a0}Pay."),
+        };
+
+        assert_eq!(balloon, expected);
+    }
+
+    #[test]
+    fn test_parse_apple_pay_recurring_1() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/app_message/ApplePayRecurring.plist");
+        let plist_data = File::open(plist_path).unwrap();
+        let plist = Value::from_reader(plist_data).unwrap();
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = AppMessage::from_map(&parsed).unwrap();
+        let expected = AppMessage {
+            image: None,
+            url: Some("data:application/vnd.apple.pkppm;base64,FAKEDATA"),
+            title: None,
+            subtitle: None,
+            caption: None,
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Apple\u{a0}Cash"),
+            ldtext: Some("Sending you $1 weekly starting Nov 18, 2023"),
         };
 
         assert_eq!(balloon, expected);
@@ -201,6 +251,156 @@ mod tests {
             trailing_subcaption: None,
             app_name: Some("Business"),
             ldtext: Some("Yes, connect me with Goldman Sachs."),
+        };
+
+        assert_eq!(balloon, expected);
+    }
+
+    #[test]
+    fn test_parse_business_query_string() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/app_message/Business.plist");
+        let plist_data = File::open(plist_path).unwrap();
+        let plist = Value::from_reader(plist_data).unwrap();
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = AppMessage::from_map(&parsed).unwrap();
+        let mut expected = HashMap::new();
+        expected.insert("receivedMessage", "33c309ab520bc2c76e99c493157ed578");
+        expected.insert("replyMessage", "6a991da615f2e75d4aa0de334e529024");
+
+        assert_eq!(balloon.parse_query_string(), expected);
+    }
+
+    #[test]
+    fn test_parse_check_in_timer() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/app_message/CheckinTimer.plist");
+        let plist_data = File::open(plist_path).unwrap();
+        let plist = Value::from_reader(plist_data).unwrap();
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = AppMessage::from_map(&parsed).unwrap();
+
+        let expected = AppMessage {
+            image: None,
+            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+            title: None,
+            subtitle: None,
+            caption: Some("Check In: Timer Started"),
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Check In"),
+            ldtext: Some("Check In: Timer Started"),
+        };
+
+        assert_eq!(balloon, expected);
+    }
+
+    #[test]
+    fn test_parse_check_in_timer_late() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/app_message/CheckinLate.plist");
+        let plist_data = File::open(plist_path).unwrap();
+        let plist = Value::from_reader(plist_data).unwrap();
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = AppMessage::from_map(&parsed).unwrap();
+
+        let expected = AppMessage {
+            image: None,
+            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+            title: None,
+            subtitle: None,
+            caption: Some("Check In: Has not checked in when expected, location shared"),
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Check In"),
+            ldtext: Some("Check In: Has not checked in when expected, location shared"),
+        };
+
+        assert_eq!(balloon, expected);
+    }
+
+    #[test]
+    fn test_parse_check_in_location() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/app_message/CheckinLocation.plist");
+        let plist_data = File::open(plist_path).unwrap();
+        let plist = Value::from_reader(plist_data).unwrap();
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = AppMessage::from_map(&parsed).unwrap();
+
+        let expected = AppMessage {
+            image: None,
+            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+            title: None,
+            subtitle: None,
+            caption: Some("Check In: Fake Location"),
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Check In"),
+            ldtext: Some("Check In: Fake Location"),
+        };
+
+        assert_eq!(balloon, expected);
+    }
+
+    #[test]
+    fn test_parse_check_in_query_string() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/app_message/CheckinTimer.plist");
+        let plist_data = File::open(plist_path).unwrap();
+        let plist = Value::from_reader(plist_data).unwrap();
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = AppMessage::from_map(&parsed).unwrap();
+        let mut expected = HashMap::new();
+        expected.insert("messageType", "1");
+        expected.insert("interfaceVersion", "1");
+        expected.insert("sendDate", "1697316869.688709");
+
+        assert_eq!(balloon.parse_query_string(), expected);
+    }
+
+    #[test]
+    fn test_parse_find_my() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/app_message/FindMy.plist");
+        let plist_data = File::open(plist_path).unwrap();
+        let plist = Value::from_reader(plist_data).unwrap();
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = AppMessage::from_map(&parsed).unwrap();
+        let expected = AppMessage {
+            image: None,
+            url: Some(
+                "?FindMyMessagePayloadVersionKey=v0&FindMyMessagePayloadZippedDataKey=FAKEDATA",
+            ),
+            title: None,
+            subtitle: None,
+            caption: None,
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Find My"),
+            ldtext: Some("Started Sharing Location"),
         };
 
         assert_eq!(balloon, expected);

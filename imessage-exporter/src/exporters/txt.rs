@@ -14,6 +14,7 @@ use imessage_database::{
     error::{message::MessageError, plist::PlistParseError, table::TableError},
     message_types::{
         app::AppMessage,
+        app_store::AppStoreMessage,
         collaboration::CollaborationMessage,
         edited::EditedMessage,
         expressives::{BubbleEffect, Expressive, ScreenEffect},
@@ -27,7 +28,7 @@ use imessage_database::{
         table::{Table, FITNESS_RECEIVER, ME, ORPHANED, YOU},
     },
     util::{
-        dates::{format, readable_diff},
+        dates::{format, get_local_time, readable_diff, TIMESTAMP_FACTOR},
         plist::parse_plist,
     },
 };
@@ -201,13 +202,22 @@ impl<'a> Writer<'a> for TXT<'a> {
                     }
                 }
                 BubbleType::Attachment => match attachments.get_mut(attachment_index) {
-                    Some(attachment) => match self.format_attachment(attachment, message) {
-                        Ok(result) => {
-                            attachment_index += 1;
-                            self.add_line(&mut formatted_message, &result, &indent);
+                    Some(attachment) => {
+                        if attachment.is_sticker {
+                            let result = self.format_sticker(attachment, message);
+                            self.add_line(&mut formatted_message, &result, &indent)
+                        } else {
+                            match self.format_attachment(attachment, message) {
+                                Ok(result) => {
+                                    attachment_index += 1;
+                                    self.add_line(&mut formatted_message, &result, &indent);
+                                }
+                                Err(result) => {
+                                    self.add_line(&mut formatted_message, result, &indent)
+                                }
+                            }
                         }
-                        Err(result) => self.add_line(&mut formatted_message, result, &indent),
-                    },
+                    }
                     // Attachment does not exist in attachments table
                     None => self.add_line(&mut formatted_message, "Attachment missing!", &indent),
                 },
@@ -307,6 +317,24 @@ impl<'a> Writer<'a> for TXT<'a> {
         Ok(self.config.message_attachment_path(attachment))
     }
 
+    fn format_sticker(&self, sticker: &'a mut Attachment, message: &Message) -> String {
+        let who = self.config.who(&message.handle_id, message.is_from_me);
+        match self.format_attachment(sticker, message) {
+            Ok(path_to_sticker) => {
+                let sticker_effect = sticker.get_sticker_effect(
+                    &self.config.options.platform,
+                    &self.config.options.db_path,
+                    self.config.options.attachment_root,
+                );
+                if let Ok(Some(sticker_effect)) = sticker_effect {
+                    return format!("{sticker_effect} Sticker from {who}: {path_to_sticker}");
+                }
+                format!("Sticker from {who}: {path_to_sticker}")
+            }
+            Err(path) => format!("Sticker from {who}: {path}"),
+        }
+    }
+
     fn format_app(
         &self,
         message: &'a Message,
@@ -329,6 +357,9 @@ impl<'a> Writer<'a> for TXT<'a> {
                             URLOverride::Collaboration(balloon) => {
                                 self.format_collaboration(&balloon, indent)
                             }
+                            URLOverride::AppStore(balloon) => {
+                                self.format_app_store(&balloon, indent)
+                            }
                         }
                     } else {
                         // Handle the app case
@@ -343,6 +374,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                                 CustomBalloon::ApplePay => self.format_apple_pay(&bubble, indent),
                                 CustomBalloon::Fitness => self.format_fitness(&bubble, indent),
                                 CustomBalloon::Slideshow => self.format_slideshow(&bubble, indent),
+                                CustomBalloon::CheckIn => self.format_check_in(&bubble, indent),
                                 _ => unreachable!(),
                             },
                             Err(why) => return Err(why),
@@ -379,18 +411,13 @@ impl<'a> Writer<'a> for TXT<'a> {
                 ))
             }
             Variant::Sticker(_) => {
-                let paths = Attachment::from_message(&self.config.db, msg)?;
-                Ok(format!(
-                    "Sticker from {}: {}",
-                    self.config.who(&msg.handle_id, msg.is_from_me),
-                    match paths.get(0) {
-                        Some(sticker) => match sticker.filename.as_ref() {
-                            Some(path) => path,
-                            None => sticker.filename(),
-                        },
-                        None => "Sticker not found!",
-                    },
-                ))
+                let mut paths = Attachment::from_message(&self.config.db, msg)?;
+                let who = self.config.who(&msg.handle_id, msg.is_from_me);
+                // Sticker messages have only one attachment, the sticker image
+                Ok(match paths.get_mut(0) {
+                    Some(sticker) => self.format_sticker(sticker, msg),
+                    None => format!("Sticker from {who} not found!"),
+                })
             }
             _ => unreachable!(),
         }
@@ -405,7 +432,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                 ScreenEffect::Balloons => "Sent with Balloons",
                 ScreenEffect::Heart => "Sent with Heart",
                 ScreenEffect::Lasers => "Sent with Lasers",
-                ScreenEffect::ShootingStar => "Sent with Shooting Start",
+                ScreenEffect::ShootingStar => "Sent with Shooting Star",
                 ScreenEffect::Sparkles => "Sent with Sparkles",
                 ScreenEffect::Spotlight => "Sent with Spotlight",
             },
@@ -474,14 +501,14 @@ impl<'a> Writer<'a> for TXT<'a> {
                             // Original message get an absolute timestamp
                             None => {
                                 let parsed_timestamp =
-                                    format(&msg.get_local_time(timestamp, &self.config.offset));
+                                    format(&get_local_time(timestamp, &self.config.offset));
                                 out_s.push_str(&parsed_timestamp);
                                 out_s.push(' ');
                             }
                             // Subsequent edits get a relative timestamp
                             Some(prev_timestamp) => {
-                                let end = msg.get_local_time(timestamp, &self.config.offset);
-                                let start = msg.get_local_time(prev_timestamp, &self.config.offset);
+                                let end = get_local_time(timestamp, &self.config.offset);
+                                let start = get_local_time(prev_timestamp, &self.config.offset);
                                 if let Some(diff) = readable_diff(start, end) {
                                     out_s.push_str(indent);
                                     out_s.push_str("Edited ");
@@ -677,6 +704,74 @@ impl<'a> BalloonFormatter<&'a str> for TXT<'a> {
         // We want to keep the newlines between blocks, but the last one should be removed
         out_s.strip_suffix('\n').unwrap_or(&out_s).to_string()
     }
+
+    fn format_check_in(&self, balloon: &AppMessage, indent: &'a str) -> String {
+        let mut out_s = String::from(indent);
+
+        out_s.push_str(balloon.caption.unwrap_or("Check In"));
+
+        let metadata: HashMap<&str, &str> = balloon.parse_query_string();
+
+        // Before manual check-in
+        if let Some(date_str) = metadata.get("estimatedEndTime") {
+            // Parse the estimated end time from the message's query string
+            let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
+            let date_time = get_local_time(&date_stamp, &self.config.offset);
+            let date_string = format(&date_time);
+
+            out_s.push_str("\nExpected at ");
+            out_s.push_str(&date_string);
+        }
+        // Expired check-in
+        else if let Some(date_str) = metadata.get("triggerTime") {
+            // Parse the estimated end time from the message's query string
+            let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
+            let date_time = get_local_time(&date_stamp, &self.config.offset);
+            let date_string = format(&date_time);
+
+            out_s.push_str("\nWas expected at ");
+            out_s.push_str(&date_string);
+        }
+        // Accepted check-in
+        else if let Some(date_str) = metadata.get("sendDate") {
+            // Parse the estimated end time from the message's query string
+            let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
+            let date_time = get_local_time(&date_stamp, &self.config.offset);
+            let date_string = format(&date_time);
+
+            out_s.push_str("\nChecked in at ");
+            out_s.push_str(&date_string);
+        }
+
+        out_s
+    }
+
+    fn format_app_store(&self, balloon: &AppStoreMessage, indent: &'a str) -> String {
+        let mut out_s = String::from(indent);
+
+        if let Some(name) = balloon.app_name {
+            self.add_line(&mut out_s, name, indent);
+        }
+
+        if let Some(description) = balloon.description {
+            self.add_line(&mut out_s, description, indent);
+        }
+
+        if let Some(platform) = balloon.platform {
+            self.add_line(&mut out_s, platform, indent);
+        }
+
+        if let Some(genre) = balloon.genre {
+            self.add_line(&mut out_s, genre, indent);
+        }
+
+        if let Some(url) = balloon.url {
+            self.add_line(&mut out_s, url, indent);
+        }
+
+        // We want to keep the newlines between blocks, but the last one should be removed
+        out_s.strip_suffix('\n').unwrap_or(&out_s).to_string()
+    }
 }
 
 impl<'a> TXT<'a> {
@@ -707,7 +802,7 @@ impl<'a> TXT<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::{env::current_dir, path::PathBuf};
 
     use crate::{
         app::attachment_manager::AttachmentManager, exporters::exporter::Writer, Config, Exporter,
@@ -751,6 +846,7 @@ mod tests {
     pub fn fake_options() -> Options<'static> {
         Options {
             db_path: default_db_path(),
+            attachment_root: None,
             attachment_manager: AttachmentManager::Disabled,
             diagnostic: false,
             export_type: None,
@@ -770,6 +866,7 @@ mod tests {
             mime_type: Some("image/png".to_string()),
             transfer_name: Some("d.jpg".to_string()),
             total_bytes: 100,
+            is_sticker: false,
             hide_attachment: 0,
             copied_path: None,
         }
@@ -1159,6 +1256,31 @@ mod tests {
 
         assert_eq!(actual, Err("d.jpg"));
     }
+
+    #[test]
+    fn can_format_txt_attachment_sticker() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let mut message = blank();
+        // Set message to sticker variant
+        message.associated_message_type = Some(1000);
+
+        let mut attachment = fake_attachment();
+        attachment.is_sticker = true;
+        let sticker_path = current_dir()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("imessage-database/test_data/stickers/outline.heic");
+        attachment.filename = Some(sticker_path.to_string_lossy().to_string());
+
+        let actual = exporter.format_sticker(&mut attachment, &message);
+
+        assert_eq!(actual, "Outline Sticker from Me: /Users/chris/Documents/Code/Rust/imessage-exporter/imessage-database/test_data/stickers/outline.heic");
+    }
 }
 
 #[cfg(test)]
@@ -1166,7 +1288,8 @@ mod balloon_format_tests {
     use super::tests::fake_options;
     use crate::{exporters::exporter::BalloonFormatter, Config, Exporter, TXT};
     use imessage_database::message_types::{
-        app::AppMessage, collaboration::CollaborationMessage, music::MusicMessage, url::URLMessage,
+        app::AppMessage, app_store::AppStoreMessage, collaboration::CollaborationMessage,
+        music::MusicMessage, url::URLMessage,
     };
 
     #[test]
@@ -1311,6 +1434,106 @@ mod balloon_format_tests {
 
         let expected = exporter.format_slideshow(&balloon, "");
         let actual = "Photo album: ldtext url";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_check_in_timer() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = AppMessage {
+            image: None,
+            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+            title: None,
+            subtitle: None,
+            caption: Some("Check In: Timer Started"),
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Check In"),
+            ldtext: Some("Check In: Timer Started"),
+        };
+
+        let expected = exporter.format_check_in(&balloon, "");
+        let actual = "Check\u{a0}In: Timer Started\nChecked in at Oct 14, 2054  1:54:29 PM";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_check_in_timer_late() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = AppMessage {
+            image: None,
+            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+            title: None,
+            subtitle: None,
+            caption: Some("Check In: Has not checked in when expected, location shared"),
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Check In"),
+            ldtext: Some("Check In: Has not checked in when expected, location shared"),
+        };
+
+        let expected = exporter.format_check_in(&balloon, "");
+        let actual = "Check\u{a0}In: Has not checked in when expected, location shared\nChecked in at Oct 14, 2054  1:54:29 PM";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_accepted_check_in() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = AppMessage {
+            image: None,
+            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+            title: None,
+            subtitle: None,
+            caption: Some("Check In: Fake Location"),
+            subcaption: None,
+            trailing_caption: None,
+            trailing_subcaption: None,
+            app_name: Some("Check In"),
+            ldtext: Some("Check In: Fake Location"),
+        };
+
+        let expected = exporter.format_check_in(&balloon, "");
+        let actual = "Check\u{a0}In: Fake Location\nChecked in at Oct 14, 2054  1:54:29 PM";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_app_store() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = AppStoreMessage {
+            url: Some("url"),
+            app_name: Some("app_name"),
+            original_url: Some("original_url"),
+            description: Some("description"),
+            platform: Some("platform"),
+            genre: Some("genre"),
+        };
+
+        let expected = exporter.format_app_store(&balloon, "");
+        let actual = "app_name\ndescription\nplatform\ngenre\nurl";
 
         assert_eq!(expected, actual);
     }
