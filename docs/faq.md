@@ -61,6 +61,6 @@ On my M1 Max MacBook Pro, performance is as follows:
 - With `--copy-method disabled`, exports run at about `18k` messages per second
 - With `--copy-method efficient`, exports run at about `13k` messages per second
 - With `--copy-method compatible`, exports run at about `300` messages per second
-- For more information on `--copy-method`, see [here](../imessage-exporter/README.md#how-to-use) and [here](./features.md#supported-message-features)
+- For more information on `--copy-method`, see [here](../imessage-exporter/README.md#how-to-use) and [here](./features.md#supported-message-features).
 
 However, if you recently deleted a large amount of data from Messages, the database will be slow for awhile, and will result in significantly reduced performance from `imessage-exporter`.
