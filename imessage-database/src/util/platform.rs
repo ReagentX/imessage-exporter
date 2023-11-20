@@ -7,7 +7,7 @@ use std::{fmt::Display, path::Path};
 use crate::tables::table::DEFAULT_PATH_IOS;
 
 /// Represents the platform that created the database this library connects to
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum Platform {
     /// macOS-sourced data
     #[allow(non_camel_case_types)]

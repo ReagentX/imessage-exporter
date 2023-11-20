@@ -40,6 +40,7 @@ pub const ABOUT: &str = concat!(
     "to find problems with the iMessage database."
 );
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct Options {
     /// Path to database file
     pub db_path: PathBuf,
@@ -98,6 +99,18 @@ impl Options {
                 "Option {OPTION_EXPORT_PATH} is enabled, which requires `--{OPTION_EXPORT_TYPE}`"
             )));
         }
+        if start_date.is_some() && export_file_type.is_none() {
+            return Err(RuntimeError::InvalidOptions(format!(
+                "Option {OPTION_START_DATE} is enabled, which requires `--{OPTION_EXPORT_TYPE}`"
+            )));
+        }
+        if end_date.is_some() && export_file_type.is_none() {
+            return Err(RuntimeError::InvalidOptions(format!(
+                "Option {OPTION_END_DATE} is enabled, which requires `--{OPTION_EXPORT_TYPE}`"
+            )));
+        }
+
+        // Warn the user if they are exporting to a file type for which lazy loading has no effect
         if no_lazy && export_file_type != Some(&"html".to_string()) {
             eprintln!(
                 "Option {OPTION_DISABLE_LAZY_LOADING} is enabled, but the format specified is not `html`!"
@@ -118,6 +131,16 @@ impl Options {
         if diagnostic && export_file_type.is_some() {
             return Err(RuntimeError::InvalidOptions(format!(
                 "Diagnostics are enabled; {OPTION_EXPORT_TYPE} is disallowed"
+            )));
+        }
+        if diagnostic && start_date.is_some() {
+            return Err(RuntimeError::InvalidOptions(format!(
+                "Diagnostics are enabled; {OPTION_START_DATE} is disallowed"
+            )));
+        }
+        if diagnostic && end_date.is_some() {
+            return Err(RuntimeError::InvalidOptions(format!(
+                "Diagnostics are enabled; {OPTION_END_DATE} is disallowed"
             )));
         }
 
@@ -246,7 +269,7 @@ fn validate_path(
     Ok(resolved_path)
 }
 
-pub fn from_command_line() -> ArgMatches {
+fn get_command() -> Command {
     Command::new("iMessage Exporter")
         .version(crate_version!())
         .about(ABOUT)
@@ -338,11 +361,264 @@ pub fn from_command_line() -> ArgMatches {
                 .help("Specify an optional custom name for the database owner's messages in exports\n")
                 .display_order(10)
         )
-        .get_matches()
+}
+
+pub fn from_command_line() -> ArgMatches {
+    get_command().get_matches()
 }
 
 #[cfg(test)]
-mod tests {
+mod arg_tests {
+    use imessage_database::util::{
+        dirs::default_db_path, export_type::ExportType, platform::Platform,
+        query_context::QueryContext,
+    };
+
+    use crate::app::{
+        attachment_manager::AttachmentManager,
+        options::{get_command, validate_path, Options},
+    };
+
+    #[test]
+    fn can_build_option_diagnostic_flag() {
+        // Get matches from sample args
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-d"];
+        let command = get_command();
+        let args = command.get_matches_from(cli_args);
+
+        // Build the Options
+        let actual = Options::from_args(&args).unwrap();
+
+        // Expected data
+        let expected = Options {
+            db_path: default_db_path(),
+            attachment_root: None,
+            attachment_manager: AttachmentManager::default(),
+            diagnostic: true,
+            export_type: None,
+            export_path: validate_path(None, &None).unwrap(),
+            query_context: QueryContext::default(),
+            no_lazy: false,
+            custom_name: None,
+            platform: Platform::default(),
+        };
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn cant_build_option_diagnostic_flag_with_export_type() {
+        // Get matches from sample args
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-d", "-f", "txt"];
+        let command = get_command();
+        let args = command.get_matches_from(cli_args);
+
+        // Build the Options
+        let actual = Options::from_args(&args);
+
+        assert!(actual.is_err());
+    }
+
+    #[test]
+    fn cant_build_option_diagnostic_flag_with_export_path() {
+        // Get matches from sample args
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-d", "-o", "~/test"];
+        let command = get_command();
+        let args = command.get_matches_from(cli_args);
+
+        // Build the Options
+        let actual = Options::from_args(&args);
+
+        assert!(actual.is_err());
+    }
+
+    #[test]
+    fn cant_build_option_diagnostic_flag_with_attachment_manager() {
+        // Get matches from sample args
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-d", "-c", "compatible"];
+        let command = get_command();
+        let args = command.get_matches_from(cli_args);
+
+        // Build the Options
+        let actual = Options::from_args(&args);
+
+        assert!(actual.is_err());
+    }
+
+    #[test]
+    fn cant_build_option_diagnostic_flag_with_start_date() {
+        // Get matches from sample args
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-d", "-s", "2020-01-01"];
+        let command = get_command();
+        let args = command.get_matches_from(cli_args);
+
+        // Build the Options
+        let actual = Options::from_args(&args);
+
+        assert!(actual.is_err());
+    }
+
+    #[test]
+    fn cant_build_option_diagnostic_flag_with_end() {
+        // Get matches from sample args
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-d", "-e", "2020-01-01"];
+        let command = get_command();
+        let args = command.get_matches_from(cli_args);
+
+        // Build the Options
+        let actual = Options::from_args(&args);
+
+        assert!(actual.is_err());
+    }
+
+    #[test]
+    fn can_build_option_export_html() {
+        // Get matches from sample args
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-f", "html"];
+        let command = get_command();
+        let args = command.get_matches_from(cli_args);
+
+        // Build the Options
+        let actual = Options::from_args(&args).unwrap();
+
+        // Expected data
+        let expected = Options {
+            db_path: default_db_path(),
+            attachment_root: None,
+            attachment_manager: AttachmentManager::default(),
+            diagnostic: false,
+            export_type: Some(ExportType::HTML),
+            export_path: validate_path(None, &None).unwrap(),
+            query_context: QueryContext::default(),
+            no_lazy: false,
+            custom_name: None,
+            platform: Platform::default(),
+        };
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_build_option_export_txt_no_lazy() {
+        // Get matches from sample args
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-f", "txt", "-l"];
+        let command = get_command();
+        let args = command.get_matches_from(cli_args);
+
+        // Build the Options
+        let actual = Options::from_args(&args).unwrap();
+
+        // Expected data
+        let expected = Options {
+            db_path: default_db_path(),
+            attachment_root: None,
+            attachment_manager: AttachmentManager::default(),
+            diagnostic: false,
+            export_type: Some(ExportType::TXT),
+            export_path: validate_path(None, &None).unwrap(),
+            query_context: QueryContext::default(),
+            no_lazy: true,
+            custom_name: None,
+            platform: Platform::default(),
+        };
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn cant_build_option_attachment_manager_no_export_type() {
+        // Get matches from sample args
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-c", "compatible"];
+        let command = get_command();
+        let args = command.get_matches_from(cli_args);
+
+        // Build the Options
+        let actual = Options::from_args(&args);
+
+        assert!(actual.is_err());
+    }
+
+    #[test]
+    fn cant_build_option_export_path_no_export_type() {
+        // Get matches from sample args
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-o", "~/test"];
+        let command = get_command();
+        let args = command.get_matches_from(cli_args);
+
+        // Build the Options
+        let actual = Options::from_args(&args);
+
+        assert!(actual.is_err());
+    }
+
+    #[test]
+    fn cant_build_option_start_date_path_no_export_type() {
+        // Get matches from sample args
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-s", "2020-01-01"];
+        let command = get_command();
+        let args = command.get_matches_from(cli_args);
+
+        // Build the Options
+        let actual = Options::from_args(&args);
+
+        assert!(actual.is_err());
+    }
+
+    #[test]
+    fn cant_build_option_end_date_path_no_export_type() {
+        // Get matches from sample args
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-e", "2020-01-01"];
+        let command = get_command();
+        let args = command.get_matches_from(cli_args);
+
+        // Build the Options
+        let actual = Options::from_args(&args);
+
+        assert!(actual.is_err());
+    }
+
+    #[test]
+    fn cant_build_option_invalid_date() {
+        // Get matches from sample args
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-f", "html", "-e", "2020-32-32"];
+        let command = get_command();
+        let args = command.get_matches_from(cli_args);
+
+        // Build the Options
+        let actual = Options::from_args(&args);
+
+        assert!(actual.is_err());
+    }
+
+    #[test]
+    fn cant_build_option_invalid_platform() {
+        // Get matches from sample args
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-a", "iPad"];
+        let command = get_command();
+        let args = command.get_matches_from(cli_args);
+
+        // Build the Options
+        let actual = Options::from_args(&args);
+
+        assert!(actual.is_err());
+    }
+
+    #[test]
+    fn cant_build_option_invalid_export_type() {
+        // Get matches from sample args
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-f", "pdf"];
+        let command = get_command();
+        let args = command.get_matches_from(cli_args);
+
+        // Build the Options
+        let actual = Options::from_args(&args);
+
+        assert!(actual.is_err());
+    }
+}
+
+#[cfg(test)]
+mod path_tests {
     use std::fs;
     use std::io::Write;
     use std::path::PathBuf;

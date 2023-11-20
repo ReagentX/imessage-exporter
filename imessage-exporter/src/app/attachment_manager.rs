@@ -14,6 +14,7 @@ use crate::app::{
 };
 
 /// Represents different ways the app can interact with attachment data
+#[derive(Debug, PartialEq, Eq)]
 pub enum AttachmentManager {
     /// Do not copy attachments
     Disabled,
