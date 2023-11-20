@@ -7,9 +7,9 @@ use std::fmt::Display;
 /// Represents the type of file to export iMessage data into
 #[derive(PartialEq, Eq)]
 pub enum ExportType {
-    /// Text file export
+    /// HTML file export
     HTML,
-    /// HTML export
+    /// Text file export
     TXT,
 }
 
