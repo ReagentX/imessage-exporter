@@ -9,6 +9,8 @@ use std::{
 
 use imessage_database::{error::table::TableError, util::size::format_file_size};
 
+use crate::app::options::OPTION_BYPASS_FREE_SPACE_CHECK;
+
 /// Errors that can happen during the application's runtime
 #[derive(Debug)]
 pub enum RuntimeError {
@@ -27,9 +29,10 @@ impl Display for RuntimeError {
             RuntimeError::NotEnoughAvailableSpace(estimated_bytes, available_bytes) => {
                 write!(
                     fmt, 
-                    "Not enough free disk space!\nEstimated export size: {}\nDisk space available: {}",
+                    "Not enough free disk space!\nEstimated export size: {}\nDisk space available: {}\nPass `--{}` to ignore\n",
                     format_file_size(*estimated_bytes),
-                    format_file_size(*available_bytes)
+                    format_file_size(*available_bytes),
+                    OPTION_BYPASS_FREE_SPACE_CHECK
                 )
             }
         }
