@@ -21,13 +21,12 @@ use crate::{
         dirs::home,
         output::{done_processing, processing},
         platform::Platform,
+        size::format_file_size,
     },
 };
 
 /// The default root directory for iMessage attachment data
 pub const DEFAULT_ATTACHMENT_ROOT: &str = "~/Library/Messages/Attachments";
-const DIVISOR: f64 = 1024.;
-const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
 
 /// Represents the MIME type of a message's attachment data
 ///
@@ -51,7 +50,7 @@ pub struct Attachment {
     pub uti: Option<String>,
     pub mime_type: Option<String>,
     pub transfer_name: Option<String>,
-    pub total_bytes: i64,
+    pub total_bytes: u64,
     pub is_sticker: bool,
     pub hide_attachment: i32,
     pub copied_path: Option<PathBuf>,
@@ -219,19 +218,18 @@ impl Attachment {
 
     /// Get a human readable file size for an attachment
     pub fn file_size(&self) -> String {
-        Attachment::format_file_size(self.total_bytes)
+        format_file_size(self.total_bytes)
     }
 
-    /// Get a human readable file size for an arbitrary amount of bytes
-    fn format_file_size(total_bytes: i64) -> String {
-        let mut index: usize = 0;
-        let mut bytes = total_bytes as f64;
-        while index < UNITS.len() - 1 && bytes > DIVISOR {
-            index += 1;
-            bytes /= DIVISOR;
-        }
+    /// Get the total attachment bytes referenced in the table
+    pub fn get_total_attachment_bytes(db: &Connection) -> Result<u64, TableError> {
+        let mut bytes_query = db
+            .prepare(&format!("SELECT SUM(total_bytes) FROM {ATTACHMENT}"))
+            .map_err(TableError::Attachment)?;
 
-        format!("{bytes:.2} {}", UNITS[index])
+        bytes_query
+            .query_row([], |r| r.get(0))
+            .map_err(TableError::Attachment)
     }
 
     /// Given a platform and database source, resolve the path for the current attachment
@@ -325,11 +323,7 @@ impl Attachment {
             })
             .count();
 
-        let mut bytes_query = db
-            .prepare(&format!("SELECT SUM(total_bytes) FROM {ATTACHMENT}"))
-            .map_err(TableError::Messages)?;
-
-        let total_bytes: i64 = bytes_query.query_row([], |r| r.get(0)).unwrap_or(0);
+        let total_bytes = Attachment::get_total_attachment_bytes(db).unwrap_or(0);
 
         done_processing();
 
@@ -338,7 +332,7 @@ impl Attachment {
             println!("    Total attachments: {total_attachments}");
             println!(
                 "    Total attachment data: {}",
-                Attachment::format_file_size(total_bytes)
+                format_file_size(total_bytes)
             );
             if missing_files > 0 && total_attachments > 0 {
                 println!(
@@ -570,44 +564,5 @@ mod tests {
             attachment.resolved_attachment_path(&Platform::iOS, &db_path, None),
             None
         );
-    }
-
-    #[test]
-    fn can_get_file_size_bytes() {
-        let attachment = sample_attachment();
-
-        assert_eq!(attachment.file_size(), String::from("100.00 B"));
-    }
-
-    #[test]
-    fn can_get_file_size_kb() {
-        let mut attachment = sample_attachment();
-        attachment.total_bytes = 2300;
-
-        assert_eq!(attachment.file_size(), String::from("2.25 KB"));
-    }
-
-    #[test]
-    fn can_get_file_size_mb() {
-        let mut attachment = sample_attachment();
-        attachment.total_bytes = 5612000;
-
-        assert_eq!(attachment.file_size(), String::from("5.35 MB"));
-    }
-
-    #[test]
-    fn can_get_file_size_gb() {
-        let mut attachment: Attachment = sample_attachment();
-        attachment.total_bytes = 9234712394;
-
-        assert_eq!(attachment.file_size(), String::from("8.60 GB"));
-    }
-
-    #[test]
-    fn can_get_file_size_cap() {
-        let mut attachment: Attachment = sample_attachment();
-        attachment.total_bytes = i64::MAX;
-
-        assert_eq!(attachment.file_size(), String::from("8388608.00 TB"));
     }
 }

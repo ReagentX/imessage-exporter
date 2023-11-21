@@ -2,7 +2,7 @@
  This module defines traits for table representations and stores some shared table constants.
 */
 
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, fs::metadata, path::Path};
 
 use rusqlite::{Connection, Error, OpenFlags, Result, Row, Statement};
 
@@ -67,6 +67,11 @@ pub fn get_connection(path: &Path) -> Result<Connection, TableError> {
         "Database not found at {}",
         &path.to_str().unwrap_or("Unknown")
     )))
+}
+
+/// Get the size of the database on the disk
+pub fn get_db_size(path: &Path) -> Result<u64, TableError> {
+    Ok(metadata(path).map_err(TableError::CannotRead)?.len())
 }
 
 // Table Names
