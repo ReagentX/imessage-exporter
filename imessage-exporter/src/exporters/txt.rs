@@ -858,6 +858,7 @@ mod tests {
             no_lazy: false,
             custom_name: None,
             platform: Platform::macOS,
+            ignore_disk_space: false,
         }
     }
 

@@ -29,6 +29,7 @@ pub const OPTION_END_DATE: &str = "end-date";
 pub const OPTION_DISABLE_LAZY_LOADING: &str = "no-lazy";
 pub const OPTION_CUSTOM_NAME: &str = "custom-name";
 pub const OPTION_PLATFORM: &str = "platform";
+pub const OPTION_BYPASS_FREE_SPACE_CHECK: &str = "ignore-disk-warning";
 
 // Other CLI Text
 pub const SUPPORTED_FILE_TYPES: &str = "txt, html";
@@ -62,6 +63,8 @@ pub struct Options {
     pub custom_name: Option<String>,
     /// The database source's platform
     pub platform: Platform,
+    /// If true, disable the free disk space check
+    pub ignore_disk_space: bool,
 }
 
 impl Options {
@@ -77,6 +80,7 @@ impl Options {
         let no_lazy = args.get_flag(OPTION_DISABLE_LAZY_LOADING);
         let custom_name: Option<&String> = args.get_one(OPTION_CUSTOM_NAME);
         let platform_type: Option<&String> = args.get_one(OPTION_PLATFORM);
+        let ignore_disk_space = args.get_flag(OPTION_BYPASS_FREE_SPACE_CHECK);
 
         // Build the export type
         let export_type: Option<ExportType> = match export_file_type {
@@ -213,6 +217,7 @@ impl Options {
             no_lazy,
             custom_name: custom_name.cloned(),
             platform,
+            ignore_disk_space,
         })
     }
 
@@ -232,15 +237,20 @@ fn validate_path(
     export_path: Option<&String>,
     export_type: &Option<&ExportType>,
 ) -> Result<PathBuf, RuntimeError> {
+    // Build a path from the user-provided data or the default location
     let resolved_path =
         PathBuf::from(export_path.unwrap_or(&format!("{}/{DEFAULT_OUTPUT_DIR}", home())));
+
+    // If there is an export type selected, ensure we do not overwrite files of the same type
     if let Some(export_type) = export_type {
         if resolved_path.exists() {
+            // Get the word to use if there is a problem with the specified path
             let path_word = match export_path {
                 Some(_) => "Specified",
                 None => "Default",
             };
 
+            // Ensure the directory exists and does not contain files of the same export type
             match resolved_path.read_dir() {
                 Ok(files) => {
                     let export_type_extension = export_type.to_string();
@@ -311,7 +321,7 @@ fn get_command() -> Command {
             Arg::new(OPTION_ATTACHMENT_ROOT)
                 .short('r')
                 .long(OPTION_ATTACHMENT_ROOT)
-                .help(format!("Specify an optional custom path to look for attachments in (macOS only).\nOnly use this if attachments are stored separately from the database's default location.\nThe default location is {DEFAULT_ATTACHMENT_ROOT}\n"))
+                .help(format!("Specify an optional custom path to look for attachments in (macOS only)\nOnly use this if attachments are stored separately from the database's default location\nThe default location is {DEFAULT_ATTACHMENT_ROOT}\n"))
                 .display_order(4)
                 .value_name("path/to/attachments"),
         )
@@ -335,7 +345,7 @@ fn get_command() -> Command {
             Arg::new(OPTION_START_DATE)
                 .short('s')
                 .long(OPTION_START_DATE)
-                .help("The start date filter. Only messages sent on or after this date will be included\n")
+                .help("The start date filter\nOnly messages sent on or after this date will be included\n")
                 .display_order(7)
                 .value_name("YYYY-MM-DD"),
         )
@@ -343,7 +353,7 @@ fn get_command() -> Command {
             Arg::new(OPTION_END_DATE)
                 .short('e')
                 .long(OPTION_END_DATE)
-                .help("The end date filter. Only messages sent before this date will be included\n")
+                .help("The end date filter\nOnly messages sent before this date will be included\n")
                 .display_order(8)
                 .value_name("YYYY-MM-DD"),
         )
@@ -361,6 +371,14 @@ fn get_command() -> Command {
                 .long(OPTION_CUSTOM_NAME)
                 .help("Specify an optional custom name for the database owner's messages in exports\n")
                 .display_order(10)
+        )
+        .arg(
+            Arg::new(OPTION_BYPASS_FREE_SPACE_CHECK)
+                .short('b')
+                .long(OPTION_BYPASS_FREE_SPACE_CHECK)
+                .help("Bypass the disk space check when exporting data\nBy default, exports will not run if there is not enough free disk space\n")
+                .action(ArgAction::SetTrue)
+                .display_order(11)
         )
 }
 
@@ -403,6 +421,7 @@ mod arg_tests {
             no_lazy: false,
             custom_name: None,
             platform: Platform::default(),
+            ignore_disk_space: false,
         };
 
         assert_eq!(actual, expected);
@@ -476,7 +495,7 @@ mod arg_tests {
     #[test]
     fn can_build_option_export_html() {
         // Get matches from sample args
-        let cli_args: Vec<&str> = vec!["imessage-exporter", "-f", "html"];
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-f", "html", "-o", "/tmp"];
         let command = get_command();
         let args = command.get_matches_from(cli_args);
 
@@ -484,17 +503,19 @@ mod arg_tests {
         let actual = Options::from_args(&args).unwrap();
 
         // Expected data
+        let tmp_dir = String::from("/tmp");
         let expected = Options {
             db_path: default_db_path(),
             attachment_root: None,
             attachment_manager: AttachmentManager::default(),
             diagnostic: false,
             export_type: Some(ExportType::HTML),
-            export_path: validate_path(None, &None).unwrap(),
+            export_path: validate_path(Some(&tmp_dir), &None).unwrap(),
             query_context: QueryContext::default(),
             no_lazy: false,
             custom_name: None,
             platform: Platform::default(),
+            ignore_disk_space: false,
         };
 
         assert_eq!(actual, expected);
@@ -522,6 +543,7 @@ mod arg_tests {
             no_lazy: true,
             custom_name: None,
             platform: Platform::default(),
+            ignore_disk_space: false,
         };
 
         assert_eq!(actual, expected);
