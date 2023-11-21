@@ -565,4 +565,43 @@ mod tests {
             None
         );
     }
+
+    #[test]
+    fn can_get_file_size_bytes() {
+        let attachment = sample_attachment();
+
+        assert_eq!(attachment.file_size(), String::from("100.00 B"));
+    }
+
+    #[test]
+    fn can_get_file_size_kb() {
+        let mut attachment = sample_attachment();
+        attachment.total_bytes = 2300;
+
+        assert_eq!(attachment.file_size(), String::from("2.25 KB"));
+    }
+
+    #[test]
+    fn can_get_file_size_mb() {
+        let mut attachment = sample_attachment();
+        attachment.total_bytes = 5612000;
+
+        assert_eq!(attachment.file_size(), String::from("5.35 MB"));
+    }
+
+    #[test]
+    fn can_get_file_size_gb() {
+        let mut attachment: Attachment = sample_attachment();
+        attachment.total_bytes = 9234712394;
+
+        assert_eq!(attachment.file_size(), String::from("8.60 GB"));
+    }
+
+    #[test]
+    fn can_get_file_size_cap() {
+        let mut attachment: Attachment = sample_attachment();
+        attachment.total_bytes = u64::MAX;
+
+        assert_eq!(attachment.file_size(), String::from("16777216.00 TB"));
+    }
 }
