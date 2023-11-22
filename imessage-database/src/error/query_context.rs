@@ -1,5 +1,5 @@
 /*!
- Errors that can happen when parsing query context data
+ Errors that can happen when parsing query context data.
 */
 
 use std::fmt::{Display, Formatter, Result};

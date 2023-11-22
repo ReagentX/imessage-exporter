@@ -5,6 +5,7 @@ use std::{
     path::PathBuf,
 };
 
+use fs2::available_space;
 use rusqlite::Connection;
 
 use crate::{
@@ -24,11 +25,11 @@ use imessage_database::{
         handle::Handle,
         messages::Message,
         table::{
-            get_connection, Cacheable, Deduplicate, Diagnostic, ATTACHMENTS_DIR, MAX_LENGTH, ME,
-            ORPHANED, UNKNOWN,
+            get_connection, get_db_size, Cacheable, Deduplicate, Diagnostic, ATTACHMENTS_DIR,
+            MAX_LENGTH, ME, ORPHANED, UNKNOWN,
         },
     },
-    util::{dates::get_offset, export_type::ExportType},
+    util::{dates::get_offset, export_type::ExportType, size::format_file_size},
 };
 
 /// Stores the application state and handles application lifecycle
@@ -218,6 +219,47 @@ impl Config {
         })
     }
 
+    /// Ensure there is available disk space for the requested export
+    fn ensure_free_space(&self) -> Result<(), RuntimeError> {
+        // Export size is usually about 6% the size of the db; we divide by 10 to over-estimate about 10% of the total size
+        // for some safe headroom
+        let total_db_size =
+            get_db_size(&self.options.db_path).map_err(RuntimeError::DatabaseError)?;
+        let mut estimated_export_size = total_db_size / 10;
+
+        let free_space_at_location = available_space(&self.options.export_path).unwrap();
+
+        // Validate that there is enough disk space free to write the export
+        match self.options.attachment_manager {
+            AttachmentManager::Disabled => {
+                if estimated_export_size >= free_space_at_location {
+                    return Err(RuntimeError::NotEnoughAvailableSpace(
+                        estimated_export_size,
+                        free_space_at_location,
+                    ));
+                }
+            }
+            _ => {
+                let total_attachment_size = Attachment::get_total_attachment_bytes(&self.db)
+                    .map_err(RuntimeError::DatabaseError)?;
+                estimated_export_size += total_attachment_size;
+                if (estimated_export_size + total_attachment_size) >= free_space_at_location {
+                    return Err(RuntimeError::NotEnoughAvailableSpace(
+                        estimated_export_size + total_attachment_size,
+                        free_space_at_location,
+                    ));
+                }
+            }
+        };
+
+        println!(
+            "Estimated export size: {}",
+            format_file_size(estimated_export_size)
+        );
+
+        Ok(())
+    }
+
     /// Handles diagnostic tests for database
     fn run_diagnostic(&self) -> Result<(), TableError> {
         println!("\niMessage Database Diagnostics\n");
@@ -227,18 +269,27 @@ impl Config {
         ChatToHandle::run_diagnostic(&self.db)?;
 
         // Global Diagnostics
+        println!("Global diagnostic data:");
+
+        let total_db_size = get_db_size(&self.options.db_path)?;
+        println!(
+            "    Total database size: {}",
+            format_file_size(total_db_size)
+        );
+
         let unique_handles: HashSet<i32> =
             HashSet::from_iter(self.real_participants.values().cloned());
         let duplicated_handles = self.participants.len() - unique_handles.len();
         if duplicated_handles > 0 {
-            println!("Duplicated contacts: {duplicated_handles}");
+            println!("    Duplicated contacts: {duplicated_handles}");
         }
 
         let unique_chats: HashSet<i32> = HashSet::from_iter(self.real_chatrooms.values().cloned());
         let duplicated_chats = self.chatrooms.len() - unique_chats.len();
         if duplicated_chats > 0 {
-            println!("Duplicated chats: {duplicated_chats}");
+            println!("    Duplicated chats: {duplicated_chats}");
         }
+
         Ok(())
     }
 
@@ -264,9 +315,15 @@ impl Config {
         } else if let Some(export_type) = &self.options.export_type {
             // Ensure the path we want to export to exists
             create_dir_all(&self.options.export_path).map_err(RuntimeError::DiskError)?;
+
             // Ensure the path we want to copy attachments to exists, if requested
             if !matches!(self.options.attachment_manager, AttachmentManager::Disabled) {
                 create_dir_all(self.attachment_path()).map_err(RuntimeError::DiskError)?;
+            }
+
+            // Ensure there is enough free disk space to write the export
+            if self.options.ignore_disk_space {
+                self.ensure_free_space()?;
             }
 
             // Create exporter, pass it data we care about, then kick it off
@@ -324,6 +381,7 @@ mod filename_tests {
             no_lazy: false,
             custom_name: None,
             platform: Platform::macOS,
+            ignore_disk_space: false,
         }
     }
 
@@ -553,6 +611,7 @@ mod who_tests {
             no_lazy: false,
             custom_name: None,
             platform: Platform::macOS,
+            ignore_disk_space: false,
         }
     }
 
@@ -775,6 +834,7 @@ mod directory_tests {
             no_lazy: false,
             custom_name: None,
             platform: Platform::macOS,
+            ignore_disk_space: false,
         }
     }
 

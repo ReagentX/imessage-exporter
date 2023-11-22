@@ -1,6 +1,7 @@
 /*!
-These are the link previews that iMessage generates when sending links. They may
-contain metadata, even if the page the link points to no longer exists on the internet.
+ These are the link previews that iMessage generates when sending links.
+
+ They may contain metadata, even if the page the link points to no longer exists on the internet.
 */
 
 use plist::Value;
@@ -93,6 +94,7 @@ impl<'a> URLMessage<'a> {
         };
         Err(PlistParseError::NoPayload)
     }
+
     /// Extract the array of image URLs from a URL message payload.
     ///
     /// The array consists of dictionaries that look like this:

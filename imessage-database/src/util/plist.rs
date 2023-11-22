@@ -1,5 +1,5 @@
 /*!
- This module contains logic to parse text from plist payload data
+ Contains logic to parse text from plist payload data.
 */
 
 use plist::{Dictionary, Value};

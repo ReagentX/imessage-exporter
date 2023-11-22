@@ -12,5 +12,5 @@ version = "0.0.0"
 [dependencies]
 chrono = "0.4.31"
 plist = "1.6.0"
-rusqlite = {version = "0.30.0", features = ["blob", "bundled"]}
+rusqlite = { version = "0.30.0", features = ["blob", "bundled"] }
 sha1 = "0.10.6"

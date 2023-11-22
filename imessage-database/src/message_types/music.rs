@@ -1,5 +1,5 @@
 /*!
-These are the link previews that iMessage generates when sending Apple Music links
+ These are the link previews that iMessage generates when sending Apple Music links.
 */
 
 use plist::Value;

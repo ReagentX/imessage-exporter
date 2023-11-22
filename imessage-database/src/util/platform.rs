@@ -1,5 +1,5 @@
 /*!
- Contains data structures used to describe database platforms
+ Contains data structures used to describe database platforms.
 */
 
 use std::{fmt::Display, path::Path};
