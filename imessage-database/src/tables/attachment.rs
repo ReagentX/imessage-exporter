@@ -288,6 +288,7 @@ impl Attachment {
         processing();
         let mut total_attachments = 0;
         let mut null_attachments = 0;
+        let mut size_on_disk: u64 = 0;
         let mut statement_paths = db
             .prepare(&format!("SELECT filename FROM {ATTACHMENT}"))
             .map_err(TableError::Attachment)?;
@@ -303,13 +304,22 @@ impl Attachment {
                 if let Ok(filepath) = path {
                     match platform {
                         Platform::macOS => {
-                            !Path::new(&Attachment::gen_macos_attachment(filepath)).exists()
+                            let path = Attachment::gen_macos_attachment(filepath);
+                            let file = Path::new(&path);
+                            if let Ok(metadata) = file.metadata() {
+                                size_on_disk += metadata.len();
+                            }
+                            !file.exists()
                         }
                         Platform::iOS => {
                             if let Some(parsed_path) =
                                 Attachment::gen_ios_attachment(filepath, db_path)
                             {
-                                return !Path::new(&parsed_path).exists();
+                                let file = Path::new(&parsed_path);
+                                if let Ok(metadata) = file.metadata() {
+                                    size_on_disk += metadata.len();
+                                }
+                                return !file.exists();
                             }
                             // This hits if the attachment path doesn't get generated
                             true
@@ -331,8 +341,12 @@ impl Attachment {
             println!("\rAttachment diagnostic data:");
             println!("    Total attachments: {total_attachments}");
             println!(
-                "    Total attachment data: {}",
+                "        Data referenced in table: {}",
                 format_file_size(total_bytes)
+            );
+            println!(
+                "        Data present on disk: {}",
+                format_file_size(size_on_disk)
             );
             if missing_files > 0 && total_attachments > 0 {
                 println!(
