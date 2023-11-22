@@ -156,9 +156,10 @@ impl Attachment {
             self.resolved_attachment_path(platform, db_path, custom_attachment_root)
         {
             let mut file = File::open(&file_path)
-                .map_err(|err| AttachmentError::Unreadable(file_path, err))?;
+                .map_err(|err| AttachmentError::Unreadable(file_path.clone(), err))?;
             let mut bytes = vec![];
-            file.read_to_end(&mut bytes).unwrap();
+            file.read_to_end(&mut bytes)
+                .map_err(|err| AttachmentError::Unreadable(file_path.clone(), err))?;
 
             return Ok(Some(bytes));
         }

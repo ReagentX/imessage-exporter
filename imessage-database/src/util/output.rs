@@ -16,7 +16,7 @@ use std::io::{stdout, Write};
 /// ```
 pub fn processing() {
     print!("\rProcessing...");
-    stdout().flush().unwrap();
+    stdout().flush().unwrap_or_default();
 }
 
 /// Overwrite the CLI when something is done working so that we can write cleanly later
@@ -31,5 +31,5 @@ pub fn processing() {
 /// ```
 pub fn done_processing() {
     print!("\r");
-    stdout().flush().unwrap();
+    stdout().flush().unwrap_or_default();
 }
