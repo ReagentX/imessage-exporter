@@ -1,5 +1,5 @@
 /*!
- Contains date parsing functions for iMessage dates
+ Contains date parsing functions for iMessage dates.
 
  Dates are stored as nanosecond-precision unix timestamps with an epoch of `1/1/2001 00:00:00` in the local time zone.
 */

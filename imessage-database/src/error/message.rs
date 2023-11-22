@@ -1,5 +1,5 @@
 /*!
- Errors that can happen when parsing message data
+ Errors that can happen when parsing message data.
 */
 
 use std::fmt::{Display, Formatter, Result};

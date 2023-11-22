@@ -90,7 +90,7 @@ pub fn get_connection(path: &Path) -> Result<Connection, TableError> {
 /// };
 ///
 /// let db_path = default_db_path();
-/// let connection = get_db_size(&db_path);
+/// let database_size_in_bytes = get_db_size(&db_path);
 /// ```
 pub fn get_db_size(path: &Path) -> Result<u64, TableError> {
     Ok(metadata(path).map_err(TableError::CannotRead)?.len())

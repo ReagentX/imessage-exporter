@@ -1,5 +1,5 @@
 /*!
-Logic and containers for the `message_summary_info` of an edited or unsent iMessage.
+ Logic and containers for the `message_summary_info` of an edited or unsent iMessage.
 */
 
 use plist::Value;

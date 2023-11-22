@@ -1,6 +1,5 @@
 /*!
-These are the link previews that iMessage generates when sending
-Collaboration links, i.e. from Pages or Freeform
+ These are the link previews that iMessage generates when sending Collaboration links, i.e. from Pages or Freeform.
 */
 
 use plist::Value;

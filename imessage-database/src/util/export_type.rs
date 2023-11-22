@@ -1,5 +1,5 @@
 /*!
- Contains data structures used to describe export types
+ Contains data structures used to describe export types.
 */
 
 use std::fmt::Display;

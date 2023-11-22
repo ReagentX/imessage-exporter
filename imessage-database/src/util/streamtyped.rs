@@ -1,5 +1,5 @@
 /*!
-Contains logic to parse text from streamtyped binary data
+ Contains logic to parse text from streamtyped binary data.
 */
 
 use crate::error::streamtyped::StreamTypedError;

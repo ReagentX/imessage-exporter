@@ -1,5 +1,5 @@
 /*!
- Contains functions that generate the correct path to the default iMessage database location
+ Contains functions that generate the correct path to the default iMessage database location.
 */
 
 use std::{env::var, path::PathBuf};

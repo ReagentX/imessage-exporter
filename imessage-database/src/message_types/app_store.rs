@@ -1,5 +1,5 @@
 /*!
-These are the link previews that iMessage generates when sending links to apps in the App Store
+ These are the link previews that iMessage generates when sending links to apps in the App Store.
 */
 
 use plist::Value;

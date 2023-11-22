@@ -1,6 +1,7 @@
 /*!
-These are the link previews that iMessage generates when sending links. They may
-contain metadata, even if the page the link points to no longer exists on the internet.
+ These are the link previews that iMessage generates when sending links.
+
+ They may contain metadata, even if the page the link points to no longer exists on the internet.
 */
 
 use plist::Value;

@@ -1,5 +1,5 @@
 /*!
- Errors that can happen when extracting data from a SQLite table
+ Errors that can happen when extracting data from a SQLite table.
 */
 
 use std::fmt::{Display, Formatter, Result};

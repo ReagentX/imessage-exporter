@@ -1,5 +1,5 @@
 /*!
-Contains logic for creating human-readable file size strings
+ Contains logic for creating human-readable file size strings.
  */
 
 const DIVISOR: f64 = 1024.;

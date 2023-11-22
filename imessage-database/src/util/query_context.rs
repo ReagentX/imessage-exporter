@@ -1,5 +1,5 @@
 /*!
-Contains logic for handling query filter configurations
+ Contains logic for handling query filter configurations.
 */
 use chrono::prelude::*;
 
