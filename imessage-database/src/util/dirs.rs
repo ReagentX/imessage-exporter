@@ -7,6 +7,10 @@ use std::{env::var, path::PathBuf};
 use crate::tables::table::DEFAULT_PATH_MACOS;
 
 /// Get the user's home directory (macOS only)
+/// 
+/// # Panics
+/// 
+/// Will panic if the environment variable `$HOME` is missing.
 ///
 /// # Example:
 ///
