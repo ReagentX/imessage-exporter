@@ -544,10 +544,8 @@ impl<'a> BalloonFormatter<&'a str> for TXT<'a> {
     fn format_url(&self, balloon: &URLMessage, indent: &str) -> String {
         let mut out_s = String::new();
 
-        if let Some(url) = balloon.url {
+        if let Some(url) = balloon.get_url() {
             self.add_line(&mut out_s, url, indent);
-        } else if let Some(original_url) = balloon.original_url {
-            self.add_line(&mut out_s, original_url, indent);
         }
 
         if let Some(title) = balloon.title {
