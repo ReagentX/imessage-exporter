@@ -56,8 +56,8 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         If omitted, the default directory is ~/Library/Messages/chat.db
         
 -r, --attachment-root <path/to/attachments>
-        Specify an optional custom path to look for attachments in (macOS only).
-        Only use this if attachments are stored separately from the database's default location.
+        Specify an optional custom path to look for attachments in (macOS only)
+        Only use this if attachments are stored separately from the database's default location
         The default location is ~/Library/Messages/Attachments
         
 -a, --platform <macOS, iOS>
@@ -69,10 +69,12 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         If omitted, the default directory is ~/imessage_export
         
 -s, --start-date <YYYY-MM-DD>
-        The start date filter. Only messages sent on or after this date will be included
+        The start date filter
+        Only messages sent on or after this date will be included
         
 -e, --end-date <YYYY-MM-DD>
-        The end date filter. Only messages sent before this date will be included
+        The end date filter
+        Only messages sent before this date will be included
         
 -l, --no-lazy
         Do not include `loading="lazy"` in HTML export `img` tags
@@ -80,6 +82,10 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         
 -m, --custom-name <custom-name>
         Specify an optional custom name for the database owner's messages in exports
+        
+-b, --ignore-disk-warning
+        Bypass the disk space check when exporting data
+        By default, exports will not run if there is not enough free disk space
         
 -h, --help
         Print help
