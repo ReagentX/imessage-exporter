@@ -28,7 +28,7 @@ impl Table for ChatToHandle {
     }
 
     fn get(db: &Connection) -> Result<Statement, TableError> {
-        db.prepare(&format!("SELECT * FROM {}", CHAT_HANDLE_JOIN))
+        db.prepare(&format!("SELECT * FROM {CHAT_HANDLE_JOIN}"))
             .map_err(TableError::ChatToHandle)
     }
 
@@ -43,7 +43,7 @@ impl Table for ChatToHandle {
 impl Cacheable for ChatToHandle {
     type K = i32;
     type V = BTreeSet<i32>;
-    /// Generate a hashmap containing each chatroom's ID pointing to a HashSet of participant handle IDs
+    /// Generate a hashmap containing each chatroom's ID pointing to a ``HashSet`` of participant handle IDs
     ///
     /// # Example:
     ///

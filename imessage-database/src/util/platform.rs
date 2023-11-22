@@ -40,7 +40,7 @@ impl Platform {
 }
 
 impl Default for Platform {
-    /// The default Platform is [Platform::macOS].
+    /// The default Platform is [`Platform::macOS`].
     fn default() -> Self {
         Self::macOS
     }

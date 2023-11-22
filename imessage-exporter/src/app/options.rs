@@ -232,7 +232,7 @@ impl Options {
 
 /// Ensure export path is empty or does not contain files of the existing export type
 ///
-/// We have to allocate a PathBuf here because it can be created from data owned by this function in the default state
+/// We have to allocate a ``PathBuf`` here because it can be created from data owned by this function in the default state
 fn validate_path(
     export_path: Option<&String>,
     export_type: &Option<&ExportType>,

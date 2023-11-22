@@ -533,69 +533,57 @@ impl<'a> Writer<'a> for HTML<'a> {
         if let Variant::App(balloon) = message.variant() {
             let mut app_bubble = String::new();
 
-            match message.payload_data(&self.config.db) {
-                Some(payload) => {
-                    let parsed = parse_plist(&payload)?;
+            if let Some(payload) = message.payload_data(&self.config.db) {
+                let parsed = parse_plist(&payload)?;
 
-                    let res = if message.is_url() {
-                        let bubble = URLMessage::get_url_message_override(&parsed)?;
-                        match bubble {
-                            URLOverride::Normal(balloon) => self.format_url(&balloon, message),
-                            URLOverride::AppleMusic(balloon) => {
-                                self.format_music(&balloon, message)
-                            }
-                            URLOverride::Collaboration(balloon) => {
-                                self.format_collaboration(&balloon, message)
-                            }
-                            URLOverride::AppStore(balloon) => {
-                                self.format_app_store(&balloon, message)
-                            }
+                let res = if message.is_url() {
+                    let bubble = URLMessage::get_url_message_override(&parsed)?;
+                    match bubble {
+                        URLOverride::Normal(balloon) => self.format_url(&balloon, message),
+                        URLOverride::AppleMusic(balloon) => self.format_music(&balloon, message),
+                        URLOverride::Collaboration(balloon) => {
+                            self.format_collaboration(&balloon, message)
                         }
-                    } else {
-                        match AppMessage::from_map(&parsed) {
-                            Ok(bubble) => match balloon {
-                                CustomBalloon::Application(bundle_id) => self.format_generic_app(
-                                    &bubble,
-                                    bundle_id,
-                                    attachments,
-                                    message,
-                                ),
-                                CustomBalloon::Handwriting => {
-                                    self.format_handwriting(&bubble, message)
-                                }
-                                CustomBalloon::ApplePay => self.format_apple_pay(&bubble, message),
-                                CustomBalloon::Fitness => self.format_fitness(&bubble, message),
-                                CustomBalloon::Slideshow => self.format_slideshow(&bubble, message),
-                                CustomBalloon::CheckIn => self.format_check_in(&bubble, message),
-                                _ => unreachable!(),
-                            },
-                            Err(why) => return Err(why),
-                        }
-                    };
-                    app_bubble.push_str(&res);
-                }
-                None => {
-                    // Sometimes, URL messages are missing their payloads
-                    if message.is_url() {
-                        if let Some(text) = &message.text {
-                            let mut out_s = String::new();
-                            out_s.push_str("<a href=\"");
-                            out_s.push_str(text);
-                            out_s.push_str("\">");
-
-                            out_s.push_str("<div class=\"app_header\"><div class=\"name\">");
-                            out_s.push_str(text);
-                            out_s.push_str("</div></div>");
-
-                            out_s.push_str("<div class=\"app_footer\"><div class=\"caption\">");
-                            out_s.push_str(text);
-                            out_s.push_str("</div></div></a>");
-
-                            return Ok(out_s);
-                        }
+                        URLOverride::AppStore(balloon) => self.format_app_store(&balloon, message),
                     }
-                    return Err(PlistParseError::NoPayload);
+                } else {
+                    match AppMessage::from_map(&parsed) {
+                        Ok(bubble) => match balloon {
+                            CustomBalloon::Application(bundle_id) => {
+                                self.format_generic_app(&bubble, bundle_id, attachments, message)
+                            }
+                            CustomBalloon::Handwriting => self.format_handwriting(&bubble, message),
+                            CustomBalloon::ApplePay => self.format_apple_pay(&bubble, message),
+                            CustomBalloon::Fitness => self.format_fitness(&bubble, message),
+                            CustomBalloon::Slideshow => self.format_slideshow(&bubble, message),
+                            CustomBalloon::CheckIn => self.format_check_in(&bubble, message),
+                            CustomBalloon::URL => unreachable!(),
+                        },
+                        Err(why) => return Err(why),
+                    }
+                };
+                app_bubble.push_str(&res);
+            } else {
+                // Sometimes, URL messages are missing their payloads
+                if message.is_url() {
+                    if let Some(text) = &message.text {
+                        let mut out_s = String::new();
+                        out_s.push_str("<a href=\"");
+                        out_s.push_str(text);
+                        out_s.push_str("\">");
+
+                        out_s.push_str("<div class=\"app_header\"><div class=\"name\">");
+                        out_s.push_str(text);
+                        out_s.push_str("</div></div>");
+
+                        out_s.push_str("<div class=\"app_footer\"><div class=\"caption\">");
+                        out_s.push_str(text);
+                        out_s.push_str("</div></div></a>");
+
+                        return Ok(out_s);
+                    }
                 }
+                return Err(PlistParseError::NoPayload);
             }
             Ok(app_bubble)
         } else {
@@ -607,7 +595,7 @@ impl<'a> Writer<'a> for HTML<'a> {
         match msg.variant() {
             Variant::Reaction(_, added, reaction) => {
                 if !added {
-                    return Ok("".to_string());
+                    return Ok(String::new());
                 }
                 Ok(format!(
                     "<span class=\"reaction\"><b>{:?}</b> by {}</span>",

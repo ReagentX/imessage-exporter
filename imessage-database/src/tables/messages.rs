@@ -282,12 +282,14 @@ impl Cacheable for Message {
     ///
     /// Builds a map like:
     ///
+    /// ```json
     /// {
-    ///     message_guid: {
+    ///     "message_guid": {
     ///         0: [Message, Message],
     ///         1: [Message]
     ///     }
     /// }
+    /// ```
     ///
     /// Where the `0` and `1` are the reaction indexes in the body of the message mapped by `message_guid`
     fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
@@ -656,7 +658,7 @@ impl Message {
         }
     }
 
-    /// Build a HashMap of message component index to messages that react to that component
+    /// Build a ``HashMap`` of message component index to messages that react to that component
     pub fn get_reactions(
         &self,
         db: &Connection,
@@ -702,7 +704,7 @@ impl Message {
         Ok(out_h)
     }
 
-    /// Build a HashMap of message component index to messages that reply to that component
+    /// Build a ``HashMap`` of message component index to messages that reply to that component
     pub fn get_replies(&self, db: &Connection) -> Result<HashMap<usize, Vec<Self>>, TableError> {
         let mut out_h: HashMap<usize, Vec<Self>> = HashMap::new();
 

@@ -72,7 +72,7 @@ impl Table for Attachment {
     }
 
     fn get(db: &Connection) -> Result<Statement, TableError> {
-        db.prepare(&format!("SELECT * from {}", ATTACHMENT))
+        db.prepare(&format!("SELECT * from {ATTACHMENT}"))
             .map_err(TableError::Attachment)
     }
 
@@ -267,8 +267,8 @@ impl Attachment {
     /// Get the number of attachments that are missing from the filesystem
     /// or are missing one of the following columns:
     ///
-    /// - ck_server_change_token_blob
-    /// - sr_ck_server_change_token_blob
+    /// - `ck_server_change_token_blob`
+    /// - `sr_ck_server_change_token_blob`
     ///
     /// # Example:
     ///
