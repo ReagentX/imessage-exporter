@@ -94,6 +94,7 @@ impl<'a> URLMessage<'a> {
         };
         Err(PlistParseError::NoPayload)
     }
+
     /// Extract the array of image URLs from a URL message payload.
     ///
     /// The array consists of dictionaries that look like this:
