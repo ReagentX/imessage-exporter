@@ -43,6 +43,17 @@ pub trait Diagnostic {
 }
 
 /// Get a connection to the iMessage SQLite database
+// # Example:
+///
+/// ```
+/// use imessage_database::{
+///     util::dirs::default_db_path,
+///     tables::table::get_connection
+/// };
+///
+/// let db_path = default_db_path();
+/// let connection = get_connection(&db_path);
+/// ```
 pub fn get_connection(path: &Path) -> Result<Connection, TableError> {
     if path.exists() && path.is_file() {
         return match Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
@@ -70,6 +81,17 @@ pub fn get_connection(path: &Path) -> Result<Connection, TableError> {
 }
 
 /// Get the size of the database on the disk
+// # Example:
+///
+/// ```
+/// use imessage_database::{
+///     util::dirs::default_db_path,
+///     tables::table::get_db_size
+/// };
+///
+/// let db_path = default_db_path();
+/// let connection = get_db_size(&db_path);
+/// ```
 pub fn get_db_size(path: &Path) -> Result<u64, TableError> {
     Ok(metadata(path).map_err(TableError::CannotRead)?.len())
 }
