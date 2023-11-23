@@ -19,6 +19,7 @@ use imessage_database::{
         edited::EditedMessage,
         expressives::{BubbleEffect, Expressive, ScreenEffect},
         music::MusicMessage,
+        placemark::PlacemarkMessage,
         url::URLMessage,
         variants::{Announcement, BalloonProvider, CustomBalloon, URLOverride, Variant},
     },
@@ -357,6 +358,9 @@ impl<'a> Writer<'a> for TXT<'a> {
                             self.format_collaboration(&balloon, indent)
                         }
                         URLOverride::AppStore(balloon) => self.format_app_store(&balloon, indent),
+                        URLOverride::SharedPlacemark(balloon) => {
+                            self.format_placemark(&balloon, indent)
+                        }
                     }
                 } else {
                     // Handle the app case
@@ -603,6 +607,88 @@ impl<'a> BalloonFormatter<&'a str> for TXT<'a> {
         out_s.strip_suffix('\n').unwrap_or(&out_s).to_string()
     }
 
+    fn format_app_store(&self, balloon: &AppStoreMessage, indent: &'a str) -> String {
+        let mut out_s = String::from(indent);
+
+        if let Some(name) = balloon.app_name {
+            self.add_line(&mut out_s, name, indent);
+        }
+
+        if let Some(description) = balloon.description {
+            self.add_line(&mut out_s, description, indent);
+        }
+
+        if let Some(platform) = balloon.platform {
+            self.add_line(&mut out_s, platform, indent);
+        }
+
+        if let Some(genre) = balloon.genre {
+            self.add_line(&mut out_s, genre, indent);
+        }
+
+        if let Some(url) = balloon.url {
+            self.add_line(&mut out_s, url, indent);
+        }
+
+        // We want to keep the newlines between blocks, but the last one should be removed
+        out_s.strip_suffix('\n').unwrap_or(&out_s).to_string()
+    }
+
+    fn format_placemark(&self, balloon: &PlacemarkMessage, indent: &'a str) -> String {
+        let mut out_s = String::from(indent);
+
+        if let Some(name) = balloon.place_name {
+            self.add_line(&mut out_s, name, indent);
+        }
+
+        if let Some(url) = balloon.get_url() {
+            self.add_line(&mut out_s, url, indent);
+        }
+
+        if let Some(name) = balloon.placemark.name {
+            self.add_line(&mut out_s, name, indent);
+        }
+
+        if let Some(address) = balloon.placemark.address {
+            self.add_line(&mut out_s, address, indent);
+        }
+
+        if let Some(state) = balloon.placemark.state {
+            self.add_line(&mut out_s, state, indent);
+        }
+
+        if let Some(city) = balloon.placemark.city {
+            self.add_line(&mut out_s, city, indent);
+        }
+
+        if let Some(iso_country_code) = balloon.placemark.iso_country_code {
+            self.add_line(&mut out_s, iso_country_code, indent);
+        }
+
+        if let Some(postal_code) = balloon.placemark.postal_code {
+            self.add_line(&mut out_s, postal_code, indent);
+        }
+
+        if let Some(country) = balloon.placemark.country {
+            self.add_line(&mut out_s, country, indent);
+        }
+
+        if let Some(street) = balloon.placemark.street {
+            self.add_line(&mut out_s, street, indent);
+        }
+
+        if let Some(sub_administrative_area) = balloon.placemark.sub_administrative_area {
+            self.add_line(&mut out_s, sub_administrative_area, indent);
+        }
+
+        if let Some(sub_locality) = balloon.placemark.sub_locality {
+            self.add_line(&mut out_s, sub_locality, indent);
+        }
+
+        // We want to keep the newlines between blocks, but the last one should be removed
+        out_s.strip_suffix('\n').unwrap_or(&out_s).to_string()
+    }
+
     fn format_handwriting(&self, _: &AppMessage, indent: &str) -> String {
         format!("{indent}Handwritten messages are not yet supported!")
     }
@@ -652,53 +738,6 @@ impl<'a> BalloonFormatter<&'a str> for TXT<'a> {
         out_s
     }
 
-    fn format_generic_app(
-        &self,
-        balloon: &AppMessage,
-        bundle_id: &str,
-        _: &mut Vec<Attachment>,
-        indent: &str,
-    ) -> String {
-        let mut out_s = String::from(indent);
-
-        if let Some(name) = balloon.app_name {
-            out_s.push_str(name);
-        } else {
-            out_s.push_str(bundle_id);
-        }
-
-        if !out_s.is_empty() {
-            out_s.push_str(" message:\n");
-        }
-
-        if let Some(title) = balloon.title {
-            self.add_line(&mut out_s, title, indent);
-        }
-
-        if let Some(subtitle) = balloon.subtitle {
-            self.add_line(&mut out_s, subtitle, indent);
-        }
-
-        if let Some(caption) = balloon.caption {
-            self.add_line(&mut out_s, caption, indent);
-        }
-
-        if let Some(subcaption) = balloon.subcaption {
-            self.add_line(&mut out_s, subcaption, indent);
-        }
-
-        if let Some(trailing_caption) = balloon.trailing_caption {
-            self.add_line(&mut out_s, trailing_caption, indent);
-        }
-
-        if let Some(trailing_subcaption) = balloon.trailing_subcaption {
-            self.add_line(&mut out_s, trailing_subcaption, indent);
-        }
-
-        // We want to keep the newlines between blocks, but the last one should be removed
-        out_s.strip_suffix('\n').unwrap_or(&out_s).to_string()
-    }
-
     fn format_check_in(&self, balloon: &AppMessage, indent: &'a str) -> String {
         let mut out_s = String::from(indent);
 
@@ -740,27 +779,47 @@ impl<'a> BalloonFormatter<&'a str> for TXT<'a> {
         out_s
     }
 
-    fn format_app_store(&self, balloon: &AppStoreMessage, indent: &'a str) -> String {
+    fn format_generic_app(
+        &self,
+        balloon: &AppMessage,
+        bundle_id: &str,
+        _: &mut Vec<Attachment>,
+        indent: &str,
+    ) -> String {
         let mut out_s = String::from(indent);
 
         if let Some(name) = balloon.app_name {
-            self.add_line(&mut out_s, name, indent);
+            out_s.push_str(name);
+        } else {
+            out_s.push_str(bundle_id);
         }
 
-        if let Some(description) = balloon.description {
-            self.add_line(&mut out_s, description, indent);
+        if !out_s.is_empty() {
+            out_s.push_str(" message:\n");
         }
 
-        if let Some(platform) = balloon.platform {
-            self.add_line(&mut out_s, platform, indent);
+        if let Some(title) = balloon.title {
+            self.add_line(&mut out_s, title, indent);
         }
 
-        if let Some(genre) = balloon.genre {
-            self.add_line(&mut out_s, genre, indent);
+        if let Some(subtitle) = balloon.subtitle {
+            self.add_line(&mut out_s, subtitle, indent);
         }
 
-        if let Some(url) = balloon.url {
-            self.add_line(&mut out_s, url, indent);
+        if let Some(caption) = balloon.caption {
+            self.add_line(&mut out_s, caption, indent);
+        }
+
+        if let Some(subcaption) = balloon.subcaption {
+            self.add_line(&mut out_s, subcaption, indent);
+        }
+
+        if let Some(trailing_caption) = balloon.trailing_caption {
+            self.add_line(&mut out_s, trailing_caption, indent);
+        }
+
+        if let Some(trailing_subcaption) = balloon.trailing_subcaption {
+            self.add_line(&mut out_s, trailing_subcaption, indent);
         }
 
         // We want to keep the newlines between blocks, but the last one should be removed
@@ -1333,8 +1392,12 @@ mod balloon_format_tests {
     use super::tests::fake_options;
     use crate::{exporters::exporter::BalloonFormatter, Config, Exporter, TXT};
     use imessage_database::message_types::{
-        app::AppMessage, app_store::AppStoreMessage, collaboration::CollaborationMessage,
-        music::MusicMessage, url::URLMessage,
+        app::AppMessage,
+        app_store::AppStoreMessage,
+        collaboration::CollaborationMessage,
+        music::MusicMessage,
+        placemark::{Placemark, PlacemarkMessage},
+        url::URLMessage,
     };
 
     #[test]
@@ -1588,6 +1651,37 @@ mod balloon_format_tests {
 
         let expected = exporter.format_app_store(&balloon, "");
         let actual = "app_name\ndescription\nplatform\ngenre\nurl";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_placemark() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = PlacemarkMessage {
+            url: Some("url"),
+            original_url: Some("original_url"),
+            place_name: Some("Name"),
+            placemark: Placemark {
+                name: Some("name"),
+                address: Some("address"),
+                state: Some("state"),
+                city: Some("city"),
+                iso_country_code: Some("iso_country_code"),
+                postal_code: Some("postal_code"),
+                country: Some("country"),
+                street: Some("street"),
+                sub_administrative_area: Some("sub_administrative_area"),
+                sub_locality: Some("sub_locality"),
+            },
+        };
+
+        let expected = exporter.format_placemark(&balloon, "");
+        let actual = "Name\nurl\nname\naddress\nstate\ncity\niso_country_code\npostal_code\ncountry\nstreet\nsub_administrative_area\nsub_locality";
 
         assert_eq!(expected, actual);
     }

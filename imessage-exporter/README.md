@@ -44,13 +44,13 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         Specify a single file format to export messages into
         
 -c, --copy-method <compatible, efficient, disabled>
-        Specify a method to use when copying message attachments
+        Specify an optional method to use when copying message attachments
         Compatible will convert HEIC files to JPEG
         Efficient will copy files without converting anything
         If omitted, the default is `disabled`
         
 -p, --db-path <path/to/source>
-        Specify a custom path for the iMessage database location
+        Specify an optional custom path for the iMessage database location
         For macOS, specify a path to a `chat.db` file
         For iOS, specify a path to the root of an unencrypted backup directory
         If omitted, the default directory is ~/Library/Messages/chat.db
@@ -65,7 +65,7 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         If omitted, the platform type is determined automatically
         
 -o, --export-path <path/to/save/files>
-        Specify a custom directory for outputting exported data
+        Specify an optional custom directory for outputting exported data
         If omitted, the default directory is ~/imessage_export
         
 -s, --start-date <YYYY-MM-DD>

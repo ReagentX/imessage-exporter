@@ -19,6 +19,7 @@ use imessage_database::{
         edited::EditedMessage,
         expressives::{BubbleEffect, Expressive, ScreenEffect},
         music::MusicMessage,
+        placemark::PlacemarkMessage,
         url::URLMessage,
         variants::{Announcement, BalloonProvider, CustomBalloon, URLOverride, Variant},
     },
@@ -545,6 +546,9 @@ impl<'a> Writer<'a> for HTML<'a> {
                             self.format_collaboration(&balloon, message)
                         }
                         URLOverride::AppStore(balloon) => self.format_app_store(&balloon, message),
+                        URLOverride::SharedPlacemark(balloon) => {
+                            self.format_placemark(&balloon, message)
+                        }
                     }
                 } else {
                     match AppMessage::from_map(&parsed) {
@@ -925,6 +929,138 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
         out_s
     }
 
+    fn format_app_store(&self, balloon: &AppStoreMessage, _: &'a Message) -> String {
+        let mut out_s = String::new();
+
+        // Header section
+        out_s.push_str("<div class=\"app_header\">");
+
+        // App name
+        if let Some(app_name) = balloon.app_name {
+            out_s.push_str("<div class=\"name\">");
+            out_s.push_str(app_name);
+            out_s.push_str("</div>");
+        }
+
+        // Header end
+        out_s.push_str("</div>");
+
+        // Make the footer clickable so we can interact with the preview
+        if let Some(url) = balloon.url {
+            out_s.push_str("<a href=\"");
+            out_s.push_str(url);
+            out_s.push_str("\">");
+        }
+
+        // Only write the footer if there is data to write
+        if balloon.description.is_some() || balloon.genre.is_some() {
+            out_s.push_str("<div class=\"app_footer\">");
+
+            // App description
+            if let Some(description) = balloon.description {
+                out_s.push_str("<div class=\"caption\">");
+                out_s.push_str(description);
+                out_s.push_str("</div>");
+            }
+
+            // App platform
+            if let Some(platform) = balloon.platform {
+                out_s.push_str("<div class=\"subcaption\">");
+                out_s.push_str(platform);
+                out_s.push_str("</div>");
+            }
+
+            // App genre
+            if let Some(genre) = balloon.genre {
+                out_s.push_str("<div class=\"trailing_subcaption\">");
+                out_s.push_str(genre);
+                out_s.push_str("</div>");
+            }
+
+            // End footer
+            out_s.push_str("</div>");
+        }
+
+        // End the link
+        if balloon.url.is_some() {
+            out_s.push_str("</a>");
+        }
+        out_s
+    }
+
+    fn format_placemark(&self, balloon: &PlacemarkMessage, _: &'a Message) -> String {
+        let mut out_s = String::new();
+
+        // Make the whole bubble clickable
+        if let Some(url) = balloon.get_url() {
+            out_s.push_str("<a href=\"");
+            out_s.push_str(url);
+            out_s.push_str("\">");
+        }
+
+        // Header section
+        out_s.push_str("<div class=\"app_header\">");
+
+        if let Some(site_name) = balloon.place_name {
+            out_s.push_str("<div class=\"name\">");
+            out_s.push_str(site_name);
+            out_s.push_str("</div>");
+        } else if let Some(url) = balloon.get_url() {
+            out_s.push_str("<div class=\"name\">");
+            out_s.push_str(url);
+            out_s.push_str("</div>");
+        }
+
+        // Header end
+        out_s.push_str("</div>");
+
+        // Only write the footer if there is data to write
+        if balloon.placemark.address.is_some()
+            || balloon.placemark.postal_code.is_some()
+            || balloon.placemark.country.is_some()
+            || balloon.placemark.sub_administrative_area.is_some()
+        {
+            out_s.push_str("<div class=\"app_footer\">");
+
+            // Address
+            if let Some(address) = balloon.placemark.address {
+                out_s.push_str("<div class=\"caption\">");
+                out_s.push_str(address);
+                out_s.push_str("</div>");
+            }
+
+            // Postal Code
+            if let Some(postal_code) = balloon.placemark.postal_code {
+                out_s.push_str("<div class=\"trailing_caption\">");
+                out_s.push_str(postal_code);
+                out_s.push_str("</div>");
+            }
+
+            // Country
+            if let Some(country) = balloon.placemark.country {
+                out_s.push_str("<div class=\"subcaption\">");
+                out_s.push_str(country);
+                out_s.push_str("</div>");
+            }
+
+            // Administrative Area
+            if let Some(area) = balloon.placemark.sub_administrative_area {
+                out_s.push_str("<div class=\"trailing_subcaption\">");
+                out_s.push_str(area);
+                out_s.push_str("</div>");
+            }
+
+            // End footer
+            out_s.push_str("</div>");
+        }
+
+        // End the link
+        if balloon.get_url().is_some() {
+            out_s.push_str("</a>");
+        }
+        out_s
+    }
+
     fn format_handwriting(&self, _: &AppMessage, _: &Message) -> String {
         String::from("Handwritten messages are not yet supported!")
     }
@@ -1044,65 +1180,6 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
         message: &Message,
     ) -> String {
         self.balloon_to_html(balloon, bundle_id, attachments, message)
-    }
-
-    fn format_app_store(&self, balloon: &AppStoreMessage, _: &'a Message) -> String {
-        let mut out_s = String::new();
-
-        // Header section
-        out_s.push_str("<div class=\"app_header\">");
-
-        // App name
-        if let Some(app_name) = balloon.app_name {
-            out_s.push_str("<div class=\"name\">");
-            out_s.push_str(app_name);
-            out_s.push_str("</div>");
-        }
-
-        // Header end
-        out_s.push_str("</div>");
-
-        // Make the footer clickable so we can interact with the preview
-        if let Some(url) = balloon.url {
-            out_s.push_str("<a href=\"");
-            out_s.push_str(url);
-            out_s.push_str("\">");
-        }
-
-        // Only write the footer if there is data to write
-        if balloon.description.is_some() || balloon.genre.is_some() {
-            out_s.push_str("<div class=\"app_footer\">");
-
-            // App description
-            if let Some(description) = balloon.description {
-                out_s.push_str("<div class=\"caption\">");
-                out_s.push_str(description);
-                out_s.push_str("</div>");
-            }
-
-            // App platform
-            if let Some(platform) = balloon.platform {
-                out_s.push_str("<div class=\"subcaption\">");
-                out_s.push_str(platform);
-                out_s.push_str("</div>");
-            }
-
-            // App genre
-            if let Some(genre) = balloon.genre {
-                out_s.push_str("<div class=\"trailing_subcaption\">");
-                out_s.push_str(genre);
-                out_s.push_str("</div>");
-            }
-
-            // End footer
-            out_s.push_str("</div>");
-        }
-
-        // End the link
-        if balloon.url.is_some() {
-            out_s.push_str("</a>");
-        }
-        out_s
     }
 }
 
@@ -1798,8 +1875,12 @@ mod balloon_format_tests {
     use super::tests::{blank, fake_options};
     use crate::{exporters::exporter::BalloonFormatter, Config, Exporter, HTML};
     use imessage_database::message_types::{
-        app::AppMessage, app_store::AppStoreMessage, collaboration::CollaborationMessage,
-        music::MusicMessage, url::URLMessage,
+        app::AppMessage,
+        app_store::AppStoreMessage,
+        collaboration::CollaborationMessage,
+        music::MusicMessage,
+        placemark::{Placemark, PlacemarkMessage},
+        url::URLMessage,
     };
 
     #[test]
@@ -2079,6 +2160,37 @@ mod balloon_format_tests {
 
         let expected = exporter.format_app_store(&balloon, &blank());
         let actual = "<div class=\"app_header\"><div class=\"name\">app_name</div></div><a href=\"url\"><div class=\"app_footer\"><div class=\"caption\">description</div><div class=\"subcaption\">platform</div><div class=\"trailing_subcaption\">genre</div></div></a>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_placemark() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = PlacemarkMessage {
+            url: Some("url"),
+            original_url: Some("original_url"),
+            place_name: Some("Name"),
+            placemark: Placemark {
+                name: Some("name"),
+                address: Some("address"),
+                state: Some("state"),
+                city: Some("city"),
+                iso_country_code: Some("iso_country_code"),
+                postal_code: Some("postal_code"),
+                country: Some("country"),
+                street: Some("street"),
+                sub_administrative_area: Some("sub_administrative_area"),
+                sub_locality: Some("sub_locality"),
+            },
+        };
+
+        let expected = exporter.format_placemark(&balloon, &blank());
+        let actual = "<a href=\"url\"><div class=\"app_header\"><div class=\"name\">Name</div></div><div class=\"app_footer\"><div class=\"caption\">address</div><div class=\"trailing_caption\">postal_code</div><div class=\"subcaption\">country</div><div class=\"trailing_subcaption\">sub_administrative_area</div></div></a>";
 
         assert_eq!(expected, actual);
     }
