@@ -128,7 +128,7 @@ pub enum Variant<'a> {
 
 /// Defines behavior for different types of messages that have custom balloons
 pub trait BalloonProvider<'a> {
-    /// Creates the object from a ``HashMap`` of item attributes
+    /// Creates the object from a `HashMap` of item attributes
     fn from_map(payload: &'a Value) -> Result<Self, PlistParseError>
     where
         Self: Sized;

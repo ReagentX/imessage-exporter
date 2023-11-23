@@ -42,7 +42,7 @@ pub trait Diagnostic {
     fn run_diagnostic(db: &Connection) -> Result<(), TableError>;
 }
 
-/// Get a connection to the iMessage ``SQLite`` database
+/// Get a connection to the iMessage `SQLite` database
 // # Example:
 ///
 /// ```

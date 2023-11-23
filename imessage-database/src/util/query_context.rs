@@ -18,7 +18,7 @@ pub struct QueryContext {
 }
 
 impl QueryContext {
-    /// Generate a ``QueryContext`` with a start date
+    /// Generate a `QueryContext` with a start date
     /// # Example:
     ///
     /// ```
@@ -34,7 +34,7 @@ impl QueryContext {
         Ok(())
     }
 
-    /// Generate a ``QueryContext`` with an end date
+    /// Generate a `QueryContext` with an end date
     /// # Example:
     ///
     /// ```
@@ -82,7 +82,7 @@ impl QueryContext {
         Some(stamp - (get_offset() * TIMESTAMP_FACTOR))
     }
 
-    /// Determine if the current ``QueryContext`` has any filters present
+    /// Determine if the current `QueryContext` has any filters present
     ///
     /// # Example:
     ///
@@ -98,7 +98,7 @@ impl QueryContext {
         [self.start, self.end].iter().any(Option::is_some)
     }
 
-    /// Generate the SQL `WHERE` clause described by this ``QueryContext``
+    /// Generate the SQL `WHERE` clause described by this `QueryContext`
     /// # Example:
     ///
     /// ```

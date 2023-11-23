@@ -44,7 +44,7 @@ impl Table for Handle {
 impl Cacheable for Handle {
     type K = i32;
     type V = String;
-    /// Generate a ``HashMap`` for looking up contacts by their IDs, collapsing
+    /// Generate a `HashMap` for looking up contacts by their IDs, collapsing
     /// duplicate contacts to the same ID String regardless of service
     ///
     /// # Example:

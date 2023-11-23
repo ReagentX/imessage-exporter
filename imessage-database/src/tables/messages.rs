@@ -659,7 +659,7 @@ impl Message {
         }
     }
 
-    /// Build a ``HashMap`` of message component index to messages that react to that component
+    /// Build a `HashMap` of message component index to messages that react to that component
     pub fn get_reactions(
         &self,
         db: &Connection,
@@ -705,7 +705,7 @@ impl Message {
         Ok(out_h)
     }
 
-    /// Build a ``HashMap`` of message component index to messages that reply to that component
+    /// Build a `HashMap` of message component index to messages that reply to that component
     pub fn get_replies(&self, db: &Connection) -> Result<HashMap<usize, Vec<Self>>, TableError> {
         let mut out_h: HashMap<usize, Vec<Self>> = HashMap::new();
 
