@@ -154,11 +154,11 @@ mod test {
 
     #[test]
     fn can_find_program() {
-        assert!(exists("ls"))
+        assert!(exists("ls"));
     }
 
     #[test]
     fn can_miss_program() {
-        assert!(!exists("fake_name"))
+        assert!(!exists("fake_name"));
     }
 }

@@ -247,6 +247,6 @@ mod tests {
 
         let output = Handle::dedupe(&input);
         let expected_deduped_ids: HashSet<i32> = output.values().copied().collect();
-        assert_eq!(expected_deduped_ids.len(), 3)
+        assert_eq!(expected_deduped_ids.len(), 3);
     }
 }

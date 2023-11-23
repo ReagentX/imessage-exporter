@@ -874,7 +874,7 @@ mod directory_tests {
 
         // Get subdirectory
         let sub_dir = app.conversation_attachment_path(Some(0));
-        assert_eq!(String::from("0"), sub_dir)
+        assert_eq!(String::from("0"), sub_dir);
     }
 
     #[test]
@@ -887,7 +887,7 @@ mod directory_tests {
 
         // Get subdirectory
         let sub_dir = app.conversation_attachment_path(Some(1));
-        assert_eq!(String::from("orphaned"), sub_dir)
+        assert_eq!(String::from("orphaned"), sub_dir);
     }
 
     #[test]
@@ -900,7 +900,7 @@ mod directory_tests {
 
         // Get subdirectory
         let sub_dir = app.conversation_attachment_path(None);
-        assert_eq!(String::from("orphaned"), sub_dir)
+        assert_eq!(String::from("orphaned"), sub_dir);
     }
 
     #[test]

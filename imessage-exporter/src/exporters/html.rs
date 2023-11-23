@@ -321,7 +321,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                     &result,
                                     "<div class=\"sticker\">",
                                     "</div>",
-                                )
+                                );
                             } else {
                                 match self.format_attachment(attachment, message) {
                                     Ok(result) => {
@@ -411,7 +411,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                         );
                         self.add_line(&mut formatted_message, &formatted_reactions, "", "");
                     }
-                    self.add_line(&mut formatted_message, "</div>", "", "")
+                    self.add_line(&mut formatted_message, "</div>", "", "");
                 }
             }
 
@@ -433,7 +433,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                         }
                         Ok(())
                     })?;
-                self.add_line(&mut formatted_message, "</div>", "", "")
+                self.add_line(&mut formatted_message, "</div>", "", "");
             }
         }
 

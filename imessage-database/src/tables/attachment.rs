@@ -106,7 +106,7 @@ impl Attachment {
 
             for attachment in iter {
                 let m = Attachment::extract(attachment)?;
-                out_l.push(m)
+                out_l.push(m);
             }
         }
         Ok(out_l)

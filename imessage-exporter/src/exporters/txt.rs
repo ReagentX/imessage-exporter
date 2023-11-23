@@ -205,7 +205,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                     Some(attachment) => {
                         if attachment.is_sticker {
                             let result = self.format_sticker(attachment, message);
-                            self.add_line(&mut formatted_message, &result, &indent)
+                            self.add_line(&mut formatted_message, &result, &indent);
                         } else {
                             match self.format_attachment(attachment, message) {
                                 Ok(result) => {
@@ -213,7 +213,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                                     self.add_line(&mut formatted_message, &result, &indent);
                                 }
                                 Err(result) => {
-                                    self.add_line(&mut formatted_message, result, &indent)
+                                    self.add_line(&mut formatted_message, result, &indent);
                                 }
                             }
                         }

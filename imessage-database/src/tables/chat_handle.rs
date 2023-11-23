@@ -93,16 +93,13 @@ impl Deduplicate for ChatToHandle {
         // Build cache of each unique set of participants to a new identifier:
         let mut unique_chat_identifier = 0;
         for (chat_id, participants) in duplicated_data {
-            match participants_to_unique_chat_id.get(participants) {
-                Some(id) => {
-                    deduplicated_chats.insert(chat_id.to_owned(), id.to_owned());
-                }
-                None => {
-                    participants_to_unique_chat_id
-                        .insert(participants.to_owned(), unique_chat_identifier);
-                    deduplicated_chats.insert(chat_id.to_owned(), unique_chat_identifier);
-                    unique_chat_identifier += 1;
-                }
+            if let Some(id) = participants_to_unique_chat_id.get(participants) {
+                deduplicated_chats.insert(chat_id.to_owned(), id.to_owned());
+            } else {
+                participants_to_unique_chat_id
+                    .insert(participants.to_owned(), unique_chat_identifier);
+                deduplicated_chats.insert(chat_id.to_owned(), unique_chat_identifier);
+                unique_chat_identifier += 1;
             }
         }
         deduplicated_chats

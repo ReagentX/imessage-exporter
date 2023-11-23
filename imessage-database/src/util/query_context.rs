@@ -257,42 +257,42 @@ mod sanitize_tests {
     #[test]
     fn can_sanitize_good() {
         let res = QueryContext::sanitize_date("2020-01-01");
-        assert!(res.is_some())
+        assert!(res.is_some());
     }
 
     #[test]
     fn can_reject_bad_short() {
         let res = QueryContext::sanitize_date("1-1-20");
-        assert!(res.is_none())
+        assert!(res.is_none());
     }
 
     #[test]
     fn can_reject_bad_order() {
         let res = QueryContext::sanitize_date("01-01-2020");
-        assert!(res.is_none())
+        assert!(res.is_none());
     }
 
     #[test]
     fn can_reject_bad_month() {
         let res = QueryContext::sanitize_date("2020-31-01");
-        assert!(res.is_none())
+        assert!(res.is_none());
     }
 
     #[test]
     fn can_reject_bad_day() {
         let res = QueryContext::sanitize_date("2020-01-32");
-        assert!(res.is_none())
+        assert!(res.is_none());
     }
 
     #[test]
     fn can_reject_bad_data() {
         let res = QueryContext::sanitize_date("2020-AB-CD");
-        assert!(res.is_none())
+        assert!(res.is_none());
     }
 
     #[test]
     fn can_reject_wrong_hyphen() {
         let res = QueryContext::sanitize_date("2020–01–01");
-        assert!(res.is_none())
+        assert!(res.is_none());
     }
 }
