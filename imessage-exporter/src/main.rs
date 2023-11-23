@@ -23,11 +23,11 @@ fn main() {
         match Config::new(options.unwrap()) {
             Ok(app) => {
                 if let Err(why) = app.start() {
-                    eprintln!("Unable to start: {why}")
+                    eprintln!("Unable to start: {why}");
                 }
             }
             Err(why) => {
-                eprintln!("Unable to launch: {why}")
+                eprintln!("Unable to launch: {why}");
             }
         }
     }

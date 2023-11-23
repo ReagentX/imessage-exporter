@@ -18,7 +18,7 @@ use crate::app::{
 pub enum AttachmentManager {
     /// Do not copy attachments
     Disabled,
-    /// Copy and convert attachments to more compatible formats using a [`Converter`](crate::app::converter::Converter)
+    /// Copy and convert attachments to more compatible formats using a [`Converter`]
     Compatible,
     /// Copy attachments without converting; preserves quality but may not display correctly in all browsers
     Efficient,
@@ -96,7 +96,7 @@ impl AttachmentManager {
                 let atime = FileTime::from_last_access_time(&metadata);
 
                 if let Err(why) = set_file_times(&to, atime, mtime) {
-                    eprintln!("Unable to update {to:?} metadata: {why}")
+                    eprintln!("Unable to update {to:?} metadata: {why}");
                 }
             }
             attachment.copied_path = Some(to);
@@ -115,7 +115,7 @@ impl AttachmentManager {
             }
         }
         if let Err(why) = copy(from, to) {
-            eprintln!("Unable to copy {from:?} to {to:?}: {why}")
+            eprintln!("Unable to copy {from:?} to {to:?}: {why}");
         };
     }
 
@@ -133,17 +133,17 @@ impl AttachmentManager {
             // Determine the output type of the sticker
             let output_type: Option<ImageType> = match original_extension.to_str() {
                 // Normal stickers get converted to png
-                Some("heic") | Some("HEIC") => Some(ImageType::Png),
+                Some("heic" | "HEIC") => Some(ImageType::Png),
                 // Animated stickers get converted to gif
-                Some("heics") | Some("HEICS") => Some(ImageType::Gif),
+                Some("heics" | "HEICS") => Some(ImageType::Gif),
                 _ => None,
             };
 
             match output_type {
                 Some(output_type) => {
                     to.set_extension(output_type.to_str());
-                    if convert_heic(from, to, converter, output_type).is_none() {
-                        eprintln!("Unable to convert {from:?}")
+                    if convert_heic(from, to, converter, &output_type).is_none() {
+                        eprintln!("Unable to convert {from:?}");
                     }
                 }
                 None => Self::copy_raw(from, to),
@@ -154,8 +154,8 @@ impl AttachmentManager {
             let output_type = ImageType::Jpeg;
             // Update extension for conversion
             to.set_extension(output_type.to_str());
-            if convert_heic(from, to, converter, output_type).is_none() {
-                eprintln!("Unable to convert {from:?}")
+            if convert_heic(from, to, converter, &output_type).is_none() {
+                eprintln!("Unable to convert {from:?}");
             }
         } else {
             Self::copy_raw(from, to);

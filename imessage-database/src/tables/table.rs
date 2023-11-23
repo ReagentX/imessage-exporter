@@ -42,7 +42,7 @@ pub trait Diagnostic {
     fn run_diagnostic(db: &Connection) -> Result<(), TableError>;
 }
 
-/// Get a connection to the iMessage SQLite database
+/// Get a connection to the iMessage ``SQLite`` database
 // # Example:
 ///
 /// ```
@@ -60,7 +60,7 @@ pub fn get_connection(path: &Path) -> Result<Connection, TableError> {
             Ok(res) => Ok(res),
             Err(why) => Err(
                 TableError::CannotConnect(
-                    format!("Unable to read from chat database: {}\nEnsure full disk access is enabled for your terminal emulator in System Settings > Security and Privacy > Full Disk Access", why)
+                    format!("Unable to read from chat database: {why}\nEnsure full disk access is enabled for your terminal emulator in System Settings > Security and Privacy > Full Disk Access")
                 )),
             };
     };

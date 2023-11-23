@@ -18,7 +18,7 @@ pub struct QueryContext {
 }
 
 impl QueryContext {
-    /// Generate a QueryContext with a start date
+    /// Generate a ``QueryContext`` with a start date
     /// # Example:
     ///
     /// ```
@@ -34,7 +34,7 @@ impl QueryContext {
         Ok(())
     }
 
-    /// Generate a QueryContext with an end date
+    /// Generate a ``QueryContext`` with an end date
     /// # Example:
     ///
     /// ```
@@ -82,7 +82,7 @@ impl QueryContext {
         Some(stamp - (get_offset() * TIMESTAMP_FACTOR))
     }
 
-    /// Determine if the current QueryContext has any filters present
+    /// Determine if the current ``QueryContext`` has any filters present
     ///
     /// # Example:
     ///
@@ -93,13 +93,12 @@ impl QueryContext {
     /// assert!(!context.has_filters());
     /// context.set_start("2023-01-01");
     /// assert!(context.has_filters());
+    /// ```
     pub fn has_filters(&self) -> bool {
-        [self.start, self.end]
-            .iter()
-            .any(|maybe_date| maybe_date.is_some())
+        [self.start, self.end].iter().any(Option::is_some)
     }
 
-    /// Generate the SQL `WHERE` clause described by this QueryContext
+    /// Generate the SQL `WHERE` clause described by this ``QueryContext``
     /// # Example:
     ///
     /// ```
@@ -108,14 +107,15 @@ impl QueryContext {
     /// let mut context = QueryContext::default();
     /// context.set_start("2023-01-01");
     /// let filters = context.generate_filter_statement();
+    /// ```
     pub fn generate_filter_statement(&self) -> String {
         let mut filters = String::new();
         if let Some(start) = self.start {
-            filters.push_str(&format!("    m.date >= {start}"))
+            filters.push_str(&format!("    m.date >= {start}"));
         }
         if let Some(end) = self.end {
             if !filters.is_empty() {
-                filters.push_str(" AND ")
+                filters.push_str(" AND ");
             }
             filters.push_str(&format!("    m.date <= {end}"));
         }
@@ -257,42 +257,42 @@ mod sanitize_tests {
     #[test]
     fn can_sanitize_good() {
         let res = QueryContext::sanitize_date("2020-01-01");
-        assert!(res.is_some())
+        assert!(res.is_some());
     }
 
     #[test]
     fn can_reject_bad_short() {
         let res = QueryContext::sanitize_date("1-1-20");
-        assert!(res.is_none())
+        assert!(res.is_none());
     }
 
     #[test]
     fn can_reject_bad_order() {
         let res = QueryContext::sanitize_date("01-01-2020");
-        assert!(res.is_none())
+        assert!(res.is_none());
     }
 
     #[test]
     fn can_reject_bad_month() {
         let res = QueryContext::sanitize_date("2020-31-01");
-        assert!(res.is_none())
+        assert!(res.is_none());
     }
 
     #[test]
     fn can_reject_bad_day() {
         let res = QueryContext::sanitize_date("2020-01-32");
-        assert!(res.is_none())
+        assert!(res.is_none());
     }
 
     #[test]
     fn can_reject_bad_data() {
         let res = QueryContext::sanitize_date("2020-AB-CD");
-        assert!(res.is_none())
+        assert!(res.is_none());
     }
 
     #[test]
     fn can_reject_wrong_hyphen() {
         let res = QueryContext::sanitize_date("2020–01–01");
-        assert!(res.is_none())
+        assert!(res.is_none());
     }
 }

@@ -268,7 +268,7 @@ mod url_tests {
             site_name: None,
             placeholder: false,
         };
-        assert_eq!(expected.get_url(), Some("https://chrissardegna.com/"))
+        assert_eq!(expected.get_url(), Some("https://chrissardegna.com/"));
     }
 
     #[test]
@@ -284,7 +284,7 @@ mod url_tests {
             site_name: None,
             placeholder: false,
         };
-        assert_eq!(expected.get_url(), Some("https://chrissardegna.com"))
+        assert_eq!(expected.get_url(), Some("https://chrissardegna.com"));
     }
 
     #[test]
@@ -300,7 +300,7 @@ mod url_tests {
             site_name: None,
             placeholder: false,
         };
-        assert_eq!(expected.get_url(), None)
+        assert_eq!(expected.get_url(), None);
     }
 }
 
@@ -325,7 +325,7 @@ mod url_override_tests {
         let parsed = parse_plist(&plist).unwrap();
 
         let balloon = URLMessage::get_url_message_override(&parsed).unwrap();
-        assert!(matches!(balloon, URLOverride::Normal(_)))
+        assert!(matches!(balloon, URLOverride::Normal(_)));
     }
 
     #[test]
@@ -339,7 +339,7 @@ mod url_override_tests {
         let parsed = parse_plist(&plist).unwrap();
 
         let balloon = URLMessage::get_url_message_override(&parsed).unwrap();
-        assert!(matches!(balloon, URLOverride::AppleMusic(_)))
+        assert!(matches!(balloon, URLOverride::AppleMusic(_)));
     }
 
     #[test]
@@ -353,7 +353,7 @@ mod url_override_tests {
         let parsed = parse_plist(&plist).unwrap();
 
         let balloon = URLMessage::get_url_message_override(&parsed).unwrap();
-        assert!(matches!(balloon, URLOverride::AppStore(_)))
+        assert!(matches!(balloon, URLOverride::AppStore(_)));
     }
 
     #[test]
@@ -367,6 +367,6 @@ mod url_override_tests {
         let parsed = parse_plist(&plist).unwrap();
 
         let balloon = URLMessage::get_url_message_override(&parsed).unwrap();
-        assert!(matches!(balloon, URLOverride::Collaboration(_)))
+        assert!(matches!(balloon, URLOverride::Collaboration(_)));
     }
 }

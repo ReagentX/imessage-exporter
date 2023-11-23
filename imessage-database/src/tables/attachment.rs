@@ -72,7 +72,7 @@ impl Table for Attachment {
     }
 
     fn get(db: &Connection) -> Result<Statement, TableError> {
-        db.prepare(&format!("SELECT * from {}", ATTACHMENT))
+        db.prepare(&format!("SELECT * from {ATTACHMENT}"))
             .map_err(TableError::Attachment)
     }
 
@@ -106,7 +106,7 @@ impl Attachment {
 
             for attachment in iter {
                 let m = Attachment::extract(attachment)?;
-                out_l.push(m)
+                out_l.push(m);
             }
         }
         Ok(out_l)
@@ -166,7 +166,7 @@ impl Attachment {
         Ok(None)
     }
 
-    /// Determine the [`StickerEffect`](crate::message_types::sticker::StickerEffect) of a sticker message
+    /// Determine the [`StickerEffect`] of a sticker message
     pub fn get_sticker_effect(
         &self,
         platform: &Platform,
@@ -239,7 +239,7 @@ impl Attachment {
     ///
     /// iOS Parsing logic source is from [here](https://github.com/nprezant/iMessageBackup/blob/940d001fb7be557d5d57504eb26b3489e88de26e/imessage_backup_tools.py#L83-L85).
     ///
-    /// Use the optional `custom_attachment_root` parameter when the attachments are not stored in the same place as the database expects. The expected location is [`DEFAULT_ATTACHMENT_ROOT`](crate::tables::attachment::DEFAULT_ATTACHMENT_ROOT).
+    /// Use the optional `custom_attachment_root` parameter when the attachments are not stored in the same place as the database expects. The expected location is [`DEFAULT_ATTACHMENT_ROOT`].
     /// A custom attachment root like `/custom/path` will overwrite a path like `~/Library/Messages/Attachments/3d/...` to `/custom/path/3d...`
     pub fn resolved_attachment_path(
         &self,
@@ -267,8 +267,8 @@ impl Attachment {
     /// Get the number of attachments that are missing from the filesystem
     /// or are missing one of the following columns:
     ///
-    /// - ck_server_change_token_blob
-    /// - sr_ck_server_change_token_blob
+    /// - `ck_server_change_token_blob`
+    /// - `sr_ck_server_change_token_blob`
     ///
     /// # Example:
     ///

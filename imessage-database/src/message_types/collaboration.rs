@@ -130,6 +130,6 @@ mod tests {
             app_name: Some("Freeform"),
         };
 
-        assert_eq!(actual, expected)
+        assert_eq!(actual, expected);
     }
 }

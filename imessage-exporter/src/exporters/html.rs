@@ -212,7 +212,7 @@ impl<'a> Writer<'a> for HTML<'a> {
         // Add message sender
         self.add_line(
             &mut formatted_message,
-            self.config.who(&message.handle_id, message.is_from_me),
+            self.config.who(message.handle_id, message.is_from_me),
             "<span class=\"sender\">",
             "</span></p>",
         );
@@ -321,7 +321,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                     &result,
                                     "<div class=\"sticker\">",
                                     "</div>",
-                                )
+                                );
                             } else {
                                 match self.format_attachment(attachment, message) {
                                     Ok(result) => {
@@ -411,7 +411,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                         );
                         self.add_line(&mut formatted_message, &formatted_reactions, "", "");
                     }
-                    self.add_line(&mut formatted_message, "</div>", "", "")
+                    self.add_line(&mut formatted_message, "</div>", "", "");
                 }
             }
 
@@ -433,7 +433,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                         }
                         Ok(())
                     })?;
-                self.add_line(&mut formatted_message, "</div>", "", "")
+                self.add_line(&mut formatted_message, "</div>", "", "");
             }
         }
 
@@ -533,69 +533,57 @@ impl<'a> Writer<'a> for HTML<'a> {
         if let Variant::App(balloon) = message.variant() {
             let mut app_bubble = String::new();
 
-            match message.payload_data(&self.config.db) {
-                Some(payload) => {
-                    let parsed = parse_plist(&payload)?;
+            if let Some(payload) = message.payload_data(&self.config.db) {
+                let parsed = parse_plist(&payload)?;
 
-                    let res = if message.is_url() {
-                        let bubble = URLMessage::get_url_message_override(&parsed)?;
-                        match bubble {
-                            URLOverride::Normal(balloon) => self.format_url(&balloon, message),
-                            URLOverride::AppleMusic(balloon) => {
-                                self.format_music(&balloon, message)
-                            }
-                            URLOverride::Collaboration(balloon) => {
-                                self.format_collaboration(&balloon, message)
-                            }
-                            URLOverride::AppStore(balloon) => {
-                                self.format_app_store(&balloon, message)
-                            }
+                let res = if message.is_url() {
+                    let bubble = URLMessage::get_url_message_override(&parsed)?;
+                    match bubble {
+                        URLOverride::Normal(balloon) => self.format_url(&balloon, message),
+                        URLOverride::AppleMusic(balloon) => self.format_music(&balloon, message),
+                        URLOverride::Collaboration(balloon) => {
+                            self.format_collaboration(&balloon, message)
                         }
-                    } else {
-                        match AppMessage::from_map(&parsed) {
-                            Ok(bubble) => match balloon {
-                                CustomBalloon::Application(bundle_id) => self.format_generic_app(
-                                    &bubble,
-                                    bundle_id,
-                                    attachments,
-                                    message,
-                                ),
-                                CustomBalloon::Handwriting => {
-                                    self.format_handwriting(&bubble, message)
-                                }
-                                CustomBalloon::ApplePay => self.format_apple_pay(&bubble, message),
-                                CustomBalloon::Fitness => self.format_fitness(&bubble, message),
-                                CustomBalloon::Slideshow => self.format_slideshow(&bubble, message),
-                                CustomBalloon::CheckIn => self.format_check_in(&bubble, message),
-                                _ => unreachable!(),
-                            },
-                            Err(why) => return Err(why),
-                        }
-                    };
-                    app_bubble.push_str(&res);
-                }
-                None => {
-                    // Sometimes, URL messages are missing their payloads
-                    if message.is_url() {
-                        if let Some(text) = &message.text {
-                            let mut out_s = String::new();
-                            out_s.push_str("<a href=\"");
-                            out_s.push_str(text);
-                            out_s.push_str("\">");
-
-                            out_s.push_str("<div class=\"app_header\"><div class=\"name\">");
-                            out_s.push_str(text);
-                            out_s.push_str("</div></div>");
-
-                            out_s.push_str("<div class=\"app_footer\"><div class=\"caption\">");
-                            out_s.push_str(text);
-                            out_s.push_str("</div></div></a>");
-
-                            return Ok(out_s);
-                        }
+                        URLOverride::AppStore(balloon) => self.format_app_store(&balloon, message),
                     }
-                    return Err(PlistParseError::NoPayload);
+                } else {
+                    match AppMessage::from_map(&parsed) {
+                        Ok(bubble) => match balloon {
+                            CustomBalloon::Application(bundle_id) => {
+                                self.format_generic_app(&bubble, bundle_id, attachments, message)
+                            }
+                            CustomBalloon::Handwriting => self.format_handwriting(&bubble, message),
+                            CustomBalloon::ApplePay => self.format_apple_pay(&bubble, message),
+                            CustomBalloon::Fitness => self.format_fitness(&bubble, message),
+                            CustomBalloon::Slideshow => self.format_slideshow(&bubble, message),
+                            CustomBalloon::CheckIn => self.format_check_in(&bubble, message),
+                            CustomBalloon::URL => unreachable!(),
+                        },
+                        Err(why) => return Err(why),
+                    }
+                };
+                app_bubble.push_str(&res);
+            } else {
+                // Sometimes, URL messages are missing their payloads
+                if message.is_url() {
+                    if let Some(text) = &message.text {
+                        let mut out_s = String::new();
+                        out_s.push_str("<a href=\"");
+                        out_s.push_str(text);
+                        out_s.push_str("\">");
+
+                        out_s.push_str("<div class=\"app_header\"><div class=\"name\">");
+                        out_s.push_str(text);
+                        out_s.push_str("</div></div>");
+
+                        out_s.push_str("<div class=\"app_footer\"><div class=\"caption\">");
+                        out_s.push_str(text);
+                        out_s.push_str("</div></div></a>");
+
+                        return Ok(out_s);
+                    }
                 }
+                return Err(PlistParseError::NoPayload);
             }
             Ok(app_bubble)
         } else {
@@ -607,17 +595,17 @@ impl<'a> Writer<'a> for HTML<'a> {
         match msg.variant() {
             Variant::Reaction(_, added, reaction) => {
                 if !added {
-                    return Ok("".to_string());
+                    return Ok(String::new());
                 }
                 Ok(format!(
                     "<span class=\"reaction\"><b>{:?}</b> by {}</span>",
                     reaction,
-                    self.config.who(&msg.handle_id, msg.is_from_me),
+                    self.config.who(msg.handle_id, msg.is_from_me),
                 ))
             }
             Variant::Sticker(_) => {
                 let mut paths = Attachment::from_message(&self.config.db, msg)?;
-                let who = self.config.who(&msg.handle_id, msg.is_from_me);
+                let who = self.config.who(msg.handle_id, msg.is_from_me);
                 // Sticker messages have only one attachment, the sticker image
                 Ok(match paths.get_mut(0) {
                     Some(sticker) => self.format_sticker(sticker, msg),
@@ -655,10 +643,10 @@ impl<'a> Writer<'a> for HTML<'a> {
     }
 
     fn format_announcement(&self, msg: &'a Message) -> String {
-        let mut who = self.config.who(&msg.handle_id, msg.is_from_me);
+        let mut who = self.config.who(msg.handle_id, msg.is_from_me);
         // Rename yourself so we render the proper grammar here
         if who == ME {
-            who = self.config.options.custom_name.as_deref().unwrap_or("You")
+            who = self.config.options.custom_name.as_deref().unwrap_or("You");
         }
         let timestamp = format(&msg.date(&self.config.offset));
 
@@ -727,7 +715,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                     &format!("Edited {diff} later"),
                                     text,
                                     last,
-                                ))
+                                ));
                             }
                         }
 
@@ -1131,10 +1119,7 @@ impl<'a> HTML<'a> {
     }
 
     fn edited_to_html(&self, timestamp: &str, text: &str, last: bool) -> String {
-        let tag = match last {
-            true => "tfoot",
-            false => "tbody",
-        };
+        let tag = if last { "tfoot" } else { "tbody" };
         format!("<{tag}><tr><td><span class=\"timestamp\">{timestamp}</span></td><td>{text}</td></tr></{tag}>")
     }
 

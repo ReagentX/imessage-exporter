@@ -282,12 +282,14 @@ impl Cacheable for Message {
     ///
     /// Builds a map like:
     ///
+    /// ```json
     /// {
-    ///     message_guid: {
+    ///     "message_guid": {
     ///         0: [Message, Message],
     ///         1: [Message]
     ///     }
     /// }
+    /// ```
     ///
     /// Where the `0` and `1` are the reaction indexes in the body of the message mapped by `message_guid`
     fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
@@ -345,7 +347,7 @@ impl Cacheable for Message {
 }
 
 impl Message {
-    /// Get the body text of a message, parsing it as [`streamtyped`](crate::util::streamtyped) data if necessary.
+    /// Get the body text of a message, parsing it as [`streamtyped`] data if necessary.
     // TODO: resolve the compiler warnings with this method
     pub fn gen_text<'a>(&'a mut self, db: &'a Connection) -> Result<&'a str, MessageError> {
         if self.text.is_none() {
@@ -593,11 +595,12 @@ impl Message {
     ) -> Result<Statement<'a>, TableError> {
         if !context.has_filters() {
             return Self::get(db);
-        } else {
-            let filters = context.generate_filter_statement();
+        }
 
-            // If database has `thread_originator_guid`, we can parse replies, otherwise default to 0
-            Ok(db.prepare(&format!(
+        let filters = context.generate_filter_statement();
+
+        // If database has `thread_originator_guid`, we can parse replies, otherwise default to 0
+        Ok(db.prepare(&format!(
                 "SELECT
                      *,
                      c.chat_id,
@@ -627,7 +630,6 @@ impl Message {
                      m.date;
                 "
             )).map_err(TableError::Messages)?))
-        }
     }
 
     /// See [Reaction](crate::message_types::variants::Reaction) for details on this data.
@@ -641,9 +643,9 @@ impl Message {
                 return Some((index, message_id.get(0..36)?));
             } else if guid.starts_with("bp:") {
                 return Some((0, guid.get(3..39)?));
-            } else {
-                return Some((0, guid.get(0..36)?));
             }
+
+            return Some((0, guid.get(0..36)?));
         }
         None
     }
@@ -656,7 +658,7 @@ impl Message {
         }
     }
 
-    /// Build a HashMap of message component index to messages that react to that component
+    /// Build a ``HashMap`` of message component index to messages that react to that component
     pub fn get_reactions(
         &self,
         db: &Connection,
@@ -702,7 +704,7 @@ impl Message {
         Ok(out_h)
     }
 
-    /// Build a HashMap of message component index to messages that reply to that component
+    /// Build a ``HashMap`` of message component index to messages that reply to that component
     pub fn get_replies(&self, db: &Connection) -> Result<HashMap<usize, Vec<Self>>, TableError> {
         let mut out_h: HashMap<usize, Vec<Self>> = HashMap::new();
 
@@ -1085,7 +1087,7 @@ mod tests {
         assert_eq!(
             message.time_until_read(&offset),
             Some("1 hour, 49 seconds".to_string())
-        )
+        );
     }
 
     #[test]
@@ -1102,7 +1104,7 @@ mod tests {
         // May 17, 2022  8:29:42 PM
         message.date_read = 674526582885055488;
 
-        assert_eq!(message.time_until_read(&offset), None)
+        assert_eq!(message.time_until_read(&offset), None);
     }
 
     #[test]
@@ -1135,7 +1137,7 @@ mod tests {
     #[test]
     fn can_get_no_balloon_bundle_id() {
         let m = blank();
-        assert_eq!(m.parse_balloon_bundle_id(), None)
+        assert_eq!(m.parse_balloon_bundle_id(), None);
     }
 
     #[test]
@@ -1145,7 +1147,7 @@ mod tests {
         assert_eq!(
             m.parse_balloon_bundle_id(),
             Some("com.apple.Handwriting.HandwritingProvider")
-        )
+        );
     }
 
     #[test]
@@ -1155,7 +1157,7 @@ mod tests {
         assert_eq!(
             m.parse_balloon_bundle_id(),
             Some("com.apple.messages.URLBalloonProvider")
-        )
+        );
     }
 
     #[test]
@@ -1165,7 +1167,7 @@ mod tests {
         assert_eq!(
             m.parse_balloon_bundle_id(),
             Some("com.apple.PassbookUIService.PeerPaymentMessagesExtension")
-        )
+        );
     }
 
     #[test]
