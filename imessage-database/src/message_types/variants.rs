@@ -76,7 +76,7 @@ pub enum CustomBalloon<'a> {
 
 /// URL Message Types
 ///
-/// Apple sometimes semantically overloads the `com.apple.messages.URLBalloonProvider` with
+/// Apple sometimes overloads `com.apple.messages.URLBalloonProvider` with
 /// other types of messages; this enum represents those variants.
 #[derive(Debug)]
 pub enum URLOverride<'a> {
@@ -88,7 +88,7 @@ pub enum URLOverride<'a> {
     AppStore(AppStoreMessage<'a>),
     /// [`Collaboration`](crate::message_types::collaboration) messages
     Collaboration(CollaborationMessage<'a>),
-    /// [`Shared Location`](crate::message_types::shared_location) messages
+    /// [`Shared Location`](crate::message_types::placemark) messages
     SharedPlacemark(PlacemarkMessage<'a>),
 }
 
