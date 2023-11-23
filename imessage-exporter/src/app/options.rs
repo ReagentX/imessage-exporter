@@ -320,7 +320,7 @@ fn get_command() -> Command {
             Arg::new(OPTION_ATTACHMENT_ROOT)
                 .short('r')
                 .long(OPTION_ATTACHMENT_ROOT)
-                .help(format!("Specify an optional custom path to look for attachments in (macOS only)\nOnly use this if attachments are stored separately from the database's default location\nThe default location is {DEFAULT_ATTACHMENT_ROOT}\n"))
+                .help(format!("Specify an optional custom path to look for attachments in (macOS only)\nOnly use this if attachments are stored separately from the database's default location\nThe default location is {}\n", DEFAULT_ATTACHMENT_ROOT.replacen('~', &home(), 1)))
                 .display_order(4)
                 .value_name("path/to/attachments"),
         )
