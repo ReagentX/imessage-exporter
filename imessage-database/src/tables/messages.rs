@@ -589,6 +589,7 @@ impl Message {
     /// let conn = get_connection(&db_path).unwrap();
     /// let context = QueryContext::default();
     /// Message::stream_rows(&conn, &context).unwrap();
+    /// ```
     pub fn stream_rows<'a>(
         db: &'a Connection,
         context: &'a QueryContext,
