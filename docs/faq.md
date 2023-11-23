@@ -14,7 +14,7 @@ No, `imessage-exporter` only reads data present on the host system.
 
 #### How does the exporter handle previously exported messages?
 
-If files with the current output type exist in the output directory, `imessage-exporter` will alert the user that they will overwrite existing exported data and the export will be cancelled. If the export directory is clear, `imessage-exporter` will export all messages by default, or between the dates specified by the `--start-date` and `--end-date` arguments.
+If files with the current output type exist in the output directory, `imessage-exporter` will alert the user that they will overwrite existing exported data and the export will be cancelled. If the export directory is clear, `imessage-exporter` will export all messages by default. Alternatively, it will export messages between the dates specified by the `--start-date` and `--end-date` arguments.
 
 See [here](../imessage-exporter/README.md#how-to-use) for details on `imessage-exporter` arguments.
 
@@ -58,11 +58,14 @@ Messages that have expired from this restoration process are permanently deleted
 
 This is a complicated question that depends on CPU, database size, chosen export type, and chosen attachment handling style.
 
-On my M1 Max MacBook Pro, performance is as follows:
+On my M1 Max MacBook Pro, approximate performance is as follows:
 
-- With `--copy-method disabled`, exports run at about `18k` messages per second
-- With `--copy-method efficient`, exports run at about `13k` messages per second
-- With `--copy-method compatible`, exports run at about `300` messages per second
-- For more information on `--copy-method`, see [here](../imessage-exporter/README.md#how-to-use) and [here](./features.md#supported-message-features).
+| `--copy-method` | Messages exported per second |
+|---|---|
+| `disabled` | 18,000 |
+| `efficient` | 13,000 |
+| `compatible` | 300 |
 
-However, if you recently deleted a large amount of data from Messages, the database will be slow for awhile, and will result in significantly reduced performance from `imessage-exporter`.
+For more information on `--copy-method`, see [here](../imessage-exporter/README.md#how-to-use) and [here](./features.md#supported-message-features).
+
+However, if you recently deleted a large amount of data from Messages, the database will be slow for awhile, resulting in significantly reduced performance from `imessage-exporter`.
