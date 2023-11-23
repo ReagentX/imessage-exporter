@@ -738,7 +738,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                 let _ = file.write_all(text.as_bytes());
             }
             Err(why) => eprintln!("Unable to write to {file:?}: {why:?}"),
-        }
+        };
     }
 }
 
