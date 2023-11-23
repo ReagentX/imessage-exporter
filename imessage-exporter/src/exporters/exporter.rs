@@ -4,7 +4,7 @@ use imessage_database::{
     error::{message::MessageError, plist::PlistParseError, table::TableError},
     message_types::{
         app::AppMessage, app_store::AppStoreMessage, collaboration::CollaborationMessage,
-        music::MusicMessage, url::URLMessage,
+        music::MusicMessage, shared_placemark::PlacemarkMessage, url::URLMessage,
     },
     tables::{attachment::Attachment, messages::Message},
 };
@@ -63,6 +63,8 @@ pub(super) trait BalloonFormatter<T> {
     fn format_collaboration(&self, balloon: &CollaborationMessage, indent: T) -> String;
     /// Format an App Store link
     fn format_app_store(&self, balloon: &AppStoreMessage, indent: T) -> String;
+    /// Format a shared location message
+    fn format_placemark(&self, balloon: &PlacemarkMessage, indent: T) -> String;
     /// Format a handwritten note message
     fn format_handwriting(&self, balloon: &AppMessage, indent: T) -> String;
     /// Format an Apple Pay message

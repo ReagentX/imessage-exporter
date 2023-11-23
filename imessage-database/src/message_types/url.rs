@@ -17,6 +17,8 @@ use crate::{
     util::plist::{get_bool_from_dict, get_string_from_dict, get_string_from_nested_dict},
 };
 
+use super::shared_placemark::PlacemarkMessage;
+
 /// This struct is not documented by Apple, but represents messages created by
 /// `com.apple.messages.URLBalloonProvider`.
 #[derive(Debug, PartialEq, Eq)]
@@ -70,6 +72,9 @@ impl<'a> URLMessage<'a> {
         }
         if let Ok(balloon) = AppStoreMessage::from_map(payload) {
             return Ok(URLOverride::AppStore(balloon));
+        }
+        if let Ok(balloon) = PlacemarkMessage::from_map(payload) {
+            return Ok(URLOverride::SharedPlacemark(balloon));
         }
         if let Ok(balloon) = URLMessage::from_map(payload) {
             return Ok(URLOverride::Normal(balloon));
@@ -368,5 +373,20 @@ mod url_override_tests {
 
         let balloon = URLMessage::get_url_message_override(&parsed).unwrap();
         assert!(matches!(balloon, URLOverride::Collaboration(_)));
+    }
+
+    #[test]
+    fn can_parse_placemark() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/shared_placemark/SharedPlacemark.plist");
+        let plist_data = File::open(plist_path).unwrap();
+        let plist = Value::from_reader(plist_data).unwrap();
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = URLMessage::get_url_message_override(&parsed).unwrap();
+        println!("{balloon:?}");
+        assert!(matches!(balloon, URLOverride::SharedPlacemark(_)));
     }
 }

@@ -8,6 +8,7 @@ pub mod collaboration;
 pub mod edited;
 pub mod expressives;
 pub mod music;
+pub mod shared_placemark;
 pub mod sticker;
 pub mod url;
 pub mod variants;

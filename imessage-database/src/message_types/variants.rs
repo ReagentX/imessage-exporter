@@ -8,7 +8,7 @@ use crate::{
     error::plist::PlistParseError,
     message_types::{
         app_store::AppStoreMessage, collaboration::CollaborationMessage, music::MusicMessage,
-        url::URLMessage,
+        shared_placemark::PlacemarkMessage, url::URLMessage,
     },
 };
 
@@ -80,14 +80,16 @@ pub enum CustomBalloon<'a> {
 /// other types of messages; this enum represents those variants.
 #[derive(Debug)]
 pub enum URLOverride<'a> {
-    /// [URL](crate::message_types::url) previews
+    /// [`URL`](crate::message_types::url) previews
     Normal(URLMessage<'a>),
-    /// [Apple Music](crate::message_types::music) messages
+    /// [`Apple Music`](crate::message_types::music) messages
     AppleMusic(MusicMessage<'a>),
-    /// [App Store](crate::message_types::app_store) messages
+    /// [`App Store`](crate::message_types::app_store) messages
     AppStore(AppStoreMessage<'a>),
-    /// [Collaboration](crate::message_types::collaboration) messages
+    /// [`Collaboration`](crate::message_types::collaboration) messages
     Collaboration(CollaborationMessage<'a>),
+    /// [`Shared Location`](crate::message_types::shared_location) messages
+    SharedPlacemark(PlacemarkMessage<'a>),
 }
 
 /// Announcement Message Types
