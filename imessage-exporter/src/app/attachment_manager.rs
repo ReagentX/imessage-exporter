@@ -18,7 +18,7 @@ use crate::app::{
 pub enum AttachmentManager {
     /// Do not copy attachments
     Disabled,
-    /// Copy and convert attachments to more compatible formats using a [`Converter`](crate::app::converter::Converter)
+    /// Copy and convert attachments to more compatible formats using a [`Converter`]
     Compatible,
     /// Copy attachments without converting; preserves quality but may not display correctly in all browsers
     Efficient,

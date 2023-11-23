@@ -347,7 +347,7 @@ impl Cacheable for Message {
 }
 
 impl Message {
-    /// Get the body text of a message, parsing it as [`streamtyped`](crate::util::streamtyped) data if necessary.
+    /// Get the body text of a message, parsing it as [`streamtyped`] data if necessary.
     // TODO: resolve the compiler warnings with this method
     pub fn gen_text<'a>(&'a mut self, db: &'a Connection) -> Result<&'a str, MessageError> {
         if self.text.is_none() {
