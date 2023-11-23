@@ -10,7 +10,7 @@ use crate::{
     util::plist::{get_string_from_dict, get_string_from_nested_dict},
 };
 
-/// Representation of Apple's [`CLPlacemark`](https://developer.apple.com/documentation/corelocation/clplacemark) object.
+/// Representation of Apple's [`CLPlacemark`](https://developer.apple.com/documentation/corelocation/clplacemark) object
 #[derive(Debug, PartialEq, Eq, Default)]
 pub struct Placemark<'a> {
     pub name: Option<&'a str>,
@@ -124,7 +124,7 @@ impl<'a> PlacemarkMessage<'a> {
 mod tests {
     use crate::{
         message_types::{
-            shared_placemark::{Placemark, PlacemarkMessage},
+            placemark::{Placemark, PlacemarkMessage},
             variants::BalloonProvider,
         },
         util::plist::parse_plist,

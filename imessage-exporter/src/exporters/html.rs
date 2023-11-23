@@ -19,7 +19,7 @@ use imessage_database::{
         edited::EditedMessage,
         expressives::{BubbleEffect, Expressive, ScreenEffect},
         music::MusicMessage,
-        shared_placemark::PlacemarkMessage,
+        placemark::PlacemarkMessage,
         url::URLMessage,
         variants::{Announcement, BalloonProvider, CustomBalloon, URLOverride, Variant},
     },
@@ -1879,7 +1879,7 @@ mod balloon_format_tests {
         app_store::AppStoreMessage,
         collaboration::CollaborationMessage,
         music::MusicMessage,
-        shared_placemark::{Placemark, PlacemarkMessage},
+        placemark::{Placemark, PlacemarkMessage},
         url::URLMessage,
     };
 

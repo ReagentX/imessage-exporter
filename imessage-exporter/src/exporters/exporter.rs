@@ -4,7 +4,7 @@ use imessage_database::{
     error::{message::MessageError, plist::PlistParseError, table::TableError},
     message_types::{
         app::AppMessage, app_store::AppStoreMessage, collaboration::CollaborationMessage,
-        music::MusicMessage, shared_placemark::PlacemarkMessage, url::URLMessage,
+        music::MusicMessage, placemark::PlacemarkMessage, url::URLMessage,
     },
     tables::{attachment::Attachment, messages::Message},
 };

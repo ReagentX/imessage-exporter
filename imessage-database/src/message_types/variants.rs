@@ -8,7 +8,7 @@ use crate::{
     error::plist::PlistParseError,
     message_types::{
         app_store::AppStoreMessage, collaboration::CollaborationMessage, music::MusicMessage,
-        shared_placemark::PlacemarkMessage, url::URLMessage,
+        placemark::PlacemarkMessage, url::URLMessage,
     },
 };
 

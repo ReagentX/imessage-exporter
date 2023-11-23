@@ -12,12 +12,11 @@ use crate::{
         app_store::AppStoreMessage,
         collaboration::CollaborationMessage,
         music::MusicMessage,
+        placemark::PlacemarkMessage,
         variants::{BalloonProvider, URLOverride},
     },
     util::plist::{get_bool_from_dict, get_string_from_dict, get_string_from_nested_dict},
 };
-
-use super::shared_placemark::PlacemarkMessage;
 
 /// This struct is not documented by Apple, but represents messages created by
 /// `com.apple.messages.URLBalloonProvider`.
