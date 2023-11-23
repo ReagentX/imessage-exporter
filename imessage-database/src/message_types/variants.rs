@@ -88,7 +88,7 @@ pub enum URLOverride<'a> {
     AppStore(AppStoreMessage<'a>),
     /// [`Collaboration`](crate::message_types::collaboration) messages
     Collaboration(CollaborationMessage<'a>),
-    /// [`Shared Location`](crate::message_types::placemark) messages
+    /// [`Placemark`](crate::message_types::placemark) messages
     SharedPlacemark(PlacemarkMessage<'a>),
 }
 
