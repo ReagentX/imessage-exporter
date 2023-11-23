@@ -66,15 +66,12 @@ impl Cacheable for ChatToHandle {
 
         for mapping in mappings {
             let joiner = ChatToHandle::extract(mapping)?;
-            match cache.get_mut(&joiner.chat_id) {
-                Some(handles) => {
-                    handles.insert(joiner.handle_id);
-                }
-                None => {
-                    let mut data_to_cache = BTreeSet::new();
-                    data_to_cache.insert(joiner.handle_id);
-                    cache.insert(joiner.chat_id, data_to_cache);
-                }
+            if let Some(handles) = cache.get_mut(&joiner.chat_id) {
+                handles.insert(joiner.handle_id);
+            } else {
+                let mut data_to_cache = BTreeSet::new();
+                data_to_cache.insert(joiner.handle_id);
+                cache.insert(joiner.chat_id, data_to_cache);
             }
         }
 

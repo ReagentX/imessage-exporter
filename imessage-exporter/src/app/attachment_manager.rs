@@ -96,7 +96,7 @@ impl AttachmentManager {
                 let atime = FileTime::from_last_access_time(&metadata);
 
                 if let Err(why) = set_file_times(&to, atime, mtime) {
-                    eprintln!("Unable to update {to:?} metadata: {why}")
+                    eprintln!("Unable to update {to:?} metadata: {why}");
                 }
             }
             attachment.copied_path = Some(to);
@@ -115,7 +115,7 @@ impl AttachmentManager {
             }
         }
         if let Err(why) = copy(from, to) {
-            eprintln!("Unable to copy {from:?} to {to:?}: {why}")
+            eprintln!("Unable to copy {from:?} to {to:?}: {why}");
         };
     }
 
@@ -143,7 +143,7 @@ impl AttachmentManager {
                 Some(output_type) => {
                     to.set_extension(output_type.to_str());
                     if convert_heic(from, to, converter, &output_type).is_none() {
-                        eprintln!("Unable to convert {from:?}")
+                        eprintln!("Unable to convert {from:?}");
                     }
                 }
                 None => Self::copy_raw(from, to),
@@ -155,7 +155,7 @@ impl AttachmentManager {
             // Update extension for conversion
             to.set_extension(output_type.to_str());
             if convert_heic(from, to, converter, &output_type).is_none() {
-                eprintln!("Unable to convert {from:?}")
+                eprintln!("Unable to convert {from:?}");
             }
         } else {
             Self::copy_raw(from, to);

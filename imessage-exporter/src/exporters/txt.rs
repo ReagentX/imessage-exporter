@@ -395,7 +395,7 @@ impl<'a> Writer<'a> for TXT<'a> {
         match msg.variant() {
             Variant::Reaction(_, added, reaction) => {
                 if !added {
-                    return Ok("".to_string());
+                    return Ok(String::new());
                 }
                 Ok(format!(
                     "{:?} by {}",
@@ -445,7 +445,7 @@ impl<'a> Writer<'a> for TXT<'a> {
         let mut who = self.config.who(msg.handle_id, msg.is_from_me);
         // Rename yourself so we render the proper grammar here
         if who == ME {
-            who = self.config.options.custom_name.as_deref().unwrap_or(YOU)
+            who = self.config.options.custom_name.as_deref().unwrap_or(YOU);
         }
 
         let timestamp = format(&msg.date(&self.config.offset));

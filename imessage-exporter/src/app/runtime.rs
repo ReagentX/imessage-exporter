@@ -157,7 +157,7 @@ impl Config {
             let participant = self.who(Some(*participant_id), false);
             if participant.len() + out_s.len() < MAX_LENGTH {
                 if !out_s.is_empty() {
-                    out_s.push_str(", ")
+                    out_s.push_str(", ");
                 }
                 out_s.push_str(participant);
                 added += 1;
@@ -167,7 +167,7 @@ impl Config {
                 if space_remaining >= MAX_LENGTH {
                     out_s.replace_range((MAX_LENGTH - extra.len()).., &extra);
                 } else if out_s.is_empty() {
-                    out_s.push_str(&participant[..MAX_LENGTH])
+                    out_s.push_str(&participant[..MAX_LENGTH]);
                 } else {
                     out_s.push_str(&extra);
                 }

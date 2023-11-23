@@ -646,7 +646,7 @@ impl<'a> Writer<'a> for HTML<'a> {
         let mut who = self.config.who(msg.handle_id, msg.is_from_me);
         // Rename yourself so we render the proper grammar here
         if who == ME {
-            who = self.config.options.custom_name.as_deref().unwrap_or("You")
+            who = self.config.options.custom_name.as_deref().unwrap_or("You");
         }
         let timestamp = format(&msg.date(&self.config.offset));
 
@@ -715,7 +715,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                     &format!("Edited {diff} later"),
                                     text,
                                     last,
-                                ))
+                                ));
                             }
                         }
 
@@ -1119,10 +1119,7 @@ impl<'a> HTML<'a> {
     }
 
     fn edited_to_html(&self, timestamp: &str, text: &str, last: bool) -> String {
-        let tag = match last {
-            true => "tfoot",
-            false => "tbody",
-        };
+        let tag = if last { "tfoot" } else { "tbody" };
         format!("<{tag}><tr><td><span class=\"timestamp\">{timestamp}</span></td><td>{text}</td></tr></{tag}>")
     }
 
