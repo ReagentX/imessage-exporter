@@ -929,8 +929,31 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
         String::from("Handwritten messages are not yet supported!")
     }
 
-    fn format_apple_pay(&self, balloon: &AppMessage, message: &Message) -> String {
-        self.balloon_to_html(balloon, "Apple Pay", &mut [], message)
+    fn format_apple_pay(&self, balloon: &AppMessage, _: &Message) -> String {
+        let mut out_s = String::new();
+
+        out_s.push_str("<div class=\"app_header\">");
+
+        if let Some(app_name) = balloon.app_name {
+            out_s.push_str("<div class=\"name\">");
+            out_s.push_str(app_name);
+            out_s.push_str("</div>");
+        }
+
+        // Header end, footer begin
+        out_s.push_str("</div>");
+        out_s.push_str("<div class=\"app_footer\">");
+
+        if let Some(ldtext) = balloon.ldtext {
+            out_s.push_str("<div class=\"caption\">");
+            out_s.push_str(ldtext);
+            out_s.push_str("</div>");
+        }
+
+        // End footer
+        out_s.push_str("</div>");
+
+        out_s
     }
 
     fn format_fitness(&self, balloon: &AppMessage, message: &Message) -> String {
@@ -1894,7 +1917,7 @@ mod balloon_format_tests {
         };
 
         let expected = exporter.format_apple_pay(&balloon, &blank());
-        let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"image\"><div class=\"name\">app_name</div><div class=\"image_title\">title</div><div class=\"image_subtitle\">subtitle</div><div class=\"ldtext\">ldtext</div></div><div class=\"app_footer\"><div class=\"caption\">caption</div><div class=\"subcaption\">subcaption</div><div class=\"trailing_caption\">trailing_caption</div><div class=\"trailing_subcaption\">trailing_subcaption</div></div></a>";
+        let actual = "<div class=\"app_header\"><div class=\"name\">app_name</div></div><div class=\"app_footer\"><div class=\"caption\">ldtext</div></div>";
 
         assert_eq!(expected, actual);
     }
