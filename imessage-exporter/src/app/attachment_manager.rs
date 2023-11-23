@@ -133,16 +133,16 @@ impl AttachmentManager {
             // Determine the output type of the sticker
             let output_type: Option<ImageType> = match original_extension.to_str() {
                 // Normal stickers get converted to png
-                Some("heic") | Some("HEIC") => Some(ImageType::Png),
+                Some("heic" | "HEIC") => Some(ImageType::Png),
                 // Animated stickers get converted to gif
-                Some("heics") | Some("HEICS") => Some(ImageType::Gif),
+                Some("heics" | "HEICS") => Some(ImageType::Gif),
                 _ => None,
             };
 
             match output_type {
                 Some(output_type) => {
                     to.set_extension(output_type.to_str());
-                    if convert_heic(from, to, converter, output_type).is_none() {
+                    if convert_heic(from, to, converter, &output_type).is_none() {
                         eprintln!("Unable to convert {from:?}")
                     }
                 }
@@ -154,7 +154,7 @@ impl AttachmentManager {
             let output_type = ImageType::Jpeg;
             // Update extension for conversion
             to.set_extension(output_type.to_str());
-            if convert_heic(from, to, converter, output_type).is_none() {
+            if convert_heic(from, to, converter, &output_type).is_none() {
                 eprintln!("Unable to convert {from:?}")
             }
         } else {

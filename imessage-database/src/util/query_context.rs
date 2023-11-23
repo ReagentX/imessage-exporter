@@ -93,10 +93,9 @@ impl QueryContext {
     /// assert!(!context.has_filters());
     /// context.set_start("2023-01-01");
     /// assert!(context.has_filters());
+    /// ```
     pub fn has_filters(&self) -> bool {
-        [self.start, self.end]
-            .iter()
-            .any(|maybe_date| maybe_date.is_some())
+        [self.start, self.end].iter().any(Option::is_some)
     }
 
     /// Generate the SQL `WHERE` clause described by this ``QueryContext``
@@ -108,14 +107,15 @@ impl QueryContext {
     /// let mut context = QueryContext::default();
     /// context.set_start("2023-01-01");
     /// let filters = context.generate_filter_statement();
+    /// ```
     pub fn generate_filter_statement(&self) -> String {
         let mut filters = String::new();
         if let Some(start) = self.start {
-            filters.push_str(&format!("    m.date >= {start}"))
+            filters.push_str(&format!("    m.date >= {start}"));
         }
         if let Some(end) = self.end {
             if !filters.is_empty() {
-                filters.push_str(" AND ")
+                filters.push_str(" AND ");
             }
             filters.push_str(&format!("    m.date <= {end}"));
         }

@@ -258,8 +258,7 @@ fn validate_path(
                         if file
                             .path()
                             .extension()
-                            .map(|s| s.to_str().unwrap_or("") == export_type_extension)
-                            .unwrap_or(false)
+                            .is_some_and(|s| s.to_str().unwrap_or("") == export_type_extension)
                         {
                             return Err(RuntimeError::InvalidOptions(format!(
                                 "{path_word} export path {resolved_path:?} contains existing \"{export_type}\" export data!"
@@ -658,7 +657,7 @@ mod path_tests {
 
         let result = validate_path(export_path, &export_type.as_ref());
 
-        assert_eq!(result.unwrap(), PathBuf::from("/tmp"))
+        assert_eq!(result.unwrap(), PathBuf::from("/tmp"));
     }
 
     #[test]

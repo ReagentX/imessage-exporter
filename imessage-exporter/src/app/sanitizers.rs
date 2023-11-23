@@ -4,12 +4,15 @@ const REPLACEMENT_CHAR: char = '_';
 const DISALLOWED_CHARS: [char; 3] = ['/', '\\', ':'];
 
 /// Remove unsafe chars in [this list](DISALLOWED_CHARS).
-pub fn sanitize_filename(filename: String) -> String {
+pub fn sanitize_filename(filename: &str) -> String {
     filename
         .chars()
-        .map(|letter| match DISALLOWED_CHARS.contains(&letter) {
-            true => REPLACEMENT_CHAR,
-            false => letter,
+        .map(|letter| {
+            if DISALLOWED_CHARS.contains(&letter) {
+                REPLACEMENT_CHAR
+            } else {
+                letter
+            }
         })
         .collect()
 }
@@ -20,25 +23,22 @@ mod tests {
 
     #[test]
     fn can_sanitize_all() {
-        let contaminated = String::from("a/b\\c:d");
         let sanitized = String::from("a_b_c_d");
 
-        assert_eq!(sanitize_filename(contaminated), sanitized);
+        assert_eq!(sanitize_filename("a/b\\c:d"), sanitized);
     }
 
     #[test]
     fn doesnt_sanitize_none() {
-        let contaminated = String::from("a_b_c_d");
         let sanitized = String::from("a_b_c_d");
 
-        assert_eq!(sanitize_filename(contaminated), sanitized);
+        assert_eq!(sanitize_filename("a_b_c_d"), sanitized);
     }
 
     #[test]
     fn can_sanitize_one() {
-        let contaminated = String::from("ab/cd");
         let sanitized = String::from("ab_cd");
 
-        assert_eq!(sanitize_filename(contaminated), sanitized);
+        assert_eq!(sanitize_filename("ab/cd"), sanitized);
     }
 }

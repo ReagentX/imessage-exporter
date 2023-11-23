@@ -139,7 +139,7 @@ impl<'a> Writer<'a> for TXT<'a> {
         // Add message sender
         self.add_line(
             &mut formatted_message,
-            self.config.who(&message.handle_id, message.is_from_me),
+            self.config.who(message.handle_id, message.is_from_me),
             &indent,
         );
 
@@ -318,7 +318,7 @@ impl<'a> Writer<'a> for TXT<'a> {
     }
 
     fn format_sticker(&self, sticker: &'a mut Attachment, message: &Message) -> String {
-        let who = self.config.who(&message.handle_id, message.is_from_me);
+        let who = self.config.who(message.handle_id, message.is_from_me);
         match self.format_attachment(sticker, message) {
             Ok(path_to_sticker) => {
                 let sticker_effect = sticker.get_sticker_effect(
@@ -400,12 +400,12 @@ impl<'a> Writer<'a> for TXT<'a> {
                 Ok(format!(
                     "{:?} by {}",
                     reaction,
-                    self.config.who(&msg.handle_id, msg.is_from_me),
+                    self.config.who(msg.handle_id, msg.is_from_me),
                 ))
             }
             Variant::Sticker(_) => {
                 let mut paths = Attachment::from_message(&self.config.db, msg)?;
-                let who = self.config.who(&msg.handle_id, msg.is_from_me);
+                let who = self.config.who(msg.handle_id, msg.is_from_me);
                 // Sticker messages have only one attachment, the sticker image
                 Ok(if let Some(sticker) = paths.get_mut(0) {
                     self.format_sticker(sticker, msg)
@@ -442,7 +442,7 @@ impl<'a> Writer<'a> for TXT<'a> {
     }
 
     fn format_announcement(&self, msg: &'a Message) -> String {
-        let mut who = self.config.who(&msg.handle_id, msg.is_from_me);
+        let mut who = self.config.who(msg.handle_id, msg.is_from_me);
         // Rename yourself so we render the proper grammar here
         if who == ME {
             who = self.config.options.custom_name.as_deref().unwrap_or(YOU)

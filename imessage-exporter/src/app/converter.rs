@@ -73,7 +73,7 @@ pub fn convert_heic(
     from: &Path,
     to: &Path,
     converter: &Converter,
-    output_image_type: ImageType,
+    output_image_type: &ImageType,
 ) -> Option<()> {
     // Get the path we want to copy from
     let from_path = from.to_str()?;

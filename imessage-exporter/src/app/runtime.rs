@@ -60,14 +60,14 @@ impl Config {
     /// Get a deduplicated chat ID or a default value
     pub fn conversation(&self, message: &Message) -> Option<(&Chat, &i32)> {
         match message.chat_id.or(message.deleted_from) {
-            Some(chat_id) => match self.chatrooms.get(&chat_id) {
-                Some(chatroom) => self.real_chatrooms.get(&chat_id).map(|id| (chatroom, id)),
-                // No chatroom for the given chat_id
-                None => {
+            Some(chat_id) => {
+                if let Some(chatroom) = self.chatrooms.get(&chat_id) {
+                    self.real_chatrooms.get(&chat_id).map(|id| (chatroom, id))
+                } else {
                     eprintln!("Chat ID {chat_id} does not exist in chat table!");
                     None
                 }
-            },
+            }
             // No chat_id provided
             None => None,
         }
@@ -129,20 +129,19 @@ impl Config {
                 )
             }
             // Fallback if there is no name set
-            None => match self.chatroom_participants.get(&chatroom.rowid) {
-                // List of participant names
-                Some(participants) => self.filename_from_participants(participants),
-                // Unique chat_identifier
-                None => {
+            None => {
+                if let Some(participants) = self.chatroom_participants.get(&chatroom.rowid) {
+                    self.filename_from_participants(participants)
+                } else {
                     eprintln!(
                         "Found error: message chat ID {} has no members!",
                         chatroom.rowid
                     );
-                    chatroom.chat_identifier.to_owned()
+                    chatroom.chat_identifier.clone()
                 }
-            },
+            }
         };
-        sanitize_filename(filename)
+        sanitize_filename(&filename)
     }
 
     /// Generate a filename from a set of participants, truncating if the name is too long
@@ -154,8 +153,8 @@ impl Config {
     fn filename_from_participants(&self, participants: &BTreeSet<i32>) -> String {
         let mut added = 0;
         let mut out_s = String::with_capacity(MAX_LENGTH);
-        for participant_id in participants.iter() {
-            let participant = self.who(&Some(*participant_id), false);
+        for participant_id in participants {
+            let participant = self.who(Some(*participant_id), false);
             if participant.len() + out_s.len() < MAX_LENGTH {
                 if !out_s.is_empty() {
                     out_s.push_str(", ")
@@ -230,25 +229,22 @@ impl Config {
         let free_space_at_location = available_space(&self.options.export_path).unwrap();
 
         // Validate that there is enough disk space free to write the export
-        match self.options.attachment_manager {
-            AttachmentManager::Disabled => {
-                if estimated_export_size >= free_space_at_location {
-                    return Err(RuntimeError::NotEnoughAvailableSpace(
-                        estimated_export_size,
-                        free_space_at_location,
-                    ));
-                }
+        if let AttachmentManager::Disabled = self.options.attachment_manager {
+            if estimated_export_size >= free_space_at_location {
+                return Err(RuntimeError::NotEnoughAvailableSpace(
+                    estimated_export_size,
+                    free_space_at_location,
+                ));
             }
-            _ => {
-                let total_attachment_size = Attachment::get_total_attachment_bytes(&self.db)
-                    .map_err(RuntimeError::DatabaseError)?;
-                estimated_export_size += total_attachment_size;
-                if (estimated_export_size + total_attachment_size) >= free_space_at_location {
-                    return Err(RuntimeError::NotEnoughAvailableSpace(
-                        estimated_export_size + total_attachment_size,
-                        free_space_at_location,
-                    ));
-                }
+        } else {
+            let total_attachment_size = Attachment::get_total_attachment_bytes(&self.db)
+                .map_err(RuntimeError::DatabaseError)?;
+            estimated_export_size += total_attachment_size;
+            if (estimated_export_size + total_attachment_size) >= free_space_at_location {
+                return Err(RuntimeError::NotEnoughAvailableSpace(
+                    estimated_export_size + total_attachment_size,
+                    free_space_at_location,
+                ));
             }
         };
 
@@ -322,7 +318,7 @@ impl Config {
             }
 
             // Ensure there is enough free disk space to write the export
-            if self.options.ignore_disk_space {
+            if !self.options.ignore_disk_space {
                 self.ensure_free_space()?;
             }
 
@@ -341,11 +337,11 @@ impl Config {
     }
 
     /// Determine who sent a message
-    pub fn who(&self, handle_id: &Option<i32>, is_from_me: bool) -> &str {
+    pub fn who(&self, handle_id: Option<i32>, is_from_me: bool) -> &str {
         if is_from_me {
             return self.options.custom_name.as_deref().unwrap_or(ME);
         } else if let Some(handle_id) = handle_id {
-            return match self.participants.get(handle_id) {
+            return match self.participants.get(&handle_id) {
                 Some(contact) => contact,
                 None => UNKNOWN,
             };
@@ -389,7 +385,7 @@ mod filename_tests {
         Chat {
             rowid: 0,
             chat_identifier: "Default".to_string(),
-            service_name: Some("".to_string()),
+            service_name: Some(String::new()),
             display_name: None,
         }
     }
@@ -619,7 +615,7 @@ mod who_tests {
         Chat {
             rowid: 0,
             chat_identifier: "Default".to_string(),
-            service_name: Some("".to_string()),
+            service_name: Some(String::new()),
             display_name: None,
         }
     }
@@ -679,7 +675,7 @@ mod who_tests {
         app.participants.insert(10, "Person 10".to_string());
 
         // Get participant name
-        let who = app.who(&Some(10), false);
+        let who = app.who(Some(10), false);
         assert_eq!(who, "Person 10".to_string());
     }
 
@@ -689,7 +685,7 @@ mod who_tests {
         let app = fake_app(options);
 
         // Get participant name
-        let who = app.who(&Some(10), false);
+        let who = app.who(Some(10), false);
         assert_eq!(who, "Unknown".to_string());
     }
 
@@ -699,7 +695,7 @@ mod who_tests {
         let app = fake_app(options);
 
         // Get participant name
-        let who = app.who(&Some(0), true);
+        let who = app.who(Some(0), true);
         assert_eq!(who, "Me".to_string());
     }
 
@@ -710,7 +706,7 @@ mod who_tests {
         let app = fake_app(options);
 
         // Get participant name
-        let who = app.who(&Some(0), true);
+        let who = app.who(Some(0), true);
         assert_eq!(who, "Name".to_string());
     }
 
@@ -720,7 +716,7 @@ mod who_tests {
         let app = fake_app(options);
 
         // Get participant name
-        let who = app.who(&None, true);
+        let who = app.who(None, true);
         assert_eq!(who, "Me".to_string());
     }
 
@@ -730,7 +726,7 @@ mod who_tests {
         let app = fake_app(options);
 
         // Get participant name
-        let who = app.who(&None, false);
+        let who = app.who(None, false);
         assert_eq!(who, "Unknown".to_string());
     }
 
