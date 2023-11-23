@@ -12,7 +12,7 @@ This binary is available on [crates.io](https://crates.io/crates/imessage-export
 
 `cargo install imessage-exporter` is the best way to install the app for normal use.
 
-<details><summary>Uninstall steps</code></summary><p><pre>% cargo uninstall imessage-exporter</pre></p></details>
+<details><summary>Uninstall steps</summary><p><pre>% cargo uninstall imessage-exporter</pre></p></details>
 
 ### Homebrew
 
@@ -20,13 +20,13 @@ This binary is available via [`brew`](https://formulae.brew.sh/formula/imessage-
 
 `brew install imessage-exporter` will install the app, but it may not be up to date with the latest release.
 
-<details><summary>Uninstall steps</code></summary><p><pre>% brew uninstall imessage-exporter</pre></p></details>
+<details><summary>Uninstall steps</summary><p><pre>% brew uninstall imessage-exporter</pre></p></details>
 
 ### Prebuilt Binaries
 
 The [releases page](https://github.com/ReagentX/imessage-exporter/releases) provides prebuilt binaries for both Apple Silicon and Intel-based Macs.
 
-<details><summary>Uninstall steps</code></summary><p><pre>% rm path/to/imessage-exporter-binary</pre></p></details>
+<details><summary>Uninstall steps</summary><p><pre>% rm path/to/imessage-exporter-binary</pre></p></details>
 
 ### Installing manually
 
