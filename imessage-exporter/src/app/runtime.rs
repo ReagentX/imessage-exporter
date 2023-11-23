@@ -226,7 +226,8 @@ impl Config {
             get_db_size(&self.options.db_path).map_err(RuntimeError::DatabaseError)?;
         let mut estimated_export_size = total_db_size / 10;
 
-        let free_space_at_location = available_space(&self.options.export_path).unwrap();
+        let free_space_at_location =
+            available_space(&self.options.export_path).map_err(RuntimeError::DiskError)?;
 
         // Validate that there is enough disk space free to write the export
         if let AttachmentManager::Disabled = self.options.attachment_manager {

@@ -85,7 +85,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
 
         let messages = statement
             .query_map([], |row| Ok(Message::from_row(row)))
-            .unwrap();
+            .map_err(|err| RuntimeError::DatabaseError(TableError::Messages(err)))?;
 
         for message in messages {
             let mut msg = Message::extract(message).map_err(RuntimeError::DatabaseError)?;
@@ -105,7 +105,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
             }
             // Message replies and reactions are rendered in context, so no need to render them separately
             else if !msg.is_reaction() {
-                msg.gen_text(&self.config.db);
+                let _ = msg.gen_text(&self.config.db);
                 let message = self
                     .format_message(&msg, 0)
                     .map_err(RuntimeError::DatabaseError)?;
@@ -421,7 +421,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                 replies
                     .iter_mut()
                     .try_for_each(|reply| -> Result<(), TableError> {
-                        reply.gen_text(&self.config.db);
+                        let _ = reply.gen_text(&self.config.db);
                         if !reply.is_reaction() {
                             // Set indent to 1 so we know this is a recursive call
                             self.add_line(
@@ -734,7 +734,9 @@ impl<'a> Writer<'a> for HTML<'a> {
 
     fn write_to_file(file: &Path, text: &str) {
         match File::options().append(true).create(true).open(file) {
-            Ok(mut file) => file.write_all(text.as_bytes()).unwrap(),
+            Ok(mut file) => {
+                let _ = file.write_all(text.as_bytes());
+            }
             Err(why) => eprintln!("Unable to write to {file:?}: {why:?}"),
         }
     }
