@@ -538,6 +538,7 @@ impl<'a> Writer<'a> for HTML<'a> {
         if let Variant::App(balloon) = message.variant() {
             let mut app_bubble = String::new();
 
+            // Handwritten messages use a different payload type, so handle that first
             if matches!(balloon, CustomBalloon::Handwriting) {
                 return Ok(self.format_handwriting(&HandwrittenMessage::new(), message));
             }
