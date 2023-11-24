@@ -18,6 +18,7 @@ use imessage_database::{
         collaboration::CollaborationMessage,
         edited::EditedMessage,
         expressives::{BubbleEffect, Expressive, ScreenEffect},
+        handwriting::HandwrittenMessage,
         music::MusicMessage,
         placemark::PlacemarkMessage,
         url::URLMessage,
@@ -282,21 +283,24 @@ impl<'a> Writer<'a> for HTML<'a> {
                 "",
             );
 
+            // Render edited messages
+            if message.is_edited() {
+                let edited = match self.format_edited(message, "") {
+                    Ok(s) => s,
+                    Err(why) => format!("{}, {}", message.guid, why),
+                };
+                self.add_line(
+                    &mut formatted_message,
+                    &edited,
+                    "<div class=\"edited\">",
+                    "</div>",
+                );
+                continue;
+            }
+
             match message_part {
                 BubbleType::Text(text) => {
-                    // Render edited messages
-                    if message.is_edited() {
-                        let edited = match self.format_edited(message, "") {
-                            Ok(s) => s,
-                            Err(why) => format!("{}, {}", message.guid, why),
-                        };
-                        self.add_line(
-                            &mut formatted_message,
-                            &edited,
-                            "<div class=\"edited\">",
-                            "</div>",
-                        );
-                    } else if text.starts_with(FITNESS_RECEIVER) {
+                    if text.starts_with(FITNESS_RECEIVER) {
                         self.add_line(
                             &mut formatted_message,
                             &text.replace(FITNESS_RECEIVER, YOU),
@@ -534,10 +538,14 @@ impl<'a> Writer<'a> for HTML<'a> {
         if let Variant::App(balloon) = message.variant() {
             let mut app_bubble = String::new();
 
-            if let Some(payload) = message.payload_data(&self.config.db) {
-                let parsed = parse_plist(&payload)?;
+            // Handwritten messages use a different payload type, so handle that first
+            if matches!(balloon, CustomBalloon::Handwriting) {
+                return Ok(self.format_handwriting(&HandwrittenMessage::new(), message));
+            }
 
+            if let Some(payload) = message.payload_data(&self.config.db) {
                 let res = if message.is_url() {
+                    let parsed = parse_plist(&payload)?;
                     let bubble = URLMessage::get_url_message_override(&parsed)?;
                     match bubble {
                         URLOverride::Normal(balloon) => self.format_url(&balloon, message),
@@ -551,17 +559,18 @@ impl<'a> Writer<'a> for HTML<'a> {
                         }
                     }
                 } else {
+                    let parsed = parse_plist(&payload)?;
                     match AppMessage::from_map(&parsed) {
                         Ok(bubble) => match balloon {
                             CustomBalloon::Application(bundle_id) => {
                                 self.format_generic_app(&bubble, bundle_id, attachments, message)
                             }
-                            CustomBalloon::Handwriting => self.format_handwriting(&bubble, message),
                             CustomBalloon::ApplePay => self.format_apple_pay(&bubble, message),
                             CustomBalloon::Fitness => self.format_fitness(&bubble, message),
                             CustomBalloon::Slideshow => self.format_slideshow(&bubble, message),
                             CustomBalloon::CheckIn => self.format_check_in(&bubble, message),
                             CustomBalloon::FindMy => self.format_find_my(&bubble, message),
+                            CustomBalloon::Handwriting => unreachable!(),
                             CustomBalloon::URL => unreachable!(),
                         },
                         Err(why) => return Err(why),
@@ -1062,7 +1071,7 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
         out_s
     }
 
-    fn format_handwriting(&self, _: &AppMessage, _: &Message) -> String {
+    fn format_handwriting(&self, _: &HandwrittenMessage, _: &Message) -> String {
         String::from("Handwritten messages are not yet supported!")
     }
 

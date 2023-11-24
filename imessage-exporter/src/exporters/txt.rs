@@ -18,6 +18,7 @@ use imessage_database::{
         collaboration::CollaborationMessage,
         edited::EditedMessage,
         expressives::{BubbleEffect, Expressive, ScreenEffect},
+        handwriting::HandwrittenMessage,
         music::MusicMessage,
         placemark::PlacemarkMessage,
         url::URLMessage,
@@ -182,17 +183,19 @@ impl<'a> Writer<'a> for TXT<'a> {
 
         // Generate the message body from it's components
         for (idx, message_part) in message_parts.iter().enumerate() {
+            // Render edited messages
+            if message.is_edited() {
+                let edited = match self.format_edited(message, &indent) {
+                    Ok(s) => s,
+                    Err(why) => format!("{}, {}", message.guid, why),
+                };
+                self.add_line(&mut formatted_message, &edited, &indent);
+                continue;
+            }
             match message_part {
                 // Fitness messages have a prefix that we need to replace with the opposite if who sent the message
                 BubbleType::Text(text) => {
-                    // Render edited messages
-                    if message.is_edited() {
-                        let edited = match self.format_edited(message, &indent) {
-                            Ok(s) => s,
-                            Err(why) => format!("{}, {}", message.guid, why),
-                        };
-                        self.add_line(&mut formatted_message, &edited, &indent);
-                    } else if text.starts_with(FITNESS_RECEIVER) {
+                    if text.starts_with(FITNESS_RECEIVER) {
                         self.add_line(
                             &mut formatted_message,
                             &text.replace(FITNESS_RECEIVER, YOU),
@@ -345,11 +348,15 @@ impl<'a> Writer<'a> for TXT<'a> {
         if let Variant::App(balloon) = message.variant() {
             let mut app_bubble = String::new();
 
-            if let Some(payload) = message.payload_data(&self.config.db) {
-                let parsed = parse_plist(&payload)?;
+            // Handwritten messages use a different payload type, so handle that first
+            if matches!(balloon, CustomBalloon::Handwriting) {
+                return Ok(self.format_handwriting(&HandwrittenMessage::new(), indent));
+            }
 
+            if let Some(payload) = message.payload_data(&self.config.db) {
                 // Handle URL messages separately since they are a special case
                 let res = if message.is_url() {
+                    let parsed = parse_plist(&payload)?;
                     let bubble = URLMessage::get_url_message_override(&parsed)?;
                     match bubble {
                         URLOverride::Normal(balloon) => self.format_url(&balloon, indent),
@@ -362,19 +369,21 @@ impl<'a> Writer<'a> for TXT<'a> {
                             self.format_placemark(&balloon, indent)
                         }
                     }
+                // Handwriting uses a different payload type than the rest of the branches
                 } else {
                     // Handle the app case
+                    let parsed = parse_plist(&payload)?;
                     match AppMessage::from_map(&parsed) {
                         Ok(bubble) => match balloon {
                             CustomBalloon::Application(bundle_id) => {
                                 self.format_generic_app(&bubble, bundle_id, attachments, indent)
                             }
-                            CustomBalloon::Handwriting => self.format_handwriting(&bubble, indent),
                             CustomBalloon::ApplePay => self.format_apple_pay(&bubble, indent),
                             CustomBalloon::Fitness => self.format_fitness(&bubble, indent),
                             CustomBalloon::Slideshow => self.format_slideshow(&bubble, indent),
                             CustomBalloon::CheckIn => self.format_check_in(&bubble, indent),
                             CustomBalloon::FindMy => self.format_find_my(&bubble, indent),
+                            CustomBalloon::Handwriting => unreachable!(),
                             CustomBalloon::URL => unreachable!(),
                         },
                         Err(why) => return Err(why),
@@ -690,7 +699,7 @@ impl<'a> BalloonFormatter<&'a str> for TXT<'a> {
         out_s.strip_suffix('\n').unwrap_or(&out_s).to_string()
     }
 
-    fn format_handwriting(&self, _: &AppMessage, indent: &str) -> String {
+    fn format_handwriting(&self, _: &HandwrittenMessage, indent: &str) -> String {
         format!("{indent}Handwritten messages are not yet supported!")
     }
 
