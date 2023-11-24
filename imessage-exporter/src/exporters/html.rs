@@ -561,6 +561,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                             CustomBalloon::Fitness => self.format_fitness(&bubble, message),
                             CustomBalloon::Slideshow => self.format_slideshow(&bubble, message),
                             CustomBalloon::CheckIn => self.format_check_in(&bubble, message),
+                            CustomBalloon::FindMy => self.format_find_my(&bubble, message),
                             CustomBalloon::URL => unreachable!(),
                         },
                         Err(why) => return Err(why),
@@ -1098,6 +1099,33 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
 
     fn format_slideshow(&self, balloon: &AppMessage, message: &Message) -> String {
         self.balloon_to_html(balloon, "Slideshow", &mut [], message)
+    }
+
+    fn format_find_my(&self, balloon: &AppMessage, _: &'a Message) -> String {
+        let mut out_s = String::new();
+
+        out_s.push_str("<div class=\"app_header\">");
+
+        if let Some(app_name) = balloon.app_name {
+            out_s.push_str("<div class=\"name\">");
+            out_s.push_str(app_name);
+            out_s.push_str("</div>");
+        }
+
+        // Header end, footer begin
+        out_s.push_str("</div>");
+        out_s.push_str("<div class=\"app_footer\">");
+
+        if let Some(ldtext) = balloon.ldtext {
+            out_s.push_str("<div class=\"caption\">");
+            out_s.push_str(ldtext);
+            out_s.push_str("</div>");
+        }
+
+        // End footer
+        out_s.push_str("</div>");
+
+        out_s
     }
 
     fn format_check_in(&self, balloon: &AppMessage, _: &Message) -> String {
@@ -2051,6 +2079,32 @@ mod balloon_format_tests {
 
         let expected = exporter.format_slideshow(&balloon, &blank());
         let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"image\"><div class=\"name\">app_name</div><div class=\"image_title\">title</div><div class=\"image_subtitle\">subtitle</div><div class=\"ldtext\">ldtext</div></div><div class=\"app_footer\"><div class=\"caption\">caption</div><div class=\"subcaption\">subcaption</div><div class=\"trailing_caption\">trailing_caption</div><div class=\"trailing_subcaption\">trailing_subcaption</div></div></a>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_find_my() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = AppMessage {
+            image: Some("image"),
+            url: Some("url"),
+            title: Some("title"),
+            subtitle: Some("subtitle"),
+            caption: Some("caption"),
+            subcaption: Some("subcaption"),
+            trailing_caption: Some("trailing_caption"),
+            trailing_subcaption: Some("trailing_subcaption"),
+            app_name: Some("app_name"),
+            ldtext: Some("ldtext"),
+        };
+
+        let expected = exporter.format_find_my(&balloon, &blank());
+        let actual = "<div class=\"app_header\"><div class=\"name\">app_name</div></div><div class=\"app_footer\"><div class=\"caption\">ldtext</div></div>";
 
         assert_eq!(expected, actual);
     }

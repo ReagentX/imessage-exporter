@@ -374,6 +374,7 @@ impl<'a> Writer<'a> for TXT<'a> {
                             CustomBalloon::Fitness => self.format_fitness(&bubble, indent),
                             CustomBalloon::Slideshow => self.format_slideshow(&bubble, indent),
                             CustomBalloon::CheckIn => self.format_check_in(&bubble, indent),
+                            CustomBalloon::FindMy => self.format_find_my(&bubble, indent),
                             CustomBalloon::URL => unreachable!(),
                         },
                         Err(why) => return Err(why),
@@ -733,6 +734,21 @@ impl<'a> BalloonFormatter<&'a str> for TXT<'a> {
         if let Some(url) = balloon.url {
             out_s.push(' ');
             out_s.push_str(url);
+        }
+
+        out_s
+    }
+
+    fn format_find_my(&self, balloon: &AppMessage, indent: &'a str) -> String {
+        let mut out_s = String::from(indent);
+        if let Some(app_name) = balloon.app_name {
+            out_s.push_str(app_name);
+            out_s.push_str(": ");
+        }
+
+        if let Some(ldtext) = balloon.ldtext {
+            out_s.push(' ');
+            out_s.push_str(ldtext);
         }
 
         out_s
@@ -1542,6 +1558,32 @@ mod balloon_format_tests {
 
         let expected = exporter.format_slideshow(&balloon, "");
         let actual = "Photo album: ldtext url";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_txt_find_my() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = TXT::new(&config);
+
+        let balloon = AppMessage {
+            image: Some("image"),
+            url: Some("url"),
+            title: Some("title"),
+            subtitle: Some("subtitle"),
+            caption: Some("caption"),
+            subcaption: Some("subcaption"),
+            trailing_caption: Some("trailing_caption"),
+            trailing_subcaption: Some("trailing_subcaption"),
+            app_name: Some("app_name"),
+            ldtext: Some("ldtext"),
+        };
+
+        let expected = exporter.format_find_my(&balloon, "");
+        let actual = "app_name:  ldtext";
 
         assert_eq!(expected, actual);
     }

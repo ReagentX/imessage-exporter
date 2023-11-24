@@ -794,6 +794,7 @@ impl Message {
                         "com.apple.SafetyMonitorApp.SafetyMonitorMessages" => {
                             Variant::App(CustomBalloon::CheckIn)
                         }
+                        "com.apple.findmy.FindMyMessagesApp" => Variant::App(CustomBalloon::FindMy),
                         _ => Variant::App(CustomBalloon::Application(bundle_id)),
                     },
                     // This is the most common case
