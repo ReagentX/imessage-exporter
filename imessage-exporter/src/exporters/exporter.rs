@@ -73,6 +73,8 @@ pub(super) trait BalloonFormatter<T> {
     fn format_fitness(&self, balloon: &AppMessage, indent: T) -> String;
     /// Format a Photo Slideshow message
     fn format_slideshow(&self, balloon: &AppMessage, indent: T) -> String;
+    /// Format a Find My message
+    fn format_find_my(&self, balloon: &AppMessage, indent: T) -> String;
     /// Format a Check In message
     fn format_check_in(&self, balloon: &AppMessage, indent: T) -> String;
     /// Format a generic app, generally third party

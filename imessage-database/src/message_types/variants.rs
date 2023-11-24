@@ -72,6 +72,8 @@ pub enum CustomBalloon<'a> {
     Slideshow,
     /// [Check In](https://support.apple.com/guide/iphone/use-check-in-iphc143bb7e9/ios) messages
     CheckIn,
+    /// Find My messages
+    FindMy
 }
 
 /// URL Message Types
