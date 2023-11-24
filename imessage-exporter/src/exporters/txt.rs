@@ -138,10 +138,6 @@ impl<'a> Writer<'a> for TXT<'a> {
         // Add message date
         self.add_line(&mut formatted_message, &self.get_time(message), &indent);
 
-        // add guid temp
-        // TODO: Remove
-        self.add_line(&mut formatted_message, &message.guid, &indent);
-
         // Add message sender
         self.add_line(
             &mut formatted_message,
