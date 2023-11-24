@@ -33,11 +33,12 @@ This tool targets the current latest public release for macOS and iMessage. It m
   - Threads are displayed both threaded under the parent as well as in-place
     - This is to preserve context, which can be lost if replying to older messages
     - Messages from a thread and were rendered in-place are annotated as such
+    - In HTML exports, threaded messages are hyperlinked to allow for easy reading in context
   - For multi-part messages, replies are threaded under the correct message part
 - Attachments
   - Any type of attachment that can be displayed on the web is embedded in the HTML exports
   - Attachments can be copied to the export directory or referenced in-place
-  - Less-compatible images are converted for portable exports:
+  - Less-compatible images can be converted for even more portable exports:
     - Attachment `HEIC` files convert to `JPEG`
     - Sticker `HEIC` files convert to `PNG`
     - Sticker `HEICS` files convert to `GIF`
@@ -57,20 +58,27 @@ This tool targets the current latest public release for macOS and iMessage. It m
     - Displayed in HTML exports
     - Annotated in TXT exports
   - For multi-part messages, stickers are placed under the correct message part
+  - Sticker effects are annotated in all exports
 - Apple Pay
   - Detects the transaction source, amount, and type
-- URL Previews
+- URL previews
   - Parses the `NSKeyedArchiver` payload to extract preview data
-  - Extracts cached metadata for each URL
-  - Preview images display in HTML exports
-  - URLs that have rotten may still retain some context if they have cached data
+    - Extracts cached metadata for each URL
+    - Preview images display in HTML exports
+    - URLs that have rotten may still retain some context if they have cached data
+  - Handles cases where URL messages are overloaded with other message types
+    - Apple Music (including preview streams)
+    - Apple Maps (including Placemark data)
+    - App Store (including app metadata)
+    - Rich Collaboration
 - App Integrations
   - Parses the `NSKeyedArchiver` payload to extract balloon data
   - Supports system message types as well as third party applications
-    - Apple Music preview streams
-    - Rich Collaboration messages
+    - Apple Fitness messages
+    - Photo Slideshow messages
     - SharePlay/Facetime messages
-    - App Store preview messages
+    - Check In messages
+    - Find My messages
 - Duplicated group chats
   - Handles (participants) and chats (threads) can become duplicated
   - On startup:
