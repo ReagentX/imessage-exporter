@@ -35,7 +35,7 @@ impl Display for ExportType {
 
 #[cfg(test)]
 mod tests {
-    use crate::util::export_type::ExportType;
+    use crate::app::export_type::ExportType;
 
     #[test]
     fn can_parse_html_any_case() {
