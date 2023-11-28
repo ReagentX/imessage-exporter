@@ -11,7 +11,7 @@ use rusqlite::Connection;
 use crate::{
     app::{
         attachment_manager::AttachmentManager, converter::Converter, error::RuntimeError,
-        options::Options, sanitizers::sanitize_filename,
+        export_type::ExportType, options::Options, sanitizers::sanitize_filename,
     },
     Exporter, HTML, TXT,
 };
@@ -29,7 +29,7 @@ use imessage_database::{
             MAX_LENGTH, ME, ORPHANED, UNKNOWN,
         },
     },
-    util::{dates::get_offset, export_type::ExportType, size::format_file_size},
+    util::{dates::get_offset, size::format_file_size},
 };
 
 /// Stores the application state and handles application lifecycle

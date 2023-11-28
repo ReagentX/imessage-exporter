@@ -6,13 +6,14 @@ use imessage_database::{
     tables::{attachment::DEFAULT_ATTACHMENT_ROOT, table::DEFAULT_PATH_IOS},
     util::{
         dirs::{default_db_path, home},
-        export_type::ExportType,
         platform::Platform,
         query_context::QueryContext,
     },
 };
 
-use crate::app::{attachment_manager::AttachmentManager, error::RuntimeError};
+use crate::app::{
+    attachment_manager::AttachmentManager, error::RuntimeError, export_type::ExportType,
+};
 
 /// Default export directory name
 pub const DEFAULT_OUTPUT_DIR: &str = "imessage_export";
@@ -389,12 +390,12 @@ pub fn from_command_line() -> ArgMatches {
 #[cfg(test)]
 mod arg_tests {
     use imessage_database::util::{
-        dirs::default_db_path, export_type::ExportType, platform::Platform,
-        query_context::QueryContext,
+        dirs::default_db_path, platform::Platform, query_context::QueryContext,
     };
 
     use crate::app::{
         attachment_manager::AttachmentManager,
+        export_type::ExportType,
         options::{get_command, validate_path, Options},
     };
 
@@ -646,8 +647,11 @@ mod path_tests {
     use std::io::Write;
     use std::path::PathBuf;
 
-    use crate::app::options::{validate_path, DEFAULT_OUTPUT_DIR};
-    use imessage_database::util::{dirs::home, export_type::ExportType};
+    use crate::app::{
+        export_type::ExportType,
+        options::{validate_path, DEFAULT_OUTPUT_DIR},
+    };
+    use imessage_database::util::dirs::home;
 
     #[test]
     fn can_validate_empty() {
