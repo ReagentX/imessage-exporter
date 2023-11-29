@@ -1,16 +1,9 @@
+use std::borrow::Cow;
+
 /// The character to replace disallowed chars with
 const FILENAME_REPLACEMENT_CHAR: char = '_';
 /// Characters disallowed in a filename
 const FILENAME_DISALLOWED_CHARS: [char; 3] = ['/', '\\', ':'];
-
-/// The result of possibly sanitizing a string
-#[derive(Debug, PartialEq, Eq)]
-enum SanitizationResult<'a> {
-    /// Used when sanitization allocates a new `String`
-    Edited(String),
-    /// Used when the source does not require sanitization
-    Original(&'a str),
-}
 
 /// Remove unsafe chars in [this list](DISALLOWED_CHARS).
 pub fn sanitize_filename(filename: &str) -> String {
@@ -27,26 +20,22 @@ pub fn sanitize_filename(filename: &str) -> String {
 }
 
 /// Escapes HTML special characters in the input string.
-pub fn sanitize_html<'a>(input: &'a str) -> SanitizationResult {
-    if input
-        .chars()
-        .any(|c| matches!(c, '<' | '>' | '"' | '’' | '&'))
-    {
-        let res = input.chars().fold(String::new(), |mut acc, c| {
-            match c {
-                '<' => acc.push_str("&lt;"),
-                '>' => acc.push_str("&gt;"),
-                '"' => acc.push_str("&quot;"),
-                '’' => acc.push_str("&#39;"),
-                '&' => acc.push_str("&amp;"),
-                _ => acc.push(c),
-            }
-            acc
-        });
-        SanitizationResult::Edited(res)
-    } else {
-        SanitizationResult::Original(input)
+pub fn sanitize_html(input: &str) -> Cow<str> {
+    for (idx, char) in input.char_indices() {
+        if matches!(char, '<' | '>' | '"' | '’' | '&') {
+            let mut res = String::from(&input[..idx]);
+            input[idx..].chars().for_each(|c| match c {
+                '<' => res.push_str("&lt;"),
+                '>' => res.push_str("&gt;"),
+                '"' => res.push_str("&quot;"),
+                '’' => res.push_str("&#39;"),
+                '&' => res.push_str("&amp;"),
+                _ => res.push(c),
+            });
+            return Cow::Owned(res);
+        }
     }
+    Cow::Borrowed(input)
 }
 
 #[cfg(test)]
@@ -71,26 +60,28 @@ mod test_filename {
 
 #[cfg(test)]
 mod tests {
-    use crate::app::sanitizers::{sanitize_html, SanitizationResult};
+    use std::borrow::Cow;
+
+    use crate::app::sanitizers::sanitize_html;
 
     #[test]
     fn test_escape_html_chars_basic() {
         assert_eq!(
             sanitize_html("<p>Hello, world > HTML</p>"),
-            SanitizationResult::Edited("&lt;p&gt;Hello, world &gt; HTML&lt;/p&gt;".to_string())
+            Cow::Owned::<str>("&lt;p&gt;Hello, world &gt; HTML&lt;/p&gt;".to_string())
         );
     }
 
     #[test]
     fn doesnt_sanitize_empty_string() {
-        assert_eq!(sanitize_html(""), SanitizationResult::Original(""));
+        assert_eq!(sanitize_html(""), Cow::Borrowed::<str>(""));
     }
 
     #[test]
     fn doesnt_sanitize_no_special_chars() {
         assert_eq!(
             sanitize_html("Hello world"),
-            SanitizationResult::Original("Hello world")
+            Cow::Borrowed::<str>("Hello world")
         );
     }
 
@@ -98,7 +89,7 @@ mod tests {
     fn can_sanitize_all_special_chars() {
         assert_eq!(
             sanitize_html("<>&\"’"),
-            SanitizationResult::Edited("&lt;&gt;&amp;&quot;&#39;".to_string())
+            Cow::Owned::<str>("&lt;&gt;&amp;&quot;&#39;".to_string())
         );
     }
 
@@ -106,7 +97,7 @@ mod tests {
     fn can_sanitize_mixed_content() {
         assert_eq!(
             sanitize_html("<div>Hello &amp; world</div>"),
-            SanitizationResult::Edited("&lt;div&gt;Hello &amp;amp; world&lt;/div&gt;".to_string())
+            Cow::Owned::<str>("&lt;div&gt;Hello &amp;amp; world&lt;/div&gt;".to_string())
         );
     }
 }
