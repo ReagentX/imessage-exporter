@@ -1,15 +1,15 @@
 /// The character to replace disallowed chars with
-const REPLACEMENT_CHAR: char = '_';
+const FILENAME_REPLACEMENT_CHAR: char = '_';
 /// Characters disallowed in a filename
-const DISALLOWED_CHARS: [char; 3] = ['/', '\\', ':'];
+const FILENAME_DISALLOWED_CHARS: [char; 3] = ['/', '\\', ':'];
 
 /// Remove unsafe chars in [this list](DISALLOWED_CHARS).
 pub fn sanitize_filename(filename: &str) -> String {
     filename
         .chars()
         .map(|letter| {
-            if DISALLOWED_CHARS.contains(&letter) {
-                REPLACEMENT_CHAR
+            if FILENAME_DISALLOWED_CHARS.contains(&letter) {
+                FILENAME_REPLACEMENT_CHAR
             } else {
                 letter
             }
