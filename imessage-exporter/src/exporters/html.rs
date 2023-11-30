@@ -286,33 +286,40 @@ impl<'a> Writer<'a> for HTML<'a> {
                 "",
             );
 
+            // Render edited messages
+            if message.is_edited() {
+                let edited = match self.format_edited(message, "") {
+                    Ok(s) => s,
+                    Err(why) => format!("{}, {}", message.guid, why),
+                };
+                self.add_line(
+                    &mut formatted_message,
+                    &edited,
+                    "<div class=\"edited\">",
+                    "</div>",
+                );
+            }
+
             match message_part {
                 BubbleType::Text(text) => {
-                    if message.is_edited() {
-                        let edited = match self.format_edited(message, "") {
-                            Ok(s) => s,
-                            Err(why) => format!("{}, {}", message.guid, why),
-                        };
-                        self.add_line(
-                            &mut formatted_message,
-                            &edited,
-                            "<div class=\"edited\">",
-                            "</div>",
-                        );
-                    } else if text.starts_with(FITNESS_RECEIVER) {
-                        self.add_line(
-                            &mut formatted_message,
-                            &text.replace(FITNESS_RECEIVER, YOU),
-                            "<span class=\"bubble\">",
-                            "</span>",
-                        );
-                    } else {
-                        self.add_line(
-                            &mut formatted_message,
-                            &sanitize_html(text),
-                            "<span class=\"bubble\">",
-                            "</span>",
-                        );
+                    // Render the message body if the message was not edited
+                    // If it was edited, it was rendered already
+                    if !message.is_edited() {
+                        if text.starts_with(FITNESS_RECEIVER) {
+                            self.add_line(
+                                &mut formatted_message,
+                                &text.replace(FITNESS_RECEIVER, YOU),
+                                "<span class=\"bubble\">",
+                                "</span>",
+                            );
+                        } else {
+                            self.add_line(
+                                &mut formatted_message,
+                                &sanitize_html(text),
+                                "<span class=\"bubble\">",
+                                "</span>",
+                            );
+                        }
                     }
                 }
                 BubbleType::Attachment => {
