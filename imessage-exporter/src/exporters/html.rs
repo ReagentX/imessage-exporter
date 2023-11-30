@@ -298,25 +298,28 @@ impl<'a> Writer<'a> for HTML<'a> {
                     "<div class=\"edited\">",
                     "</div>",
                 );
-                continue;
             }
 
             match message_part {
                 BubbleType::Text(text) => {
-                    if text.starts_with(FITNESS_RECEIVER) {
-                        self.add_line(
-                            &mut formatted_message,
-                            &text.replace(FITNESS_RECEIVER, YOU),
-                            "<span class=\"bubble\">",
-                            "</span>",
-                        );
-                    } else {
-                        self.add_line(
-                            &mut formatted_message,
-                            &sanitize_html(text),
-                            "<span class=\"bubble\">",
-                            "</span>",
-                        );
+                    // Render the message body if the message was not edited
+                    // If it was edited, it was rendered already
+                    if !message.is_edited() {
+                        if text.starts_with(FITNESS_RECEIVER) {
+                            self.add_line(
+                                &mut formatted_message,
+                                &text.replace(FITNESS_RECEIVER, YOU),
+                                "<span class=\"bubble\">",
+                                "</span>",
+                            );
+                        } else {
+                            self.add_line(
+                                &mut formatted_message,
+                                &sanitize_html(text),
+                                "<span class=\"bubble\">",
+                                "</span>",
+                            );
+                        }
                     }
                 }
                 BubbleType::Attachment => {
