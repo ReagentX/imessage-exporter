@@ -5,7 +5,7 @@ const FILENAME_REPLACEMENT_CHAR: char = '_';
 /// Characters disallowed in a filename
 const FILENAME_DISALLOWED_CHARS: [char; 3] = ['/', '\\', ':'];
 
-/// Remove unsafe chars in [this list](DISALLOWED_CHARS).
+/// Remove unsafe chars in [this list](FILENAME_DISALLOWED_CHARS).
 pub fn sanitize_filename(filename: &str) -> String {
     filename
         .chars()
