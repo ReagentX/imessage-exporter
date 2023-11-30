@@ -67,37 +67,31 @@ mod tests {
     #[test]
     fn test_escape_html_chars_basic() {
         assert_eq!(
-            sanitize_html("<p>Hello, world > HTML</p>"),
-            Cow::Owned::<str>("&lt;p&gt;Hello, world &gt; HTML&lt;/p&gt;".to_string())
+            &sanitize_html("<p>Hello, world > HTML</p>"),
+            "&lt;p&gt;Hello, world &gt; HTML&lt;/p&gt;"
         );
     }
 
     #[test]
     fn doesnt_sanitize_empty_string() {
-        assert_eq!(sanitize_html(""), Cow::Borrowed::<str>(""));
+        assert_eq!(&sanitize_html(""), "");
     }
 
     #[test]
     fn doesnt_sanitize_no_special_chars() {
-        assert_eq!(
-            sanitize_html("Hello world"),
-            Cow::Borrowed::<str>("Hello world")
-        );
+        assert_eq!(&sanitize_html("Hello world"), "Hello world");
     }
 
     #[test]
     fn can_sanitize_all_special_chars() {
-        assert_eq!(
-            sanitize_html("<>&\"’"),
-            Cow::Owned::<str>("&lt;&gt;&amp;&quot;&#39;".to_string())
-        );
+        assert_eq!(&sanitize_html("<>&\"’"), "&lt;&gt;&amp;&quot;&#39;");
     }
 
     #[test]
     fn can_sanitize_mixed_content() {
         assert_eq!(
-            sanitize_html("<div>Hello &amp; world</div>"),
-            Cow::Owned::<str>("&lt;div&gt;Hello &amp;amp; world&lt;/div&gt;".to_string())
+            &sanitize_html("<div>Hello &amp; world</div>"),
+            "&lt;div&gt;Hello &amp;amp; world&lt;/div&gt;"
         );
     }
 }
