@@ -6,7 +6,10 @@ use std::{
 };
 
 use crate::{
-    app::{error::RuntimeError, progress::build_progress_bar_export, runtime::Config},
+    app::{
+        error::RuntimeError, progress::build_progress_bar_export, runtime::Config,
+        sanitizers::sanitize_html,
+    },
     exporters::exporter::{BalloonFormatter, Exporter, Writer},
 };
 
@@ -242,7 +245,7 @@ impl<'a> Writer<'a> for HTML<'a> {
             // Add message sender
             self.add_line(
                 &mut formatted_message,
-                subject,
+                &sanitize_html(subject),
                 "<p>Subject: <span class=\"subject\">",
                 "</span></p>",
             );
@@ -310,7 +313,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                     } else {
                         self.add_line(
                             &mut formatted_message,
-                            text,
+                            &sanitize_html(text),
                             "<span class=\"bubble\">",
                             "</span>",
                         );
@@ -667,8 +670,9 @@ impl<'a> Writer<'a> for HTML<'a> {
         return match msg.get_announcement() {
             Some(announcement) => match announcement {
                 Announcement::NameChange(name) => {
+                    let clean_name = sanitize_html(name);
                     format!(
-                        "\n<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} named the conversation <b>{name}</b></p></div>\n"
+                        "\n<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} named the conversation <b>{clean_name}</b></p></div>\n"
                     )
                 }
                 Announcement::PhotoChange => {
@@ -718,8 +722,9 @@ impl<'a> Writer<'a> for HTML<'a> {
                     let last = i == edited_message.items() - 1;
 
                     if let Some((timestamp, text, _)) = edited_message.item_at(i) {
+                        let clean_text = sanitize_html(text);
                         match previous_timestamp {
-                            None => out_s.push_str(&self.edited_to_html("", text, last)),
+                            None => out_s.push_str(&self.edited_to_html("", &clean_text, last)),
                             Some(prev_timestamp) => {
                                 let end = get_local_time(timestamp, &self.config.offset);
                                 let start = get_local_time(prev_timestamp, &self.config.offset);
@@ -727,7 +732,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                 let diff = readable_diff(start, end).unwrap_or_default();
                                 out_s.push_str(&self.edited_to_html(
                                     &format!("Edited {diff} later"),
-                                    text,
+                                    &clean_text,
                                     last,
                                 ));
                             }
@@ -800,16 +805,16 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
 
             // Title
             if let Some(title) = balloon.title {
-                out_s.push_str("<div class=\"caption\"><xmp>");
-                out_s.push_str(title);
-                out_s.push_str("</xmp></div>");
+                out_s.push_str("<div class=\"caption\">");
+                out_s.push_str(&sanitize_html(title));
+                out_s.push_str("</div>");
             }
 
             // Subtitle
             if let Some(summary) = balloon.summary {
-                out_s.push_str("<div class=\"subcaption\"><xmp>");
-                out_s.push_str(summary);
-                out_s.push_str("</xmp></div>");
+                out_s.push_str("<div class=\"subcaption\">");
+                out_s.push_str(&sanitize_html(summary));
+                out_s.push_str("</div>");
             }
 
             // End footer
@@ -1560,6 +1565,29 @@ mod tests {
     }
 
     #[test]
+    fn can_format_html_message_with_html() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.text = Some("<table></table>".to_string());
+        message.is_from_me = true;
+        message.chat_id = Some(0);
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected = "<div class=\"message\">\n<div class=\"sent iMessage\">\n<p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span>\n<span class=\"sender\">Me</span></p>\n<hr><div class=\"message_part\">\n<span class=\"bubble\">&lt;table&gt;&lt;/table&gt;</span>\n</div>\n</div>\n</div>\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
     fn can_format_html_from_me_normal_deleted() {
         // Set timezone to PST for consistent Local time
         set_var("TZ", "PST");
@@ -1940,7 +1968,7 @@ mod balloon_format_tests {
         };
 
         let expected = exporter.format_url(&balloon, &blank());
-        let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"images\" loading=\"lazy\", onerror=\"this.style.display='none'\"><div class=\"name\">site_name</div></div><div class=\"app_footer\"><div class=\"caption\"><xmp>title</xmp></div><div class=\"subcaption\"><xmp>summary</xmp></div></div></a>";
+        let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"images\" loading=\"lazy\", onerror=\"this.style.display='none'\"><div class=\"name\">site_name</div></div><div class=\"app_footer\"><div class=\"caption\">title</div><div class=\"subcaption\">summary</div></div></a>";
 
         assert_eq!(expected, actual);
     }
@@ -1966,7 +1994,7 @@ mod balloon_format_tests {
         };
 
         let expected = exporter.format_url(&balloon, &blank());
-        let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"images\" onerror=\"this.style.display='none'\"><div class=\"name\">site_name</div></div><div class=\"app_footer\"><div class=\"caption\"><xmp>title</xmp></div><div class=\"subcaption\"><xmp>summary</xmp></div></div></a>";
+        let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"images\" onerror=\"this.style.display='none'\"><div class=\"name\">site_name</div></div><div class=\"app_footer\"><div class=\"caption\">title</div><div class=\"subcaption\">summary</div></div></a>";
 
         assert_eq!(expected, actual);
     }
