@@ -286,24 +286,20 @@ impl<'a> Writer<'a> for HTML<'a> {
                 "",
             );
 
-            // Render edited messages
-            if message.is_edited() {
-                let edited = match self.format_edited(message, "") {
-                    Ok(s) => s,
-                    Err(why) => format!("{}, {}", message.guid, why),
-                };
-                self.add_line(
-                    &mut formatted_message,
-                    &edited,
-                    "<div class=\"edited\">",
-                    "</div>",
-                );
-                continue;
-            }
-
             match message_part {
                 BubbleType::Text(text) => {
-                    if text.starts_with(FITNESS_RECEIVER) {
+                    if message.is_edited() {
+                        let edited = match self.format_edited(message, "") {
+                            Ok(s) => s,
+                            Err(why) => format!("{}, {}", message.guid, why),
+                        };
+                        self.add_line(
+                            &mut formatted_message,
+                            &edited,
+                            "<div class=\"edited\">",
+                            "</div>",
+                        );
+                    } else if text.starts_with(FITNESS_RECEIVER) {
                         self.add_line(
                             &mut formatted_message,
                             &text.replace(FITNESS_RECEIVER, YOU),
