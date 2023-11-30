@@ -8,17 +8,17 @@ use std::fmt::Display;
 #[derive(PartialEq, Eq, Debug)]
 pub enum ExportType {
     /// HTML file export
-    HTML,
+    Html,
     /// Text file export
-    TXT,
+    Txt,
 }
 
 impl ExportType {
     /// Given user's input, return a variant if the input matches one
     pub fn from_cli(platform: &str) -> Option<Self> {
         match platform.to_lowercase().as_str() {
-            "txt" => Some(Self::TXT),
-            "html" => Some(Self::HTML),
+            "txt" => Some(Self::Txt),
+            "html" => Some(Self::Html),
             _ => None,
         }
     }
@@ -27,8 +27,8 @@ impl ExportType {
 impl Display for ExportType {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ExportType::TXT => write!(fmt, "txt"),
-            ExportType::HTML => write!(fmt, "html"),
+            ExportType::Txt => write!(fmt, "txt"),
+            ExportType::Html => write!(fmt, "html"),
         }
     }
 }
@@ -41,23 +41,23 @@ mod tests {
     fn can_parse_html_any_case() {
         assert!(matches!(
             ExportType::from_cli("html"),
-            Some(ExportType::HTML)
+            Some(ExportType::Html)
         ));
         assert!(matches!(
             ExportType::from_cli("HTML"),
-            Some(ExportType::HTML)
+            Some(ExportType::Html)
         ));
         assert!(matches!(
             ExportType::from_cli("HtMl"),
-            Some(ExportType::HTML)
+            Some(ExportType::Html)
         ));
     }
 
     #[test]
     fn can_parse_txt_any_case() {
-        assert!(matches!(ExportType::from_cli("txt"), Some(ExportType::TXT)));
-        assert!(matches!(ExportType::from_cli("TXT"), Some(ExportType::TXT)));
-        assert!(matches!(ExportType::from_cli("tXt"), Some(ExportType::TXT)));
+        assert!(matches!(ExportType::from_cli("txt"), Some(ExportType::Txt)));
+        assert!(matches!(ExportType::from_cli("TXT"), Some(ExportType::Txt)));
+        assert!(matches!(ExportType::from_cli("tXt"), Some(ExportType::Txt)));
     }
 
     #[test]

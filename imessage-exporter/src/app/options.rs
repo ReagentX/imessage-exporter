@@ -509,7 +509,7 @@ mod arg_tests {
             attachment_root: None,
             attachment_manager: AttachmentManager::default(),
             diagnostic: false,
-            export_type: Some(ExportType::HTML),
+            export_type: Some(ExportType::Html),
             export_path: validate_path(Some(&tmp_dir), &None).unwrap(),
             query_context: QueryContext::default(),
             no_lazy: false,
@@ -537,7 +537,7 @@ mod arg_tests {
             attachment_root: None,
             attachment_manager: AttachmentManager::default(),
             diagnostic: false,
-            export_type: Some(ExportType::TXT),
+            export_type: Some(ExportType::Txt),
             export_path: validate_path(None, &None).unwrap(),
             query_context: QueryContext::default(),
             no_lazy: true,
@@ -657,7 +657,7 @@ mod path_tests {
     fn can_validate_empty() {
         let tmp = String::from("/tmp");
         let export_path = Some(&tmp);
-        let export_type = Some(ExportType::TXT);
+        let export_type = Some(ExportType::Txt);
 
         let result = validate_path(export_path, &export_type.as_ref());
 
@@ -668,7 +668,7 @@ mod path_tests {
     fn can_validate_different_type() {
         let tmp = String::from("/tmp");
         let export_path = Some(&tmp);
-        let export_type = Some(ExportType::TXT);
+        let export_type = Some(ExportType::Txt);
 
         let result = validate_path(export_path, &export_type.as_ref());
 
@@ -685,7 +685,7 @@ mod path_tests {
     fn can_validate_same_type() {
         let tmp = String::from("/tmp");
         let export_path = Some(&tmp);
-        let export_type = Some(ExportType::TXT);
+        let export_type = Some(ExportType::Txt);
 
         let result = validate_path(export_path, &export_type.as_ref());
 

@@ -325,10 +325,10 @@ impl Config {
 
             // Create exporter, pass it data we care about, then kick it off
             match export_type {
-                ExportType::HTML => {
+                ExportType::Html => {
                     HTML::new(self).iter_messages()?;
                 }
-                ExportType::TXT => {
+                ExportType::Txt => {
                     TXT::new(self).iter_messages()?;
                 }
             }

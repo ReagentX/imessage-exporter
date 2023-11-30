@@ -10,3 +10,9 @@ impl HandwrittenMessage {
         Self {}
     }
 }
+
+impl Default for HandwrittenMessage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
