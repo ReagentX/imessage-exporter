@@ -60,8 +60,6 @@ mod test_filename {
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
-
     use crate::app::sanitizers::sanitize_html;
 
     #[test]
