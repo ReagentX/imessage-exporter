@@ -28,7 +28,7 @@ impl Table for ChatToHandle {
     }
 
     fn get(db: &Connection) -> Result<Statement, TableError> {
-        db.prepare(&format!("SELECT * FROM {}", CHAT_HANDLE_JOIN))
+        db.prepare(&format!("SELECT * FROM {CHAT_HANDLE_JOIN}"))
             .map_err(TableError::ChatToHandle)
     }
 
@@ -43,7 +43,7 @@ impl Table for ChatToHandle {
 impl Cacheable for ChatToHandle {
     type K = i32;
     type V = BTreeSet<i32>;
-    /// Generate a hashmap containing each chatroom's ID pointing to a HashSet of participant handle IDs
+    /// Generate a hashmap containing each chatroom's ID pointing to a `HashSet` of participant handle IDs
     ///
     /// # Example:
     ///
@@ -66,15 +66,12 @@ impl Cacheable for ChatToHandle {
 
         for mapping in mappings {
             let joiner = ChatToHandle::extract(mapping)?;
-            match cache.get_mut(&joiner.chat_id) {
-                Some(handles) => {
-                    handles.insert(joiner.handle_id);
-                }
-                None => {
-                    let mut data_to_cache = BTreeSet::new();
-                    data_to_cache.insert(joiner.handle_id);
-                    cache.insert(joiner.chat_id, data_to_cache);
-                }
+            if let Some(handles) = cache.get_mut(&joiner.chat_id) {
+                handles.insert(joiner.handle_id);
+            } else {
+                let mut data_to_cache = BTreeSet::new();
+                data_to_cache.insert(joiner.handle_id);
+                cache.insert(joiner.chat_id, data_to_cache);
             }
         }
 
@@ -96,16 +93,13 @@ impl Deduplicate for ChatToHandle {
         // Build cache of each unique set of participants to a new identifier:
         let mut unique_chat_identifier = 0;
         for (chat_id, participants) in duplicated_data {
-            match participants_to_unique_chat_id.get(participants) {
-                Some(id) => {
-                    deduplicated_chats.insert(chat_id.to_owned(), id.to_owned());
-                }
-                None => {
-                    participants_to_unique_chat_id
-                        .insert(participants.to_owned(), unique_chat_identifier);
-                    deduplicated_chats.insert(chat_id.to_owned(), unique_chat_identifier);
-                    unique_chat_identifier += 1;
-                }
+            if let Some(id) = participants_to_unique_chat_id.get(participants) {
+                deduplicated_chats.insert(chat_id.to_owned(), id.to_owned());
+            } else {
+                participants_to_unique_chat_id
+                    .insert(participants.to_owned(), unique_chat_identifier);
+                deduplicated_chats.insert(chat_id.to_owned(), unique_chat_identifier);
+                unique_chat_identifier += 1;
             }
         }
         deduplicated_chats

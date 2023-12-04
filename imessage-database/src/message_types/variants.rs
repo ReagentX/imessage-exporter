@@ -8,7 +8,7 @@ use crate::{
     error::plist::PlistParseError,
     message_types::{
         app_store::AppStoreMessage, collaboration::CollaborationMessage, music::MusicMessage,
-        url::URLMessage,
+        placemark::PlacemarkMessage, url::URLMessage,
     },
 };
 
@@ -72,22 +72,26 @@ pub enum CustomBalloon<'a> {
     Slideshow,
     /// [Check In](https://support.apple.com/guide/iphone/use-check-in-iphc143bb7e9/ios) messages
     CheckIn,
+    /// Find My messages
+    FindMy
 }
 
 /// URL Message Types
 ///
-/// Apple sometimes semantically overloads the `com.apple.messages.URLBalloonProvider` with
+/// Apple sometimes overloads `com.apple.messages.URLBalloonProvider` with
 /// other types of messages; this enum represents those variants.
 #[derive(Debug)]
 pub enum URLOverride<'a> {
-    /// [URL](crate::message_types::url) previews
+    /// [`URL`](crate::message_types::url) previews
     Normal(URLMessage<'a>),
-    /// [Apple Music](crate::message_types::music) messages
+    /// [`Apple Music`](crate::message_types::music) messages
     AppleMusic(MusicMessage<'a>),
-    /// [App Store](crate::message_types::app_store) messages
+    /// [`App Store`](crate::message_types::app_store) messages
     AppStore(AppStoreMessage<'a>),
-    /// [Collaboration](crate::message_types::collaboration) messages
+    /// [`Collaboration`](crate::message_types::collaboration) messages
     Collaboration(CollaborationMessage<'a>),
+    /// [`Placemark`](crate::message_types::placemark) messages
+    SharedPlacemark(PlacemarkMessage<'a>),
 }
 
 /// Announcement Message Types
@@ -128,7 +132,7 @@ pub enum Variant<'a> {
 
 /// Defines behavior for different types of messages that have custom balloons
 pub trait BalloonProvider<'a> {
-    /// Creates the object from a HashMap of item attributes
+    /// Creates the object from a `HashMap` of item attributes
     fn from_map(payload: &'a Value) -> Result<Self, PlistParseError>
     where
         Self: Sized;

@@ -1,6 +1,7 @@
 /*!
-These are the link previews that iMessage generates when sending links. They may
-contain metadata, even if the page the link points to no longer exists on the internet.
+ These are the link previews that iMessage generates when sending links.
+
+ They may contain metadata, even if the page the link points to no longer exists on the internet.
 */
 
 use plist::Value;
@@ -11,6 +12,7 @@ use crate::{
         app_store::AppStoreMessage,
         collaboration::CollaborationMessage,
         music::MusicMessage,
+        placemark::PlacemarkMessage,
         variants::{BalloonProvider, URLOverride},
     },
     util::plist::{get_bool_from_dict, get_string_from_dict, get_string_from_nested_dict},
@@ -70,6 +72,9 @@ impl<'a> URLMessage<'a> {
         if let Ok(balloon) = AppStoreMessage::from_map(payload) {
             return Ok(URLOverride::AppStore(balloon));
         }
+        if let Ok(balloon) = PlacemarkMessage::from_map(payload) {
+            return Ok(URLOverride::SharedPlacemark(balloon));
+        }
         if let Ok(balloon) = URLMessage::from_map(payload) {
             return Ok(URLOverride::Normal(balloon));
         }
@@ -93,6 +98,7 @@ impl<'a> URLMessage<'a> {
         };
         Err(PlistParseError::NoPayload)
     }
+
     /// Extract the array of image URLs from a URL message payload.
     ///
     /// The array consists of dictionaries that look like this:
@@ -266,7 +272,7 @@ mod url_tests {
             site_name: None,
             placeholder: false,
         };
-        assert_eq!(expected.get_url(), Some("https://chrissardegna.com/"))
+        assert_eq!(expected.get_url(), Some("https://chrissardegna.com/"));
     }
 
     #[test]
@@ -282,7 +288,7 @@ mod url_tests {
             site_name: None,
             placeholder: false,
         };
-        assert_eq!(expected.get_url(), Some("https://chrissardegna.com"))
+        assert_eq!(expected.get_url(), Some("https://chrissardegna.com"));
     }
 
     #[test]
@@ -298,7 +304,7 @@ mod url_tests {
             site_name: None,
             placeholder: false,
         };
-        assert_eq!(expected.get_url(), None)
+        assert_eq!(expected.get_url(), None);
     }
 }
 
@@ -323,7 +329,7 @@ mod url_override_tests {
         let parsed = parse_plist(&plist).unwrap();
 
         let balloon = URLMessage::get_url_message_override(&parsed).unwrap();
-        assert!(matches!(balloon, URLOverride::Normal(_)))
+        assert!(matches!(balloon, URLOverride::Normal(_)));
     }
 
     #[test]
@@ -337,7 +343,7 @@ mod url_override_tests {
         let parsed = parse_plist(&plist).unwrap();
 
         let balloon = URLMessage::get_url_message_override(&parsed).unwrap();
-        assert!(matches!(balloon, URLOverride::AppleMusic(_)))
+        assert!(matches!(balloon, URLOverride::AppleMusic(_)));
     }
 
     #[test]
@@ -351,7 +357,7 @@ mod url_override_tests {
         let parsed = parse_plist(&plist).unwrap();
 
         let balloon = URLMessage::get_url_message_override(&parsed).unwrap();
-        assert!(matches!(balloon, URLOverride::AppStore(_)))
+        assert!(matches!(balloon, URLOverride::AppStore(_)));
     }
 
     #[test]
@@ -365,6 +371,21 @@ mod url_override_tests {
         let parsed = parse_plist(&plist).unwrap();
 
         let balloon = URLMessage::get_url_message_override(&parsed).unwrap();
-        assert!(matches!(balloon, URLOverride::Collaboration(_)))
+        assert!(matches!(balloon, URLOverride::Collaboration(_)));
+    }
+
+    #[test]
+    fn can_parse_placemark() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/shared_placemark/SharedPlacemark.plist");
+        let plist_data = File::open(plist_path).unwrap();
+        let plist = Value::from_reader(plist_data).unwrap();
+        let parsed = parse_plist(&plist).unwrap();
+
+        let balloon = URLMessage::get_url_message_override(&parsed).unwrap();
+        println!("{balloon:?}");
+        assert!(matches!(balloon, URLOverride::SharedPlacemark(_)));
     }
 }

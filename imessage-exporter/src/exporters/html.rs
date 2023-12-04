@@ -1,4 +1,3 @@
-use core::panic;
 use std::{
     collections::HashMap,
     fs::File,
@@ -7,7 +6,10 @@ use std::{
 };
 
 use crate::{
-    app::{error::RuntimeError, progress::build_progress_bar_export, runtime::Config},
+    app::{
+        error::RuntimeError, progress::build_progress_bar_export, runtime::Config,
+        sanitizers::sanitize_html,
+    },
     exporters::exporter::{BalloonFormatter, Exporter, Writer},
 };
 
@@ -19,7 +21,9 @@ use imessage_database::{
         collaboration::CollaborationMessage,
         edited::EditedMessage,
         expressives::{BubbleEffect, Expressive, ScreenEffect},
+        handwriting::HandwrittenMessage,
         music::MusicMessage,
+        placemark::PlacemarkMessage,
         url::URLMessage,
         variants::{Announcement, BalloonProvider, CustomBalloon, URLOverride, Variant},
     },
@@ -40,7 +44,7 @@ const STYLE: &str = include_str!("resources/style.css");
 
 pub struct HTML<'a> {
     /// Data that is setup from the application's runtime
-    pub config: &'a Config<'a>,
+    pub config: &'a Config,
     /// Handles to files we want to write messages to
     /// Map of internal unique chatroom ID to a filename
     pub files: HashMap<i32, PathBuf>,
@@ -86,7 +90,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
 
         let messages = statement
             .query_map([], |row| Ok(Message::from_row(row)))
-            .unwrap();
+            .map_err(|err| RuntimeError::DatabaseError(TableError::Messages(err)))?;
 
         for message in messages {
             let mut msg = Message::extract(message).map_err(RuntimeError::DatabaseError)?;
@@ -106,7 +110,7 @@ impl<'a> Exporter<'a> for HTML<'a> {
             }
             // Message replies and reactions are rendered in context, so no need to render them separately
             else if !msg.is_reaction() {
-                msg.gen_text(&self.config.db);
+                let _ = msg.gen_text(&self.config.db);
                 let message = self
                     .format_message(&msg, 0)
                     .map_err(RuntimeError::DatabaseError)?;
@@ -213,7 +217,7 @@ impl<'a> Writer<'a> for HTML<'a> {
         // Add message sender
         self.add_line(
             &mut formatted_message,
-            self.config.who(&message.handle_id, message.is_from_me),
+            self.config.who(message.handle_id, message.is_from_me),
             "<span class=\"sender\">",
             "</span></p>",
         );
@@ -241,7 +245,7 @@ impl<'a> Writer<'a> for HTML<'a> {
             // Add message sender
             self.add_line(
                 &mut formatted_message,
-                subject,
+                &sanitize_html(subject),
                 "<p>Subject: <span class=\"subject\">",
                 "</span></p>",
             );
@@ -282,34 +286,40 @@ impl<'a> Writer<'a> for HTML<'a> {
                 "",
             );
 
+            // Render edited messages
+            if message.is_edited() {
+                let edited = match self.format_edited(message, "") {
+                    Ok(s) => s,
+                    Err(why) => format!("{}, {}", message.guid, why),
+                };
+                self.add_line(
+                    &mut formatted_message,
+                    &edited,
+                    "<div class=\"edited\">",
+                    "</div>",
+                );
+            }
+
             match message_part {
                 BubbleType::Text(text) => {
-                    // Render edited messages
-                    if message.is_edited() {
-                        let edited = match self.format_edited(message, "") {
-                            Ok(s) => s,
-                            Err(why) => format!("{}, {}", message.guid, why),
-                        };
-                        self.add_line(
-                            &mut formatted_message,
-                            &edited,
-                            "<div class=\"edited\">",
-                            "</div>",
-                        );
-                    } else if text.starts_with(FITNESS_RECEIVER) {
-                        self.add_line(
-                            &mut formatted_message,
-                            &text.replace(FITNESS_RECEIVER, YOU),
-                            "<span class=\"bubble\">",
-                            "</span>",
-                        );
-                    } else {
-                        self.add_line(
-                            &mut formatted_message,
-                            text,
-                            "<span class=\"bubble\">",
-                            "</span>",
-                        );
+                    // Render the message body if the message was not edited
+                    // If it was edited, it was rendered already
+                    if !message.is_edited() {
+                        if text.starts_with(FITNESS_RECEIVER) {
+                            self.add_line(
+                                &mut formatted_message,
+                                &text.replace(FITNESS_RECEIVER, YOU),
+                                "<span class=\"bubble\">",
+                                "</span>",
+                            );
+                        } else {
+                            self.add_line(
+                                &mut formatted_message,
+                                &sanitize_html(text),
+                                "<span class=\"bubble\">",
+                                "</span>",
+                            );
+                        }
                     }
                 }
                 BubbleType::Attachment => {
@@ -322,7 +332,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                                     &result,
                                     "<div class=\"sticker\">",
                                     "</div>",
-                                )
+                                );
                             } else {
                                 match self.format_attachment(attachment, message) {
                                     Ok(result) => {
@@ -412,7 +422,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                         );
                         self.add_line(&mut formatted_message, &formatted_reactions, "", "");
                     }
-                    self.add_line(&mut formatted_message, "</div>", "", "")
+                    self.add_line(&mut formatted_message, "</div>", "", "");
                 }
             }
 
@@ -422,7 +432,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                 replies
                     .iter_mut()
                     .try_for_each(|reply| -> Result<(), TableError> {
-                        reply.gen_text(&self.config.db);
+                        let _ = reply.gen_text(&self.config.db);
                         if !reply.is_reaction() {
                             // Set indent to 1 so we know this is a recursive call
                             self.add_line(
@@ -434,7 +444,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                         }
                         Ok(())
                     })?;
-                self.add_line(&mut formatted_message, "</div>", "", "")
+                self.add_line(&mut formatted_message, "</div>", "", "");
             }
         }
 
@@ -514,7 +524,7 @@ impl<'a> Writer<'a> for HTML<'a> {
                 let sticker_effect = sticker.get_sticker_effect(
                     &self.config.options.platform,
                     &self.config.options.db_path,
-                    self.config.options.attachment_root,
+                    self.config.options.attachment_root.as_deref(),
                 );
                 if let Ok(Some(sticker_effect)) = sticker_effect {
                     return format!("{sticker_embed}\n<div class=\"sticker_effect\">Sent with {sticker_effect} effect</div>");
@@ -534,69 +544,66 @@ impl<'a> Writer<'a> for HTML<'a> {
         if let Variant::App(balloon) = message.variant() {
             let mut app_bubble = String::new();
 
-            match message.payload_data(&self.config.db) {
-                Some(payload) => {
+            // Handwritten messages use a different payload type, so handle that first
+            if matches!(balloon, CustomBalloon::Handwriting) {
+                return Ok(self.format_handwriting(&HandwrittenMessage::new(), message));
+            }
+
+            if let Some(payload) = message.payload_data(&self.config.db) {
+                let res = if message.is_url() {
                     let parsed = parse_plist(&payload)?;
-
-                    let res = if message.is_url() {
-                        let bubble = URLMessage::get_url_message_override(&parsed)?;
-                        match bubble {
-                            URLOverride::Normal(balloon) => self.format_url(&balloon, message),
-                            URLOverride::AppleMusic(balloon) => {
-                                self.format_music(&balloon, message)
-                            }
-                            URLOverride::Collaboration(balloon) => {
-                                self.format_collaboration(&balloon, message)
-                            }
-                            URLOverride::AppStore(balloon) => {
-                                self.format_app_store(&balloon, message)
-                            }
+                    let bubble = URLMessage::get_url_message_override(&parsed)?;
+                    match bubble {
+                        URLOverride::Normal(balloon) => self.format_url(&balloon, message),
+                        URLOverride::AppleMusic(balloon) => self.format_music(&balloon, message),
+                        URLOverride::Collaboration(balloon) => {
+                            self.format_collaboration(&balloon, message)
                         }
-                    } else {
-                        match AppMessage::from_map(&parsed) {
-                            Ok(bubble) => match balloon {
-                                CustomBalloon::Application(bundle_id) => self.format_generic_app(
-                                    &bubble,
-                                    bundle_id,
-                                    attachments,
-                                    message,
-                                ),
-                                CustomBalloon::Handwriting => {
-                                    self.format_handwriting(&bubble, message)
-                                }
-                                CustomBalloon::ApplePay => self.format_apple_pay(&bubble, message),
-                                CustomBalloon::Fitness => self.format_fitness(&bubble, message),
-                                CustomBalloon::Slideshow => self.format_slideshow(&bubble, message),
-                                CustomBalloon::CheckIn => self.format_check_in(&bubble, message),
-                                _ => unreachable!(),
-                            },
-                            Err(why) => return Err(why),
-                        }
-                    };
-                    app_bubble.push_str(&res);
-                }
-                None => {
-                    // Sometimes, URL messages are missing their payloads
-                    if message.is_url() {
-                        if let Some(text) = &message.text {
-                            let mut out_s = String::new();
-                            out_s.push_str("<a href=\"");
-                            out_s.push_str(text);
-                            out_s.push_str("\">");
-
-                            out_s.push_str("<div class=\"app_header\"><div class=\"name\">");
-                            out_s.push_str(text);
-                            out_s.push_str("</div></div>");
-
-                            out_s.push_str("<div class=\"app_footer\"><div class=\"caption\">");
-                            out_s.push_str(text);
-                            out_s.push_str("</div></div></a>");
-
-                            return Ok(out_s);
+                        URLOverride::AppStore(balloon) => self.format_app_store(&balloon, message),
+                        URLOverride::SharedPlacemark(balloon) => {
+                            self.format_placemark(&balloon, message)
                         }
                     }
-                    return Err(PlistParseError::NoPayload);
+                } else {
+                    let parsed = parse_plist(&payload)?;
+                    match AppMessage::from_map(&parsed) {
+                        Ok(bubble) => match balloon {
+                            CustomBalloon::Application(bundle_id) => {
+                                self.format_generic_app(&bubble, bundle_id, attachments, message)
+                            }
+                            CustomBalloon::ApplePay => self.format_apple_pay(&bubble, message),
+                            CustomBalloon::Fitness => self.format_fitness(&bubble, message),
+                            CustomBalloon::Slideshow => self.format_slideshow(&bubble, message),
+                            CustomBalloon::CheckIn => self.format_check_in(&bubble, message),
+                            CustomBalloon::FindMy => self.format_find_my(&bubble, message),
+                            CustomBalloon::Handwriting => unreachable!(),
+                            CustomBalloon::URL => unreachable!(),
+                        },
+                        Err(why) => return Err(why),
+                    }
+                };
+                app_bubble.push_str(&res);
+            } else {
+                // Sometimes, URL messages are missing their payloads
+                if message.is_url() {
+                    if let Some(text) = &message.text {
+                        let mut out_s = String::new();
+                        out_s.push_str("<a href=\"");
+                        out_s.push_str(text);
+                        out_s.push_str("\">");
+
+                        out_s.push_str("<div class=\"app_header\"><div class=\"name\">");
+                        out_s.push_str(text);
+                        out_s.push_str("</div></div>");
+
+                        out_s.push_str("<div class=\"app_footer\"><div class=\"caption\">");
+                        out_s.push_str(text);
+                        out_s.push_str("</div></div></a>");
+
+                        return Ok(out_s);
+                    }
                 }
+                return Err(PlistParseError::NoPayload);
             }
             Ok(app_bubble)
         } else {
@@ -608,17 +615,17 @@ impl<'a> Writer<'a> for HTML<'a> {
         match msg.variant() {
             Variant::Reaction(_, added, reaction) => {
                 if !added {
-                    return Ok("".to_string());
+                    return Ok(String::new());
                 }
                 Ok(format!(
                     "<span class=\"reaction\"><b>{:?}</b> by {}</span>",
                     reaction,
-                    self.config.who(&msg.handle_id, msg.is_from_me),
+                    self.config.who(msg.handle_id, msg.is_from_me),
                 ))
             }
             Variant::Sticker(_) => {
                 let mut paths = Attachment::from_message(&self.config.db, msg)?;
-                let who = self.config.who(&msg.handle_id, msg.is_from_me);
+                let who = self.config.who(msg.handle_id, msg.is_from_me);
                 // Sticker messages have only one attachment, the sticker image
                 Ok(match paths.get_mut(0) {
                     Some(sticker) => self.format_sticker(sticker, msg),
@@ -656,18 +663,19 @@ impl<'a> Writer<'a> for HTML<'a> {
     }
 
     fn format_announcement(&self, msg: &'a Message) -> String {
-        let mut who = self.config.who(&msg.handle_id, msg.is_from_me);
+        let mut who = self.config.who(msg.handle_id, msg.is_from_me);
         // Rename yourself so we render the proper grammar here
         if who == ME {
-            who = self.config.options.custom_name.unwrap_or("You")
+            who = self.config.options.custom_name.as_deref().unwrap_or("You");
         }
         let timestamp = format(&msg.date(&self.config.offset));
 
         return match msg.get_announcement() {
             Some(announcement) => match announcement {
                 Announcement::NameChange(name) => {
+                    let clean_name = sanitize_html(name);
                     format!(
-                        "\n<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} named the conversation <b>{name}</b></p></div>\n"
+                        "\n<div class =\"announcement\"><p><span class=\"timestamp\">{timestamp}</span> {who} named the conversation <b>{clean_name}</b></p></div>\n"
                     )
                 }
                 Announcement::PhotoChange => {
@@ -701,7 +709,7 @@ impl<'a> Writer<'a> for HTML<'a> {
 
             if edited_message.is_deleted() {
                 let who = if msg.is_from_me {
-                    self.config.options.custom_name.unwrap_or(YOU)
+                    self.config.options.custom_name.as_deref().unwrap_or(YOU)
                 } else {
                     "They"
                 };
@@ -717,8 +725,9 @@ impl<'a> Writer<'a> for HTML<'a> {
                     let last = i == edited_message.items() - 1;
 
                     if let Some((timestamp, text, _)) = edited_message.item_at(i) {
+                        let clean_text = sanitize_html(text);
                         match previous_timestamp {
-                            None => out_s.push_str(&self.edited_to_html("", text, last)),
+                            None => out_s.push_str(&self.edited_to_html("", &clean_text, last)),
                             Some(prev_timestamp) => {
                                 let end = get_local_time(timestamp, &self.config.offset);
                                 let start = get_local_time(prev_timestamp, &self.config.offset);
@@ -726,9 +735,9 @@ impl<'a> Writer<'a> for HTML<'a> {
                                 let diff = readable_diff(start, end).unwrap_or_default();
                                 out_s.push_str(&self.edited_to_html(
                                     &format!("Edited {diff} later"),
-                                    text,
+                                    &clean_text,
                                     last,
-                                ))
+                                ));
                             }
                         }
 
@@ -747,9 +756,11 @@ impl<'a> Writer<'a> for HTML<'a> {
 
     fn write_to_file(file: &Path, text: &str) {
         match File::options().append(true).create(true).open(file) {
-            Ok(mut file) => file.write_all(text.as_bytes()).unwrap(),
+            Ok(mut file) => {
+                let _ = file.write_all(text.as_bytes());
+            }
             Err(why) => eprintln!("Unable to write to {file:?}: {why:?}"),
-        }
+        };
     }
 }
 
@@ -797,16 +808,16 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
 
             // Title
             if let Some(title) = balloon.title {
-                out_s.push_str("<div class=\"caption\"><xmp>");
-                out_s.push_str(title);
-                out_s.push_str("</xmp></div>");
+                out_s.push_str("<div class=\"caption\">");
+                out_s.push_str(&sanitize_html(title));
+                out_s.push_str("</div>");
             }
 
             // Subtitle
             if let Some(summary) = balloon.summary {
-                out_s.push_str("<div class=\"subcaption\"><xmp>");
-                out_s.push_str(summary);
-                out_s.push_str("</xmp></div>");
+                out_s.push_str("<div class=\"subcaption\">");
+                out_s.push_str(&sanitize_html(summary));
+                out_s.push_str("</div>");
             }
 
             // End footer
@@ -936,104 +947,6 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
         out_s
     }
 
-    fn format_handwriting(&self, _: &AppMessage, _: &Message) -> String {
-        String::from("Handwritten messages are not yet supported!")
-    }
-
-    fn format_apple_pay(&self, balloon: &AppMessage, message: &Message) -> String {
-        self.balloon_to_html(balloon, "Apple Pay", &mut [], message)
-    }
-
-    fn format_fitness(&self, balloon: &AppMessage, message: &Message) -> String {
-        self.balloon_to_html(balloon, "Fitness", &mut [], message)
-    }
-
-    fn format_slideshow(&self, balloon: &AppMessage, message: &Message) -> String {
-        self.balloon_to_html(balloon, "Slideshow", &mut [], message)
-    }
-
-    fn format_check_in(&self, balloon: &AppMessage, _: &Message) -> String {
-        let mut out_s = String::new();
-
-        out_s.push_str("<div class=\"app_header\">");
-
-        // Name
-        out_s.push_str("<div class=\"name\">");
-        out_s.push_str(balloon.app_name.unwrap_or("Check In"));
-        out_s.push_str("</div>");
-
-        // ldtext
-        if let Some(ldtext) = balloon.ldtext {
-            out_s.push_str("<div class=\"ldtext\">");
-            out_s.push_str(ldtext);
-            out_s.push_str("</div>");
-        }
-
-        // Header end, footer begin
-        out_s.push_str("</div>");
-
-        // Only write the footer if there is data to write
-        let metadata: HashMap<&str, &str> = balloon.parse_query_string();
-
-        // Before manual check-in
-        if let Some(date_str) = metadata.get("estimatedEndTime") {
-            // Parse the estimated end time from the message's query string
-            let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
-            let date_time = get_local_time(&date_stamp, &self.config.offset);
-            let date_string = format(&date_time);
-
-            out_s.push_str("<div class=\"app_footer\">");
-
-            out_s.push_str("<div class=\"caption\">Expected around ");
-            out_s.push_str(&date_string);
-            out_s.push_str("</div>");
-
-            out_s.push_str("</div>");
-        }
-        // Expired check-in
-        else if let Some(date_str) = metadata.get("triggerTime") {
-            // Parse the estimated end time from the message's query string
-            let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
-            let date_time = get_local_time(&date_stamp, &self.config.offset);
-            let date_string = format(&date_time);
-
-            out_s.push_str("<div class=\"app_footer\">");
-
-            out_s.push_str("<div class=\"caption\">Was expected around ");
-            out_s.push_str(&date_string);
-            out_s.push_str("</div>");
-
-            out_s.push_str("</div>");
-        }
-        // Accepted check-in
-        else if let Some(date_str) = metadata.get("sendDate") {
-            // Parse the estimated end time from the message's query string
-            let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
-            let date_time = get_local_time(&date_stamp, &self.config.offset);
-            let date_string = format(&date_time);
-
-            out_s.push_str("<div class=\"app_footer\">");
-
-            out_s.push_str("<div class=\"caption\">Checked in at ");
-            out_s.push_str(&date_string);
-            out_s.push_str("</div>");
-
-            out_s.push_str("</div>");
-        }
-
-        out_s
-    }
-
-    fn format_generic_app(
-        &self,
-        balloon: &AppMessage,
-        bundle_id: &str,
-        attachments: &mut Vec<Attachment>,
-        message: &Message,
-    ) -> String {
-        self.balloon_to_html(balloon, bundle_id, attachments, message)
-    }
-
     fn format_app_store(&self, balloon: &AppStoreMessage, _: &'a Message) -> String {
         let mut out_s = String::new();
 
@@ -1092,6 +1005,227 @@ impl<'a> BalloonFormatter<&'a Message> for HTML<'a> {
         }
         out_s
     }
+
+    fn format_placemark(&self, balloon: &PlacemarkMessage, _: &'a Message) -> String {
+        let mut out_s = String::new();
+
+        // Make the whole bubble clickable
+        if let Some(url) = balloon.get_url() {
+            out_s.push_str("<a href=\"");
+            out_s.push_str(url);
+            out_s.push_str("\">");
+        }
+
+        // Header section
+        out_s.push_str("<div class=\"app_header\">");
+
+        if let Some(site_name) = balloon.place_name {
+            out_s.push_str("<div class=\"name\">");
+            out_s.push_str(site_name);
+            out_s.push_str("</div>");
+        } else if let Some(url) = balloon.get_url() {
+            out_s.push_str("<div class=\"name\">");
+            out_s.push_str(url);
+            out_s.push_str("</div>");
+        }
+
+        // Header end
+        out_s.push_str("</div>");
+
+        // Only write the footer if there is data to write
+        if balloon.placemark.address.is_some()
+            || balloon.placemark.postal_code.is_some()
+            || balloon.placemark.country.is_some()
+            || balloon.placemark.sub_administrative_area.is_some()
+        {
+            out_s.push_str("<div class=\"app_footer\">");
+
+            // Address
+            if let Some(address) = balloon.placemark.address {
+                out_s.push_str("<div class=\"caption\">");
+                out_s.push_str(address);
+                out_s.push_str("</div>");
+            }
+
+            // Postal Code
+            if let Some(postal_code) = balloon.placemark.postal_code {
+                out_s.push_str("<div class=\"trailing_caption\">");
+                out_s.push_str(postal_code);
+                out_s.push_str("</div>");
+            }
+
+            // Country
+            if let Some(country) = balloon.placemark.country {
+                out_s.push_str("<div class=\"subcaption\">");
+                out_s.push_str(country);
+                out_s.push_str("</div>");
+            }
+
+            // Administrative Area
+            if let Some(area) = balloon.placemark.sub_administrative_area {
+                out_s.push_str("<div class=\"trailing_subcaption\">");
+                out_s.push_str(area);
+                out_s.push_str("</div>");
+            }
+
+            // End footer
+            out_s.push_str("</div>");
+        }
+
+        // End the link
+        if balloon.get_url().is_some() {
+            out_s.push_str("</a>");
+        }
+        out_s
+    }
+
+    fn format_handwriting(&self, _: &HandwrittenMessage, _: &Message) -> String {
+        String::from("Handwritten messages are not yet supported!")
+    }
+
+    fn format_apple_pay(&self, balloon: &AppMessage, _: &Message) -> String {
+        let mut out_s = String::new();
+
+        out_s.push_str("<div class=\"app_header\">");
+
+        if let Some(app_name) = balloon.app_name {
+            out_s.push_str("<div class=\"name\">");
+            out_s.push_str(app_name);
+            out_s.push_str("</div>");
+        }
+
+        // Header end, footer begin
+        out_s.push_str("</div>");
+        out_s.push_str("<div class=\"app_footer\">");
+
+        if let Some(ldtext) = balloon.ldtext {
+            out_s.push_str("<div class=\"caption\">");
+            out_s.push_str(ldtext);
+            out_s.push_str("</div>");
+        }
+
+        // End footer
+        out_s.push_str("</div>");
+
+        out_s
+    }
+
+    fn format_fitness(&self, balloon: &AppMessage, message: &Message) -> String {
+        self.balloon_to_html(balloon, "Fitness", &mut [], message)
+    }
+
+    fn format_slideshow(&self, balloon: &AppMessage, message: &Message) -> String {
+        self.balloon_to_html(balloon, "Slideshow", &mut [], message)
+    }
+
+    fn format_find_my(&self, balloon: &AppMessage, _: &'a Message) -> String {
+        let mut out_s = String::new();
+
+        out_s.push_str("<div class=\"app_header\">");
+
+        if let Some(app_name) = balloon.app_name {
+            out_s.push_str("<div class=\"name\">");
+            out_s.push_str(app_name);
+            out_s.push_str("</div>");
+        }
+
+        // Header end, footer begin
+        out_s.push_str("</div>");
+        out_s.push_str("<div class=\"app_footer\">");
+
+        if let Some(ldtext) = balloon.ldtext {
+            out_s.push_str("<div class=\"caption\">");
+            out_s.push_str(ldtext);
+            out_s.push_str("</div>");
+        }
+
+        // End footer
+        out_s.push_str("</div>");
+
+        out_s
+    }
+
+    fn format_check_in(&self, balloon: &AppMessage, _: &Message) -> String {
+        let mut out_s = String::new();
+
+        out_s.push_str("<div class=\"app_header\">");
+
+        // Name
+        out_s.push_str("<div class=\"name\">");
+        out_s.push_str(balloon.app_name.unwrap_or("Check In"));
+        out_s.push_str("</div>");
+
+        // ldtext
+        if let Some(ldtext) = balloon.ldtext {
+            out_s.push_str("<div class=\"ldtext\">");
+            out_s.push_str(ldtext);
+            out_s.push_str("</div>");
+        }
+
+        // Header end, footer begin
+        out_s.push_str("</div>");
+
+        // Only write the footer if there is data to write
+        let metadata: HashMap<&str, &str> = balloon.parse_query_string();
+
+        // Before manual check-in
+        if let Some(date_str) = metadata.get("estimatedEndTime") {
+            // Parse the estimated end time from the message's query string
+            let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
+            let date_time = get_local_time(&date_stamp, &0);
+            let date_string = format(&date_time);
+
+            out_s.push_str("<div class=\"app_footer\">");
+
+            out_s.push_str("<div class=\"caption\">Expected around ");
+            out_s.push_str(&date_string);
+            out_s.push_str("</div>");
+
+            out_s.push_str("</div>");
+        }
+        // Expired check-in
+        else if let Some(date_str) = metadata.get("triggerTime") {
+            // Parse the estimated end time from the message's query string
+            let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
+            let date_time = get_local_time(&date_stamp, &0);
+            let date_string = format(&date_time);
+
+            out_s.push_str("<div class=\"app_footer\">");
+
+            out_s.push_str("<div class=\"caption\">Was expected around ");
+            out_s.push_str(&date_string);
+            out_s.push_str("</div>");
+
+            out_s.push_str("</div>");
+        }
+        // Accepted check-in
+        else if let Some(date_str) = metadata.get("sendDate") {
+            // Parse the estimated end time from the message's query string
+            let date_stamp = date_str.parse::<f64>().unwrap_or(0.) as i64 * TIMESTAMP_FACTOR;
+            let date_time = get_local_time(&date_stamp, &0);
+            let date_string = format(&date_time);
+
+            out_s.push_str("<div class=\"app_footer\">");
+
+            out_s.push_str("<div class=\"caption\">Checked in at ");
+            out_s.push_str(&date_string);
+            out_s.push_str("</div>");
+
+            out_s.push_str("</div>");
+        }
+
+        out_s
+    }
+
+    fn format_generic_app(
+        &self,
+        balloon: &AppMessage,
+        bundle_id: &str,
+        attachments: &mut Vec<Attachment>,
+        message: &Message,
+    ) -> String {
+        self.balloon_to_html(balloon, bundle_id, attachments, message)
+    }
 }
 
 impl<'a> HTML<'a> {
@@ -1103,7 +1237,7 @@ impl<'a> HTML<'a> {
                 let who = if message.is_from_me {
                     "them"
                 } else {
-                    self.config.options.custom_name.unwrap_or("you")
+                    self.config.options.custom_name.as_deref().unwrap_or("you")
                 };
                 date.push_str(&format!(" (Read by {who} after {time})"));
             }
@@ -1132,10 +1266,7 @@ impl<'a> HTML<'a> {
     }
 
     fn edited_to_html(&self, timestamp: &str, text: &str, last: bool) -> String {
-        let tag = match last {
-            true => "tfoot",
-            false => "tbody",
-        };
+        let tag = if last { "tfoot" } else { "tbody" };
         format!("<{tag}><tr><td><span class=\"timestamp\">{timestamp}</span></td><td>{text}</td></tr></{tag}>")
     }
 
@@ -1243,7 +1374,10 @@ impl<'a> HTML<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::{env::current_dir, path::PathBuf};
+    use std::{
+        env::{current_dir, set_var},
+        path::PathBuf,
+    };
 
     use crate::{
         app::attachment_manager::AttachmentManager, exporters::exporter::Writer, Config, Exporter,
@@ -1284,7 +1418,7 @@ mod tests {
         }
     }
 
-    pub fn fake_options() -> Options<'static> {
+    pub fn fake_options() -> Options {
         Options {
             db_path: default_db_path(),
             attachment_root: None,
@@ -1296,6 +1430,7 @@ mod tests {
             no_lazy: false,
             custom_name: None,
             platform: Platform::macOS,
+            ignore_disk_space: false,
         }
     }
 
@@ -1323,6 +1458,9 @@ mod tests {
 
     #[test]
     fn can_get_time_valid() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1345,6 +1483,9 @@ mod tests {
 
     #[test]
     fn can_get_time_invalid() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1405,6 +1546,9 @@ mod tests {
 
     #[test]
     fn can_format_html_from_me_normal() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1424,7 +1568,33 @@ mod tests {
     }
 
     #[test]
+    fn can_format_html_message_with_html() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let mut message = blank();
+        // May 17, 2022  8:29:42 PM
+        message.date = 674526582885055488;
+        message.text = Some("<table></table>".to_string());
+        message.is_from_me = true;
+        message.chat_id = Some(0);
+
+        let actual = exporter.format_message(&message, 0).unwrap();
+        let expected = "<div class=\"message\">\n<div class=\"sent iMessage\">\n<p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span>\n<span class=\"sender\">Me</span></p>\n<hr><div class=\"message_part\">\n<span class=\"bubble\">&lt;table&gt;&lt;/table&gt;</span>\n</div>\n</div>\n</div>\n";
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
     fn can_format_html_from_me_normal_deleted() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1445,6 +1615,9 @@ mod tests {
 
     #[test]
     fn can_format_html_from_me_normal_read() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1467,6 +1640,9 @@ mod tests {
 
     #[test]
     fn can_format_html_from_them_normal() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let mut config = Config::new(options).unwrap();
@@ -1489,6 +1665,9 @@ mod tests {
 
     #[test]
     fn can_format_html_from_them_normal_read() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let mut config = Config::new(options).unwrap();
@@ -1516,9 +1695,12 @@ mod tests {
 
     #[test]
     fn can_format_html_from_them_custom_name_read() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let mut options = fake_options();
-        options.custom_name = Some("Name");
+        options.custom_name = Some("Name".to_string());
         let mut config = Config::new(options).unwrap();
         config
             .participants
@@ -1544,6 +1726,9 @@ mod tests {
 
     #[test]
     fn can_format_html_shareplay() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1562,6 +1747,9 @@ mod tests {
 
     #[test]
     fn can_format_html_announcement() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1580,9 +1768,12 @@ mod tests {
 
     #[test]
     fn can_format_html_announcement_custom_name() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let mut options = fake_options();
-        options.custom_name = Some("Name");
+        options.custom_name = Some("Name".to_string());
         let config = Config::new(options).unwrap();
         let exporter = HTML::new(&config);
 
@@ -1599,6 +1790,9 @@ mod tests {
 
     #[test]
     fn can_format_html_reaction_me() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1618,6 +1812,9 @@ mod tests {
 
     #[test]
     fn can_format_html_reaction_them() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let mut config = Config::new(options).unwrap();
@@ -1713,7 +1910,9 @@ mod tests {
     #[test]
     fn can_format_html_attachment_sticker() {
         // Create exporter
-        let options = fake_options();
+        let mut options = fake_options();
+        options.export_path = current_dir().unwrap().parent().unwrap().to_path_buf();
+
         let config = Config::new(options).unwrap();
         let exporter = HTML::new(&config);
 
@@ -1729,20 +1928,27 @@ mod tests {
             .unwrap()
             .join("imessage-database/test_data/stickers/outline.heic");
         attachment.filename = Some(sticker_path.to_string_lossy().to_string());
+        attachment.copied_path = Some(PathBuf::from(sticker_path.to_string_lossy().to_string()));
 
         let actual = exporter.format_sticker(&mut attachment, &message);
 
-        assert_eq!(actual, "<img src=\"/Users/chris/Documents/Code/Rust/imessage-exporter/imessage-database/test_data/stickers/outline.heic\" loading=\"lazy\">\n<div class=\"sticker_effect\">Sent with Outline effect</div>");
+        assert_eq!(actual, "<img src=\"imessage-database/test_data/stickers/outline.heic\" loading=\"lazy\">\n<div class=\"sticker_effect\">Sent with Outline effect</div>");
     }
 }
 
 #[cfg(test)]
 mod balloon_format_tests {
+    use std::env::set_var;
+
     use super::tests::{blank, fake_options};
     use crate::{exporters::exporter::BalloonFormatter, Config, Exporter, HTML};
     use imessage_database::message_types::{
-        app::AppMessage, app_store::AppStoreMessage, collaboration::CollaborationMessage,
-        music::MusicMessage, url::URLMessage,
+        app::AppMessage,
+        app_store::AppStoreMessage,
+        collaboration::CollaborationMessage,
+        music::MusicMessage,
+        placemark::{Placemark, PlacemarkMessage},
+        url::URLMessage,
     };
 
     #[test]
@@ -1765,7 +1971,7 @@ mod balloon_format_tests {
         };
 
         let expected = exporter.format_url(&balloon, &blank());
-        let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"images\" loading=\"lazy\", onerror=\"this.style.display='none'\"><div class=\"name\">site_name</div></div><div class=\"app_footer\"><div class=\"caption\"><xmp>title</xmp></div><div class=\"subcaption\"><xmp>summary</xmp></div></div></a>";
+        let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"images\" loading=\"lazy\", onerror=\"this.style.display='none'\"><div class=\"name\">site_name</div></div><div class=\"app_footer\"><div class=\"caption\">title</div><div class=\"subcaption\">summary</div></div></a>";
 
         assert_eq!(expected, actual);
     }
@@ -1791,7 +1997,7 @@ mod balloon_format_tests {
         };
 
         let expected = exporter.format_url(&balloon, &blank());
-        let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"images\" onerror=\"this.style.display='none'\"><div class=\"name\">site_name</div></div><div class=\"app_footer\"><div class=\"caption\"><xmp>title</xmp></div><div class=\"subcaption\"><xmp>summary</xmp></div></div></a>";
+        let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"images\" onerror=\"this.style.display='none'\"><div class=\"name\">site_name</div></div><div class=\"app_footer\"><div class=\"caption\">title</div><div class=\"subcaption\">summary</div></div></a>";
 
         assert_eq!(expected, actual);
     }
@@ -1860,7 +2066,7 @@ mod balloon_format_tests {
         };
 
         let expected = exporter.format_apple_pay(&balloon, &blank());
-        let actual = "<a href=\"url\"><div class=\"app_header\"><img src=\"image\"><div class=\"name\">app_name</div><div class=\"image_title\">title</div><div class=\"image_subtitle\">subtitle</div><div class=\"ldtext\">ldtext</div></div><div class=\"app_footer\"><div class=\"caption\">caption</div><div class=\"subcaption\">subcaption</div><div class=\"trailing_caption\">trailing_caption</div><div class=\"trailing_subcaption\">trailing_subcaption</div></div></a>";
+        let actual = "<div class=\"app_header\"><div class=\"name\">app_name</div></div><div class=\"app_footer\"><div class=\"caption\">ldtext</div></div>";
 
         assert_eq!(expected, actual);
     }
@@ -1918,7 +2124,36 @@ mod balloon_format_tests {
     }
 
     #[test]
+    fn can_format_html_find_my() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = AppMessage {
+            image: Some("image"),
+            url: Some("url"),
+            title: Some("title"),
+            subtitle: Some("subtitle"),
+            caption: Some("caption"),
+            subcaption: Some("subcaption"),
+            trailing_caption: Some("trailing_caption"),
+            trailing_subcaption: Some("trailing_subcaption"),
+            app_name: Some("app_name"),
+            ldtext: Some("ldtext"),
+        };
+
+        let expected = exporter.format_find_my(&balloon, &blank());
+        let actual = "<div class=\"app_header\"><div class=\"name\">app_name</div></div><div class=\"app_footer\"><div class=\"caption\">ldtext</div></div>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
     fn can_format_html_check_in_timer() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1938,13 +2173,16 @@ mod balloon_format_tests {
         };
 
         let expected = exporter.format_check_in(&balloon, &blank());
-        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Timer Started</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2054  1:54:29 PM</div></div>";
+        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Timer Started</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2023  1:54:29 PM</div></div>";
 
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn can_format_html_check_in_timer_late() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1964,13 +2202,16 @@ mod balloon_format_tests {
         };
 
         let expected = exporter.format_check_in(&balloon, &blank());
-        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Has not checked in when expected, location shared</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2054  1:54:29 PM</div></div>";
+        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Has not checked in when expected, location shared</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2023  1:54:29 PM</div></div>";
 
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn can_format_html_accepted_check_in() {
+        // Set timezone to PST for consistent Local time
+        set_var("TZ", "PST");
+
         // Create exporter
         let options = fake_options();
         let config = Config::new(options).unwrap();
@@ -1990,7 +2231,7 @@ mod balloon_format_tests {
         };
 
         let expected = exporter.format_check_in(&balloon, &blank());
-        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Fake Location</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2054  1:54:29 PM</div></div>";
+        let actual = "<div class=\"app_header\"><div class=\"name\">Check\u{a0}In</div><div class=\"ldtext\">Check\u{a0}In: Fake Location</div></div><div class=\"app_footer\"><div class=\"caption\">Checked in at Oct 14, 2023  1:54:29 PM</div></div>";
 
         assert_eq!(expected, actual);
     }
@@ -2013,6 +2254,37 @@ mod balloon_format_tests {
 
         let expected = exporter.format_app_store(&balloon, &blank());
         let actual = "<div class=\"app_header\"><div class=\"name\">app_name</div></div><a href=\"url\"><div class=\"app_footer\"><div class=\"caption\">description</div><div class=\"subcaption\">platform</div><div class=\"trailing_subcaption\">genre</div></div></a>";
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn can_format_html_placemark() {
+        // Create exporter
+        let options = fake_options();
+        let config = Config::new(options).unwrap();
+        let exporter = HTML::new(&config);
+
+        let balloon = PlacemarkMessage {
+            url: Some("url"),
+            original_url: Some("original_url"),
+            place_name: Some("Name"),
+            placemark: Placemark {
+                name: Some("name"),
+                address: Some("address"),
+                state: Some("state"),
+                city: Some("city"),
+                iso_country_code: Some("iso_country_code"),
+                postal_code: Some("postal_code"),
+                country: Some("country"),
+                street: Some("street"),
+                sub_administrative_area: Some("sub_administrative_area"),
+                sub_locality: Some("sub_locality"),
+            },
+        };
+
+        let expected = exporter.format_placemark(&balloon, &blank());
+        let actual = "<a href=\"url\"><div class=\"app_header\"><div class=\"name\">Name</div></div><div class=\"app_footer\"><div class=\"caption\">address</div><div class=\"trailing_caption\">postal_code</div><div class=\"subcaption\">country</div><div class=\"trailing_subcaption\">sub_administrative_area</div></div></a>";
 
         assert_eq!(expected, actual);
     }

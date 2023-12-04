@@ -5,12 +5,13 @@ use std::{
     path::PathBuf,
 };
 
+use fs2::available_space;
 use rusqlite::Connection;
 
 use crate::{
     app::{
         attachment_manager::AttachmentManager, converter::Converter, error::RuntimeError,
-        options::Options, sanitizers::sanitize_filename,
+        export_type::ExportType, options::Options, sanitizers::sanitize_filename,
     },
     Exporter, HTML, TXT,
 };
@@ -24,15 +25,15 @@ use imessage_database::{
         handle::Handle,
         messages::Message,
         table::{
-            get_connection, Cacheable, Deduplicate, Diagnostic, ATTACHMENTS_DIR, MAX_LENGTH, ME,
-            ORPHANED, UNKNOWN,
+            get_connection, get_db_size, Cacheable, Deduplicate, Diagnostic, ATTACHMENTS_DIR,
+            MAX_LENGTH, ME, ORPHANED, UNKNOWN,
         },
     },
-    util::dates::get_offset,
+    util::{dates::get_offset, size::format_file_size},
 };
 
 /// Stores the application state and handles application lifecycle
-pub struct Config<'a> {
+pub struct Config {
     /// Map of chatroom ID to chatroom information
     pub chatrooms: HashMap<i32, Chat>,
     // Map of chatroom ID to an internal unique chatroom ID
@@ -46,7 +47,7 @@ pub struct Config<'a> {
     /// Messages that are reactions to other messages
     pub reactions: HashMap<String, HashMap<usize, Vec<Message>>>,
     /// App configuration options
-    pub options: Options<'a>,
+    pub options: Options,
     /// Global date offset used by the iMessage database:
     pub offset: i64,
     /// The connection we use to query the database
@@ -55,18 +56,18 @@ pub struct Config<'a> {
     pub converter: Option<Converter>,
 }
 
-impl<'a> Config<'a> {
+impl Config {
     /// Get a deduplicated chat ID or a default value
     pub fn conversation(&self, message: &Message) -> Option<(&Chat, &i32)> {
         match message.chat_id.or(message.deleted_from) {
-            Some(chat_id) => match self.chatrooms.get(&chat_id) {
-                Some(chatroom) => self.real_chatrooms.get(&chat_id).map(|id| (chatroom, id)),
-                // No chatroom for the given chat_id
-                None => {
+            Some(chat_id) => {
+                if let Some(chatroom) = self.chatrooms.get(&chat_id) {
+                    self.real_chatrooms.get(&chat_id).map(|id| (chatroom, id))
+                } else {
                     eprintln!("Chat ID {chat_id} does not exist in chat table!");
                     None
                 }
-            },
+            }
             // No chat_id provided
             None => None,
         }
@@ -106,7 +107,7 @@ impl<'a> Config<'a> {
                 .resolved_attachment_path(
                     &self.options.platform,
                     &self.options.db_path,
-                    self.options.attachment_root,
+                    self.options.attachment_root.as_deref(),
                 )
                 .unwrap_or(attachment.filename().to_string()),
         }
@@ -128,20 +129,19 @@ impl<'a> Config<'a> {
                 )
             }
             // Fallback if there is no name set
-            None => match self.chatroom_participants.get(&chatroom.rowid) {
-                // List of participant names
-                Some(participants) => self.filename_from_participants(participants),
-                // Unique chat_identifier
-                None => {
+            None => {
+                if let Some(participants) = self.chatroom_participants.get(&chatroom.rowid) {
+                    self.filename_from_participants(participants)
+                } else {
                     eprintln!(
                         "Found error: message chat ID {} has no members!",
                         chatroom.rowid
                     );
-                    chatroom.chat_identifier.to_owned()
+                    chatroom.chat_identifier.clone()
                 }
-            },
+            }
         };
-        sanitize_filename(filename)
+        sanitize_filename(&filename)
     }
 
     /// Generate a filename from a set of participants, truncating if the name is too long
@@ -153,11 +153,11 @@ impl<'a> Config<'a> {
     fn filename_from_participants(&self, participants: &BTreeSet<i32>) -> String {
         let mut added = 0;
         let mut out_s = String::with_capacity(MAX_LENGTH);
-        for participant_id in participants.iter() {
-            let participant = self.who(&Some(*participant_id), false);
+        for participant_id in participants {
+            let participant = self.who(Some(*participant_id), false);
             if participant.len() + out_s.len() < MAX_LENGTH {
                 if !out_s.is_empty() {
-                    out_s.push_str(", ")
+                    out_s.push_str(", ");
                 }
                 out_s.push_str(participant);
                 added += 1;
@@ -167,7 +167,7 @@ impl<'a> Config<'a> {
                 if space_remaining >= MAX_LENGTH {
                     out_s.replace_range((MAX_LENGTH - extra.len()).., &extra);
                 } else if out_s.is_empty() {
-                    out_s.push_str(&participant[..MAX_LENGTH])
+                    out_s.push_str(&participant[..MAX_LENGTH]);
                 } else {
                     out_s.push_str(&extra);
                 }
@@ -218,6 +218,45 @@ impl<'a> Config<'a> {
         })
     }
 
+    /// Ensure there is available disk space for the requested export
+    fn ensure_free_space(&self) -> Result<(), RuntimeError> {
+        // Export size is usually about 6% the size of the db; we divide by 10 to over-estimate about 10% of the total size
+        // for some safe headroom
+        let total_db_size =
+            get_db_size(&self.options.db_path).map_err(RuntimeError::DatabaseError)?;
+        let mut estimated_export_size = total_db_size / 10;
+
+        let free_space_at_location =
+            available_space(&self.options.export_path).map_err(RuntimeError::DiskError)?;
+
+        // Validate that there is enough disk space free to write the export
+        if let AttachmentManager::Disabled = self.options.attachment_manager {
+            if estimated_export_size >= free_space_at_location {
+                return Err(RuntimeError::NotEnoughAvailableSpace(
+                    estimated_export_size,
+                    free_space_at_location,
+                ));
+            }
+        } else {
+            let total_attachment_size = Attachment::get_total_attachment_bytes(&self.db)
+                .map_err(RuntimeError::DatabaseError)?;
+            estimated_export_size += total_attachment_size;
+            if (estimated_export_size + total_attachment_size) >= free_space_at_location {
+                return Err(RuntimeError::NotEnoughAvailableSpace(
+                    estimated_export_size + total_attachment_size,
+                    free_space_at_location,
+                ));
+            }
+        };
+
+        println!(
+            "Estimated export size: {}",
+            format_file_size(estimated_export_size)
+        );
+
+        Ok(())
+    }
+
     /// Handles diagnostic tests for database
     fn run_diagnostic(&self) -> Result<(), TableError> {
         println!("\niMessage Database Diagnostics\n");
@@ -227,18 +266,27 @@ impl<'a> Config<'a> {
         ChatToHandle::run_diagnostic(&self.db)?;
 
         // Global Diagnostics
+        println!("Global diagnostic data:");
+
+        let total_db_size = get_db_size(&self.options.db_path)?;
+        println!(
+            "    Total database size: {}",
+            format_file_size(total_db_size)
+        );
+
         let unique_handles: HashSet<i32> =
             HashSet::from_iter(self.real_participants.values().cloned());
         let duplicated_handles = self.participants.len() - unique_handles.len();
         if duplicated_handles > 0 {
-            println!("Duplicated contacts: {duplicated_handles}");
+            println!("    Duplicated contacts: {duplicated_handles}");
         }
 
         let unique_chats: HashSet<i32> = HashSet::from_iter(self.real_chatrooms.values().cloned());
         let duplicated_chats = self.chatrooms.len() - unique_chats.len();
         if duplicated_chats > 0 {
-            println!("Duplicated chats: {duplicated_chats}");
+            println!("    Duplicated chats: {duplicated_chats}");
         }
+
         Ok(())
     }
 
@@ -261,23 +309,27 @@ impl<'a> Config<'a> {
     pub fn start(&self) -> Result<(), RuntimeError> {
         if self.options.diagnostic {
             self.run_diagnostic().map_err(RuntimeError::DatabaseError)?;
-        } else if self.options.export_type.is_some() {
+        } else if let Some(export_type) = &self.options.export_type {
             // Ensure the path we want to export to exists
             create_dir_all(&self.options.export_path).map_err(RuntimeError::DiskError)?;
 
-            match self.options.export_type.unwrap_or_default() {
-                "txt" => {
-                    // Create exporter, pass it data we care about, then kick it off
-                    TXT::new(self).iter_messages()?;
-                }
-                "html" => {
-                    if !matches!(self.options.attachment_manager, AttachmentManager::Disabled) {
-                        create_dir_all(self.attachment_path()).map_err(RuntimeError::DiskError)?;
-                    }
+            // Ensure the path we want to copy attachments to exists, if requested
+            if !matches!(self.options.attachment_manager, AttachmentManager::Disabled) {
+                create_dir_all(self.attachment_path()).map_err(RuntimeError::DiskError)?;
+            }
+
+            // Ensure there is enough free disk space to write the export
+            if !self.options.ignore_disk_space {
+                self.ensure_free_space()?;
+            }
+
+            // Create exporter, pass it data we care about, then kick it off
+            match export_type {
+                ExportType::Html => {
                     HTML::new(self).iter_messages()?;
                 }
-                _ => {
-                    unreachable!()
+                ExportType::Txt => {
+                    TXT::new(self).iter_messages()?;
                 }
             }
         }
@@ -286,11 +338,11 @@ impl<'a> Config<'a> {
     }
 
     /// Determine who sent a message
-    pub fn who(&self, handle_id: &Option<i32>, is_from_me: bool) -> &str {
+    pub fn who(&self, handle_id: Option<i32>, is_from_me: bool) -> &str {
         if is_from_me {
-            return self.options.custom_name.unwrap_or(ME);
+            return self.options.custom_name.as_deref().unwrap_or(ME);
         } else if let Some(handle_id) = handle_id {
-            return match self.participants.get(handle_id) {
+            return match self.participants.get(&handle_id) {
                 Some(contact) => contact,
                 None => UNKNOWN,
             };
@@ -314,7 +366,7 @@ mod filename_tests {
         path::PathBuf,
     };
 
-    fn fake_options<'a>() -> Options<'a> {
+    fn fake_options() -> Options {
         Options {
             db_path: default_db_path(),
             attachment_root: None,
@@ -326,6 +378,7 @@ mod filename_tests {
             no_lazy: false,
             custom_name: None,
             platform: Platform::macOS,
+            ignore_disk_space: false,
         }
     }
 
@@ -333,7 +386,7 @@ mod filename_tests {
         Chat {
             rowid: 0,
             chat_identifier: "Default".to_string(),
-            service_name: Some("".to_string()),
+            service_name: Some(String::new()),
             display_name: None,
         }
     }
@@ -543,7 +596,7 @@ mod who_tests {
     };
     use std::{collections::HashMap, path::PathBuf};
 
-    fn fake_options<'a>() -> Options<'a> {
+    fn fake_options() -> Options {
         Options {
             db_path: default_db_path(),
             attachment_root: None,
@@ -555,6 +608,7 @@ mod who_tests {
             no_lazy: false,
             custom_name: None,
             platform: Platform::macOS,
+            ignore_disk_space: false,
         }
     }
 
@@ -562,7 +616,7 @@ mod who_tests {
         Chat {
             rowid: 0,
             chat_identifier: "Default".to_string(),
-            service_name: Some("".to_string()),
+            service_name: Some(String::new()),
             display_name: None,
         }
     }
@@ -622,7 +676,7 @@ mod who_tests {
         app.participants.insert(10, "Person 10".to_string());
 
         // Get participant name
-        let who = app.who(&Some(10), false);
+        let who = app.who(Some(10), false);
         assert_eq!(who, "Person 10".to_string());
     }
 
@@ -632,7 +686,7 @@ mod who_tests {
         let app = fake_app(options);
 
         // Get participant name
-        let who = app.who(&Some(10), false);
+        let who = app.who(Some(10), false);
         assert_eq!(who, "Unknown".to_string());
     }
 
@@ -642,18 +696,18 @@ mod who_tests {
         let app = fake_app(options);
 
         // Get participant name
-        let who = app.who(&Some(0), true);
+        let who = app.who(Some(0), true);
         assert_eq!(who, "Me".to_string());
     }
 
     #[test]
     fn can_get_who_me_custom() {
         let mut options = fake_options();
-        options.custom_name = Some("Name");
+        options.custom_name = Some("Name".to_string());
         let app = fake_app(options);
 
         // Get participant name
-        let who = app.who(&Some(0), true);
+        let who = app.who(Some(0), true);
         assert_eq!(who, "Name".to_string());
     }
 
@@ -663,7 +717,7 @@ mod who_tests {
         let app = fake_app(options);
 
         // Get participant name
-        let who = app.who(&None, true);
+        let who = app.who(None, true);
         assert_eq!(who, "Me".to_string());
     }
 
@@ -673,7 +727,7 @@ mod who_tests {
         let app = fake_app(options);
 
         // Get participant name
-        let who = app.who(&None, false);
+        let who = app.who(None, false);
         assert_eq!(who, "Unknown".to_string());
     }
 
@@ -765,7 +819,7 @@ mod directory_tests {
     };
     use std::{collections::HashMap, path::PathBuf};
 
-    fn fake_options<'a>() -> Options<'a> {
+    fn fake_options() -> Options {
         Options {
             db_path: default_db_path(),
             attachment_root: None,
@@ -777,6 +831,7 @@ mod directory_tests {
             no_lazy: false,
             custom_name: None,
             platform: Platform::macOS,
+            ignore_disk_space: false,
         }
     }
 
@@ -820,7 +875,7 @@ mod directory_tests {
 
         // Get subdirectory
         let sub_dir = app.conversation_attachment_path(Some(0));
-        assert_eq!(String::from("0"), sub_dir)
+        assert_eq!(String::from("0"), sub_dir);
     }
 
     #[test]
@@ -833,7 +888,7 @@ mod directory_tests {
 
         // Get subdirectory
         let sub_dir = app.conversation_attachment_path(Some(1));
-        assert_eq!(String::from("orphaned"), sub_dir)
+        assert_eq!(String::from("orphaned"), sub_dir);
     }
 
     #[test]
@@ -846,7 +901,7 @@ mod directory_tests {
 
         // Get subdirectory
         let sub_dir = app.conversation_attachment_path(None);
-        assert_eq!(String::from("orphaned"), sub_dir)
+        assert_eq!(String::from("orphaned"), sub_dir);
     }
 
     #[test]

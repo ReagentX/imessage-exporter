@@ -21,13 +21,12 @@ use crate::{
         dirs::home,
         output::{done_processing, processing},
         platform::Platform,
+        size::format_file_size,
     },
 };
 
 /// The default root directory for iMessage attachment data
 pub const DEFAULT_ATTACHMENT_ROOT: &str = "~/Library/Messages/Attachments";
-const DIVISOR: f64 = 1024.;
-const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
 
 /// Represents the MIME type of a message's attachment data
 ///
@@ -51,7 +50,7 @@ pub struct Attachment {
     pub uti: Option<String>,
     pub mime_type: Option<String>,
     pub transfer_name: Option<String>,
-    pub total_bytes: i64,
+    pub total_bytes: u64,
     pub is_sticker: bool,
     pub hide_attachment: i32,
     pub copied_path: Option<PathBuf>,
@@ -73,7 +72,7 @@ impl Table for Attachment {
     }
 
     fn get(db: &Connection) -> Result<Statement, TableError> {
-        db.prepare(&format!("SELECT * from {}", ATTACHMENT))
+        db.prepare(&format!("SELECT * from {ATTACHMENT}"))
             .map_err(TableError::Attachment)
     }
 
@@ -107,7 +106,7 @@ impl Attachment {
 
             for attachment in iter {
                 let m = Attachment::extract(attachment)?;
-                out_l.push(m)
+                out_l.push(m);
             }
         }
         Ok(out_l)
@@ -157,16 +156,17 @@ impl Attachment {
             self.resolved_attachment_path(platform, db_path, custom_attachment_root)
         {
             let mut file = File::open(&file_path)
-                .map_err(|err| AttachmentError::Unreadable(file_path, err))?;
+                .map_err(|err| AttachmentError::Unreadable(file_path.clone(), err))?;
             let mut bytes = vec![];
-            file.read_to_end(&mut bytes).unwrap();
+            file.read_to_end(&mut bytes)
+                .map_err(|err| AttachmentError::Unreadable(file_path.clone(), err))?;
 
             return Ok(Some(bytes));
         }
         Ok(None)
     }
 
-    /// Determine the [`StickerEffect`](crate::message_types::sticker::StickerEffect) of a sticker message
+    /// Determine the [`StickerEffect`] of a sticker message
     pub fn get_sticker_effect(
         &self,
         platform: &Platform,
@@ -219,19 +219,18 @@ impl Attachment {
 
     /// Get a human readable file size for an attachment
     pub fn file_size(&self) -> String {
-        Attachment::format_file_size(self.total_bytes)
+        format_file_size(self.total_bytes)
     }
 
-    /// Get a human readable file size for an arbitrary amount of bytes
-    fn format_file_size(total_bytes: i64) -> String {
-        let mut index: usize = 0;
-        let mut bytes = total_bytes as f64;
-        while index < UNITS.len() - 1 && bytes > DIVISOR {
-            index += 1;
-            bytes /= DIVISOR;
-        }
+    /// Get the total attachment bytes referenced in the table
+    pub fn get_total_attachment_bytes(db: &Connection) -> Result<u64, TableError> {
+        let mut bytes_query = db
+            .prepare(&format!("SELECT SUM(total_bytes) FROM {ATTACHMENT}"))
+            .map_err(TableError::Attachment)?;
 
-        format!("{bytes:.2} {}", UNITS[index])
+        bytes_query
+            .query_row([], |r| r.get(0))
+            .map_err(TableError::Attachment)
     }
 
     /// Given a platform and database source, resolve the path for the current attachment
@@ -240,7 +239,7 @@ impl Attachment {
     ///
     /// iOS Parsing logic source is from [here](https://github.com/nprezant/iMessageBackup/blob/940d001fb7be557d5d57504eb26b3489e88de26e/imessage_backup_tools.py#L83-L85).
     ///
-    /// Use the optional `custom_attachment_root` parameter when the attachments are not stored in the same place as the database expects. The expected location is [`DEFAULT_ATTACHMENT_ROOT`](crate::tables::attachment::DEFAULT_ATTACHMENT_ROOT).
+    /// Use the optional `custom_attachment_root` parameter when the attachments are not stored in the same place as the database expects. The expected location is [`DEFAULT_ATTACHMENT_ROOT`].
     /// A custom attachment root like `/custom/path` will overwrite a path like `~/Library/Messages/Attachments/3d/...` to `/custom/path/3d...`
     pub fn resolved_attachment_path(
         &self,
@@ -268,8 +267,8 @@ impl Attachment {
     /// Get the number of attachments that are missing from the filesystem
     /// or are missing one of the following columns:
     ///
-    /// - ck_server_change_token_blob
-    /// - sr_ck_server_change_token_blob
+    /// - `ck_server_change_token_blob`
+    /// - `sr_ck_server_change_token_blob`
     ///
     /// # Example:
     ///
@@ -290,6 +289,7 @@ impl Attachment {
         processing();
         let mut total_attachments = 0;
         let mut null_attachments = 0;
+        let mut size_on_disk: u64 = 0;
         let mut statement_paths = db
             .prepare(&format!("SELECT filename FROM {ATTACHMENT}"))
             .map_err(TableError::Attachment)?;
@@ -305,13 +305,22 @@ impl Attachment {
                 if let Ok(filepath) = path {
                     match platform {
                         Platform::macOS => {
-                            !Path::new(&Attachment::gen_macos_attachment(filepath)).exists()
+                            let path = Attachment::gen_macos_attachment(filepath);
+                            let file = Path::new(&path);
+                            if let Ok(metadata) = file.metadata() {
+                                size_on_disk += metadata.len();
+                            }
+                            !file.exists()
                         }
                         Platform::iOS => {
                             if let Some(parsed_path) =
                                 Attachment::gen_ios_attachment(filepath, db_path)
                             {
-                                return !Path::new(&parsed_path).exists();
+                                let file = Path::new(&parsed_path);
+                                if let Ok(metadata) = file.metadata() {
+                                    size_on_disk += metadata.len();
+                                }
+                                return !file.exists();
                             }
                             // This hits if the attachment path doesn't get generated
                             true
@@ -325,11 +334,7 @@ impl Attachment {
             })
             .count();
 
-        let mut bytes_query = db
-            .prepare(&format!("SELECT SUM(total_bytes) FROM {ATTACHMENT}"))
-            .map_err(TableError::Messages)?;
-
-        let total_bytes: i64 = bytes_query.query_row([], |r| r.get(0)).unwrap_or(0);
+        let total_bytes = Attachment::get_total_attachment_bytes(db).unwrap_or(0);
 
         done_processing();
 
@@ -337,8 +342,12 @@ impl Attachment {
             println!("\rAttachment diagnostic data:");
             println!("    Total attachments: {total_attachments}");
             println!(
-                "    Total attachment data: {}",
-                Attachment::format_file_size(total_bytes)
+                "        Data referenced in table: {}",
+                format_file_size(total_bytes)
+            );
+            println!(
+                "        Data present on disk: {}",
+                format_file_size(size_on_disk)
             );
             if missing_files > 0 && total_attachments > 0 {
                 println!(
@@ -606,8 +615,8 @@ mod tests {
     #[test]
     fn can_get_file_size_cap() {
         let mut attachment: Attachment = sample_attachment();
-        attachment.total_bytes = i64::MAX;
+        attachment.total_bytes = u64::MAX;
 
-        assert_eq!(attachment.file_size(), String::from("8388608.00 TB"));
+        assert_eq!(attachment.file_size(), String::from("16777216.00 TB"));
     }
 }

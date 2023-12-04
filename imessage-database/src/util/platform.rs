@@ -1,5 +1,5 @@
 /*!
- Contains data structures used to describe database platforms
+ Contains data structures used to describe database platforms.
 */
 
 use std::{fmt::Display, path::Path};
@@ -7,7 +7,7 @@ use std::{fmt::Display, path::Path};
 use crate::tables::table::DEFAULT_PATH_IOS;
 
 /// Represents the platform that created the database this library connects to
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum Platform {
     /// macOS-sourced data
     #[allow(non_camel_case_types)]
@@ -40,7 +40,7 @@ impl Platform {
 }
 
 impl Default for Platform {
-    /// The default Platform is [Platform::macOS].
+    /// The default Platform is [`Platform::macOS`].
     fn default() -> Self {
         Self::macOS
     }

@@ -1,5 +1,5 @@
 /*!
- Errors that can happen when parsing `streamtyped` data
+ Errors that can happen when parsing `streamtyped` data.
 */
 
 use std::fmt::{Display, Formatter, Result};

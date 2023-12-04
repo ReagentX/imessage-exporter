@@ -44,7 +44,7 @@ impl Table for Handle {
 impl Cacheable for Handle {
     type K = i32;
     type V = String;
-    /// Generate a HashMap for looking up contacts by their IDs, collapsing
+    /// Generate a `HashMap` for looking up contacts by their IDs, collapsing
     /// duplicate contacts to the same ID String regardless of service
     ///
     /// # Example:
@@ -104,17 +104,14 @@ impl Deduplicate for Handle {
         // Build cache of each unique set of participants to a new identifier:
         let mut unique_participant_identifier = 0;
         for (participant_id, participant) in duplicated_data {
-            match participant_to_unique_participant_id.get(participant) {
-                Some(id) => {
-                    deduplicated_participants.insert(participant_id.to_owned(), id.to_owned());
-                }
-                None => {
-                    participant_to_unique_participant_id
-                        .insert(participant.to_owned(), unique_participant_identifier);
-                    deduplicated_participants
-                        .insert(participant_id.to_owned(), unique_participant_identifier);
-                    unique_participant_identifier += 1;
-                }
+            if let Some(id) = participant_to_unique_participant_id.get(participant) {
+                deduplicated_participants.insert(participant_id.to_owned(), id.to_owned());
+            } else {
+                participant_to_unique_participant_id
+                    .insert(participant.to_owned(), unique_participant_identifier);
+                deduplicated_participants
+                    .insert(participant_id.to_owned(), unique_participant_identifier);
+                unique_participant_identifier += 1;
             }
         }
         deduplicated_participants
@@ -125,7 +122,7 @@ impl Diagnostic for Handle {
     /// Emit diagnostic data for the Handles table
     ///
     /// Get the number of handles that are duplicated
-    /// The person_centric_id is used to map handles that represent the
+    /// The `person_centric_id` is used to map handles that represent the
     /// same contact across ids (numbers, emails, etc) and across
     /// services (iMessage, Jabber, iChat, SMS, etc)
     ///
@@ -201,7 +198,7 @@ impl Handle {
                         row_data.push(tup);
                     }
                     Err(why) => {
-                        panic!("{:?}", why);
+                        panic!("{why}");
                     }
                 }
             }
@@ -209,15 +206,12 @@ impl Handle {
             // First pass: generate a map of each person_centric_id to its matching ids
             for contact in &row_data {
                 let (person_centric_id, _, id) = contact;
-                match person_to_id.get_mut(person_centric_id) {
-                    Some(set) => {
-                        set.insert(id.to_owned());
-                    }
-                    None => {
-                        let mut set = HashSet::new();
-                        set.insert(id.to_owned());
-                        person_to_id.insert(person_centric_id.to_owned(), set);
-                    }
+                if let Some(set) = person_to_id.get_mut(person_centric_id) {
+                    set.insert(id.to_owned());
+                } else {
+                    let mut set = HashSet::new();
+                    set.insert(id.to_owned());
+                    person_to_id.insert(person_centric_id.to_owned(), set);
                 }
             }
 
@@ -253,6 +247,6 @@ mod tests {
 
         let output = Handle::dedupe(&input);
         let expected_deduped_ids: HashSet<i32> = output.values().copied().collect();
-        assert_eq!(expected_deduped_ids.len(), 3)
+        assert_eq!(expected_deduped_ids.len(), 3);
     }
 }

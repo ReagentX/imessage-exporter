@@ -4,7 +4,8 @@ use imessage_database::{
     error::{message::MessageError, plist::PlistParseError, table::TableError},
     message_types::{
         app::AppMessage, app_store::AppStoreMessage, collaboration::CollaborationMessage,
-        music::MusicMessage, url::URLMessage,
+        handwriting::HandwrittenMessage, music::MusicMessage, placemark::PlacemarkMessage,
+        url::URLMessage,
     },
     tables::{attachment::Attachment, messages::Message},
 };
@@ -46,7 +47,7 @@ pub(super) trait Writer<'a> {
     fn format_expressive(&self, msg: &'a Message) -> &'a str;
     /// Format an announcement message
     fn format_announcement(&self, msg: &'a Message) -> String;
-    /// Format a SharePlay message
+    /// Format a `SharePlay` message
     fn format_shareplay(&self) -> &str;
     /// Format an edited message
     fn format_edited(&self, msg: &'a Message, indent: &str) -> Result<String, MessageError>;
@@ -63,14 +64,18 @@ pub(super) trait BalloonFormatter<T> {
     fn format_collaboration(&self, balloon: &CollaborationMessage, indent: T) -> String;
     /// Format an App Store link
     fn format_app_store(&self, balloon: &AppStoreMessage, indent: T) -> String;
+    /// Format a shared location message
+    fn format_placemark(&self, balloon: &PlacemarkMessage, indent: T) -> String;
     /// Format a handwritten note message
-    fn format_handwriting(&self, balloon: &AppMessage, indent: T) -> String;
+    fn format_handwriting(&self, balloon: &HandwrittenMessage, indent: T) -> String;
     /// Format an Apple Pay message
     fn format_apple_pay(&self, balloon: &AppMessage, indent: T) -> String;
     /// Format a Fitness message
     fn format_fitness(&self, balloon: &AppMessage, indent: T) -> String;
     /// Format a Photo Slideshow message
     fn format_slideshow(&self, balloon: &AppMessage, indent: T) -> String;
+    /// Format a Find My message
+    fn format_find_my(&self, balloon: &AppMessage, indent: T) -> String;
     /// Format a Check In message
     fn format_check_in(&self, balloon: &AppMessage, indent: T) -> String;
     /// Format a generic app, generally third party

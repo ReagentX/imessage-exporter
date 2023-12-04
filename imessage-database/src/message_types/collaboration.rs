@@ -1,6 +1,5 @@
 /*!
-These are the link previews that iMessage generates when sending
-Collaboration links, i.e. from Pages or Freeform
+ These are the link previews that iMessage generates when sending Collaboration links, i.e. from Pages or Freeform.
 */
 
 use plist::Value;
@@ -131,6 +130,6 @@ mod tests {
             app_name: Some("Freeform"),
         };
 
-        assert_eq!(actual, expected)
+        assert_eq!(actual, expected);
     }
 }

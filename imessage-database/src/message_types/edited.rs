@@ -1,5 +1,5 @@
 /*!
-Logic and containers for the `message_summary_info` of an edited or unsent iMessage.
+ Logic and containers for the `message_summary_info` of an edited or unsent iMessage.
 */
 
 use plist::Value;
@@ -164,7 +164,7 @@ mod tests {
             expected.texts.first().unwrap().as_str(),
             expected.guids.first().unwrap(),
         ));
-        assert_eq!(parsed.item_at(0), expected_item)
+        assert_eq!(parsed.item_at(0), expected_item);
     }
 
     #[test]
@@ -194,7 +194,7 @@ mod tests {
             expected.texts.first().unwrap().as_str(),
             expected.guids.first().unwrap(),
         ));
-        assert_eq!(parsed.item_at(0), expected_item)
+        assert_eq!(parsed.item_at(0), expected_item);
     }
 
     #[test]
@@ -229,7 +229,7 @@ mod tests {
             expected.texts.first().unwrap().as_str(),
             expected.guids.first().unwrap(),
         ));
-        assert_eq!(parsed.item_at(0), expected_item)
+        assert_eq!(parsed.item_at(0), expected_item);
     }
 
     #[test]
@@ -253,6 +253,6 @@ mod tests {
         assert_eq!(parsed.items(), 0);
 
         let expected_item = None;
-        assert_eq!(parsed.item_at(0), expected_item)
+        assert_eq!(parsed.item_at(0), expected_item);
     }
 }
