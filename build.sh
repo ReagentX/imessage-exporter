@@ -17,7 +17,7 @@ if [ -n "$VERSION" ]; then
     # Otherwise it returns `invalid command code C`
     sed -i '' "s/version = \"0.0.0\"/version = \"$VERSION\"/g" imessage-database/Cargo.toml
     sed -i '' "s/version = \"0.0.0\"/version = \"$VERSION\"/g" imessage-exporter/Cargo.toml
-    sed -i '' s/'{path = "..\/imessage-database"}'/\"$VERSION\"/g imessage-exporter/Cargo.toml
+    sed -i '' s/'{ path = "..\/imessage-database" }'/\"$VERSION\"/g imessage-exporter/Cargo.toml
 
     if [ -n "$PUBLISH" ]; then
         echo 'Publishing database library...'
