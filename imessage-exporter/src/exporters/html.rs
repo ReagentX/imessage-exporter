@@ -721,29 +721,26 @@ impl<'a> Writer<'a> for HTML<'a> {
             } else {
                 out_s.push_str("<table>");
 
-                for i in 0..edited_message.items() {
-                    let last = i == edited_message.items() - 1;
+                for (idx, event) in edited_message.events.iter().enumerate() {
+                    let last = idx == edited_message.items() - 1;
+                    let clean_text = sanitize_html(&event.text);
+                    match previous_timestamp {
+                        None => out_s.push_str(&self.edited_to_html("", &clean_text, last)),
+                        Some(prev_timestamp) => {
+                            let end = get_local_time(&event.date, &self.config.offset);
+                            let start = get_local_time(prev_timestamp, &self.config.offset);
 
-                    if let Some((timestamp, text, _)) = edited_message.item_at(i) {
-                        let clean_text = sanitize_html(text);
-                        match previous_timestamp {
-                            None => out_s.push_str(&self.edited_to_html("", &clean_text, last)),
-                            Some(prev_timestamp) => {
-                                let end = get_local_time(timestamp, &self.config.offset);
-                                let start = get_local_time(prev_timestamp, &self.config.offset);
-
-                                let diff = readable_diff(start, end).unwrap_or_default();
-                                out_s.push_str(&self.edited_to_html(
-                                    &format!("Edited {diff} later"),
-                                    &clean_text,
-                                    last,
-                                ));
-                            }
+                            let diff = readable_diff(start, end).unwrap_or_default();
+                            out_s.push_str(&self.edited_to_html(
+                                &format!("Edited {diff} later"),
+                                &clean_text,
+                                last,
+                            ));
                         }
-
-                        // Update the previous timestamp for the next loop
-                        previous_timestamp = Some(timestamp);
                     }
+
+                    // Update the previous timestamp for the next loop
+                    previous_timestamp = Some(&event.date);
                 }
 
                 out_s.push_str("</table>");

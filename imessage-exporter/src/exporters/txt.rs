@@ -502,36 +502,33 @@ impl<'a> Writer<'a> for TXT<'a> {
                 out_s.push_str(who);
                 out_s.push_str(" deleted a message.");
             } else {
-                for i in 0..edited_message.items() {
-                    // If a message exists, build a string for it
-                    if let Some((timestamp, text, _)) = edited_message.item_at(i) {
-                        match previous_timestamp {
-                            // Original message get an absolute timestamp
-                            None => {
-                                let parsed_timestamp =
-                                    format(&get_local_time(timestamp, &self.config.offset));
-                                out_s.push_str(&parsed_timestamp);
-                                out_s.push(' ');
+                for event in &edited_message.events {
+                    match previous_timestamp {
+                        // Original message get an absolute timestamp
+                        None => {
+                            let parsed_timestamp =
+                                format(&get_local_time(&event.date, &self.config.offset));
+                            out_s.push_str(&parsed_timestamp);
+                            out_s.push(' ');
+                        }
+                        // Subsequent edits get a relative timestamp
+                        Some(prev_timestamp) => {
+                            let end = get_local_time(&event.date, &self.config.offset);
+                            let start = get_local_time(prev_timestamp, &self.config.offset);
+                            if let Some(diff) = readable_diff(start, end) {
+                                out_s.push_str(indent);
+                                out_s.push_str("Edited ");
+                                out_s.push_str(&diff);
+                                out_s.push_str(" later: ");
                             }
-                            // Subsequent edits get a relative timestamp
-                            Some(prev_timestamp) => {
-                                let end = get_local_time(timestamp, &self.config.offset);
-                                let start = get_local_time(prev_timestamp, &self.config.offset);
-                                if let Some(diff) = readable_diff(start, end) {
-                                    out_s.push_str(indent);
-                                    out_s.push_str("Edited ");
-                                    out_s.push_str(&diff);
-                                    out_s.push_str(" later: ");
-                                }
-                            }
-                        };
+                        }
+                    };
 
-                        // Update the previous timestamp for the next loop
-                        previous_timestamp = Some(timestamp);
+                    // Update the previous timestamp for the next loop
+                    previous_timestamp = Some(&event.date);
 
-                        // Render the message text
-                        self.add_line(&mut out_s, text, indent);
-                    }
+                    // Render the message text
+                    self.add_line(&mut out_s, &event.text, indent);
                 }
             }
 
