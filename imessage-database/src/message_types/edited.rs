@@ -14,6 +14,22 @@ use crate::{
     },
 };
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct EditedEvent<'a> {
+    /// The date the messages were edited
+    pub date: i64,
+    /// The content of the edited messages in [`streamtyped`](crate::util::streamtyped) format
+    pub text: String,
+    /// A GUID reference to another message
+    pub guid: Option<&'a str>,
+}
+
+impl<'a> EditedEvent<'a> {
+    fn new(date: i64, text: String, guid: Option<&'a str>) -> Self {
+        Self { date, text, guid }
+    }
+}
+
 /// iMessage permits editing sent messages up to five times
 /// within 15 minutes of sending the first message and unsending
 /// sent messages within 2 minutes.
@@ -34,12 +50,7 @@ use crate::{
 /// Apple describes editing and unsending messages [here](https://support.apple.com/guide/iphone/unsend-and-edit-messages-iphe67195653/ios).
 #[derive(Debug, PartialEq, Eq)]
 pub struct EditedMessage<'a> {
-    /// The dates the messages were edited
-    pub dates: Vec<i64>,
-    /// The content of the edited messages in [`streamtyped`](crate::util::streamtyped) format
-    pub texts: Vec<String>,
-    /// A GUID reference to another message
-    pub guids: Vec<Option<&'a str>>,
+    pub events: Vec<EditedEvent<'a>>,
 }
 
 impl<'a> BalloonProvider<'a> for EditedMessage<'a> {
@@ -75,9 +86,7 @@ impl<'a> BalloonProvider<'a> for EditedMessage<'a> {
 
             let guid = message_data.get("bcg").and_then(|item| item.as_string());
 
-            edited.dates.push(timestamp);
-            edited.texts.push(text);
-            edited.guids.push(guid);
+            edited.events.push(EditedEvent::new(timestamp, text, guid));
         }
 
         Ok(edited)
@@ -87,44 +96,35 @@ impl<'a> BalloonProvider<'a> for EditedMessage<'a> {
 impl<'a> EditedMessage<'a> {
     /// A new empty edited message
     fn empty() -> Self {
-        EditedMessage {
-            dates: Vec::new(),
-            texts: Vec::new(),
-            guids: Vec::new(),
-        }
+        EditedMessage { events: Vec::new() }
     }
 
     /// A new message with a preallocated capacity
     fn with_capacity(capacity: usize) -> Self {
         EditedMessage {
-            dates: Vec::with_capacity(capacity),
-            texts: Vec::with_capacity(capacity),
-            guids: Vec::with_capacity(capacity),
+            events: Vec::with_capacity(capacity),
         }
     }
 
     /// `true` if the message was deleted, `false` if it was edited
     pub fn is_deleted(&self) -> bool {
-        self.texts.is_empty()
+        self.events.is_empty()
     }
 
     /// Gets a tuple for the message at the provided position
-    pub fn item_at(&self, position: usize) -> Option<(&i64, &str, &Option<&str>)> {
-        Some((
-            self.dates.get(position)?,
-            self.texts.get(position)?,
-            self.guids.get(position)?,
-        ))
+    pub fn item_at(&self, position: usize) -> Option<&EditedEvent> {
+        self.events.get(position)
     }
 
     /// Gets the number of items in the edit history
     pub fn items(&self) -> usize {
-        self.texts.len()
+        self.events.len()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::message_types::edited::EditedEvent;
     use crate::message_types::{edited::EditedMessage, variants::BalloonProvider};
     use plist::Value;
     use std::env::current_dir;
@@ -141,29 +141,18 @@ mod tests {
         let parsed = EditedMessage::from_map(&plist).unwrap();
 
         let expected = EditedMessage {
-            dates: vec![
-                690513474000000000,
-                690513480000000000,
-                690513485000000000,
-                690513494000000000,
+            events: vec![
+                EditedEvent::new(690513474000000000, "First message  ".to_string(), None),
+                EditedEvent::new(690513480000000000, "Edit 1".to_string(), None),
+                EditedEvent::new(690513485000000000, "Edit 2".to_string(), None),
+                EditedEvent::new(690513494000000000, "Edited message".to_string(), None),
             ],
-            texts: vec![
-                "First message  ".to_string(),
-                "Edit 1".to_string(),
-                "Edit 2".to_string(),
-                "Edited message".to_string(),
-            ],
-            guids: vec![None, None, None, None],
         };
 
         assert_eq!(parsed, expected);
         assert_eq!(parsed.items(), 4);
 
-        let expected_item = Some((
-            expected.dates.first().unwrap(),
-            expected.texts.first().unwrap().as_str(),
-            expected.guids.first().unwrap(),
-        ));
+        let expected_item = Some(expected.events.first().unwrap());
         assert_eq!(parsed.item_at(0), expected_item);
     }
 
@@ -178,22 +167,20 @@ mod tests {
         let parsed = EditedMessage::from_map(&plist).unwrap();
 
         let expected = EditedMessage {
-            dates: vec![690514004000000000, 690514772000000000],
-            texts: vec![
-                "here we go!".to_string(),
-                "https://github.com/ReagentX/imessage-exporter/issues/10".to_string(),
+            events: vec![
+                EditedEvent::new(690514004000000000, "here we go!".to_string(), None),
+                EditedEvent::new(
+                    690514772000000000,
+                    "https://github.com/ReagentX/imessage-exporter/issues/10".to_string(),
+                    Some("292BF9C6-C9B8-4827-BE65-6EA1C9B5B384"),
+                ),
             ],
-            guids: vec![None, Some("292BF9C6-C9B8-4827-BE65-6EA1C9B5B384")],
         };
 
         assert_eq!(parsed, expected);
         assert_eq!(parsed.items(), 2);
 
-        let expected_item = Some((
-            expected.dates.first().unwrap(),
-            expected.texts.first().unwrap().as_str(),
-            expected.guids.first().unwrap(),
-        ));
+        let expected_item = Some(expected.events.first().unwrap());
         assert_eq!(parsed.item_at(0), expected_item);
     }
 
@@ -208,27 +195,30 @@ mod tests {
         let parsed = EditedMessage::from_map(&plist).unwrap();
 
         let expected = EditedMessage {
-            dates: vec![690514809000000000, 690514819000000000, 690514834000000000],
-            texts: vec![
-                "This is a normal message".to_string(),
-                "Edit to a url https://github.com/ReagentX/imessage-exporter/issues/10".to_string(),
-                "And edit it back to a normal message...".to_string(),
-            ],
-            guids: vec![
-                None,
-                Some("0B9103FE-280C-4BD0-A66F-4EDEE3443247"),
-                Some("0D93DF88-05BA-4418-9B20-79918ADD9923"),
+            events: vec![
+                EditedEvent::new(
+                    690514809000000000,
+                    "This is a normal message".to_string(),
+                    None,
+                ),
+                EditedEvent::new(
+                    690514819000000000,
+                    "Edit to a url https://github.com/ReagentX/imessage-exporter/issues/10"
+                        .to_string(),
+                    Some("0B9103FE-280C-4BD0-A66F-4EDEE3443247"),
+                ),
+                EditedEvent::new(
+                    690514834000000000,
+                    "And edit it back to a normal message...".to_string(),
+                    Some("0D93DF88-05BA-4418-9B20-79918ADD9923"),
+                ),
             ],
         };
 
         assert_eq!(parsed, expected);
         assert_eq!(parsed.items(), 3);
 
-        let expected_item = Some((
-            expected.dates.first().unwrap(),
-            expected.texts.first().unwrap().as_str(),
-            expected.guids.first().unwrap(),
-        ));
+        let expected_item = Some(expected.events.first().unwrap());
         assert_eq!(parsed.item_at(0), expected_item);
     }
 
@@ -242,11 +232,7 @@ mod tests {
         let plist = Value::from_reader(plist_data).unwrap();
         let parsed = EditedMessage::from_map(&plist).unwrap();
 
-        let expected = EditedMessage {
-            dates: vec![],
-            texts: vec![],
-            guids: vec![],
-        };
+        let expected = EditedMessage { events: vec![] };
 
         assert_eq!(parsed, expected);
         assert!(parsed.is_deleted());
