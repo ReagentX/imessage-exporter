@@ -32,6 +32,7 @@ pub const OPTION_CUSTOM_NAME: &str = "custom-name";
 pub const OPTION_PLATFORM: &str = "platform";
 pub const OPTION_BYPASS_FREE_SPACE_CHECK: &str = "ignore-disk-warning";
 pub const OPTION_USE_CALLER_ID: &str = "use-caller-id";
+pub const OPTION_TELEPHONE: &str = "telephone";
 
 // Other CLI Text
 pub const SUPPORTED_FILE_TYPES: &str = "txt, html";
@@ -86,6 +87,7 @@ impl Options {
         let use_caller_id = args.get_flag(OPTION_USE_CALLER_ID);
         let platform_type: Option<&String> = args.get_one(OPTION_PLATFORM);
         let ignore_disk_space = args.get_flag(OPTION_BYPASS_FREE_SPACE_CHECK);
+        let telephone: Option<&String> = args.get_one(OPTION_TELEPHONE);
 
         // Build the export type
         let export_type: Option<ExportType> = match export_file_type {
@@ -121,6 +123,11 @@ impl Options {
         if use_caller_id && export_file_type.is_none() {
             return Err(RuntimeError::InvalidOptions(format!(
                 "Option {OPTION_USE_CALLER_ID} is enabled, which requires `--{OPTION_EXPORT_TYPE}`"
+            )));
+        }
+        if telephone.is_some() && export_file_type.is_none() {
+            return Err(RuntimeError::InvalidOptions(format!(
+                "Option {OPTION_TELEPHONE} is enabled, which requires `--{OPTION_EXPORT_TYPE}`"
             )));
         }
 
@@ -162,6 +169,11 @@ impl Options {
                 "Diagnostics are enabled; {OPTION_USE_CALLER_ID} is disallowed"
             )));
         }
+        if diagnostic && telephone.is_some() {
+            return Err(RuntimeError::InvalidOptions(format!(
+                "Diagnostics are enabled; {OPTION_TELEPHONE} is disallowed"
+            )));
+        }
 
         // Ensure that there are no custom name conflicts
         if custom_name.is_some() && use_caller_id {
@@ -179,6 +191,11 @@ impl Options {
         }
         if let Some(end) = end_date {
             if let Err(why) = query_context.set_end(end) {
+                return Err(RuntimeError::InvalidOptions(format!("{why}")));
+            }
+        }
+        if let Some(telephone) = telephone {
+            if let Err(why) = query_context.set_telephone(telephone) {
                 return Err(RuntimeError::InvalidOptions(format!("{why}")));
             }
         }
@@ -410,6 +427,14 @@ fn get_command() -> Command {
                 .action(ArgAction::SetTrue)
                 .display_order(12)
         )
+        .arg(
+            Arg::new(OPTION_TELEPHONE)
+                .short('t')
+                .long(OPTION_TELEPHONE)
+                .help("The telephone filter\nOnly messages including this telephone number will be included\n")
+                .display_order(13)
+                .value_name("+16468885555"),
+        )
 }
 
 /// Parse arguments from the command line
@@ -529,6 +554,19 @@ mod arg_tests {
     fn cant_build_option_diagnostic_flag_with_caller_id() {
         // Get matches from sample args
         let cli_args: Vec<&str> = vec!["imessage-exporter", "-d", "-i"];
+        let command = get_command();
+        let args = command.get_matches_from(cli_args);
+
+        // Build the Options
+        let actual = Options::from_args(&args);
+
+        assert!(actual.is_err());
+    }
+
+    #[test]
+    fn cant_build_option_diagnostic_flag_with_telephone() {
+        // Get matches from sample args
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-d", "-t", "+16468885555"];
         let command = get_command();
         let args = command.get_matches_from(cli_args);
 
@@ -769,6 +807,19 @@ mod arg_tests {
     fn cant_build_option_caller_id_no_export() {
         // Get matches from sample args
         let cli_args: Vec<&str> = vec!["imessage-exporter", "-f", "txt", "-m", "Name", "-i"];
+        let command = get_command();
+        let args = command.get_matches_from(cli_args);
+
+        // Build the Options
+        let actual = Options::from_args(&args);
+
+        assert!(actual.is_err());
+    }
+
+    #[test]
+    fn cant_build_option_telephone_path_no_export_type() {
+        // Get matches from sample args
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-t", "+16468885555"];
         let command = get_command();
         let args = command.get_matches_from(cli_args);
 
