@@ -179,7 +179,7 @@ impl Diagnostic for ChatToHandle {
 
 #[cfg(test)]
 mod tests {
-    use crate::tables::{chat_handle::ChatToHandle, table::Deduplicate};
+    use crate::tables::{chat_handle::{ChatToHandle, MapChatHandle}, table::Deduplicate};
     use std::collections::{BTreeSet, HashMap, HashSet};
 
     #[test]

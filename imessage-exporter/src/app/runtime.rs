@@ -227,7 +227,7 @@ impl Config {
             AttachmentManager::Efficient => None,
         };
 
-        Ok(Config {
+        let mut config = Config {
             chatrooms,
             real_chatrooms: ChatToHandle::dedupe(&chatroom_participants),
             chatroom_participants,
@@ -238,7 +238,12 @@ impl Config {
             offset: get_offset(),
             db: conn,
             converter,
-        })
+        };
+
+        let telephone = config.options.query_context.telephone.clone().unwrap();
+        config.participants.retain(|_, v| *v == telephone);
+
+        Ok(config)
     }
 
     /// Ensure there is available disk space for the requested export

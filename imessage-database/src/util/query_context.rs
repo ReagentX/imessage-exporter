@@ -15,6 +15,8 @@ pub struct QueryContext {
     pub start: Option<i64>,
     /// The end date filter. Only messages sent before this date will be included.
     pub end: Option<i64>,
+    /// Telephone filter. Only messages including this number will be included.
+    pub telephone: Option<String>,
 }
 
 impl QueryContext {
@@ -50,6 +52,25 @@ impl QueryContext {
         Ok(())
     }
 
+    /// Generate a `QueryContext` with a telephone number.
+    /// # Example:
+    ///
+    /// ```
+    /// use imessage_database::util::query_context::QueryContext;
+    ///
+    /// let mut context = QueryContext::default();
+    /// context.set_telephone("16468885555");
+    /// ```
+    pub fn set_telephone(&mut self, telephone: &str) -> Result<(), QueryContextError> {
+        let tele = QueryContext::sanitize_telephone(telephone)
+            .ok_or(QueryContextError::InvalidTelephone(telephone.to_string()))?;
+
+        let mut number = String::from(tele);
+        number.insert_str(0, "+");
+        self.telephone = Some(number);
+        Ok(())
+    }
+
     /// Ensure a date string is valid
     fn sanitize_date(date: &str) -> Option<i64> {
         if date.len() < 9 {
@@ -80,6 +101,14 @@ impl QueryContext {
         let stamp = local.timestamp_nanos_opt().unwrap_or(0);
 
         Some(stamp - (get_offset() * TIMESTAMP_FACTOR))
+    }
+
+    /// Ensure a telephone string is valid
+    fn sanitize_telephone(telephone: &str) -> Option<&str> {
+        if telephone.len() < 11 {
+            return None;
+        }
+        Some(telephone)
     }
 
     /// Determine if the current `QueryContext` has any filters present
@@ -293,6 +322,24 @@ mod sanitize_tests {
     #[test]
     fn can_reject_wrong_hyphen() {
         let res = QueryContext::sanitize_date("2020–01–01");
+        assert!(res.is_none());
+    }
+
+    #[test]
+    fn can_sanitize_good_telephone() {
+        let res = QueryContext::sanitize_telephone("16468885555");
+        assert!(res.is_some());
+    }
+
+    #[test]
+    fn can_reject_bad_short_telephone() {
+        let res = QueryContext::sanitize_telephone("1646888555");
+        assert!(res.is_none());
+    }
+
+    #[test]
+    fn can_reject_typo_telephone() {
+        let res = QueryContext::sanitize_telephone("1646-8885555");
         assert!(res.is_none());
     }
 }

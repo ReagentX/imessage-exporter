@@ -8,6 +8,7 @@ use std::fmt::{Display, Formatter, Result};
 #[derive(Debug)]
 pub enum QueryContextError {
     InvalidDate(String),
+    InvalidTelephone(String),
 }
 
 impl Display for QueryContextError {
@@ -16,6 +17,10 @@ impl Display for QueryContextError {
             QueryContextError::InvalidDate(date) => write!(
                 fmt,
                 "Invalid date provided: {date}! Must be in format YYYY-MM-DD."
+            ),
+            QueryContextError::InvalidTelephone(telephone) => write!(
+                fmt,
+                "Invalid telephone provided: {telephone}! Must be in format XXXXXXXXXXX, e.g., 16468885555"
             ),
         }
     }
