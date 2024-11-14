@@ -13,6 +13,8 @@ use crate::{
 };
 use rusqlite::{Connection, Error, Result, Row, Statement};
 
+type MapChatHandle = HashMap<i32, BTreeSet<i32>>;
+
 /// Represents a single row in the `chat_handle_join` table.
 pub struct ChatToHandle {
     chat_id: i32,
@@ -57,7 +59,7 @@ impl Cacheable for ChatToHandle {
     /// let chatrooms = ChatToHandle::cache(&conn);
     /// ```
     fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
-        let mut cache: HashMap<i32, BTreeSet<i32>> = HashMap::new();
+        let mut cache: MapChatHandle = HashMap::new();
 
         let mut rows = ChatToHandle::get(db)?;
         let mappings = rows
@@ -88,7 +90,7 @@ impl Deduplicate for ChatToHandle {
     /// that represents a single chat for all of the same participants, even if they have multiple handles.
     ///
     /// Assuming no new chat-handle relationships have been written to the database, deduplicated data is deterministic across runs.
-    fn dedupe(duplicated_data: &HashMap<i32, Self::T>) -> HashMap<i32, i32> {
+    fn dedupe(duplicated_data: &MapChatHandle) -> HashMap<i32, i32> {
         let mut deduplicated_chats: HashMap<i32, i32> = HashMap::new();
         let mut participants_to_unique_chat_id: HashMap<Self::T, i32> = HashMap::new();
 
@@ -182,7 +184,7 @@ mod tests {
 
     #[test]
     fn can_dedupe() {
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
+        let mut input: MapChatHandle = HashMap::new();
         input.insert(1, BTreeSet::from([1])); // 0
         input.insert(2, BTreeSet::from([1])); // 0
         input.insert(3, BTreeSet::from([1])); // 0
@@ -197,7 +199,7 @@ mod tests {
 
     #[test]
     fn can_dedupe_multi() {
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
+        let mut input: MapChatHandle = HashMap::new();
         input.insert(1, BTreeSet::from([1, 2])); // 0
         input.insert(2, BTreeSet::from([1])); // 1
         input.insert(3, BTreeSet::from([1])); // 1
@@ -213,7 +215,7 @@ mod tests {
     #[test]
     // Simulate 3 runs of the program and ensure that the order of the deduplicated contacts is stable
     fn test_same_values() {
-        let mut input_1: HashMap<i32, BTreeSet<i32>> = HashMap::new();
+        let mut input_1: MapChatHandle = HashMap::new();
         input_1.insert(1, BTreeSet::from([1]));
         input_1.insert(2, BTreeSet::from([1]));
         input_1.insert(3, BTreeSet::from([1]));
@@ -221,7 +223,7 @@ mod tests {
         input_1.insert(5, BTreeSet::from([2]));
         input_1.insert(6, BTreeSet::from([3]));
 
-        let mut input_2: HashMap<i32, BTreeSet<i32>> = HashMap::new();
+        let mut input_2: MapChatHandle = HashMap::new();
         input_2.insert(1, BTreeSet::from([1]));
         input_2.insert(2, BTreeSet::from([1]));
         input_2.insert(3, BTreeSet::from([1]));
@@ -229,7 +231,7 @@ mod tests {
         input_2.insert(5, BTreeSet::from([2]));
         input_2.insert(6, BTreeSet::from([3]));
 
-        let mut input_3: HashMap<i32, BTreeSet<i32>> = HashMap::new();
+        let mut input_3: MapChatHandle = HashMap::new();
         input_3.insert(1, BTreeSet::from([1]));
         input_3.insert(2, BTreeSet::from([1]));
         input_3.insert(3, BTreeSet::from([1]));
