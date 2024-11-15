@@ -433,7 +433,7 @@ fn get_command() -> Command {
                 .long(OPTION_TELEPHONE)
                 .help("The telephone filter\nOnly messages including this telephone number will be included\n")
                 .display_order(13)
-                .value_name("+16468885555"),
+                .value_name("16468885555"),
         )
 }
 
@@ -566,7 +566,7 @@ mod arg_tests {
     #[test]
     fn cant_build_option_diagnostic_flag_with_telephone() {
         // Get matches from sample args
-        let cli_args: Vec<&str> = vec!["imessage-exporter", "-d", "-t", "+16468885555"];
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-d", "-t", "16468885555"];
         let command = get_command();
         let args = command.get_matches_from(cli_args);
 
@@ -819,7 +819,7 @@ mod arg_tests {
     #[test]
     fn cant_build_option_telephone_path_no_export_type() {
         // Get matches from sample args
-        let cli_args: Vec<&str> = vec!["imessage-exporter", "-t", "+16468885555"];
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-t", "16468885555"];
         let command = get_command();
         let args = command.get_matches_from(cli_args);
 
