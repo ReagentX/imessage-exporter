@@ -76,6 +76,10 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
 -e, --end-date <YYYY-MM-DD>
         The end date filter
         Only messages sent before this date will be included
+
+-t, --telephone <XXXXXXXXXXX>
+        The telephone filter
+        Only messages associated with this number will be included
         
 -l, --no-lazy
         Do not include `loading="lazy"` in HTML export `img` tags
@@ -135,6 +139,10 @@ Export messages from `2020-01-01` to `2020-12-31` as `txt` from the default macO
 
 ```zsh
 imessage-exporter -f txt -o ~/export-2020 -s 2020-01-01 -e 2021-01-01 -a macOS
+```
+
+```zsh
+imessage-exporter -f html -s 2024-10-15 -t 16468885555
 ```
 
 ## Features
