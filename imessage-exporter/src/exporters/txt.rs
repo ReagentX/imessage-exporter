@@ -113,6 +113,12 @@ impl<'a> Exporter<'a> for TXT<'a> {
             }
             current_message_row = msg.rowid;
 
+            // Skip non-deleted messages if only_deleted is enabled
+            if self.config.options.only_deleted && !msg.is_deleted() {
+                current_message += 1;
+                continue;
+            }
+
             // Generate the text of the message
             let _ = msg.generate_text(&self.config.db);
 

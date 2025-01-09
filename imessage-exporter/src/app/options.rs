@@ -39,6 +39,7 @@ pub const OPTION_PLATFORM: &str = "platform";
 pub const OPTION_BYPASS_FREE_SPACE_CHECK: &str = "ignore-disk-warning";
 pub const OPTION_USE_CALLER_ID: &str = "use-caller-id";
 pub const OPTION_CONVERSATION_FILTER: &str = "conversation-filter";
+pub const OPTION_ONLY_DELETED: &str = "only-recently-deleted";
 
 // Other CLI Text
 pub const SUPPORTED_FILE_TYPES: &str = "txt, html";
@@ -78,6 +79,8 @@ pub struct Options {
     pub ignore_disk_space: bool,
     /// An optional filter for conversation participants
     pub conversation_filter: Option<String>,
+    /// If true, only export deleted messages
+    pub only_deleted: bool,
 }
 
 impl Options {
@@ -272,6 +275,7 @@ impl Options {
             platform,
             ignore_disk_space,
             conversation_filter: conversation_filter.cloned(),
+            only_deleted: args.get_flag(OPTION_ONLY_DELETED),
         })
     }
 
@@ -449,6 +453,14 @@ fn get_command() -> Command {
                 .value_name("filter")
                 .display_order(13)
         )
+        .arg(
+            Arg::new(OPTION_ONLY_DELETED)
+                .short('x')
+                .long(OPTION_ONLY_DELETED)
+                .help("Only export recently deleted messages. If this option is enabled, only deleted messages will be exported. Messages that are not present in recently deleted cannot be exported as they are not recoverable.\n")
+                .action(ArgAction::SetTrue)
+                .display_order(14),
+        )
 }
 
 #[cfg(test)]
@@ -472,6 +484,7 @@ impl Options {
             platform: Platform::macOS,
             ignore_disk_space: false,
             conversation_filter: None,
+            only_deleted: false,
         }
     }
 }
@@ -520,6 +533,7 @@ mod arg_tests {
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
+            only_deleted: false,
         };
 
         assert_eq!(actual, expected);
@@ -632,6 +646,7 @@ mod arg_tests {
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
+            only_deleted: false,
         };
 
         assert_eq!(actual, expected);
@@ -665,6 +680,7 @@ mod arg_tests {
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
+            only_deleted: false,
         };
 
         assert_eq!(actual, expected);
@@ -786,6 +802,7 @@ mod arg_tests {
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
+            only_deleted: false,
         };
 
         assert_eq!(actual, expected);
@@ -816,6 +833,7 @@ mod arg_tests {
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
+            only_deleted: false,
         };
 
         assert_eq!(actual, expected);
@@ -846,6 +864,7 @@ mod arg_tests {
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: Some(String::from("steve@apple.com")),
+            only_deleted: false,
         };
 
         assert_eq!(actual, expected);
@@ -876,6 +895,7 @@ mod arg_tests {
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
+            only_deleted: false,
         };
 
         assert_eq!(actual, expected);
@@ -906,6 +926,7 @@ mod arg_tests {
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
+            only_deleted: false,
         };
 
         assert_eq!(actual, expected);
@@ -961,6 +982,37 @@ mod arg_tests {
         let actual = Options::from_args(&args);
 
         assert!(actual.is_err());
+    }
+
+    #[test]
+    fn can_build_option_only_deleted() {
+        // Get matches from sample args
+        let cli_args: Vec<&str> = vec!["imessage-exporter", "-f", "txt", "-x"];
+        let command = get_command();
+        let args = command.get_matches_from(cli_args);
+
+        // Build the Options
+        let actual = Options::from_args(&args).unwrap();
+
+        // Expected data
+        let expected = Options {
+            db_path: default_db_path(),
+            attachment_root: None,
+            attachment_manager: AttachmentManager::from(AttachmentManagerMode::Disabled),
+            diagnostic: false,
+            export_type: Some(ExportType::Txt),
+            export_path: validate_path(None, &None).unwrap(),
+            query_context: QueryContext::default(),
+            no_lazy: false,
+            custom_name: None,
+            use_caller_id: false,
+            platform: Platform::default(),
+            ignore_disk_space: false,
+            conversation_filter: None,
+            only_deleted: true,
+        };
+
+        assert_eq!(actual, expected);
     }
 }
 
