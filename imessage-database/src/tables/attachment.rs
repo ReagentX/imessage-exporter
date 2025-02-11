@@ -92,6 +92,8 @@ pub struct Attachment {
     pub emoji_description: Option<String>,
     /// Auxiliary data to denote that an attachment has been copied
     pub copied_path: Option<PathBuf>,
+    /// Unique identifier for the attachment
+    pub guid: Option<String>,
 }
 
 impl Table for Attachment {
@@ -107,6 +109,7 @@ impl Table for Attachment {
             hide_attachment: row.get("hide_attachment").unwrap_or(0),
             emoji_description: row.get("emoji_image_short_description").unwrap_or(None),
             copied_path: None,
+            guid: row.get("guid").unwrap_or(None),
         })
     }
 
@@ -562,6 +565,7 @@ mod tests {
             hide_attachment: 0,
             emoji_description: None,
             copied_path: None,
+            guid: None,
         }
     }
 
