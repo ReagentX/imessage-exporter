@@ -26,6 +26,7 @@ a[href^="#"] {
 .message {
 	margin: 1%;
 	overflow-wrap: break-word;
+	break-inside: avoid;
 }
 
 .message .sent,
