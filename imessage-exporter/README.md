@@ -50,14 +50,11 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
 -f, --format <txt, html>
         Specify a single file format to export messages into
         
--c, --copy-method <clone, basic, full, disabled>
+-c, --copy-method <compatible, efficient, disabled>
         Specify an optional method to use when copying message attachments
-        `clone` will copy all files without converting anything
-        `basic` will copy all files and convert HEIC images to JPEG
-        `full` will copy all files and convert HEIC files to JPEG, CAF to MP4, and MOV to MP4
+        Compatible will convert HEIC files to JPEG
+        Efficient will copy files without converting anything
         If omitted, the default is `disabled`
-        ImageMagick is required to convert images on non-macOS platforms
-        ffmpeg is required to convert audio on non-macOS platforms and video on all platforms
         
 -p, --db-path <path/to/source>
         Specify an optional custom path for the iMessage database location
@@ -124,13 +121,13 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
 Export as `html` and copy attachments in web-compatible formats from the default iMessage Database location to your home directory:
 
 ```zsh
-imessage-exporter -f html -c full
+imessage-exporter -f html -c compatible
 ```
 
 Export as `txt` and copy attachments in their original formats from the default iMessage Database location to a new folder in the current working directory called `output`:
 
 ```zsh
-imessage-exporter -f txt -o output -c clone
+imessage-exporter -f txt -o output -c efficient
 ```
 
 Export as `txt` from an iPhone backup located at `~/iphone_backup_latest` to a new folder in the current working directory called `backup_export`:
@@ -148,7 +145,7 @@ imessage-exporter -f html -c disabled -p /Volumes/external/chat.db -o /Volumes/e
 Export as `html` from `/Volumes/external/chat.db` to `/Volumes/external/export` with attachments in `/Volumes/external/Attachments`:
 
 ```zsh
-imessage-exporter -f html -c clone -p /Volumes/external/chat.db -r /Volumes/external/Attachments -o /Volumes/external/export 
+imessage-exporter -f html -c efficient -p /Volumes/external/chat.db -r /Volumes/external/Attachments -o /Volumes/external/export 
 ```
 
 Export messages from `2020-01-01` to `2020-12-31` as `txt` from the default macOS iMessage Database location to `~/export-2020`:
@@ -160,7 +157,7 @@ imessage-exporter -f txt -o ~/export-2020 -s 2020-01-01 -e 2021-01-01 -a macOS
 Export messages from a specific participant as `html` and copy attachments in their original formats from the default iMessage Database location to your home directory:
 
 ```zsh
-imessage-exporter -f html -c clone -t "5558675309"
+imessage-exporter -f html -c efficient -t "5558675309"
 ```
 
 Export messages from multiple specific participants as `html` without attachments from the default iMessage Database location to your home directory:
