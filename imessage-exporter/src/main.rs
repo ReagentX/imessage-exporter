@@ -6,7 +6,7 @@ mod exporters;
 pub use exporters::{exporter::Exporter, html::HTML, txt::TXT, transcript::Transcript};
 
 use app::{
-    options::{from_command_line, Options},
+    options::{Options, from_command_line},
     runtime::Config,
 };
 
@@ -20,15 +20,21 @@ fn main() {
     if let Err(why) = &options {
         eprintln!("{why}");
     } else {
-        match Config::new(options.unwrap()) {
-            Ok(app) => {
-                if let Err(why) = app.start() {
-                    eprintln!("Unable to start: {why}");
+        match options {
+            Ok(options) => match Config::new(options) {
+                Ok(mut app) => {
+                    // Resolve the filtered contacts, if provided
+                    app.resolve_filtered_handles();
+
+                    if let Err(why) = app.start() {
+                        eprintln!("Unable to export: {why}");
+                    }
                 }
-            }
-            Err(why) => {
-                eprintln!("Unable to launch: {why}");
-            }
+                Err(why) => {
+                    eprintln!("Invalid configuration: {why}");
+                }
+            },
+            Err(why) => eprintln!("Invalid command line options: {why}"),
         }
     }
 }

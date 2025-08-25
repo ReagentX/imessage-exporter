@@ -12,7 +12,7 @@ Documentation is available on [docs.rs](https://docs.rs/imessage-database/).
 
 ## Example
 
-```rust
+```rust,no_run
 use imessage_database::{
     error::table::TableError,
     tables::{
@@ -23,27 +23,25 @@ use imessage_database::{
 };
 
 fn iter_messages() -> Result<(), TableError> {
-    /// Create a read-only connection to an iMessage database
+    // Create a read-only connection to an iMessage database
     let db = get_connection(&default_db_path()).unwrap();
 
-    /// Create SQL statement
-    let mut statement = Message::get(&db)?;
+    // Iterate over a stream of messages
+    Message::stream(&db, |message_result| {
+        match message_result {
+            Ok(mut message) => {
+                // Deserialize the message body
+                message.generate_text(&db);
 
-    /// Execute statement
-    let messages = statement
-        .query_map([], |row| Ok(Message::from_row(row)))
-        .unwrap();
+                // Emit debug info for each message
+                println!("Message: {:#?}", message)
+            },
+            Err(e) => eprintln!("Error: {:?}", e),
+        };
 
-    /// Iterate over each row
-    for message in messages {
-        let mut msg = Message::extract(message)?;
-
-        /// Parse message body if it was sent from macOS 13.0 or newer
-        msg.gen_text(&db);
-
-        /// Emit debug info for each message
-        println!("{:?}", msg)
-    }
+        // You can substitute your own closure error type
+        Ok::<(), TableError>(())
+    })?;
 
     Ok(())
 }

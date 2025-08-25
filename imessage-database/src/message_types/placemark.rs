@@ -13,15 +13,25 @@ use crate::{
 /// Representation of Apple's [`CLPlacemark`](https://developer.apple.com/documentation/corelocation/clplacemark) object
 #[derive(Debug, PartialEq, Eq, Default)]
 pub struct Placemark<'a> {
+    /// The name of the placemark
     pub name: Option<&'a str>,
+    /// The full address formatted associated with the placemark
     pub address: Option<&'a str>,
+    /// The state or province associated with the placemark
     pub state: Option<&'a str>,
+    /// The city associated with the placemark
     pub city: Option<&'a str>,
+    /// The abbreviated country or region name
     pub iso_country_code: Option<&'a str>,
+    /// The postal code associated with the placemark
     pub postal_code: Option<&'a str>,
+    /// The name of the country or region associated with the placemark
     pub country: Option<&'a str>,
+    /// The street associated with the placemark
     pub street: Option<&'a str>,
+    /// Additional administrative area information for the placemark
     pub sub_administrative_area: Option<&'a str>,
+    /// Additional city-level information for the placemark
     pub sub_locality: Option<&'a str>,
 }
 
@@ -67,7 +77,7 @@ pub struct PlacemarkMessage<'a> {
     pub original_url: Option<&'a str>,
     /// The full street address of the location
     pub place_name: Option<&'a str>,
-    /// The short description of the app in the App Store
+    /// [Placemark] data for the specified location
     pub placemark: Placemark<'a>,
 }
 
@@ -115,6 +125,7 @@ impl<'a> PlacemarkMessage<'a> {
     }
 
     /// Get the redirected URL from a URL message, falling back to the original URL, if it exists
+    #[must_use]
     pub fn get_url(&self) -> Option<&str> {
         self.url.or(self.original_url)
     }
@@ -127,7 +138,7 @@ mod tests {
             placemark::{Placemark, PlacemarkMessage},
             variants::BalloonProvider,
         },
-        util::plist::parse_plist,
+        util::plist::parse_ns_keyed_archiver,
     };
     use plist::Value;
     use std::env::current_dir;
@@ -141,12 +152,16 @@ mod tests {
             .join("test_data/shared_placemark/SharedPlacemark.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = parse_plist(&plist).unwrap();
+        let parsed = parse_ns_keyed_archiver(&plist).unwrap();
 
         let balloon = PlacemarkMessage::from_map(&parsed).unwrap();
         let expected = PlacemarkMessage {
-            url: Some("https://maps.apple.com/?address=Cherry%20Cove,%20Avalon,%20CA%20%2090704,%20United%20States&ll=33.450858,-118.508212&q=Cherry%20Cove&t=m"),
-            original_url: Some("https://maps.apple.com/?address=Cherry%20Cove,%20Avalon,%20CA%20%2090704,%20United%20States&ll=33.450858,-118.508212&q=Cherry%20Cove&t=m"),
+            url: Some(
+                "https://maps.apple.com/?address=Cherry%20Cove,%20Avalon,%20CA%20%2090704,%20United%20States&ll=33.450858,-118.508212&q=Cherry%20Cove&t=m",
+            ),
+            original_url: Some(
+                "https://maps.apple.com/?address=Cherry%20Cove,%20Avalon,%20CA%20%2090704,%20United%20States&ll=33.450858,-118.508212&q=Cherry%20Cove&t=m",
+            ),
             place_name: Some("Cherry Cove Avalon CA 90704 United States"),
             placemark: Placemark {
                 name: Some("Cherry Cove"),
@@ -173,7 +188,7 @@ mod tests {
             .join("test_data/shared_placemark/SharedPlacemark.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = parse_plist(&plist).unwrap();
+        let parsed = parse_ns_keyed_archiver(&plist).unwrap();
 
         let (placemark_data, _) = PlacemarkMessage::get_body_and_url(&parsed).unwrap();
 

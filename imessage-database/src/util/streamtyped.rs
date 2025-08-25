@@ -1,5 +1,9 @@
 /*!
- Contains logic to parse text from streamtyped binary data.
+ The legacy/fallback simple `typedstream` parser.
+
+ Contains logic to parse text from `attributedBody`'s `typedstream` data.
+
+ It is called `streamtyped` because that is the header string contained in the data.
 */
 
 use crate::error::streamtyped::StreamTypedError;
@@ -14,12 +18,43 @@ const START_PATTERN: [u8; 2] = [0x0001, 0x002b];
 /// - <https://www.compart.com/en/unicode/U+0084>
 const END_PATTERN: [u8; 2] = [0x0086, 0x0084];
 
-/// Parse the body text from a known type of `streamtyped` `attributedBody` file.
+/// Parse the body [text](crate::tables::messages::message::Message::text) from a known type of `typedstream` `attributedBody` file.
 ///
-/// `attributedBody` `streamtyped` data looks like:
+/// `attributedBody` `typedstream` data looks like:
 ///
 /// ```txt
 /// streamtyped���@���NSAttributedString�NSObject����NSString��+Example message  ��iI���� NSDictionary��i����__kIMMessagePartAttributeName����NSNumber��NSValue��*������
+/// ```
+///
+/// In that example, the returned body text would be `"Example message"`.
+///
+/// ## Legacy parsing
+///
+/// If the `typedstream` data cannot be deserialized, we fall back to athislegacy string parsing algorithm that
+/// only supports unstyled text.
+///
+/// If the message has attachments, there will be one [`U+FFFC`](https://www.compart.com/en/unicode/U+FFFC) character
+/// for each attachment and one [`U+FFFD`](https://www.compart.com/en/unicode/U+FFFD) for app messages that we need
+/// to format.
+///
+/// ## Sample
+///
+/// An iMessage that contains body text like:
+///
+/// ```
+/// let message_text = "\u{FFFC}Check out this photo!";
+/// ```
+///
+/// Will have a `body()` of:
+///
+/// ```
+/// use imessage_database::message_types::text_effects::TextEffect;
+/// use imessage_database::tables::messages::{models::{TextAttributes, BubbleComponent, AttachmentMeta}};
+///  
+/// let result = vec![
+///     BubbleComponent::Attachment(AttachmentMeta::default()),
+///     BubbleComponent::Text(vec![TextAttributes::new(3, 24, vec![TextEffect::Default])]),
+/// ];
 /// ```
 pub fn parse(mut stream: Vec<u8>) -> Result<String, StreamTypedError> {
     // Find the start index and drain
@@ -55,7 +90,6 @@ pub fn parse(mut stream: Vec<u8>) -> Result<String, StreamTypedError> {
     match String::from_utf8(stream)
         .map_err(|non_utf8| String::from_utf8_lossy(non_utf8.as_bytes()).into_owned())
     {
-        // TODO: Why does this logic work? Maybe the offset can be derived from the bytes
         // If the bytes are valid unicode, only one char prefixes the actual message
         // ['\u{6}', 'T', ...] where `T` is the first real char
         // The prefix char is not always the same
@@ -94,7 +128,7 @@ mod tests {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/streamtyped/AttributedBodyTextOnly");
+            .join("test_data/typedstream/AttributedBodyTextOnly");
         let mut file = File::open(plist_path).unwrap();
         let mut bytes = vec![];
         file.read_to_end(&mut bytes).unwrap();
@@ -110,7 +144,7 @@ mod tests {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/streamtyped/AttributedBodyTextOnly2");
+            .join("test_data/typedstream/AttributedBodyTextOnly2");
         let mut file = File::open(plist_path).unwrap();
         let mut bytes = vec![];
         file.read_to_end(&mut bytes).unwrap();
@@ -126,7 +160,7 @@ mod tests {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/streamtyped/WeirdText");
+            .join("test_data/typedstream/WeirdText");
         let mut file = File::open(plist_path).unwrap();
         let mut bytes = vec![];
         file.read_to_end(&mut bytes).unwrap();
@@ -142,7 +176,7 @@ mod tests {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/streamtyped/URL");
+            .join("test_data/typedstream/URL");
         let mut file = File::open(plist_path).unwrap();
         let mut bytes = vec![];
         file.read_to_end(&mut bytes).unwrap();
@@ -158,7 +192,7 @@ mod tests {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/streamtyped/MultiPart");
+            .join("test_data/typedstream/MultiPart");
         let mut file = File::open(plist_path).unwrap();
         let mut bytes = vec![];
         file.read_to_end(&mut bytes).unwrap();
@@ -171,10 +205,11 @@ mod tests {
 
     #[test]
     fn test_parse_text_app() {
+        // This test removed a block of text so the pointers become misaligned during parsing
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/streamtyped/ExtraData");
+            .join("test_data/typedstream/ExtraData");
         let mut file = File::open(plist_path).unwrap();
         let mut bytes = vec![];
         file.read_to_end(&mut bytes).unwrap();
@@ -186,17 +221,86 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_text_long() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/typedstream/LongMessage");
+        let mut file = File::open(plist_path).unwrap();
+        let mut bytes = vec![];
+        file.read_to_end(&mut bytes).unwrap();
+        let parsed = parse(bytes).unwrap();
+
+        let expected = "Sed nibh velit,";
+
+        assert_eq!(&parsed[..expected.len()], expected);
+        assert_eq!(parsed.len(), 2359);
+    }
+
+    #[test]
     fn test_parse_text_blank() {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
-            .join("test_data/streamtyped/Blank");
+            .join("test_data/typedstream/Blank");
         let mut file = File::open(plist_path).unwrap();
         let mut bytes = vec![];
         file.read_to_end(&mut bytes).unwrap();
         let parsed = parse(bytes);
 
         assert!(&parsed.is_err());
+    }
+
+    #[test]
+    fn test_parse_text_multi_part_deleted() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/typedstream/MultiPartWithDeleted");
+        let mut file = File::open(plist_path).unwrap();
+        let mut bytes = vec![];
+        file.read_to_end(&mut bytes).unwrap();
+        let parsed = parse(bytes).unwrap();
+        println!("{parsed:?}");
+
+        let expected = "From arbitrary byte stream:\r\u{FFFC}To native Rust data structures:\r";
+
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_parse_text_attachment() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/typedstream/Attachment");
+        let mut file = File::open(plist_path).unwrap();
+        let mut bytes = vec![];
+        file.read_to_end(&mut bytes).unwrap();
+        let parsed = parse(bytes).unwrap();
+        println!("{parsed:?}");
+
+        let expected =
+            "\u{FFFC}This is how the notes look to me fyi, in case it helps make sense of anything";
+
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_parse_text_array() {
+        let plist_path = current_dir()
+            .unwrap()
+            .as_path()
+            .join("test_data/typedstream/Array");
+        let mut file = File::open(plist_path).unwrap();
+        let mut bytes = vec![];
+        file.read_to_end(&mut bytes).unwrap();
+        let parsed = parse(bytes).unwrap();
+        println!("{parsed:?}");
+
+        let expected = "A single ChatGPT instance takes 5MW of power to run";
+
+        assert_eq!(parsed, expected);
     }
 
     #[test]

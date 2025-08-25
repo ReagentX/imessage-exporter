@@ -1,6 +1,6 @@
 /*!
- Contains logic for creating human-readable file size strings.
- */
+Contains logic for creating human-readable file size strings.
+*/
 
 const DIVISOR: f64 = 1024.;
 const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
@@ -15,6 +15,7 @@ const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
 /// let size: String = format_file_size(5612000);
 /// println!("{size}"); // 5.35 MB
 /// ```
+#[must_use]
 pub fn format_file_size(total_bytes: u64) -> String {
     let mut index: usize = 0;
     let mut bytes = total_bytes as f64;

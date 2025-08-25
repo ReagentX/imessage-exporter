@@ -1,5 +1,4 @@
-pub mod attachment_manager;
-pub mod converter;
+pub mod compatibility;
 pub mod error;
 pub mod export_type;
 pub mod options;

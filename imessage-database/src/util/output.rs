@@ -2,7 +2,7 @@
  Contains functions that emit a loading message while we do other work.
 */
 
-use std::io::{stdout, Write};
+use std::io::{Write, stdout};
 
 /// Write to the CLI while something is working so that we can overwrite it later
 ///

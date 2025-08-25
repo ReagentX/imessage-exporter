@@ -1,0 +1,52 @@
+syntax = 'proto3';
+package digital_touch;
+
+message BaseMessage {
+  TouchKind TouchKind = 1;
+  bytes TouchPayload = 3;
+  string ID = 5;
+}
+
+enum TouchKind {
+  Unknown = 0;
+  Tap = 1;
+  // 2?
+  Heartbeat = 3; // Also broken heart
+  Sketch = 4;
+  // 5?
+  // 6?
+  Kiss = 7;
+  Fireball = 8;
+}
+
+message TapMessage {
+  bytes Delays = 2;
+  bytes Location = 3;
+  bytes Color = 4;
+}
+
+message SketchMessage {
+  int64 StrokesCount = 1;
+  bytes Strokes = 2;
+  bytes Colors = 3;
+}
+
+message KissMessage {
+  bytes Delays = 1;
+  bytes Points = 2;
+  bytes Rotations = 3;
+}
+
+message HeartbeatMessage {
+  float  BPM = 1;
+  uint64 Duration = 2;
+  float  HeartBrokenAt = 6;
+}
+
+message FireballMessage {
+  float Duration = 1;
+  float StartX = 2;
+  float StartY = 3;
+  bytes Delays = 4;
+  bytes Points = 5;
+}

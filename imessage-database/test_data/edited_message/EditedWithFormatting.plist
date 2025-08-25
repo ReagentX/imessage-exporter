@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>ec</key>
+	<dict>
+		<key>0</key>
+		<array>
+			<dict>
+				<key>d</key>
+				<real>758573156.22799993</real>
+				<key>t</key>
+				<data>
+				BAtzdHJlYW10eXBlZIHoA4QBQISEhBJOU0F0dHJpYnV0
+				ZWRTdHJpbmcAhIQITlNPYmplY3QAhZKEhIQITlNTdHJp
+				bmcBlIQBKwRUZXN0hoQCaUkBBJKEhIQMTlNEaWN0aW9u
+				YXJ5AJSEAWkBkoSWlh1fX2tJTU1lc3NhZ2VQYXJ0QXR0
+				cmlidXRlTmFtZYaShISECE5TTnVtYmVyAISEB05TVmFs
+				dWUAlIQBKoSZmQCGhoY=
+				</data>
+			</dict>
+			<dict>
+				<key>bcg</key>
+				<string>76A466B8-D21E-4A20-AF62-FF2D3A20D31C</string>
+				<key>d</key>
+				<real>758573166.17679596</real>
+				<key>t</key>
+				<data>
+				BAtzdHJlYW10eXBlZIHoA4QBQISEhBJOU0F0dHJpYnV0
+				ZWRTdHJpbmcAhIQITlNPYmplY3QAhZKEhIQITlNTdHJp
+				bmcBlIQBKwRUZXN0hoQCaUkBBJKEhIQMTlNEaWN0aW9u
+				YXJ5AJSEAWkCkoSWliNfX2tJTVRleHRTdHJpa2V0aHJv
+				dWdoQXR0cmlidXRlTmFtZYaShISECE5TTnVtYmVyAISE
+				B05TVmFsdWUAlIQBKoSZmQGGkoSWlh1fX2tJTU1lc3Nh
+				Z2VQYXJ0QXR0cmlidXRlTmFtZYaShJucnZkAhoaG
+				</data>
+			</dict>
+		</array>
+	</dict>
+	<key>ep</key>
+	<array>
+		<integer>0</integer>
+	</array>
+	<key>euh</key>
+	<array>
+		<string>+5558675308</string>
+	</array>
+	<key>otr</key>
+	<dict>
+		<key>0</key>
+		<dict>
+			<key>le</key>
+			<integer>4</integer>
+			<key>lo</key>
+			<integer>0</integer>
+		</dict>
+	</dict>
+	<key>ust</key>
+	<true/>
+</dict>
+</plist>

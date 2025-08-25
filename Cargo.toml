@@ -5,5 +5,7 @@ members = ["imessage-database", "imessage-exporter"]
 [profile.release]
 # Perform Link Time Optimization
 lto = true
+# Use a single codegen unit for the entire crate
+codegen-units = 1
 # Do not unwind stack on crash
 panic = "abort"

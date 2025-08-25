@@ -7,6 +7,7 @@ use std::fmt::{Display, Formatter, Result};
 /// Errors that can happen when parsing query context data
 #[derive(Debug)]
 pub enum QueryContextError {
+    /// Error that occurs when a date string cannot be parsed into a valid date
     InvalidDate(String),
 }
 

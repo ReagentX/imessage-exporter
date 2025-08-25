@@ -38,6 +38,7 @@ pub struct URLMessage<'a> {
     pub icons: Vec<&'a str>,
     /// The name of a website
     pub site_name: Option<&'a str>,
+    /// Indicates whether this is a placeholder link preview that needs to be loaded
     pub placeholder: bool,
 }
 
@@ -62,7 +63,9 @@ impl<'a> BalloonProvider<'a> for URLMessage<'a> {
 
 impl<'a> URLMessage<'a> {
     /// Gets the subtype of the URL message based on the payload
-    pub fn get_url_message_override(payload: &'a Value) -> Result<URLOverride, PlistParseError> {
+    pub fn get_url_message_override(
+        payload: &'a Value,
+    ) -> Result<URLOverride<'a>, PlistParseError> {
         if let Ok(balloon) = CollaborationMessage::from_map(payload) {
             return Ok(URLOverride::Collaboration(balloon));
         }
@@ -92,10 +95,10 @@ impl<'a> URLMessage<'a> {
 
         if let Some(meta) = root_dict.get("richLinkMetadata") {
             return Ok(meta);
-        };
+        }
         if let Some(meta) = root_dict.get("metadata") {
             return Ok(meta);
-        };
+        }
         Err(PlistParseError::NoPayload)
     }
 
@@ -127,6 +130,7 @@ impl<'a> URLMessage<'a> {
     }
 
     /// Get the redirected URL from a URL message, falling back to the original URL, if it exists
+    #[must_use]
     pub fn get_url(&self) -> Option<&str> {
         self.url.or(self.original_url)
     }
@@ -136,7 +140,7 @@ impl<'a> URLMessage<'a> {
 mod url_tests {
     use crate::{
         message_types::{url::URLMessage, variants::BalloonProvider},
-        util::plist::parse_plist,
+        util::plist::parse_ns_keyed_archiver,
     };
     use plist::Value;
     use std::env::current_dir;
@@ -150,7 +154,7 @@ mod url_tests {
             .join("test_data/url_message/URL.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = parse_plist(&plist).unwrap();
+        let parsed = parse_ns_keyed_archiver(&plist).unwrap();
 
         let balloon = URLMessage::from_map(&parsed).unwrap();
         let expected = URLMessage {
@@ -176,7 +180,7 @@ mod url_tests {
             .join("test_data/url_message/MetadataURL.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = parse_plist(&plist).unwrap();
+        let parsed = parse_ns_keyed_archiver(&plist).unwrap();
 
         let balloon = URLMessage::from_map(&parsed).unwrap();
         let expected = URLMessage {
@@ -206,7 +210,7 @@ mod url_tests {
             .join("test_data/url_message/Twitter.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = parse_plist(&plist).unwrap();
+        let parsed = parse_ns_keyed_archiver(&plist).unwrap();
 
         let balloon = URLMessage::from_map(&parsed).unwrap();
         let expected = URLMessage {
@@ -239,7 +243,7 @@ mod url_tests {
             .join("test_data/url_message/Reminder.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = parse_plist(&plist).unwrap();
+        let parsed = parse_ns_keyed_archiver(&plist).unwrap();
 
         let balloon = URLMessage::from_map(&parsed).unwrap();
         let expected = URLMessage {
@@ -312,7 +316,7 @@ mod url_tests {
 mod url_override_tests {
     use crate::{
         message_types::{url::URLMessage, variants::URLOverride},
-        util::plist::parse_plist,
+        util::plist::parse_ns_keyed_archiver,
     };
     use plist::Value;
     use std::env::current_dir;
@@ -326,7 +330,7 @@ mod url_override_tests {
             .join("test_data/url_message/URL.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = parse_plist(&plist).unwrap();
+        let parsed = parse_ns_keyed_archiver(&plist).unwrap();
 
         let balloon = URLMessage::get_url_message_override(&parsed).unwrap();
         assert!(matches!(balloon, URLOverride::Normal(_)));
@@ -340,7 +344,7 @@ mod url_override_tests {
             .join("test_data/music_message/AppleMusic.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = parse_plist(&plist).unwrap();
+        let parsed = parse_ns_keyed_archiver(&plist).unwrap();
 
         let balloon = URLMessage::get_url_message_override(&parsed).unwrap();
         assert!(matches!(balloon, URLOverride::AppleMusic(_)));
@@ -354,7 +358,7 @@ mod url_override_tests {
             .join("test_data/app_store/AppStoreLink.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = parse_plist(&plist).unwrap();
+        let parsed = parse_ns_keyed_archiver(&plist).unwrap();
 
         let balloon = URLMessage::get_url_message_override(&parsed).unwrap();
         assert!(matches!(balloon, URLOverride::AppStore(_)));
@@ -368,7 +372,7 @@ mod url_override_tests {
             .join("test_data/collaboration_message/Freeform.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = parse_plist(&plist).unwrap();
+        let parsed = parse_ns_keyed_archiver(&plist).unwrap();
 
         let balloon = URLMessage::get_url_message_override(&parsed).unwrap();
         assert!(matches!(balloon, URLOverride::Collaboration(_)));
@@ -382,7 +386,7 @@ mod url_override_tests {
             .join("test_data/shared_placemark/SharedPlacemark.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = parse_plist(&plist).unwrap();
+        let parsed = parse_ns_keyed_archiver(&plist).unwrap();
 
         let balloon = URLMessage::get_url_message_override(&parsed).unwrap();
         println!("{balloon:?}");

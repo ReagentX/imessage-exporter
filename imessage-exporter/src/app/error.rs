@@ -1,5 +1,5 @@
 /*!
-Errors that can happen during the application's runtime
+ Errors that can happen during the application's runtime.
 */
 
 use std::{
@@ -7,6 +7,7 @@ use std::{
     io::Error as IoError,
 };
 
+use crabapple::error::BackupError;
 use imessage_database::{error::table::TableError, util::size::format_file_size};
 
 use crate::app::options::OPTION_BYPASS_FREE_SPACE_CHECK;
@@ -17,7 +18,9 @@ pub enum RuntimeError {
     InvalidOptions(String),
     DiskError(IoError),
     DatabaseError(TableError),
+    BackupError(BackupError),
     NotEnoughAvailableSpace(u64, u64),
+    FileNameError,
 }
 
 impl Display for RuntimeError {
@@ -28,13 +31,32 @@ impl Display for RuntimeError {
             RuntimeError::DatabaseError(why) => write!(fmt, "{why}"),
             RuntimeError::NotEnoughAvailableSpace(estimated_bytes, available_bytes) => {
                 write!(
-                    fmt, 
-                    "Not enough free disk space!\nEstimated export size: {}\nDisk space available: {}\nPass `--{}` to ignore\n",
+                    fmt,
+                    "Not enough free disk space!\nEstimated export size: {}\nDisk space available: {}\nPass --{OPTION_BYPASS_FREE_SPACE_CHECK} to ignore\n",
                     format_file_size(*estimated_bytes),
                     format_file_size(*available_bytes),
-                    OPTION_BYPASS_FREE_SPACE_CHECK
                 )
             }
+            RuntimeError::BackupError(why) => write!(fmt, "{why}"),
+            RuntimeError::FileNameError => write!(fmt, "Invalid file name!"),
         }
+    }
+}
+
+impl From<TableError> for RuntimeError {
+    fn from(err: TableError) -> Self {
+        RuntimeError::DatabaseError(err)
+    }
+}
+
+impl From<BackupError> for RuntimeError {
+    fn from(err: BackupError) -> Self {
+        RuntimeError::BackupError(err)
+    }
+}
+
+impl From<IoError> for RuntimeError {
+    fn from(err: IoError) -> Self {
+        RuntimeError::DiskError(err)
     }
 }

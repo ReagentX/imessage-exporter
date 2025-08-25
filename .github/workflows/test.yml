@@ -11,19 +11,11 @@ env:
 
 jobs:
   Test:
+    name: iMessage Exporter Tests
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-      - name: Lint
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-features
-      - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
+      - uses: actions/checkout@v4
+      - run: rustup update stable && rustup default stable
+      - run: cargo clippy
+      - run: cargo build

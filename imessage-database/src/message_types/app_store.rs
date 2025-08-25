@@ -78,7 +78,7 @@ impl<'a> AppStoreMessage<'a> {
 mod tests {
     use crate::{
         message_types::{app_store::AppStoreMessage, variants::BalloonProvider},
-        util::plist::parse_plist,
+        util::plist::parse_ns_keyed_archiver,
     };
     use plist::Value;
     use std::env::current_dir;
@@ -92,7 +92,7 @@ mod tests {
             .join("test_data/app_store/AppStoreLink.plist");
         let plist_data = File::open(plist_path).unwrap();
         let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = parse_plist(&plist).unwrap();
+        let parsed = parse_ns_keyed_archiver(&plist).unwrap();
 
         let balloon = AppStoreMessage::from_map(&parsed).unwrap();
         let expected = AppStoreMessage {

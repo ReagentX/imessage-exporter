@@ -1,0 +1,50 @@
+syntax = 'proto3';
+package handwriting;
+
+message BaseMessage {
+  // Milliseconds since 2001-01-01 UTC.
+  sfixed64 CreatedAt = 2;
+  string ID = 3;
+  Handwriting Handwriting = 4;
+}
+
+enum Compression {
+  Unknown = 0;
+  None = 1;
+  XZ = 4;
+}
+
+// `int16` is little endian.
+// To decode the value `xor` it with `0x8000`
+message Handwriting {
+  // struct {
+  //   Origin struct {
+  //     X int16
+  //     Y int16
+  //   }
+  //   Size struct {
+  //     Width int16
+  //     Height int16
+  //   }
+  // }
+  // Box fits the provided points
+  bytes Frame = 3;
+  // Number of arrays in Strokes
+  int64 StrokesCount = 4;
+  // If compressed, DecompressedLength is set.
+  Compression Compression = 5;
+  // If DataType is Compressed, size of decompressed data
+  optional int64 DecompressedLength = 6;
+  // Either compressed payload or raw data.
+  // In raw form it is in this format:
+  // [StrokesCount]struct{
+  //    Count uint16
+  //    Elems [Count]struct{
+  //      X        int16
+  //      Y        int16
+  //      Width    int16
+  //      ??       int16
+  //    }
+  // }
+  bytes Strokes = 8;
+}

@@ -4,7 +4,10 @@
 
 use std::{fmt::Display, path::Path};
 
-use crate::tables::table::DEFAULT_PATH_IOS;
+use crate::{
+    error::table::{TableConnectError, TableError},
+    tables::table::DEFAULT_PATH_IOS,
+};
 
 /// Represents the platform that created the database this library connects to
 #[derive(PartialEq, Eq, Debug)]
@@ -19,17 +22,25 @@ pub enum Platform {
 
 impl Platform {
     /// Try to determine the current platform, defaulting to macOS.
-    pub fn determine(db_path: &Path) -> Self {
+    pub fn determine(db_path: &Path) -> Result<Self, TableError> {
+        // If the path ends with the default iOS path,
+        // the user accidentally passed the full iOS path,
+        // not the root of the backup
+        if db_path.ends_with(DEFAULT_PATH_IOS) {
+            return Err(TableError::CannotConnect(TableConnectError::NotBackupRoot));
+        }
+
         if db_path.join(DEFAULT_PATH_IOS).exists() {
-            return Self::iOS;
+            return Ok(Self::iOS);
         } else if db_path.is_file() {
-            return Self::macOS;
+            return Ok(Self::macOS);
         }
         // If we get here, the database is missing; that error is handled in the connection lifecycle
-        Self::default()
+        Ok(Self::default())
     }
 
     /// Given user's input, return a variant if the input matches one
+    #[must_use]
     pub fn from_cli(platform: &str) -> Option<Self> {
         match platform.to_lowercase().as_str() {
             "macos" => Some(Self::macOS),
@@ -57,7 +68,7 @@ impl Display for Platform {
 
 #[cfg(test)]
 mod tests {
-    use crate::util::platform::Platform;
+    use crate::{tables::table::DEFAULT_PATH_IOS, util::platform::Platform};
 
     #[test]
     fn can_parse_macos_any_case() {
@@ -78,5 +89,11 @@ mod tests {
         assert!(Platform::from_cli("mac").is_none());
         assert!(Platform::from_cli("iphone").is_none());
         assert!(Platform::from_cli("").is_none());
+    }
+
+    #[test]
+    fn cant_build_ends_with_ios_backup() {
+        let path = std::path::PathBuf::from(DEFAULT_PATH_IOS);
+        assert!(Platform::determine(&path).is_err());
     }
 }

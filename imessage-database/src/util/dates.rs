@@ -1,20 +1,34 @@
 /*!
  Contains date parsing functions for iMessage dates.
 
- Dates are stored as nanosecond-precision unix timestamps with an epoch of `1/1/2001 00:00:00` in the local time zone.
+ Most dates are stored as nanosecond-precision unix timestamps with an epoch of `1/1/2001 00:00:00` in the local time zone.
 */
 
-use chrono::{DateTime, Duration, Local, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Duration, Local, TimeZone, Utc};
 
 use crate::error::message::MessageError;
 
 const SEPARATOR: &str = ", ";
+
+/// Factor used to convert between nanosecond-precision timestamps and seconds
+///
+/// The iMessage database stores timestamps as nanoseconds, so this factor is used
+/// to convert between the database format and standard Unix timestamps.
 pub const TIMESTAMP_FACTOR: i64 = 1000000000;
 
 /// Get the date offset for the iMessage Database
 ///
 /// This offset is used to adjust the unix timestamps stored in the iMessage database
-/// with a non-standard epoch of `2001-01-01 00:00:00` in the local time zone.
+/// with a non-standard epoch of `2001-01-01 00:00:00` in the current machine's local time zone.
+///
+/// # Example
+///
+/// ```
+/// use imessage_database::util::dates::get_offset;
+///
+/// let current_epoch = get_offset();
+/// ```
+#[must_use]
 pub fn get_offset() -> i64 {
     Utc.with_ymd_and_hms(2001, 1, 1, 0, 0, 0)
         .unwrap()
@@ -24,10 +38,20 @@ pub fn get_offset() -> i64 {
 /// Create a `DateTime<Local>` from an arbitrary date and offset
 ///
 /// This is used to create date data for anywhere dates are stored in the table, including
-/// `PLIST` payloads or [`streamtyped`](crate::util::streamtyped) data.
+/// `PLIST` payloads or [`typedstream`](crate::util::typedstream) data.
+///
+/// # Example
+///
+/// ```
+/// use imessage_database::util::dates::{get_local_time, get_offset};
+///
+/// let current_offset = get_offset();
+/// let local = get_local_time(&674526582885055488, &current_offset).unwrap();
+/// ```
 pub fn get_local_time(date_stamp: &i64, offset: &i64) -> Result<DateTime<Local>, MessageError> {
-    let utc_stamp = NaiveDateTime::from_timestamp_opt((date_stamp / TIMESTAMP_FACTOR) + offset, 0)
-        .ok_or(MessageError::InvalidTimestamp(*date_stamp))?;
+    let utc_stamp = DateTime::from_timestamp((date_stamp / TIMESTAMP_FACTOR) + offset, 0)
+        .ok_or(MessageError::InvalidTimestamp(*date_stamp))?
+        .naive_utc();
     Ok(Local.from_utc_datetime(&utc_stamp))
 }
 
@@ -42,6 +66,7 @@ pub fn get_local_time(date_stamp: &i64, offset: &i64) -> Result<DateTime<Local>,
 /// let date = format(&Ok(Local::now()));
 /// println!("{date}");
 /// ```
+#[must_use]
 pub fn format(date: &Result<DateTime<Local>, MessageError>) -> String {
     match date {
         Ok(d) => DateTime::format(d, "%b %d, %Y %l:%M:%S %p").to_string(),
@@ -57,10 +82,11 @@ pub fn format(date: &Result<DateTime<Local>, MessageError>) -> String {
 /// use chrono::prelude::*;
 /// use imessage_database::util::dates::readable_diff;
 ///
-/// let start = Ok(Local.ymd(2020, 5, 20).and_hms_milli(9, 10, 11, 12));
-/// let end = Ok(Local.ymd(2020, 5, 20).and_hms_milli(9, 15, 11, 12));
-/// println!("{}", readable_diff(start, end).unwrap())
+/// let start = Ok(Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap());
+/// let end = Ok(Local.with_ymd_and_hms(2020, 5, 20, 9, 15, 13).unwrap());
+/// println!("{}", readable_diff(start, end).unwrap()) // "5 minutes, 2 seconds"
 /// ```
+#[must_use]
 pub fn readable_diff(
     start: Result<DateTime<Local>, MessageError>,
     end: Result<DateTime<Local>, MessageError>,
@@ -253,6 +279,6 @@ mod tests {
     fn can_format_no_diff() {
         let start = Ok(Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap());
         let end = Ok(Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap());
-        assert_eq!(readable_diff(start, end), Some("".to_owned()));
+        assert_eq!(readable_diff(start, end), Some(String::new()));
     }
 }
