@@ -1,4 +1,5 @@
 pub mod compatibility;
+pub mod contacts;
 pub mod error;
 pub mod export_type;
 pub mod options;

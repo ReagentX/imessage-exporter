@@ -283,7 +283,7 @@ impl<'a> MessageFormatter<'a> for HTML<'a> {
         // Add message sender
         self.add_line(
             &mut formatted_message,
-            self.config.who(
+            &self.config.who(
                 message.handle_id,
                 message.is_from_me(),
                 &message.destination_caller_id,
@@ -857,7 +857,7 @@ impl<'a> MessageFormatter<'a> for HTML<'a> {
             .who(msg.handle_id, msg.is_from_me(), &msg.destination_caller_id);
         // Rename yourself so we render the proper grammar here
         if who == ME {
-            who = self.config.options.custom_name.as_deref().unwrap_or("You");
+            who = self.config.options.custom_name.as_deref().unwrap_or("You").to_string();
         }
         let timestamp = format(&msg.date(&self.config.offset));
 
@@ -978,7 +978,7 @@ impl<'a> MessageFormatter<'a> for HTML<'a> {
                 }
                 EditStatus::Unsent => {
                     let who = if msg.is_from_me() {
-                        self.config.options.custom_name.as_deref().unwrap_or(YOU)
+                        self.config.options.custom_name.as_deref().unwrap_or(YOU).to_string()
                     } else {
                         self.config
                             .who(msg.handle_id, msg.is_from_me(), &msg.destination_caller_id)

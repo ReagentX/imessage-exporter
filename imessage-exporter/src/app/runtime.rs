@@ -21,6 +21,7 @@ use crate::{
             attachment_manager::AttachmentManagerMode,
             backup::{decrypt_backup, get_decrypted_message_database},
         },
+        contacts::VcfParser,
         error::RuntimeError,
         export_type::ExportType,
         options::{OPTION_CLEARTEXT_PASSWORD, Options},
@@ -69,6 +70,8 @@ pub struct Config {
     pub db: Option<Connection>,
     /// An optional encrypted iOS backup
     pub backup: Option<Backup>,
+    /// VCF contact parser for resolving names from phone numbers and emails
+    pub vcf_parser: Option<VcfParser>,
 }
 
 impl Config {
@@ -193,7 +196,7 @@ impl Config {
                 if !out_s.is_empty() {
                     out_s.push_str(", ");
                 }
-                out_s.push_str(participant);
+                out_s.push_str(&participant);
                 added += 1;
             } else {
                 let extra = format!(", and {} others", participants.len() - added);
@@ -254,7 +257,7 @@ impl Config {
         let tapbacks = Message::cache(&conn)?;
         eprintln!("Cache built!");
 
-        Ok(Config {
+        let mut config = Config {
             chatrooms,
             real_chatrooms: ChatToHandle::dedupe(&chatroom_participants),
             chatroom_participants,
@@ -265,7 +268,13 @@ impl Config {
             offset: get_offset(),
             db: Some(conn),
             backup,
-        })
+            vcf_parser: None,
+        };
+
+        // Try to load VCF contacts if available
+        config.load_vcf_contacts();
+
+        Ok(config)
     }
 
     /// Get the current database connection, if it is alive
@@ -497,25 +506,77 @@ impl Config {
         Ok(())
     }
 
+    /// Load VCF contacts from the ContactCards directory
+    fn load_vcf_contacts(&mut self) {
+        // Look for VCF files in the ContactCards directory relative to the current working directory
+        let contact_dirs = ["ContactCards", "./ContactCards", "../ContactCards"];
+        
+        for contact_dir in &contact_dirs {
+            let contact_path = Path::new(contact_dir);
+            if contact_path.exists() && contact_path.is_dir() {
+                if let Ok(entries) = std::fs::read_dir(contact_path) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.extension().and_then(|s| s.to_str()) == Some("vcf") {
+                            eprintln!("Loading contacts from: {}", path.display());
+                            let mut parser = VcfParser::new();
+                            match parser.parse_vcf_file(&path) {
+                                Ok(()) => {
+                                    eprintln!("Loaded {} contact entries", parser.contact_count());
+                                    self.vcf_parser = Some(parser);
+                                    return;
+                                }
+                                Err(e) => {
+                                    eprintln!("Warning: Failed to parse VCF file {}: {}", path.display(), e);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        eprintln!("No VCF contact files found in ContactCards directory");
+    }
+
+    /// Get a contact name with fallback to phone/email if no VCF name is found
+    pub fn get_contact_display_name(&self, contact_id: &str) -> String {
+        // First try to get name from VCF parser
+        if let Some(parser) = &self.vcf_parser {
+            // Try phone number lookup
+            if let Some(name) = parser.get_name_by_phone(contact_id) {
+                return format!("{} ({})", name, contact_id);
+            }
+            
+            // Try email lookup
+            if let Some(name) = parser.get_name_by_email(contact_id) {
+                return format!("{} ({})", name, contact_id);
+            }
+        }
+        
+        // Fallback to just the contact ID
+        contact_id.to_string()
+    }
+
     /// Determine who sent a message
     pub fn who<'a, 'b: 'a>(
         &'a self,
         handle_id: Option<i32>,
         is_from_me: bool,
         destination_caller_id: &'b Option<String>,
-    ) -> &'a str {
+    ) -> String {
         if is_from_me {
             if self.options.use_caller_id {
-                return destination_caller_id.as_deref().unwrap_or(ME);
+                return destination_caller_id.as_deref().unwrap_or(ME).to_string();
             }
-            return self.options.custom_name.as_deref().unwrap_or(ME);
+            return self.options.custom_name.as_deref().unwrap_or(ME).to_string();
         } else if let Some(handle_id) = handle_id {
             return match self.participants.get(&handle_id) {
-                Some(contact) => contact,
-                None => UNKNOWN,
+                Some(contact_id) => self.get_contact_display_name(contact_id),
+                None => UNKNOWN.to_string(),
             };
         }
-        UNKNOWN
+        UNKNOWN.to_string()
     }
 }
 
@@ -535,6 +596,7 @@ impl Config {
             offset: get_offset(),
             db: Some(connection),
             backup: None,
+            vcf_parser: None,
         }
     }
 

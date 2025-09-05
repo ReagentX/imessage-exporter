@@ -179,7 +179,7 @@ impl<'a> MessageFormatter<'a> for TXT<'a> {
         // Add message sender
         self.add_line(
             &mut formatted_message,
-            self.config.who(
+            &self.config.who(
                 message.handle_id,
                 message.is_from_me(),
                 &message.destination_caller_id,
@@ -605,7 +605,7 @@ impl<'a> MessageFormatter<'a> for TXT<'a> {
             .who(msg.handle_id, msg.is_from_me(), &msg.destination_caller_id);
         // Rename yourself so we render the proper grammar here
         if who == ME {
-            who = self.config.options.custom_name.as_deref().unwrap_or(YOU);
+            who = self.config.options.custom_name.as_deref().unwrap_or(YOU).to_string();
         }
 
         let timestamp = format(&msg.date(&self.config.offset));
