@@ -115,3 +115,18 @@ This tool targets the current latest public release for Messages.app. It may wor
   - On startup:
     - Different handles that belong to the same person are combined
     - Chatrooms that contain identical contacts (i.e., duplicated handles) are combined
+- Contact Name Resolution
+  - Resolves phone numbers and email addresses to contact names using VCF (vCard) files
+  - Supports multiple contact sources:
+    - Command line: `--contacts path/to/contacts.vcf`
+    - Automatic detection: searches for VCF files in `ContactCards/` directory
+  - Features:
+    - Displays contacts as "Name (phone/email)" instead of just the raw identifier
+    - Handles multiple phone numbers and emails per contact
+    - Merges duplicate contact entries with the same name
+    - Normalizes phone numbers (removes formatting, handles country codes)
+    - Case-insensitive email matching
+    - Graceful fallback to original identifier if no name is found
+  - Supported VCF formats:
+    - Standard vCard 3.0 format (as exported by macOS Contacts)
+    - Handles `FN:` (full name), `TEL:` (phone), and `EMAIL:` fields

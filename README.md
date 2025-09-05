@@ -6,6 +6,7 @@ This free and open-source software can:
 
 - Save, export, backup, and archive iMessage data to open, portable formats
 - Preserve multimedia content (images, videos, audio) from conversations
+- Resolve contact names from VCF (vCard) files
 - Facilitate easy migration of message history between devices and platforms
 - Run diagnostics on the iMessage database
 - Give you full ownership and control over your communication history

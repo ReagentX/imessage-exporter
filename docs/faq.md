@@ -104,3 +104,58 @@ On my M1 Max MacBook Pro, approximate performance is as follows:
 For more information on `--copy-method`, see [here](../imessage-exporter/README.md#how-to-use) and [here](./features.md#supported-message-features).
 
 However, if you recently deleted a large amount of data from Messages, the database will be slow for awhile, resulting in significantly reduced performance from `imessage-exporter`.
+
+***
+
+## How do I get contact names to show up instead of phone numbers and emails?
+
+`imessage-exporter` can resolve phone numbers and email addresses to contact names using VCF (vCard) files. There are two ways to provide contact information:
+
+### Option 1: Command Line (Recommended)
+
+Use the `--contacts` flag to specify a VCF file:
+
+```bash
+imessage-exporter -f txt --contacts "/path/to/your/contacts.vcf" -o ./export
+```
+
+### Option 2: Automatic Detection
+
+Place your VCF file in a `ContactCards/` directory in the same location as the exporter, and it will be automatically detected.
+
+### How to Export Contacts from macOS
+
+1. Open the **Contacts** app
+2. Select all contacts you would like to have labeled.
+3. Select **File** → **Export** → **Export vCard...**
+4. Use the saved VCF file with the `--contacts` option
+
+### What You'll See
+
+Instead of:
+
+```
+Message from: +19059998799
+Message from: john.doe@example.com
+```
+
+You'll get:
+
+```
+Message from: John Doe (+19059998799)
+Message from: Jane Smith (john.doe@example.com)
+```
+
+The system handles multiple phone numbers/emails per contact and automatically merges duplicate contact entries.
+
+***
+
+## What VCF file formats are supported?
+
+`imessage-exporter` supports standard vCard 3.0 format files, which is what macOS Contacts exports by default. The parser looks for:
+
+-   `FN:` fields for full names
+-   `TEL:` fields for phone numbers (with automatic normalization)
+-   `EMAIL:` fields for email addresses (case-insensitive matching)
+
+The system can handle contacts with multiple phone numbers or email addresses, and will automatically merge information from duplicate contact entries that have the same name.
