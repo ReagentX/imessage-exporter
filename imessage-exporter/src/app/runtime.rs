@@ -506,9 +506,26 @@ impl Config {
         Ok(())
     }
 
-    /// Load VCF contacts from the ContactCards directory
+    /// Load VCF contacts from the specified path or search in ContactCards directory
     fn load_vcf_contacts(&mut self) {
-        // Look for VCF files in the ContactCards directory relative to the current working directory
+        // First, check if a specific VCF file path was provided via command line
+        if let Some(vcf_path) = &self.options.contacts_vcf_path {
+            eprintln!("Loading contacts from: {}", vcf_path);
+            let mut parser = VcfParser::new();
+            match parser.parse_vcf_file(vcf_path) {
+                Ok(()) => {
+                    eprintln!("Loaded {} contact entries", parser.contact_count());
+                    self.vcf_parser = Some(parser);
+                    return;
+                }
+                Err(e) => {
+                    eprintln!("Error: Failed to parse VCF file {}: {}", vcf_path, e);
+                    return;
+                }
+            }
+        }
+
+        // If no specific path provided, look for VCF files in the ContactCards directory
         let contact_dirs = ["ContactCards", "./ContactCards", "../ContactCards"];
         
         for contact_dir in &contact_dirs {
@@ -536,7 +553,7 @@ impl Config {
             }
         }
         
-        eprintln!("No VCF contact files found in ContactCards directory");
+        eprintln!("No VCF contact files found. Contact names will not be resolved.");
     }
 
     /// Get a contact name with fallback to phone/email if no VCF name is found

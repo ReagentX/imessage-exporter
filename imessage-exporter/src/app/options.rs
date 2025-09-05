@@ -41,6 +41,7 @@ pub const OPTION_BYPASS_FREE_SPACE_CHECK: &str = "ignore-disk-warning";
 pub const OPTION_USE_CALLER_ID: &str = "use-caller-id";
 pub const OPTION_CONVERSATION_FILTER: &str = "conversation-filter";
 pub const OPTION_CLEARTEXT_PASSWORD: &str = "cleartext-password";
+pub const OPTION_CONTACTS_VCF: &str = "contacts";
 
 // Other CLI Text
 pub const SUPPORTED_FILE_TYPES: &str = "txt, html";
@@ -83,6 +84,8 @@ pub struct Options {
     pub conversation_filter: Option<String>,
     /// An optional password for encrypted backups
     pub cleartext_password: Option<String>,
+    /// Optional path to VCF contacts file for name resolution
+    pub contacts_vcf_path: Option<String>,
 }
 
 // MARK: Validation
@@ -103,6 +106,7 @@ impl Options {
         let ignore_disk_space = args.get_flag(OPTION_BYPASS_FREE_SPACE_CHECK);
         let conversation_filter: Option<&String> = args.get_one(OPTION_CONVERSATION_FILTER);
         let cleartext_password: Option<&String> = args.get_one(OPTION_CLEARTEXT_PASSWORD);
+        let contacts_vcf_path: Option<&String> = args.get_one(OPTION_CONTACTS_VCF);
 
         // Build the export type
         let export_type: Option<ExportType> = match export_file_type {
@@ -226,6 +230,21 @@ impl Options {
             None => AttachmentManagerMode::default(),
         };
 
+        // Validate the VCF contacts file path if provided
+        if let Some(vcf_path) = contacts_vcf_path {
+            let vcf_file_path = PathBuf::from(vcf_path);
+            if !vcf_file_path.exists() {
+                return Err(RuntimeError::InvalidOptions(format!(
+                    "Supplied {OPTION_CONTACTS_VCF} file `{vcf_path}` does not exist!"
+                )));
+            }
+            if !vcf_file_path.is_file() {
+                return Err(RuntimeError::InvalidOptions(format!(
+                    "Supplied {OPTION_CONTACTS_VCF} path `{vcf_path}` is not a file!"
+                )));
+            }
+        }
+
         // Validate the provided export path
         let export_path = validate_path(user_export_path, &export_type.as_ref())?;
 
@@ -244,6 +263,7 @@ impl Options {
             ignore_disk_space,
             conversation_filter: conversation_filter.cloned(),
             cleartext_password: cleartext_password.cloned(),
+            contacts_vcf_path: contacts_vcf_path.cloned(),
         })
     }
 
@@ -430,6 +450,13 @@ fn get_command() -> Command {
                 .display_order(14)
                 .value_name("password"),
         )
+        .arg(
+            Arg::new(OPTION_CONTACTS_VCF)
+                .long(OPTION_CONTACTS_VCF)
+                .help("Optional path to VCF (vCard) contacts file for resolving contact names\nIf provided, phone numbers and email addresses in messages will be replaced with 'Name (phone/email)'\nIf omitted, the system will automatically look for VCF files in the ContactCards/ directory\n")
+                .display_order(15)
+                .value_name("path/to/contacts.vcf"),
+        )
 }
 
 #[cfg(test)]
@@ -454,6 +481,8 @@ impl Options {
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: None,
+            contacts_vcf_path: None,
+            contacts_vcf_path: None,
         }
     }
 }
@@ -502,6 +531,7 @@ mod arg_tests {
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: None,
+            contacts_vcf_path: None,
         };
 
         assert_eq!(actual, expected);
@@ -584,6 +614,7 @@ mod arg_tests {
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: None,
+            contacts_vcf_path: None,
         };
 
         assert_eq!(actual, expected);
@@ -617,6 +648,7 @@ mod arg_tests {
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: None,
+            contacts_vcf_path: None,
         };
 
         assert_eq!(actual, expected);
@@ -696,6 +728,7 @@ mod arg_tests {
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: None,
+            contacts_vcf_path: None,
         };
 
         assert_eq!(actual, expected);
@@ -788,6 +821,7 @@ mod arg_tests {
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: None,
+            contacts_vcf_path: None,
         };
 
         assert_eq!(actual, expected);
@@ -818,6 +852,7 @@ mod arg_tests {
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: None,
+            contacts_vcf_path: None,
         };
 
         assert_eq!(actual, expected);
@@ -879,6 +914,7 @@ mod arg_tests {
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: None,
+            contacts_vcf_path: None,
         };
 
         assert_eq!(actual, expected);
@@ -909,6 +945,7 @@ mod arg_tests {
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: None,
+            contacts_vcf_path: None,
         };
 
         assert_eq!(actual, expected);
