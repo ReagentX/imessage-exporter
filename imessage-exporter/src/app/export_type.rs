@@ -11,6 +11,8 @@ pub enum ExportType {
     Html,
     /// Text file export
     Txt,
+    /// XML file export
+    Xml,
 }
 
 impl ExportType {
@@ -19,6 +21,7 @@ impl ExportType {
         match platform.to_lowercase().as_str() {
             "txt" => Some(Self::Txt),
             "html" => Some(Self::Html),
+            "xml" => Some(Self::Xml),
             _ => None,
         }
     }
@@ -28,6 +31,7 @@ impl ExportType {
         match self {
             ExportType::Html => ".html",
             ExportType::Txt => ".txt",
+            ExportType::Xml => ".xml",
         }
     }
 }
@@ -37,6 +41,7 @@ impl Display for ExportType {
         match self {
             ExportType::Txt => write!(fmt, "txt"),
             ExportType::Html => write!(fmt, "html"),
+            ExportType::Xml => write!(fmt, "xml"),
         }
     }
 }

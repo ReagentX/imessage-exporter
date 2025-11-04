@@ -43,12 +43,12 @@ pub const OPTION_CONVERSATION_FILTER: &str = "conversation-filter";
 pub const OPTION_CLEARTEXT_PASSWORD: &str = "cleartext-password";
 
 // Other CLI Text
-pub const SUPPORTED_FILE_TYPES: &str = "txt, html";
+pub const SUPPORTED_FILE_TYPES: &str = "txt, html, xml";
 pub const SUPPORTED_PLATFORMS: &str = "macOS, iOS";
 pub const SUPPORTED_ATTACHMENT_MANAGER_MODES: &str = "clone, basic, full, disabled";
 pub const ABOUT: &str = concat!(
     "The `imessage-exporter` binary exports iMessage data to\n",
-    "`txt` or `html` formats. It can also run diagnostics\n",
+    "`txt`, `html`, or `xml` formats. It can also run diagnostics\n",
     "to find problems with the iMessage database."
 );
 
