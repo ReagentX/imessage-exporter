@@ -71,6 +71,10 @@ pub struct Config {
     pub db: Option<Connection>,
     /// An optional encrypted iOS backup
     pub backup: Option<Backup>,
+    /// Maps participant identifiers to anonymous labels (when --anonymize is used)
+    pub participant_labels: std::cell::RefCell<HashMap<String, String>>,
+    /// Counter for generating participant labels
+    pub participant_counter: std::cell::RefCell<u8>,
 }
 
 impl Config {
@@ -195,7 +199,7 @@ impl Config {
                 if !out_s.is_empty() {
                     out_s.push_str(", ");
                 }
-                out_s.push_str(participant);
+                out_s.push_str(&participant);
                 added += 1;
             } else {
                 let extra = format!(", and {} others", participants.len() - added);
@@ -270,6 +274,8 @@ impl Config {
             offset: get_offset(),
             db: Some(conn),
             backup,
+            participant_labels: std::cell::RefCell::new(HashMap::new()),
+            participant_counter: std::cell::RefCell::new(0),
         })
     }
 
@@ -511,19 +517,41 @@ impl Config {
         handle_id: Option<i32>,
         is_from_me: bool,
         destination_caller_id: &'b Option<String>,
-    ) -> &'a str {
-        if is_from_me {
+    ) -> String {
+        // Get the original identifier
+        let original = if is_from_me {
             if self.options.use_caller_id {
-                return destination_caller_id.as_deref().unwrap_or(ME);
+                destination_caller_id.as_deref().unwrap_or(ME)
+            } else {
+                self.options.custom_name.as_deref().unwrap_or(ME)
             }
-            return self.options.custom_name.as_deref().unwrap_or(ME);
         } else if let Some(handle_id) = handle_id {
-            return match self.participants.get(&handle_id) {
-                Some(contact) => contact,
+            match self.participants.get(&handle_id) {
+                Some(contact) => contact.as_str(),
                 None => UNKNOWN,
-            };
+            }
+        } else {
+            UNKNOWN
+        };
+
+        // Apply anonymization if enabled
+        if self.options.anonymize {
+            let mut labels = self.participant_labels.borrow_mut();
+
+            // Check if we already have a label for this participant
+            if let Some(label) = labels.get(original) {
+                return label.clone();
+            }
+
+            // Generate a new label
+            let mut counter = self.participant_counter.borrow_mut();
+            *counter += 1;
+            let label = format!("Participant {}", (b'A' - 1 + *counter) as char);
+            labels.insert(original.to_string(), label.clone());
+            return label;
         }
-        UNKNOWN
+
+        original.to_string()
     }
 }
 
@@ -544,6 +572,8 @@ impl Config {
             offset: get_offset(),
             db: Some(connection),
             backup: None,
+            participant_labels: std::cell::RefCell::new(HashMap::new()),
+            participant_counter: std::cell::RefCell::new(0),
         }
     }
 

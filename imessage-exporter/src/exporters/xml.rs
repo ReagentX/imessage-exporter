@@ -306,7 +306,7 @@ impl<'a> XML<'a> {
             msg.handle_id,
             msg.is_from_me(),
             &msg.destination_caller_id,
-        ).to_string()
+        )
     }
 
     fn escape_xml(text: &str) -> String {

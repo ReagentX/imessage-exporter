@@ -41,6 +41,7 @@ pub const OPTION_BYPASS_FREE_SPACE_CHECK: &str = "ignore-disk-warning";
 pub const OPTION_USE_CALLER_ID: &str = "use-caller-id";
 pub const OPTION_CONVERSATION_FILTER: &str = "conversation-filter";
 pub const OPTION_CLEARTEXT_PASSWORD: &str = "cleartext-password";
+pub const OPTION_ANONYMIZE: &str = "anonymize";
 
 // Other CLI Text
 pub const SUPPORTED_FILE_TYPES: &str = "txt, html, xml";
@@ -83,6 +84,8 @@ pub struct Options {
     pub conversation_filter: Option<String>,
     /// An optional password for encrypted backups
     pub cleartext_password: Option<String>,
+    /// If true, replace names with Participant A, B, etc. for anonymization
+    pub anonymize: bool,
 }
 
 // MARK: Validation
@@ -103,6 +106,7 @@ impl Options {
         let ignore_disk_space = args.get_flag(OPTION_BYPASS_FREE_SPACE_CHECK);
         let conversation_filter: Option<&String> = args.get_one(OPTION_CONVERSATION_FILTER);
         let cleartext_password: Option<&String> = args.get_one(OPTION_CLEARTEXT_PASSWORD);
+        let anonymize = args.get_flag(OPTION_ANONYMIZE);
 
         // Build the export type
         let export_type: Option<ExportType> = match export_file_type {
@@ -244,6 +248,7 @@ impl Options {
             ignore_disk_space,
             conversation_filter: conversation_filter.cloned(),
             cleartext_password: cleartext_password.cloned(),
+            anonymize,
         })
     }
 
@@ -430,6 +435,13 @@ fn get_command() -> Command {
                 .display_order(14)
                 .value_name("password"),
         )
+        .arg(
+            Arg::new(OPTION_ANONYMIZE)
+                .long(OPTION_ANONYMIZE)
+                .help("Replace names with Participant A, Participant B, etc. based on message order\nUseful for objective LLM analysis and privacy protection\n")
+                .action(ArgAction::SetTrue)
+                .display_order(15),
+        )
 }
 
 #[cfg(test)]
@@ -454,6 +466,7 @@ impl Options {
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: None,
+            anonymize: false,
         }
     }
 }
