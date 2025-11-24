@@ -113,6 +113,13 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         All conversations with the specified participants are exported, including group conversations
         Example: `-t steve@apple.com,5558675309`
         
+-g, --group-filter <group_name>
+        Filter exported group conversations by their names
+        To provide multiple group names, use a comma-separated string
+        Example: `-g "Family Chat,Work Group"`
+
+Note: When both `--conversation-filter` and `--group-filter` are specified, only conversations that match both filters (intersection) will be exported.
+        
 -x, --cleartext-password <password>
         Optional password for encrypted iOS backups
         This is only used when the source is an encrypted iOS backup directory
