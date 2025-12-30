@@ -46,6 +46,7 @@ This tool targets the current latest public release for Messages.app. It may wor
   - Parts are displayed as
     - New lines in TXT exports
     - Separate balloons in HTML exports
+    - Concatenated text in JSON exports
   - Handles Edited and Unsent parts
 - Threads and Message Replies
   - [Threads](https://support.apple.com/en-us/104974) are displayed both threaded under the parent as well as in-place
@@ -65,6 +66,7 @@ This tool targets the current latest public release for Messages.app. It may wor
   - Attachments are displayed as
     - File paths in TXT exports
     - Embeds in HTML exports (including `<img>`, `<video>`, and `<audio>`)
+    - Structured metadata objects in JSON exports
       - [Audio messages](https://support.apple.com/guide/messages/send-an-audio-message-icht204ef108/mac) include embedded transcripts
   - Attachment date metadata is set to the date and time of message receipt
 - Expressives
@@ -79,6 +81,7 @@ This tool targets the current latest public release for Messages.app. It may wor
   - Messages sent with stickers are
     - Displayed in HTML exports
     - Annotated in TXT exports
+    - Included as attachment metadata in JSON exports
   - For multi-part messages, stickers are placed under the correct message part
   - Sticker effects are annotated in all exports
   - Sticker tapbacks are also supported

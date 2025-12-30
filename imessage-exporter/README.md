@@ -1,6 +1,6 @@
 # Binary Documentation
 
-The `imessage-exporter` binary exports iMessage data to `txt` or `html` formats. It can also run diagnostics to find problems with the iMessage database.
+The `imessage-exporter` binary exports iMessage data to `html`, `json`, or `txt` formats. It can also run diagnostics to find problems with the iMessage database.
 
 ## Installation
 
@@ -47,7 +47,7 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
 -d, --diagnostics
         Print diagnostic information and exit
         
--f, --format <txt, html>
+-f, --format <html, json, txt>
         Specify a single file format to export messages into
         
 -c, --copy-method <clone, basic, full, disabled>
@@ -193,6 +193,12 @@ Export messages from participants using email addresses but not phone numbers as
 imessage-exporter -f html -t "@"
 ```
 
+Export as `json` with full message metadata for programmatic analysis:
+
+```zsh
+imessage-exporter -f json -o output -c clone
+```
+
 ## Features
 
 [Click here](../docs/features.md) for a full list of features.
@@ -240,6 +246,29 @@ For example, to prevent messages from breaking across pages when printing:
 ```
 
 The default styles can be viewed [here](/imessage-exporter/src/exporters/resources/style.css).
+
+### JSON Exports
+
+JSON exports use a newline-delimited JSON format (NDJSON/JSON Lines), where each line is a complete JSON object representing a single message. This format is:
+
+- Easy to parse incrementally
+- Compatible with streaming processing tools like `jq`
+- Suitable for large datasets
+
+Each message object includes:
+
+- `guid`: Unique message identifier
+- `timestamp`: Human-readable timestamp
+- `timestamp_unix`: Unix timestamp for programmatic use
+- `sender`: The message sender's name
+- `is_from_me`: Boolean indicating message direction
+- `text`: The message content
+- `attachments`: Array of attachment metadata
+- `tapbacks`: Array of reactions to the message
+- `replies`: Array of reply messages (nested)
+- `app_message`: Rich app content (URLs, music, etc.)
+- `expressive`: Any expressive effect applied
+- `edited`: Edit history if the message was edited
 
 ### PDF Exports
 
