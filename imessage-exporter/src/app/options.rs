@@ -42,6 +42,7 @@ pub const OPTION_USE_CALLER_ID: &str = "use-caller-id";
 pub const OPTION_CONVERSATION_FILTER: &str = "conversation-filter";
 pub const OPTION_CLEARTEXT_PASSWORD: &str = "cleartext-password";
 pub const OPTION_CUSTOM_CONTACTS_DB_PATH: &str = "contacts-path";
+pub const OPTION_DEBUG_PARTICIPANTS: &str = "debug-participants";
 
 // Other CLI Text
 pub const SUPPORTED_FILE_TYPES: &str = "txt, html";
@@ -86,6 +87,8 @@ pub struct Options {
     pub cleartext_password: Option<String>,
     /// An optional path to a custom contacts database
     pub contacts_path: Option<PathBuf>,
+    /// If true, print the participants map to stderr (for debugging -t filter)
+    pub debug_participants: bool,
 }
 
 // MARK: Validation
@@ -107,6 +110,7 @@ impl Options {
         let conversation_filter: Option<&String> = args.get_one(OPTION_CONVERSATION_FILTER);
         let cleartext_password: Option<&String> = args.get_one(OPTION_CLEARTEXT_PASSWORD);
         let contacts_path: Option<&String> = args.get_one(OPTION_CUSTOM_CONTACTS_DB_PATH);
+        let debug_participants = args.get_flag(OPTION_DEBUG_PARTICIPANTS);
 
         // Build the export type
         let export_type: Option<ExportType> = match export_file_type {
@@ -129,6 +133,7 @@ impl Options {
                 (custom_name.is_some(), OPTION_CUSTOM_NAME),
                 (use_caller_id, OPTION_USE_CALLER_ID),
                 (conversation_filter.is_some(), OPTION_CONVERSATION_FILTER),
+                (debug_participants, OPTION_DEBUG_PARTICIPANTS),
             ];
             for (set, opt) in format_deps {
                 if set {
@@ -150,6 +155,7 @@ impl Options {
             (use_caller_id, OPTION_USE_CALLER_ID),
             (custom_name.is_some(), OPTION_CUSTOM_NAME),
             (conversation_filter.is_some(), OPTION_CONVERSATION_FILTER),
+            (debug_participants, OPTION_DEBUG_PARTICIPANTS),
         ];
         for (set, opt) in diag_conflicts {
             if diagnostic && set {
@@ -267,6 +273,7 @@ impl Options {
             conversation_filter: conversation_filter.cloned(),
             cleartext_password: cleartext_password.cloned(),
             contacts_path: contacts_path.cloned().map(PathBuf::from),
+            debug_participants,
         })
     }
 
@@ -463,6 +470,13 @@ fn get_command() -> Command {
                 .display_order(15)
                 .value_name("path"),
         )
+        .arg(
+            Arg::new(OPTION_DEBUG_PARTICIPANTS)
+                .long(OPTION_DEBUG_PARTICIPANTS)
+                .help("Print the participants map to stderr before export (for debugging -t conversation filter)\n")
+                .action(ArgAction::SetTrue)
+                .display_order(16),
+        )
 }
 
 #[cfg(test)]
@@ -488,6 +502,7 @@ impl Options {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            debug_participants: false,
         }
     }
 }
@@ -537,6 +552,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            debug_participants: false,
         };
 
         assert_eq!(actual, expected);
@@ -620,6 +636,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            debug_participants: false,
         };
 
         assert_eq!(actual, expected);
@@ -654,6 +671,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            debug_participants: false,
         };
 
         assert_eq!(actual, expected);
@@ -734,6 +752,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            debug_participants: false,
         };
 
         assert_eq!(actual, expected);
@@ -773,6 +792,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: Some("password".to_string()),
             contacts_path: None,
+            debug_participants: false,
         };
 
         assert_eq!(actual, expected);
@@ -828,6 +848,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            debug_participants: false,
         };
 
         assert_eq!(actual, expected);
@@ -859,6 +880,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            debug_participants: false,
         };
 
         assert_eq!(actual, expected);
@@ -891,6 +913,7 @@ mod arg_tests {
             conversation_filter: Some(String::from("steve@apple.com")),
             cleartext_password: None,
             contacts_path: None,
+            debug_participants: false,
         };
 
         assert_eq!(actual, expected);
@@ -922,6 +945,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            debug_participants: false,
         };
 
         assert_eq!(actual, expected);
@@ -953,6 +977,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            debug_participants: false,
         };
 
         assert_eq!(actual, expected);
@@ -1026,6 +1051,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            debug_participants: false,
         };
 
         assert_eq!(actual, expected);

@@ -25,6 +25,8 @@ fn main() {
                 Ok(mut app) => {
                     // Resolve the filtered contacts, if provided
                     app.resolve_filtered_handles();
+                    // Optional: dump participants map when --debug-participants was passed
+                    app.debug_print_participants();
 
                     if let Err(why) = app.start() {
                         eprintln!("Unable to export: {why}");

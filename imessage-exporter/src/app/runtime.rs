@@ -348,6 +348,25 @@ impl Config {
         }
     }
 
+    /// Print participants map to stderr when `--debug-participants` was passed.
+    pub fn debug_print_participants(&self) {
+        if !self.options.debug_participants {
+            return;
+        }
+        eprintln!("--- participants_map ({} entries) ---", self.participants.len());
+        let mut keys: Vec<_> = self.participants.keys().collect();
+        keys.sort();
+        for &internal_id in keys {
+            let name = self.participants.get(&internal_id).unwrap();
+            let handle_ids: Vec<String> = name.handle_ids.iter().map(|id: &i32| id.to_string()).collect();
+            eprintln!(
+                "  internal_id={} | first={:?} last={:?} full={:?} details={:?} handle_ids=[{}]",
+                internal_id, name.first, name.last, name.full, name.details, handle_ids.join(", ")
+            );
+        }
+        eprintln!("--- end participants_map ---");
+    }
+
     /// Ensure there is available disk space for the requested export
     fn ensure_free_space(&self) -> Result<(), RuntimeError> {
         // Export size is usually about 6% the size of the db;
