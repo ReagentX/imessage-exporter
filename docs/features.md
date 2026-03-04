@@ -57,7 +57,7 @@ This tool targets the current latest public release for Messages.app. It may wor
   - Any type of attachment that can be displayed on the web is embedded in the HTML exports
   - Attachments can be copied to the export directory or referenced in-place
   - Less-compatible attachments can be converted for even more portable exports:
-    - Image `HEIC` files convert to `JPEG`
+    - Image `HEIC`/`HEIF` files convert to `JPEG`
     - Sticker `HEIC` files convert to `PNG`
     - Animated Sticker `HEICS` (HEIC sequence) files convert to `GIF`
     - Video `MOV` files convert to `mp4`
