@@ -72,6 +72,7 @@ pub enum ImageConverter {
 
 impl Converter for ImageConverter {
     fn determine() -> Option<ImageConverter> {
+        #[cfg(target_os = "macos")]
         if exists(ImageConverter::Sips.name()) {
             return Some(ImageConverter::Sips);
         }
