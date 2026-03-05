@@ -4,6 +4,8 @@
 # Generated files
 /target
 /output
+/Messages
+/Output
 
 # OS Files
 .DS_Store
