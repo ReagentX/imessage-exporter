@@ -59,18 +59,17 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         ImageMagick is required to convert images on non-macOS platforms
         ffmpeg is required to convert audio on non-macOS platforms and video on all platforms
         
--p, --db-path <path/to/source>
-        Specify an optional custom path for the iMessage database location
+-p, --db-path <path/to/messages>
+        Specify an optional path for the iMessage database
         For macOS, specify a path to a `chat.db` file
         For iOS, specify a path to the root of a device backup directory
         If the iOS backup is encrypted, --cleartext-password must be passed
-        If omitted, the default directory is ~/Library/Messages/chat.db
+        The default is ~/Library/Messages/chat.db
         
 -r, --attachment-root <path/to/attachments>
-        Specify an optional custom path to look for attachment data in (macOS only)
+        Specify an optional path for the `Attachments` and `StickerCache` directories
         Only use this if attachments are stored separately from the database's default location
-        This option affects both the `Attachments` and `StickerCache` directories
-        The default location is ~Library/Messages
+        The default is ~Library/Messages/
         
 -a, --platform <macOS, iOS>
         Specify the platform the database was created on
