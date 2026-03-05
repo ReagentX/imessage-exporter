@@ -3,6 +3,7 @@
 */
 
 use std::{
+    cell::RefCell,
     cmp::min,
     collections::{BTreeSet, HashMap, HashSet},
     fs::create_dir_all,
@@ -61,6 +62,10 @@ pub struct Config {
     pub offset: i64,
     /// Data source for the application
     pub data_source: DataSource,
+    /// Tracks generated contact filenames to avoid collisions
+    pub contact_filename_usage: RefCell<HashMap<String, usize>>,
+    /// Cache of generated filenames per chat rowid to ensure stable filenames across messages
+    pub filename_cache: RefCell<HashMap<i32, String>>,
 }
 
 impl Config {
@@ -144,6 +149,11 @@ impl Config {
         let export_path_len = self.options.export_path.as_os_str().len();
         let max_len = MAX_LENGTH.saturating_sub(export_path_len + 1);
 
+        // Return cached filename if we've already generated one for this chatroom
+        if let Some(cached) = self.filename_cache.borrow().get(&chatroom.rowid) {
+            return cached.clone();
+        }
+
         let mut filename = match &chatroom.display_name() {
             // If there is a display name, use that
             Some(name) => {
@@ -159,7 +169,12 @@ impl Config {
             // Fallback if there is no name set
             None => {
                 if let Some(participants) = self.chatroom_participants.get(&chatroom.rowid) {
-                    self.filename_from_participants(participants)
+                    let participant_filename = self.filename_from_participants(participants);
+                    if self.options.contact_filenames {
+                        self.ensure_unique_contact_filename(participant_filename, participants)
+                    } else {
+                        participant_filename
+                    }
                 } else {
                     eprintln!(
                         "Found error: message chat ID {} has no members!",
@@ -175,7 +190,13 @@ impl Config {
             filename.push_str(export_type.extension());
         }
 
-        sanitize_filename(&filename)
+        let sanitized = sanitize_filename(&filename);
+        // Cache the computed filename so subsequent calls return the same value and don't create new files
+        self.filename_cache
+            .borrow_mut()
+            .insert(chatroom.rowid, sanitized.clone());
+
+        sanitized
     }
 
     /// Generate a filename from a set of participants, truncating if the name is too long
@@ -192,16 +213,21 @@ impl Config {
         let mut added = 0;
         let mut out_s = String::with_capacity(max_len);
         for participant_id in participants {
-            let participant_details = match self.resolve_participant(*participant_id) {
-                Some(name) => name.details.as_str(),
-                None => UNKNOWN,
+            let participant_details = if self.options.contact_filenames {
+                self.contact_filename_label(*participant_id)
+                    .unwrap_or_else(|| UNKNOWN.to_string())
+            } else {
+                match self.resolve_participant(*participant_id) {
+                    Some(name) => name.details.clone(),
+                    None => UNKNOWN.to_string(),
+                }
             };
 
             if participant_details.len() + out_s.len() < max_len {
                 if !out_s.is_empty() {
                     out_s.push_str(", ");
                 }
-                out_s.push_str(participant_details);
+                out_s.push_str(&participant_details);
                 added += 1;
             } else {
                 let extra = format!(", and {} others", participants.len() - added);
@@ -217,6 +243,44 @@ impl Config {
             }
         }
         out_s
+    }
+
+    fn contact_filename_label(&self, participant_id: i32) -> Option<String> {
+        let name = self.resolve_participant(participant_id)?;
+        clean_contact_name(name.get_display_name()).or_else(|| clean_contact_name(&name.details))
+    }
+
+    fn ensure_unique_contact_filename(&self, base: String, participants: &BTreeSet<i32>) -> String {
+        let mut usage = self.contact_filename_usage.borrow_mut();
+        let counter = usage.entry(base.clone()).or_insert(0);
+        let result = if *counter == 0 {
+            base.clone()
+        } else {
+            let suffix = self.contact_filename_suffix(participants);
+            if *counter == 1 {
+                format!("{base} ({suffix})")
+            } else {
+                format!("{base} ({suffix}-{counter})")
+            }
+        };
+        *counter += 1;
+        result
+    }
+
+    fn contact_filename_suffix(&self, participants: &BTreeSet<i32>) -> String {
+        for participant_id in participants {
+            if let Some(name) = self.resolve_participant(*participant_id) {
+                let detail = canonical_handle_detail(&name.details);
+                if !detail.is_empty() {
+                    let sanitized = sanitize_filename(detail.trim());
+                    let trimmed = sanitized.trim();
+                    if !trimmed.is_empty() {
+                        return trimmed.to_string();
+                    }
+                }
+            }
+        }
+        UNKNOWN.to_string()
     }
 
     // MARK: Init
@@ -272,6 +336,8 @@ impl Config {
             options,
             offset: get_offset(),
             data_source,
+            contact_filename_usage: RefCell::new(HashMap::new()),
+            filename_cache: RefCell::new(HashMap::new()),
         })
     }
 
@@ -535,6 +601,72 @@ impl Config {
     }
 }
 
+fn clean_contact_name(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let without_emoji = remove_emoji(trimmed);
+    let without_suffix = strip_professional_suffix(without_emoji.trim());
+    let cleaned = without_suffix.split_whitespace().collect::<Vec<_>>().join(" ");
+    if cleaned.is_empty() {
+        None
+    } else {
+        Some(cleaned)
+    }
+}
+
+fn strip_professional_suffix(name: &str) -> &str {
+    if let Some(idx) = name.rfind(',') {
+        let suffix = name[idx + 1..].trim();
+        if !suffix.is_empty() && suffix.chars().all(is_professional_suffix_char) {
+            return name[..idx].trim_end();
+        }
+    }
+    name
+}
+
+fn is_professional_suffix_char(ch: char) -> bool {
+    ch.is_ascii_uppercase()
+        || ch == '-'
+        || ch == ' '
+        || ch == '.'
+        || ch == '+'
+        || ch.is_ascii_digit()
+}
+
+fn canonical_handle_detail(value: &str) -> String {
+    let digits: String = value
+        .chars()
+        .filter(|ch| ch.is_ascii_digit() || *ch == '+')
+        .collect();
+    if !digits.is_empty() {
+        digits
+    } else {
+        value.trim().to_string()
+    }
+}
+
+fn remove_emoji(value: &str) -> String {
+    value.chars().filter(|ch| !is_emoji(*ch)).collect()
+}
+
+fn is_emoji(ch: char) -> bool {
+    matches!(
+        ch as u32,
+        0x1F300..=0x1F5FF
+            | 0x1F600..=0x1F64F
+            | 0x1F680..=0x1F6FF
+            | 0x1F700..=0x1F77F
+            | 0x1F900..=0x1F9FF
+            | 0x1F1E6..=0x1F1FF
+            | 0x2600..=0x26FF
+            | 0x2700..=0x27BF
+            | 0xFE00..=0xFE0F
+    )
+}
+
 // MARK: Test Config
 #[cfg(test)]
 impl Config {
@@ -552,6 +684,8 @@ impl Config {
             options,
             offset: get_offset(),
             data_source,
+            contact_filename_usage: RefCell::new(HashMap::new()),
+            filename_cache: RefCell::new(HashMap::new()),
         }
     }
 
@@ -618,7 +752,7 @@ mod filename_tests {
 
     use imessage_database::tables::chat::Chat;
 
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeSet, HashSet};
 
     pub fn fake_chat() -> Chat {
         Chat {
@@ -658,6 +792,125 @@ mod filename_tests {
         let filename = app.filename_from_participants(&people);
         assert_eq!(filename, "Person 10, Person 11".to_string());
         assert!(filename.len() <= MAX_LENGTH);
+    }
+
+    #[test]
+    fn can_use_contact_names_when_flag_enabled() {
+        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        options.contact_filenames = true;
+        let mut app = Config::fake_app(options);
+
+        let mut handles = HashSet::new();
+        handles.insert(10);
+        app.participants.insert(
+            10,
+            Name {
+                first: "Alice".to_string(),
+                last: "Smith".to_string(),
+                full: "Alice Smith".to_string(),
+                details: "5558675309".to_string(),
+                handle_ids: handles,
+            },
+        );
+        app.real_participants.insert(10, 10);
+
+        let mut people = BTreeSet::new();
+        people.insert(10);
+
+        let filename = app.filename_from_participants(&people);
+        assert_eq!(filename, "Alice Smith".to_string());
+    }
+
+    #[test]
+    fn trims_suffix_and_emoji_from_contact_names() {
+        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        options.contact_filenames = true;
+        let mut app = Config::fake_app(options);
+
+        let mut handles = HashSet::new();
+        handles.insert(10);
+        app.participants.insert(
+            10,
+            Name {
+                first: "Elaine".to_string(),
+                last: "Vuong".to_string(),
+                full: "  Elaine   Vuong, MT-BC  🌟  ".to_string(),
+                details: "5558675309".to_string(),
+                handle_ids: handles,
+            },
+        );
+        app.real_participants.insert(10, 10);
+
+        let mut people = BTreeSet::new();
+        people.insert(10);
+
+        let filename = app.filename_from_participants(&people);
+        assert_eq!(filename, "Elaine Vuong".to_string());
+    }
+
+    #[test]
+    fn keeps_noncomma_suffix_when_in_last_name() {
+        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        options.contact_filenames = true;
+        let mut app = Config::fake_app(options);
+
+        let mut handles = HashSet::new();
+        handles.insert(10);
+        app.participants.insert(
+            10,
+            Name {
+                first: "Sarah".to_string(),
+                last: "Syzmanowski MT-BC".to_string(),
+                full: "Sarah Syzmanowski MT-BC".to_string(),
+                details: "5558675309".to_string(),
+                handle_ids: handles,
+            },
+        );
+        app.real_participants.insert(10, 10);
+
+        let mut people = BTreeSet::new();
+        people.insert(10);
+
+        let filename = app.filename_from_participants(&people);
+        assert_eq!(filename, "Sarah Syzmanowski MT-BC".to_string());
+    }
+
+    #[test]
+    fn appends_phone_suffix_for_duplicate_contact_names() {
+        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        options.contact_filenames = true;
+        let mut app = Config::fake_app(options);
+
+        let mut handles = HashSet::new();
+        handles.insert(10);
+        app.participants.insert(
+            10,
+            Name {
+                first: "Sam".to_string(),
+                last: "Doe".to_string(),
+                full: "Sam Doe".to_string(),
+                details: "+15551234567".to_string(),
+                handle_ids: handles.clone(),
+            },
+        );
+        app.real_participants.insert(10, 10);
+
+        let mut people = BTreeSet::new();
+        people.insert(10);
+
+        let mut chat_one = fake_chat();
+        chat_one.rowid = 1;
+        let mut chat_two = fake_chat();
+        chat_two.rowid = 2;
+
+        app.chatroom_participants
+            .insert(chat_one.rowid, people.clone());
+        app.chatroom_participants.insert(chat_two.rowid, people);
+
+        let first = app.filename(&chat_one);
+        let second = app.filename(&chat_two);
+        assert_eq!(first, "Sam Doe.html");
+        assert_eq!(second, "Sam Doe (+15551234567).html");
     }
 
     #[test]

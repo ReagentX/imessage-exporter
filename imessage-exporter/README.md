@@ -48,7 +48,8 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         Print diagnostic information and exit
         
 -f, --format <txt, html>
-        Specify a single file format to export messages into
+        Specify a format to export messages into
+        If omitted, no output files will be written
         
 -c, --copy-method <clone, basic, full, disabled>
         Specify an optional method to use when copying message attachments
@@ -119,6 +120,11 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         Handles from the messages table will be mapped to names in the provided database
         Generally, one of `AddressBook-v22.abcddb` or `AddressBook.sqlitedb`
         
+-g, --contact-filenames
+        Use resolved contact names when generating filenames for exported conversations
+        Names are munged slightly to play nicely with various filesystems (no emojis, trailing spaces, etc.)
+        If the same person has two phone numbers (handles), the handle is appended to avoid filename collisions
+
 -h, --help
         Print help
 -V, --version

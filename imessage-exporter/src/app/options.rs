@@ -42,6 +42,7 @@ pub const OPTION_USE_CALLER_ID: &str = "use-caller-id";
 pub const OPTION_CONVERSATION_FILTER: &str = "conversation-filter";
 pub const OPTION_CLEARTEXT_PASSWORD: &str = "cleartext-password";
 pub const OPTION_CUSTOM_CONTACTS_DB_PATH: &str = "contacts-path";
+pub const OPTION_CONTACT_FILENAMES: &str = "contact-filenames";
 
 // Other CLI Text
 pub const SUPPORTED_FILE_TYPES: &str = "txt, html";
@@ -86,6 +87,8 @@ pub struct Options {
     pub cleartext_password: Option<String>,
     /// An optional path to a custom contacts database
     pub contacts_path: Option<PathBuf>,
+    /// If true, name HTML exports using resolved contact names
+    pub contact_filenames: bool,
 }
 
 // MARK: Validation
@@ -102,6 +105,7 @@ impl Options {
         let no_lazy = args.get_flag(OPTION_DISABLE_LAZY_LOADING);
         let custom_name: Option<&String> = args.get_one(OPTION_CUSTOM_NAME);
         let use_caller_id = args.get_flag(OPTION_USE_CALLER_ID);
+        let contact_filenames = args.get_flag(OPTION_CONTACT_FILENAMES);
         let platform_type: Option<&String> = args.get_one(OPTION_PLATFORM);
         let ignore_disk_space = args.get_flag(OPTION_BYPASS_FREE_SPACE_CHECK);
         let conversation_filter: Option<&String> = args.get_one(OPTION_CONVERSATION_FILTER);
@@ -129,6 +133,7 @@ impl Options {
                 (custom_name.is_some(), OPTION_CUSTOM_NAME),
                 (use_caller_id, OPTION_USE_CALLER_ID),
                 (conversation_filter.is_some(), OPTION_CONVERSATION_FILTER),
+                (contact_filenames, OPTION_CONTACT_FILENAMES),
             ];
             for (set, opt) in format_deps {
                 if set {
@@ -150,6 +155,7 @@ impl Options {
             (use_caller_id, OPTION_USE_CALLER_ID),
             (custom_name.is_some(), OPTION_CUSTOM_NAME),
             (conversation_filter.is_some(), OPTION_CONVERSATION_FILTER),
+            (contact_filenames, OPTION_CONTACT_FILENAMES),
         ];
         for (set, opt) in diag_conflicts {
             if diagnostic && set {
@@ -267,6 +273,7 @@ impl Options {
             conversation_filter: conversation_filter.cloned(),
             cleartext_password: cleartext_password.cloned(),
             contacts_path: contacts_path.cloned().map(PathBuf::from),
+            contact_filenames,
         })
     }
 
@@ -463,6 +470,14 @@ fn get_command() -> Command {
                 .display_order(15)
                 .value_name("path"),
         )
+        .arg(
+            Arg::new(OPTION_CONTACT_FILENAMES)
+                .short('g')
+                .long(OPTION_CONTACT_FILENAMES)
+                .help("Use resolved contact names when naming exported conversation files")
+                .action(ArgAction::SetTrue)
+                .display_order(16),
+        )
 }
 
 #[cfg(test)]
@@ -488,6 +503,7 @@ impl Options {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            contact_filenames: false,
         }
     }
 }
@@ -537,6 +553,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -620,6 +637,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -654,6 +672,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -734,6 +753,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -773,6 +793,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: Some("password".to_string()),
             contacts_path: None,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -828,6 +849,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -859,6 +881,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -891,6 +914,7 @@ mod arg_tests {
             conversation_filter: Some(String::from("steve@apple.com")),
             cleartext_password: None,
             contacts_path: None,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -922,6 +946,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -953,6 +978,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -1026,6 +1052,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
