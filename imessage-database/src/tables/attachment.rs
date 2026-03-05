@@ -354,11 +354,37 @@ impl Attachment {
     ) -> Option<String> {
         if let Some(mut path_str) = self.filename.clone() {
             // Apply custom attachment path, if provided
-            if let Some(custom_attachment_path) = custom_attachment_root
-                && (path_str.starts_with(DEFAULT_STICKER_CACHE_ROOT)
-                    || path_str.starts_with(DEFAULT_ATTACHMENT_ROOT))
-            {
-                path_str = path_str.replacen(DEFAULT_MESSAGES_ROOT, custom_attachment_path, 1);
+            if let Some(custom_attachment_path) = custom_attachment_root {
+                // When the user provided --attachment-root, prefer mapping the path by replacing
+                // everything before the first attachment-like directory ("Attachments", "Parts", "StickerCache")
+                // with the provided custom root. This handles macOS absolute paths, device-style paths,
+                // and backup roots in a consistent manner.
+                let tokens = ["Attachments", "Parts", "StickerCache"];
+                let mut replaced = false;
+                for token in tokens {
+                    if let Some(idx) = path_str.find(token) {
+                        // Suffix including the token (e.g., "Attachments/0a/...")
+                        let suffix = &path_str[idx..];
+                        // Build the resultant path safely using PathBuf to avoid duplicate separators
+                        let mut pb = PathBuf::from(custom_attachment_path);
+                        // Remove leading slash from suffix before pushing
+                        let suffix_trimmed = suffix.strip_prefix('/').unwrap_or(suffix);
+                        pb.push(suffix_trimmed);
+                        path_str = pb.to_string_lossy().into_owned();
+                        replaced = true;
+                        break;
+                    }
+                }
+                if !replaced {
+                    // Fallback: if the path contains "/Library/SMS", take the path after that and append
+                    if let Some(idx) = path_str.find("/Library/SMS") {
+                        let suffix = &path_str[idx + "/Library/SMS".len()..];
+                        let mut pb = PathBuf::from(custom_attachment_path);
+                        let suffix_trimmed = suffix.strip_prefix('/').unwrap_or(suffix);
+                        pb.push(suffix_trimmed);
+                        path_str = pb.to_string_lossy().into_owned();
+                    }
+                }
             }
 
             return match platform {
