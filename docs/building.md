@@ -23,7 +23,7 @@ rustup update stable
 For full functionality, especially attachment format conversion:
 
 #### macOS
-- **ImageMagick** (for HEIC image conversion on non-macOS platforms when running in compatibility mode)
+- **ImageMagick** (the exporter detects either the `magick` binary or the legacy `convert` binary for HEIC conversion on non-macOS platforms in compatibility mode)
 - **ffmpeg** (for audio CAF→MP4 and video MOV→MP4 conversion)
 
 ```bash

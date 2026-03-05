@@ -67,7 +67,8 @@ impl AudioType {
 pub enum ImageConverter {
     /// macOS Builtin
     Sips,
-    Imagemagick,
+    /// ImageMagick entry point (`magick` or legacy `convert`)
+    Imagemagick(&'static str),
 }
 
 impl Converter for ImageConverter {
@@ -76,8 +77,11 @@ impl Converter for ImageConverter {
         if exists(ImageConverter::Sips.name()) {
             return Some(ImageConverter::Sips);
         }
-        if exists(ImageConverter::Imagemagick.name()) {
-            return Some(ImageConverter::Imagemagick);
+        if exists("magick") {
+            return Some(ImageConverter::Imagemagick("magick"));
+        }
+        if exists("convert") {
+            return Some(ImageConverter::Imagemagick("convert"));
         }
         eprintln!("No HEIC converter found, image attachments will not be converted!");
         None
@@ -86,7 +90,7 @@ impl Converter for ImageConverter {
     fn name(&self) -> &'static str {
         match self {
             ImageConverter::Sips => "sips",
-            ImageConverter::Imagemagick => "magick",
+            ImageConverter::Imagemagick(binary) => binary,
         }
     }
 }

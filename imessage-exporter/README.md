@@ -201,7 +201,7 @@ imessage-exporter -f html -t "@"
 
 ### Cross-platform attachment conversion
 
-[ImageMagick](https://imagemagick.org/index.php) is required to make exported images more compatible on non-macOS platforms.
+[ImageMagick](https://imagemagick.org/index.php) (either the `magick` or legacy `convert` binary) is required to make exported images more compatible on non-macOS platforms.
 
 [ffmpeg](https://ffmpeg.org) is required to make exported audio more compatible on non-macOS platforms and exported video more compatible on all platforms.
 

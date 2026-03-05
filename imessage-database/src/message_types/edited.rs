@@ -131,9 +131,9 @@ impl<'a> BalloonProvider<'a> for EditedMessage {
                 let events = events
                     .as_array()
                     .ok_or_else(|| PlistParseError::InvalidTypeIndex(idx, "array".to_string()))?;
-                let parsed_key = key.parse::<usize>().map_err(|_| {
-                    PlistParseError::InvalidType(key.clone(), "string".to_string())
-                })?;
+                let parsed_key = key
+                    .parse::<usize>()
+                    .map_err(|_| PlistParseError::InvalidType(key.clone(), "string".to_string()))?;
 
                 for event in events {
                     let message_data = event.as_dictionary().ok_or_else(|| {

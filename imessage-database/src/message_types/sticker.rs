@@ -53,8 +53,7 @@ impl StickerSource {
 }
 
 /// Represents different types of [sticker effects](https://www.macrumors.com/how-to/add-effects-to-stickers-in-messages/) that can be applied to sticker iMessage balloons.
-#[derive(Debug, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, PartialEq, Eq, Default)]
 pub enum StickerEffect {
     /// Sticker sent with no effect
     #[default]
@@ -96,7 +95,6 @@ impl Display for StickerEffect {
         }
     }
 }
-
 
 /// Parse the sticker effect type from the EXIF data of a HEIC blob
 #[must_use]

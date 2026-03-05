@@ -100,7 +100,7 @@ fn convert_heic(
             ];
             run_command(converter.name(), args)
         }
-        ImageConverter::Imagemagick => {
+        ImageConverter::Imagemagick(_) => {
             let formatted_from = format!("{from_path}[0]");
             let args = vec![&formatted_from, to_path];
             run_command(converter.name(), args)
