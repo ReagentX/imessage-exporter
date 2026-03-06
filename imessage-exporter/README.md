@@ -39,7 +39,7 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
 
 - `clone` the repository
 - `cd` to the repository
-- `cargo run --release` to compile
+- `cargo build --release` to compile
 
 ## How To Use
 
@@ -70,7 +70,7 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
 -r, --attachment-root <path/to/attachments>
         Specify an optional path for the `Attachments` and `StickerCache` directories
         Only use this if attachments are stored separately from the database's default location
-        The default is ~Library/Messages/
+        The default is ~/Library/Messages/
         
 -a, --platform <macOS, iOS>
         Specify the platform the database was created on
@@ -127,6 +127,7 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
 
 -h, --help
         Print help
+
 -V, --version
         Print version
 ```
@@ -207,13 +208,22 @@ imessage-exporter -f html -t "@"
 
 ### Cross-platform attachment conversion
 
-[ImageMagick](https://imagemagick.org/index.php) (either the `magick` or legacy `convert` binary) is required to make exported images more compatible on non-macOS platforms.
+[ImageMagick](https://imagemagick.org/index.php) (either the `magick`
+or legacy `convert` binary) is required to convert images on non-macOS
+platforms.
 
-[ffmpeg](https://ffmpeg.org) is required to make exported audio more compatible on non-macOS platforms and exported video more compatible on all platforms.
+[ffmpeg](https://ffmpeg.org) is required to convert audio on non-macOS
+platforms, and convert video on _all_ platforms.
 
 ### Contacts
 
-`imessage-exporter` will automatically attempt to resolve handle details (email addresses and phone numbers) against contacts found either in the provided iOS backup or on the local macOS Address Book. Users can optionally pass in a path to an Address Book database, but this should generally not be necessary.
+`imessage-exporter` will automatically attempt to resolve handle
+details (email addresses and phone numbers) against contacts found
+either in the provided iOS backup, or on the local Address Book (on
+macOS only).
+
+Alternately, you can provide a path to an Address Book database (using
+the `--contacts-path` option) and it will be used instead.
 
 ### HTML Exports
 
@@ -271,3 +281,45 @@ This persisted after granting `cargo`, `imessage-exporter`, and `wkhtmltopdf` Fu
 #### Browser Automation
 
 There are several `chomedriver` wrappers for Rust. The ones that use async make this binary too large (over `10mb`) and have too many dependencies. The sync implementation in the `headless-chrome` crate works, but [times out](https://github.com/atroche/rust-headless-chrome/issues/319) when generating large `PDF`s, even with an extreme timeout.
+
+## Wrapper Script
+
+If desired, you can invoke `imessage-exporter` via a wrapper script,
+which can assist in repeated or batch use.
+
+For example:
+
+```zsh
+#!/usr/bin/env bash
+
+# Path to the chat.db file (Mac OS), sms.db (iOS), or the root of an iOS backup
+INPATH="/mnt/MacHD/Users/jcool/Library/Messages/chat.db"
+
+# Path to an AddressBook.sqlitedb file for data enrichment
+# This is not compatible with iOS backup datasources, only chat.db or sms.db
+CONTACTSDB="/mnt/MacHD/Users/jcool/Library/Application Support/AddressBook/AddressBook-v22.abcddb"
+
+# Path to the directory *containing* the Attachments/ directory
+ATTACHMENTROOT="/mnt/MacHD/Users/jcool/Library/Messages"
+
+# Specify desired output directory here
+# It should be empty at the start of the run
+OUTDIR="/tmp/imessage-exports/jcool"
+
+# Ensure the output directory exists
+echo 'Creating output dir'
+mkdir -p $OUTDIR
+echo
+
+echo 'Starting imessage-exporter'
+./target/release/imessage-exporter \
+    --contact-filenames \
+    --no-lazy \
+    --format html \
+    --copy-method full \
+    --db-path "$INPATH" \
+    --contacts-path "$CONTACTSDB" \
+    --attachment-root "$ATTACHMENTROOT" \
+    --export-path "$OUTDIR"
+echo 'Export complete'
+```
