@@ -300,35 +300,52 @@ impl Config {
     /// ```
     pub fn new(options: Options) -> Result<Config, RuntimeError> {
         let data_source = DataSource::from(&options)?;
+        let db_path = options.get_db_path();
 
         eprintln!("Building cache...");
         eprintln!("  [1/5] Caching chats...");
-        let chatrooms = Chat::cache(data_source.db()).map_err(|e| RuntimeError::InvalidOptions(format!(
-            "Failed to read 'chat' table from {}: {e}", options.get_db_path().display()
-        )))?;
+        let chatrooms = Chat::cache(data_source.db()).map_err(|e| {
+            RuntimeError::InvalidOptions(format!(
+                "Failed to read 'chat' table from {}: {e}",
+                db_path.display()
+            ))
+        })?;
 
         eprintln!("  [2/5] Caching chatrooms...");
-        let chatroom_participants = ChatToHandle::cache(data_source.db()).map_err(|e| RuntimeError::InvalidOptions(format!(
-            "Failed to read 'chat_handle_join' table from {}: {e}", options.get_db_path().display()
-        )))?;
-        let chat_handle_lookup = ChatToHandle::get_chat_lookup_map(data_source.db()).map_err(|e| RuntimeError::InvalidOptions(format!(
-            "Failed to build chat lookup map from {}: {e}", options.get_db_path().display()
-        )))?;
+        let chatroom_participants = ChatToHandle::cache(data_source.db()).map_err(|e| {
+            RuntimeError::InvalidOptions(format!(
+                "Failed to read 'chat_handle_join' table from {}: {e}",
+                db_path.display()
+            ))
+        })?;
+        let chat_handle_lookup =
+            ChatToHandle::get_chat_lookup_map(data_source.db()).map_err(|e| {
+                RuntimeError::InvalidOptions(format!(
+                    "Failed to build chat lookup map from {}: {e}",
+                    db_path.display()
+                ))
+            })?;
         let real_chatrooms = ChatToHandle::dedupe(&chatroom_participants, &chat_handle_lookup)?;
 
         eprintln!("  [3/5] Caching participants...");
-        let participants = Handle::cache(data_source.db()).map_err(|e| RuntimeError::InvalidOptions(format!(
-            "Failed to read 'handle' table from {}: {e}", options.get_db_path().display()
-        )))?;
+        let participants = Handle::cache(data_source.db()).map_err(|e| {
+            RuntimeError::InvalidOptions(format!(
+                "Failed to read 'handle' table from {}: {e}",
+                db_path.display()
+            ))
+        })?;
         let real_participants = Handle::dedupe(&participants);
         let participants_map = data_source
             .contacts_index
             .build_participants_map(&participants, &real_participants);
 
         eprintln!("  [4/5] Caching tapbacks...");
-        let tapbacks = Message::cache(data_source.db()).map_err(|e| RuntimeError::InvalidOptions(format!(
-            "Failed to read 'message' table from {}: {e}", options.get_db_path().display()
-        )))?;
+        let tapbacks = Message::cache(data_source.db()).map_err(|e| {
+            RuntimeError::InvalidOptions(format!(
+                "Failed to read 'message' table from {}: {e}",
+                db_path.display()
+            ))
+        })?;
 
         eprintln!("  [5/5] Caching translations...");
         // Translations are not available in older database versions, so we default to an empty set
@@ -619,7 +636,10 @@ fn clean_contact_name(raw: &str) -> Option<String> {
 
     let without_emoji = remove_emoji(trimmed);
     let without_suffix = strip_professional_suffix(without_emoji.trim());
-    let cleaned = without_suffix.split_whitespace().collect::<Vec<_>>().join(" ");
+    let cleaned = without_suffix
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
     if cleaned.is_empty() {
         None
     } else {

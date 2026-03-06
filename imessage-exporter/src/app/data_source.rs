@@ -40,15 +40,12 @@ impl DataSource {
                 let contacts_index =
                     Self::get_contacts_index(options.contacts_path.as_deref()).unwrap_or_default();
 
-                let conn = match get_connection(&messages_path) {
-                    Ok(c) => c,
-                    Err(e) => {
-                        return Err(RuntimeError::InvalidOptions(format!(
-                            "Unable to open messages database at {}: {e}",
-                            messages_path.display()
-                        )));
-                    }
-                };
+                let conn = get_connection(&messages_path).map_err(|e| {
+                    RuntimeError::InvalidOptions(format!(
+                        "Unable to open messages database at {}: {e}",
+                        messages_path.display()
+                    ))
+                })?;
 
                 Ok(Self {
                     messages_connection: Some(conn),
@@ -81,15 +78,12 @@ impl DataSource {
                         );
                     }
 
-                    let conn = match get_connection(&messages_path) {
-                        Ok(c) => c,
-                        Err(e) => {
-                            return Err(RuntimeError::InvalidOptions(format!(
-                                "Unable to open decrypted messages database at {}: {e}",
-                                messages_path.display()
-                            )));
-                        }
-                    };
+                    let conn = get_connection(&messages_path).map_err(|e| {
+                        RuntimeError::InvalidOptions(format!(
+                            "Unable to open decrypted messages database at {}: {e}",
+                            messages_path.display()
+                        ))
+                    })?;
 
                     Ok(Self {
                         messages_connection: Some(conn),
@@ -99,15 +93,12 @@ impl DataSource {
                 } else {
                     // No backup decryption; assume unencrypted database
                     let messages_path = options.get_db_path();
-                    let conn = match get_connection(&messages_path) {
-                        Ok(c) => c,
-                        Err(e) => {
-                            return Err(RuntimeError::InvalidOptions(format!(
-                                "Unable to open messages database at {}: {e}",
-                                messages_path.display()
-                            )));
-                        }
-                    };
+                    let conn = get_connection(&messages_path).map_err(|e| {
+                        RuntimeError::InvalidOptions(format!(
+                            "Unable to open messages database at {}: {e}",
+                            messages_path.display()
+                        ))
+                    })?;
 
                     // Check if the backup is encrypted and a password was not provided
                     if backup.is_none() && conn.query_row("SELECT 1", [], |_| Ok(())).is_err() {

@@ -175,45 +175,14 @@ pub trait Diagnostic {
 /// ```
 pub fn get_connection(path: &Path) -> Result<Connection, TableError> {
     if path.exists() && path.is_file() {
-        // First attempt: open normally in read-only mode
         let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
-        match Connection::open_with_flags(path, flags) {
-            Ok(res) => {
-                // Verify the opened connection can execute queries without attempting to create WAL/SHM files.
-                // Some filesystems allow opening the DB file but will fail when SQLite tries to access WAL/SHM.
-                if res.query_row("SELECT 1", [], |_| Ok::<(), Error>(())).is_ok() {
-                    return Ok(res);
-                } else {
-                    // If a simple query failed (e.g., "unable to open database file"), retry with immutable=1 via URI.
-                    let uri = format!("file:{}?immutable=1", path.to_string_lossy());
-                    let uri_flags = flags | OpenFlags::SQLITE_OPEN_URI;
-                    match Connection::open_with_flags(Path::new(&uri), uri_flags) {
-                        Ok(res2) => return Ok(res2),
-                        Err(second_err) => {
-                            return Err(TableError::CannotConnect(TableConnectError::Permissions(
-                                second_err,
-                            )));
-                        }
-                    }
-                }
-            }
-            Err(_first_err) => {
-                // Second attempt: fall back to opening via SQLite URI with immutable=1.
-                // This allows opening databases on read-only or special filesystems where
-                // creating WAL/SHM files is not possible.
-                let uri = format!("file:{}?immutable=1", path.to_string_lossy());
-                let uri_flags = flags | OpenFlags::SQLITE_OPEN_URI;
-                match Connection::open_with_flags(Path::new(&uri), uri_flags) {
-                    Ok(res) => return Ok(res),
-                    Err(second_err) => {
-                        // Prefer returning the second error (more specific to URI attempt)
-                        return Err(TableError::CannotConnect(TableConnectError::Permissions(
-                            second_err,
-                        )));
-                    }
-                }
-            }
+        // Prefer immutable mode first so SQLite does not try creating WAL/SHM on read-only mounts.
+        if let Ok(connection) = open_connection_immutable(path, flags) {
+            return Ok(connection);
         }
+
+        return Connection::open_with_flags(path, flags)
+            .map_err(|why| TableError::CannotConnect(TableConnectError::Permissions(why)));
     }
 
     // Path does not point to a file
@@ -227,6 +196,11 @@ pub fn get_connection(path: &Path) -> Result<Connection, TableError> {
     Err(TableError::CannotConnect(TableConnectError::DoesNotExist(
         path.to_path_buf(),
     )))
+}
+
+fn open_connection_immutable(path: &Path, flags: OpenFlags) -> Result<Connection> {
+    let uri = format!("file:{}?mode=ro&immutable=1", path.to_string_lossy());
+    Connection::open_with_flags(Path::new(&uri), flags | OpenFlags::SQLITE_OPEN_URI)
 }
 
 /// Get the size of the database on the disk
