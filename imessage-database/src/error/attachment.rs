@@ -14,6 +14,8 @@ pub enum AttachmentError {
     Unreadable(String, Error),
 }
 
+impl std::error::Error for AttachmentError {}
+
 impl Display for AttachmentError {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result {
         match self {

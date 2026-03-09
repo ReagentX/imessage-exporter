@@ -2,31 +2,33 @@
  Defines routines for sanitizing text data.
 */
 
-use std::collections::{HashMap, HashSet};
-use std::sync::LazyLock;
-
 use std::borrow::Cow;
 
-/// Characters disallowed in a filename
-static FILENAME_DISALLOWED_CHARS: LazyLock<HashSet<char>> =
-    LazyLock::new(|| HashSet::from(['*', '"', '/', '\\', '<', '>', ':', '|', '?']));
 /// The character to replace disallowed chars with
 const FILENAME_REPLACEMENT_CHAR: char = '_';
 
-/// Characters disallowed in HTML
-static HTML_DISALLOWED_CHARS: LazyLock<HashMap<char, &str>> = LazyLock::new(|| {
-    HashMap::from([
-        ('>', "&gt;"),
-        ('<', "&lt;"),
-        ('"', "&quot;"),
-        ('\'', "&apos;"),
-        ('`', "&grave;"),
-        ('&', "&amp;"),
-        (' ', "&nbsp;"),
-    ])
-});
+/// Returns true if a character is disallowed in filenames
+#[inline]
+fn is_filename_disallowed(c: char) -> bool {
+    matches!(c, '*' | '"' | '/' | '\\' | '<' | '>' | ':' | '|' | '?')
+}
 
-/// Remove unsafe chars in [this list](FILENAME_DISALLOWED_CHARS).
+/// Returns the HTML entity replacement for a character, if it needs escaping
+#[inline]
+fn html_replacement(c: char) -> Option<&'static str> {
+    match c {
+        '>' => Some("&gt;"),
+        '<' => Some("&lt;"),
+        '"' => Some("&quot;"),
+        '\'' => Some("&apos;"),
+        '`' => Some("&grave;"),
+        '&' => Some("&amp;"),
+        '\u{a0}' => Some("&nbsp;"),
+        _ => None,
+    }
+}
+
+/// Remove unsafe chars in filenames.
 ///
 /// Does not need to use a `Cow` for optimization because the source is always generated based on chat data
 /// so there is no opportunity for the original input to be passed in from another borrow.
@@ -34,7 +36,7 @@ pub fn sanitize_filename(filename: &str) -> String {
     filename
         .chars()
         .map(|letter| {
-            if letter.is_control() || FILENAME_DISALLOWED_CHARS.contains(&letter) {
+            if letter.is_control() || is_filename_disallowed(letter) {
                 FILENAME_REPLACEMENT_CHAR
             } else {
                 letter
@@ -46,11 +48,11 @@ pub fn sanitize_filename(filename: &str) -> String {
 /// Escapes HTML special characters in the input string, allocating a new string only if necessary.
 pub fn sanitize_html(input: &'_ str) -> Cow<'_, str> {
     for (idx, c) in input.char_indices() {
-        if HTML_DISALLOWED_CHARS.contains_key(&c) {
+        if html_replacement(c).is_some() {
             let mut res = String::from(&input[..idx]);
             input[idx..]
                 .chars()
-                .for_each(|c| match HTML_DISALLOWED_CHARS.get(&c) {
+                .for_each(|c| match html_replacement(c) {
                     Some(replacement) => res.push_str(replacement),
                     None => res.push(c),
                 });

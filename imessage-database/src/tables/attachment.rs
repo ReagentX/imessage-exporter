@@ -34,6 +34,11 @@ use crate::{
 // MARK: Constants
 /// The default root directory for iMessage database files, which is replaced with the custom attachment root if provided
 pub const DEFAULT_MESSAGES_ROOT: &str = "~/Library/Messages";
+/// Alternate root directory used by a jailbroken iOS device's `sms.db`
+///
+/// The `sms.db` database uses the same schema and path conventions as a macOS `chat.db`,
+/// but attachment paths are rooted under `~/Library/SMS` instead of `~/Library/Messages`.
+pub const DEFAULT_SMS_ROOT: &str = "~/Library/SMS";
 /// The default root directory for iMessage attachment data
 pub const DEFAULT_ATTACHMENT_ROOT: &str = "~/Library/Messages/Attachments";
 /// The default root directory for iMessage sticker cache data
@@ -132,12 +137,6 @@ impl Table for Attachment {
         Ok(db.prepare_cached(&format!("SELECT * from {ATTACHMENT}"))?)
     }
 
-    fn extract(attachment: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
-        match attachment {
-            Ok(Ok(attachment)) => Ok(attachment),
-            Err(why) | Ok(Err(why)) => Err(TableError::QueryError(why)),
-        }
-    }
 }
 
 // MARK: Impl
@@ -342,9 +341,18 @@ impl Attachment {
     /// On iOS, file names are derived from SHA-1 hash of `MediaDomain-` concatenated with the relative [`self.filename()`](Self::filename).
     /// Between the domain and the path there is a dash. Read more [here](https://theapplewiki.com/index.php?title=ITunes_Backup).
     ///
-    /// Use the optional `custom_attachment_root` parameter when the attachments are not stored in
-    /// the same place as the database expects.The expected location is [`DEFAULT_ATTACHMENT_ROOT`].
-    /// A custom attachment root like `/custom/path` will overwrite a path like `~/Library/Messages/Attachments/3d/...` to `/custom/path/3d/...`
+    /// Use the optional `custom_attachment_root` parameter when attachment data is stored under a
+    /// different Messages root than the database expects. This replaces the leading Messages root,
+    /// not just the `Attachments` directory, so it affects both [`DEFAULT_ATTACHMENT_ROOT`] and
+    /// [`DEFAULT_STICKER_CACHE_ROOT`].
+    ///
+    /// For example, a custom attachment root like `/custom/path` will rewrite
+    /// `~/Library/Messages/Attachments/3d/...` to `/custom/path/Attachments/3d/...` and
+    /// `~/Library/Messages/StickerCache/ab/...` to `/custom/path/StickerCache/ab/...`.
+    ///
+    /// For a jailbroken iOS `sms.db`, attachment paths start with [`DEFAULT_SMS_ROOT`] (`~/Library/SMS`)
+    /// instead of [`DEFAULT_MESSAGES_ROOT`]. These databases behave like macOS databases and should
+    /// use [`Platform::macOS`] — not [`Platform::iOS`], which is reserved for encrypted Finder/Apple Devices/iTunes backups.
     #[must_use]
     pub fn resolved_attachment_path(
         &self,
@@ -387,12 +395,27 @@ impl Attachment {
                 }
             }
 
-            return match platform {
-                Platform::macOS => Some(Attachment::gen_macos_attachment(&path_str)),
-                Platform::iOS => Attachment::gen_ios_attachment(&path_str, db_path),
+        // Apply custom attachment path, if provided
+        if matches!(platform, Platform::macOS)
+            && let Some(custom_attachment_path) = custom_attachment_root
+        {
+            let prefix = if path_str.starts_with(DEFAULT_MESSAGES_ROOT) {
+                Some(DEFAULT_MESSAGES_ROOT)
+            } else if path_str.starts_with(DEFAULT_SMS_ROOT) {
+                Some(DEFAULT_SMS_ROOT)
+            } else {
+                None
             };
+
+            if let Some(old) = prefix {
+                path_str = path_str.replacen(old, custom_attachment_path, 1);
+            }
         }
-        None
+
+        match platform {
+            Platform::macOS => Some(Attachment::gen_macos_attachment(&path_str)),
+            Platform::iOS => Attachment::gen_ios_attachment(&path_str, db_path),
+        }
     }
 
     /// Emit diagnostic data for the Attachments table
@@ -569,7 +592,8 @@ mod tests {
     use crate::{
         tables::{
             attachment::{
-                Attachment, DEFAULT_ATTACHMENT_ROOT, DEFAULT_STICKER_CACHE_ROOT, MediaType,
+                Attachment, DEFAULT_ATTACHMENT_ROOT, DEFAULT_SMS_ROOT, DEFAULT_STICKER_CACHE_ROOT,
+                MediaType,
             },
             table::get_connection,
         },
@@ -765,6 +789,39 @@ mod tests {
         assert_eq!(
             attachment.resolved_attachment_path(&Platform::iOS, &db_path, Some("custom/root")),
             Some("fake_root/41/41746ffc65924078eae42725c979305626f57cca".to_string())
+        );
+    }
+
+    #[test]
+    fn can_get_resolved_path_ios_custom_ignores_prefixed_path() {
+        let db_path = PathBuf::from("fake_root");
+        let mut attachment = sample_attachment();
+        attachment.filename = Some(format!("{DEFAULT_ATTACHMENT_ROOT}/a/b/c.png"));
+        let expected = attachment.resolved_attachment_path(&Platform::iOS, &db_path, None);
+
+        // Custom attachment roots do not apply to iOS backups, even when the stored filename
+        // resembles a macOS-style attachment path.
+        assert_eq!(
+            attachment.resolved_attachment_path(&Platform::iOS, &db_path, Some("/custom/root")),
+            expected
+        );
+    }
+
+    #[test]
+    fn can_get_resolved_path_ios_smsdb() {
+        let db_path = PathBuf::from("fake_root");
+        let mut attachment = sample_attachment();
+        attachment.filename = Some(format!("{DEFAULT_SMS_ROOT}/Attachments/a/b/c.png"));
+
+        assert_eq!(
+            attachment.resolved_attachment_path(
+                // A jailbroken iOS sms.db uses `Platform::macOS` conventions, not `Platform::iOS`,
+                // since the attachments are stored in direct filesystem paths, not SHA-1 hashed backup paths
+                &Platform::macOS,
+                &db_path,
+                Some("/custom/path"),
+            ),
+            Some("/custom/path/Attachments/a/b/c.png".to_string())
         );
     }
 

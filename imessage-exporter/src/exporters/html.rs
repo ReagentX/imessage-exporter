@@ -10,7 +10,7 @@ use std::{
     },
     fmt::Write as FmtWrite,
     fs::File,
-    io::{BufWriter, Write},
+    io::BufWriter,
 };
 
 use crate::{
@@ -18,8 +18,12 @@ use crate::{
         compatibility::attachment_manager::AttachmentManagerMode, error::RuntimeError,
         progress::ExportProgress, runtime::Config, sanitizers::sanitize_html,
     },
-    exporters::exporter::{
-        ATTACHMENT_NO_FILENAME, BalloonFormatter, Exporter, MessageFormatter, TextEffectFormatter,
+    exporters::{
+        exporter::{
+            ATTACHMENT_NO_FILENAME, BalloonFormatter, Exporter, MessageFormatter,
+            TextEffectFormatter,
+        },
+        shared::{format_expressive, message_time},
     },
 };
 
@@ -31,7 +35,6 @@ use imessage_database::{
         collaboration::CollaborationMessage,
         digital_touch::{self, DigitalTouch},
         edited::{EditStatus, EditedMessage},
-        expressives::{BubbleEffect, Expressive, ScreenEffect},
         handwriting::HandwrittenMessage,
         music::MusicMessage,
         placemark::PlacemarkMessage,
@@ -205,11 +208,6 @@ impl<'a> Exporter<'a> for HTML<'a> {
             }
             None => Ok(&mut self.orphaned),
         }
-    }
-
-    fn write_to_file(file: &mut BufWriter<File>, text: &str) -> Result<(), RuntimeError> {
-        file.write_all(text.as_bytes())
-            .map_err(RuntimeError::DiskError)
     }
 }
 
@@ -513,7 +511,7 @@ impl<'a> MessageFormatter<'a> for HTML<'a> {
                         if !formatted.is_empty() {
                             self.add_line(
                                 &mut formatted_tapbacks,
-                                &self.format_tapback(tapback)?,
+                                &formatted,
                                 "<div class=\"tapback\">",
                                 "</div>",
                             );
@@ -872,27 +870,7 @@ impl<'a> MessageFormatter<'a> for HTML<'a> {
     }
 
     fn format_expressive(&self, msg: &'a Message) -> &'a str {
-        match msg.get_expressive() {
-            Expressive::Screen(effect) => match effect {
-                ScreenEffect::Confetti => "Sent with Confetti",
-                ScreenEffect::Echo => "Sent with Echo",
-                ScreenEffect::Fireworks => "Sent with Fireworks",
-                ScreenEffect::Balloons => "Sent with Balloons",
-                ScreenEffect::Heart => "Sent with Heart",
-                ScreenEffect::Lasers => "Sent with Lasers",
-                ScreenEffect::ShootingStar => "Sent with Shooting Star",
-                ScreenEffect::Sparkles => "Sent with Sparkles",
-                ScreenEffect::Spotlight => "Sent with Spotlight",
-            },
-            Expressive::Bubble(effect) => match effect {
-                BubbleEffect::Slam => "Sent with Slam",
-                BubbleEffect::Loud => "Sent with Loud",
-                BubbleEffect::Gentle => "Sent with Gentle",
-                BubbleEffect::InvisibleInk => "Sent with Invisible Ink",
-            },
-            Expressive::Unknown(effect) => effect,
-            Expressive::None => "",
-        }
+        format_expressive(msg)
     }
 
     fn format_announcement(&self, msg: &'a Message) -> String {
@@ -1731,20 +1709,7 @@ impl<'a> TextEffectFormatter<'a> for HTML<'a> {
 // MARK: Impl
 impl HTML<'_> {
     fn get_time(&self, message: &Message) -> (String, String) {
-        let date = format(&message.date(&self.config.offset));
-        let mut read_at = String::new();
-        let read_after = message.time_until_read(&self.config.offset);
-        if let Some(time) = read_after
-            && !time.is_empty()
-        {
-            let who = if message.is_from_me() {
-                "them"
-            } else {
-                self.config.options.custom_name.as_deref().unwrap_or("you")
-            };
-            read_at = format!("(Read by {who} after {time})");
-        }
-        (date, read_at)
+        message_time(self.config, message)
     }
 
     fn add_line(&self, string: &mut String, part: &str, pre: &str, post: &str) {

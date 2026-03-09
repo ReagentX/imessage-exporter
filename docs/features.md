@@ -12,6 +12,9 @@ This tool targets the current latest public release for Messages.app. It may wor
 - Encrypted or unencrypted local iOS backups
   - Unencrypted backups are resolved normally
   - Encrypted backups are resolved with [crabapple](https://github.com/ReagentX/crabapple)
+- Jailbroken iOS filesystem data
+  - Uses `sms.db`, which follows the same schema as macOS `chat.db`
+  - Resolved as a macOS database with an alternate attachment root
 
 ## Supported Message Features
 

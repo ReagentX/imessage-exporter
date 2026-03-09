@@ -27,7 +27,7 @@
  }).unwrap();
  ```
 
- Note: you can substitute `TableError` with your own error type if you want to handle errors differently. See the [`Table::stream`] method for more details.
+ Note: you can substitute `TableError` with your own error type if it implements `From<TableError>`. See the [`Table::stream`] method for more details.
 */
 
 use std::{collections::HashMap, fs::metadata, path::Path};
@@ -46,7 +46,12 @@ pub trait Table: Sized {
     fn get(db: &'_ Connection) -> Result<CachedStatement<'_>, TableError>;
 
     /// Map a `rusqlite::Result<Self>` into our `TableError`
-    fn extract(item: Result<Result<Self, Error>, Error>) -> Result<Self, TableError>;
+    fn extract(item: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
+        match item {
+            Ok(Ok(row)) => Ok(row),
+            Err(why) | Ok(Err(why)) => Err(TableError::QueryError(why)),
+        }
+    }
 
     /// Process all rows from the table using a callback.
     /// This is the most memory-efficient approach for large tables.
@@ -80,8 +85,9 @@ pub trait Table: Sized {
     ///     Ok::<(), TableError>(())
     /// }).unwrap();
     /// ```
-    fn stream<F, E>(db: &Connection, callback: F) -> Result<(), TableError>
+    fn stream<F, E>(db: &Connection, callback: F) -> Result<(), E>
     where
+        E: From<TableError>,
         F: FnMut(Result<Self, TableError>) -> Result<(), E>,
     {
         stream_table_callback::<Self, F, E>(db, callback)
@@ -121,17 +127,21 @@ pub trait Table: Sized {
     }
 }
 
-fn stream_table_callback<T, F, E>(db: &Connection, mut callback: F) -> Result<(), TableError>
+fn stream_table_callback<T, F, E>(db: &Connection, mut callback: F) -> Result<(), E>
 where
     T: Table + Sized,
+    E: From<TableError>,
     F: FnMut(Result<T, TableError>) -> Result<(), E>,
 {
-    let mut stmt = T::get(db)?;
-    let rows = stmt.query_map([], |row| Ok(T::from_row(row)))?;
+    let mut stmt = T::get(db).map_err(E::from)?;
+    let rows = stmt
+        .query_map([], |row| Ok(T::from_row(row)))
+        .map_err(TableError::from)
+        .map_err(E::from)?;
 
     for row_result in rows {
         let item_result = T::extract(row_result);
-        let _ = callback(item_result);
+        callback(item_result)?;
     }
     Ok(())
 }
@@ -269,3 +279,77 @@ pub const ORPHANED: &str = "orphaned";
 pub const FITNESS_RECEIVER: &str = "$(kIMTranscriptPluginBreadcrumbTextReceiverIdentifier)";
 /// Name for attachments directory in exports
 pub const ATTACHMENTS_DIR: &str = "attachments";
+
+#[cfg(test)]
+mod tests {
+    use rusqlite::{CachedStatement, Connection, Result, Row};
+
+    use crate::error::table::TableError;
+
+    use super::Table;
+
+    struct TestRow(i64);
+
+    impl Table for TestRow {
+        fn from_row(row: &Row) -> Result<Self> {
+            Ok(Self(row.get(0)?))
+        }
+
+        fn get(db: &'_ Connection) -> Result<CachedStatement<'_>, TableError> {
+            Ok(db.prepare_cached("SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3")?)
+        }
+    }
+
+    #[derive(Debug)]
+    enum StreamError {
+        Table(TableError),
+        Stop,
+    }
+
+    impl From<TableError> for StreamError {
+        fn from(err: TableError) -> Self {
+            Self::Table(err)
+        }
+    }
+
+    #[test]
+    fn stream_propagates_callback_errors() {
+        let db = Connection::open_in_memory().unwrap();
+        let mut seen = vec![];
+
+        let result = TestRow::stream(&db, |row| {
+            let row = row.map_err(StreamError::from)?;
+            seen.push(row.0);
+            if row.0 == 2 {
+                return Err(StreamError::Stop);
+            }
+            Ok(())
+        });
+
+        assert!(matches!(result, Err(StreamError::Stop)));
+        assert_eq!(seen, vec![1, 2]);
+    }
+
+    #[test]
+    fn stream_converts_setup_errors() {
+        struct BrokenTable;
+
+        impl Table for BrokenTable {
+            fn from_row(_row: &Row) -> Result<Self> {
+                Ok(Self)
+            }
+
+            fn get(_db: &'_ Connection) -> Result<CachedStatement<'_>, TableError> {
+                Err(TableError::CannotRead(std::io::Error::other("boom")))
+            }
+        }
+
+        let db = Connection::open_in_memory().unwrap();
+        let result = BrokenTable::stream(&db, |_| Ok::<(), StreamError>(()));
+
+        assert!(matches!(
+            result,
+            Err(StreamError::Table(TableError::CannotRead(_)))
+        ));
+    }
+}

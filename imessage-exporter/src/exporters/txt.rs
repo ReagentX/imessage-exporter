@@ -5,7 +5,7 @@ use std::{
     },
     fmt::Write as FmtWrite,
     fs::File,
-    io::{BufWriter, Write},
+    io::BufWriter,
 };
 
 use crate::{
@@ -13,7 +13,10 @@ use crate::{
         compatibility::attachment_manager::AttachmentManagerMode, error::RuntimeError,
         progress::ExportProgress, runtime::Config,
     },
-    exporters::exporter::{ATTACHMENT_NO_FILENAME, BalloonFormatter, Exporter, MessageFormatter},
+    exporters::{
+        exporter::{ATTACHMENT_NO_FILENAME, BalloonFormatter, Exporter, MessageFormatter},
+        shared::{format_expressive, message_time},
+    },
 };
 
 use imessage_database::{
@@ -24,7 +27,6 @@ use imessage_database::{
         collaboration::CollaborationMessage,
         digital_touch::{self, DigitalTouch},
         edited::{EditStatus, EditedMessage},
-        expressives::{BubbleEffect, Expressive, ScreenEffect},
         handwriting::HandwrittenMessage,
         music::MusicMessage,
         placemark::PlacemarkMessage,
@@ -162,11 +164,6 @@ impl<'a> Exporter<'a> for TXT<'a> {
             }
             None => Ok(&mut self.orphaned),
         }
-    }
-
-    fn write_to_file(file: &mut BufWriter<File>, text: &str) -> Result<(), RuntimeError> {
-        file.write_all(text.as_bytes())
-            .map_err(RuntimeError::DiskError)
     }
 }
 
@@ -334,11 +331,7 @@ impl<'a> MessageFormatter<'a> for TXT<'a> {
                     .try_for_each(|tapbacks| -> Result<(), TableError> {
                         let formatted = self.format_tapback(tapbacks)?;
                         if !formatted.is_empty() {
-                            self.add_line(
-                                &mut formatted_tapbacks,
-                                &self.format_tapback(tapbacks)?,
-                                &indent,
-                            );
+                            self.add_line(&mut formatted_tapbacks, &formatted, &indent);
                         }
                         Ok(())
                     })?;
@@ -617,27 +610,7 @@ impl<'a> MessageFormatter<'a> for TXT<'a> {
     }
 
     fn format_expressive(&self, msg: &'a Message) -> &'a str {
-        match msg.get_expressive() {
-            Expressive::Screen(effect) => match effect {
-                ScreenEffect::Confetti => "Sent with Confetti",
-                ScreenEffect::Echo => "Sent with Echo",
-                ScreenEffect::Fireworks => "Sent with Fireworks",
-                ScreenEffect::Balloons => "Sent with Balloons",
-                ScreenEffect::Heart => "Sent with Heart",
-                ScreenEffect::Lasers => "Sent with Lasers",
-                ScreenEffect::ShootingStar => "Sent with Shooting Star",
-                ScreenEffect::Sparkles => "Sent with Sparkles",
-                ScreenEffect::Spotlight => "Sent with Spotlight",
-            },
-            Expressive::Bubble(effect) => match effect {
-                BubbleEffect::Slam => "Sent with Slam",
-                BubbleEffect::Loud => "Sent with Loud",
-                BubbleEffect::Gentle => "Sent with Gentle",
-                BubbleEffect::InvisibleInk => "Sent with Invisible Ink",
-            },
-            Expressive::Unknown(effect) => effect,
-            Expressive::None => "",
-        }
+        format_expressive(msg)
     }
 
     fn format_announcement(&self, msg: &'a Message) -> String {
@@ -1170,19 +1143,14 @@ impl<'a> BalloonFormatter<&'a str> for TXT<'a> {
 // MARK: Impl
 impl TXT<'_> {
     fn get_time(&self, message: &Message) -> String {
-        let mut date = format(&message.date(&self.config.offset));
-        let read_after = message.time_until_read(&self.config.offset);
-        if let Some(time) = read_after
-            && !time.is_empty()
-        {
-            let who = if message.is_from_me() {
-                "them"
-            } else {
-                self.config.options.custom_name.as_deref().unwrap_or("you")
-            };
-            let _ = write!(date, " (Read by {who} after {time})");
+        let (mut date, read_receipt) = message_time(self.config, message);
+        if read_receipt.is_empty() {
+            date
+        } else {
+            date.push(' ');
+            date.push_str(&read_receipt);
+            date
         }
-        date
     }
 
     fn add_line(&self, string: &mut String, part: &str, indent: &str) {

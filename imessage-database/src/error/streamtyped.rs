@@ -17,6 +17,8 @@ pub enum StreamTypedError {
     InvalidTimestamp,
 }
 
+impl std::error::Error for StreamTypedError {}
+
 impl Display for StreamTypedError {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result {
         match self {

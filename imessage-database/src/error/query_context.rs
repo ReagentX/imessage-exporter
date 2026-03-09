@@ -11,6 +11,8 @@ pub enum QueryContextError {
     InvalidDate(String),
 }
 
+impl std::error::Error for QueryContextError {}
+
 impl Display for QueryContextError {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result {
         match self {

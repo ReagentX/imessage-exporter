@@ -49,6 +49,8 @@ impl Display for MessageError {
     }
 }
 
+impl std::error::Error for MessageError {}
+
 impl From<StreamTypedError> for MessageError {
     fn from(err: StreamTypedError) -> Self {
         MessageError::StreamTypedParseError(err)

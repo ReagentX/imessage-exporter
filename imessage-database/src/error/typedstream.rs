@@ -26,6 +26,8 @@ pub enum TypedStreamError {
     InvalidPointer(usize),
 }
 
+impl std::error::Error for TypedStreamError {}
+
 impl Display for TypedStreamError {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result {
         match self {

@@ -1,4 +1,9 @@
-use std::{borrow::Cow, fs::File, io::BufWriter, marker::Sized};
+use std::{
+    borrow::Cow,
+    fs::File,
+    io::{BufWriter, Write},
+    marker::Sized,
+};
 
 use imessage_database::{
     error::{message::MessageError, table::TableError},
@@ -43,7 +48,10 @@ pub trait Exporter<'a> {
         message: &Message,
     ) -> Result<&mut BufWriter<File>, RuntimeError>;
     /// Write formatted text to a file
-    fn write_to_file(file: &mut BufWriter<File>, text: &str) -> Result<(), RuntimeError>;
+    fn write_to_file(file: &mut BufWriter<File>, text: &str) -> Result<(), RuntimeError> {
+        file.write_all(text.as_bytes())
+            .map_err(RuntimeError::DiskError)
+    }
 }
 
 // MARK: Message

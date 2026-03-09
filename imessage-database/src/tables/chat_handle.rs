@@ -9,7 +9,7 @@ use crate::{
     tables::table::{CHAT_HANDLE_JOIN, CHAT_MESSAGE_JOIN, Cacheable, Diagnostic, Table},
     util::output::{done_processing, processing},
 };
-use rusqlite::{CachedStatement, Connection, Error, Result, Row};
+use rusqlite::{CachedStatement, Connection, Result, Row};
 
 // MARK: Struct
 /// Represents a single row in the `chat_handle_join` table.
@@ -30,12 +30,6 @@ impl Table for ChatToHandle {
         Ok(db.prepare_cached(&format!("SELECT * FROM {CHAT_HANDLE_JOIN}"))?)
     }
 
-    fn extract(chat_to_handle: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
-        match chat_to_handle {
-            Ok(Ok(chat_to_handle)) => Ok(chat_to_handle),
-            Err(why) | Ok(Err(why)) => Err(TableError::QueryError(why)),
-        }
-    }
 }
 
 // MARK: Cache

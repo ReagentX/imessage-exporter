@@ -27,6 +27,8 @@ pub enum HandwritingError {
     ResizeError(std::num::TryFromIntError),
 }
 
+impl std::error::Error for HandwritingError {}
+
 impl Display for HandwritingError {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result {
         match self {

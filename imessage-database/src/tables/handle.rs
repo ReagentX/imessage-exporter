@@ -2,7 +2,7 @@
  This module represents common (but not all) columns in the `handle` table.
 */
 
-use rusqlite::{CachedStatement, Connection, Error, Result, Row};
+use rusqlite::{CachedStatement, Connection, Result, Row};
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::{
@@ -37,12 +37,6 @@ impl Table for Handle {
         Ok(db.prepare_cached(&format!("SELECT * from {HANDLE}"))?)
     }
 
-    fn extract(handle: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
-        match handle {
-            Ok(Ok(handle)) => Ok(handle),
-            Err(why) | Ok(Err(why)) => Err(TableError::QueryError(why)),
-        }
-    }
 }
 
 // MARK: Cache
@@ -258,7 +252,7 @@ impl Handle {
                 let (person_centric_id, rowid, _) = contact;
                 let data_to_insert = match person_to_id.get_mut(person_centric_id) {
                     Some(person) => person.iter().cloned().collect::<Vec<String>>().join(" "),
-                    None => panic!("Attempted to resolve contact with no person_centric_id!"),
+                    None => continue,
                 };
                 row_to_id.insert(rowid.to_owned(), data_to_insert);
             }

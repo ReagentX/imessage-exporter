@@ -8,6 +8,7 @@
  ## Example
  ```no_run
  use imessage_database::{
+     error::table::TableError,
      tables::{
          messages::Message,
          table::{get_connection, Diagnostic, Table},
@@ -16,7 +17,14 @@
  };
 
  // Your custom error type
- struct ProgramError;
+ #[derive(Debug)]
+ struct ProgramError(TableError);
+
+ impl From<TableError> for ProgramError {
+     fn from(err: TableError) -> Self {
+         Self(err)
+     }
+ }
 
  // Get the default database path and connect to it
  let db_path = default_db_path();
@@ -124,7 +132,7 @@ use std::{
 use chrono::{DateTime, offset::Local};
 use crabstep::TypedStreamDeserializer;
 use plist::Value;
-use rusqlite::{CachedStatement, Connection, Error, Result, Row};
+use rusqlite::{CachedStatement, Connection, Result, Row};
 
 use crate::{
     error::{message::MessageError, table::TableError},
@@ -248,12 +256,6 @@ impl Table for Message {
             .or_else(|_| db.prepare_cached(&ios_13_older_query(None)))?)
     }
 
-    fn extract(message: Result<Result<Self, Error>, Error>) -> Result<Self, TableError> {
-        match message {
-            Ok(Ok(message)) => Ok(message),
-            Err(why) | Ok(Err(why)) => Err(TableError::QueryError(why)),
-        }
-    }
 }
 
 // MARK: Diagnostic
@@ -1369,16 +1371,12 @@ impl Message {
     /// }
     ///```
     pub fn from_guid(guid: &str, db: &Connection) -> Result<Self, TableError> {
-        // If the database has `chat_recoverable_message_join`, we can restore some deleted messages.
-        // If database has `thread_originator_guid`, we can parse replies, otherwise default to 0
-        let filters = format!("WHERE m.guid = \"{guid}\"");
-
         let mut statement = db
-            .prepare(&ios_16_newer_query(Some(&filters)))
-            .or_else(|_| db.prepare(&ios_14_15_query(Some(&filters))))
-            .or_else(|_| db.prepare(&ios_13_older_query(Some(&filters))))?;
+            .prepare_cached(&ios_16_newer_query(Some("WHERE m.guid = ?1")))
+            .or_else(|_| db.prepare_cached(&ios_14_15_query(Some("WHERE m.guid = ?1"))))
+            .or_else(|_| db.prepare_cached(&ios_13_older_query(Some("WHERE m.guid = ?1"))))?;
 
-        Message::extract(statement.query_row([], |row| Ok(Message::from_row(row))))
+        Message::extract(statement.query_row([guid], |row| Ok(Message::from_row(row))))
     }
 }
 
