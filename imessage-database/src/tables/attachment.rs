@@ -395,27 +395,30 @@ impl Attachment {
                 }
             }
 
-        // Apply custom attachment path, if provided
-        if matches!(platform, Platform::macOS)
-            && let Some(custom_attachment_path) = custom_attachment_root
-        {
-            let prefix = if path_str.starts_with(DEFAULT_MESSAGES_ROOT) {
-                Some(DEFAULT_MESSAGES_ROOT)
-            } else if path_str.starts_with(DEFAULT_SMS_ROOT) {
-                Some(DEFAULT_SMS_ROOT)
-            } else {
-                None
-            };
+            // Apply custom attachment path replacement for macOS-style prefixes
+            if matches!(platform, Platform::macOS) {
+                if let Some(custom_attachment_path) = custom_attachment_root {
+                    let prefix = if path_str.starts_with(DEFAULT_MESSAGES_ROOT) {
+                        Some(DEFAULT_MESSAGES_ROOT)
+                    } else if path_str.starts_with(DEFAULT_SMS_ROOT) {
+                        Some(DEFAULT_SMS_ROOT)
+                    } else {
+                        None
+                    };
 
-            if let Some(old) = prefix {
-                path_str = path_str.replacen(old, custom_attachment_path, 1);
+                    if let Some(old) = prefix {
+                        path_str = path_str.replacen(old, custom_attachment_path, 1);
+                    }
+                }
             }
+
+            return match platform {
+                Platform::macOS => Some(Attachment::gen_macos_attachment(&path_str)),
+                Platform::iOS => Attachment::gen_ios_attachment(&path_str, db_path),
+            };
         }
 
-        match platform {
-            Platform::macOS => Some(Attachment::gen_macos_attachment(&path_str)),
-            Platform::iOS => Attachment::gen_ios_attachment(&path_str, db_path),
-        }
+        None
     }
 
     /// Emit diagnostic data for the Attachments table
