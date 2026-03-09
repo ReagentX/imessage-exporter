@@ -255,7 +255,6 @@ impl Table for Message {
             .or_else(|_| db.prepare_cached(&ios_14_15_query(None)))
             .or_else(|_| db.prepare_cached(&ios_13_older_query(None)))?)
     }
-
 }
 
 // MARK: Diagnostic

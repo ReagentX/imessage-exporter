@@ -36,7 +36,6 @@ impl Table for Handle {
     fn get(db: &'_ Connection) -> Result<CachedStatement<'_>, TableError> {
         Ok(db.prepare_cached(&format!("SELECT * from {HANDLE}"))?)
     }
-
 }
 
 // MARK: Cache

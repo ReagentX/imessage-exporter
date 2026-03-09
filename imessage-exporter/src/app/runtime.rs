@@ -592,6 +592,9 @@ impl Config {
                 ExportType::Txt => {
                     TXT::new(self)?.iter_messages()?;
                 }
+                ExportType::Json => {
+                    crate::JSON::new(self)?.iter_messages()?;
+                }
             }
         }
         println!("Done!");

@@ -29,7 +29,6 @@ impl Table for ChatToHandle {
     fn get(db: &'_ Connection) -> Result<CachedStatement<'_>, TableError> {
         Ok(db.prepare_cached(&format!("SELECT * FROM {CHAT_HANDLE_JOIN}"))?)
     }
-
 }
 
 // MARK: Cache

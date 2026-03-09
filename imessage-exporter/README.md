@@ -1,6 +1,6 @@
 # Binary Documentation
 
-The `imessage-exporter` binary exports iMessage data to `txt` or `html` formats. It can also run diagnostics to find problems with the iMessage database.
+The `imessage-exporter` binary exports iMessage data to `txt`, `html`, or `ndjson` (newline-delimited JSON) formats. It can also run diagnostics to find problems with the iMessage database.
 
 ## Installation
 
@@ -47,7 +47,7 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
 -d, --diagnostics
         Print diagnostic information and exit
         
--f, --format <txt, html>
+-f, --format <txt, html, ndjson>
         Specify a format to export messages into
         If omitted, no output files will be written
         
@@ -199,6 +199,10 @@ Export messages from participants using email addresses but not phone numbers as
 ```zsh
 imessage-exporter -f html -t "@"
 ```
+
+## NDJSON Export
+
+The binary also supports a machine-readable newline-delimited JSON export. Use `--format ndjson` (also accepts `json`/`jsonl`). Each line is a compact JSON object representing a single message and includes sender, recipients, attachment metadata, and other message fields so downstream tools do not need external lookups.
 
 ## Features
 
