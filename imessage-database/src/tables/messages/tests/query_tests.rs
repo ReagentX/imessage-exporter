@@ -230,7 +230,10 @@ mod guid_query_tests {
 
         let mut message =
             Message::from_guid("0355C6E1-D0C8-4212-AA87-DD8AE4FD1203", &conn).unwrap();
-        let _ = message.generate_text(&conn);
+
+        let body = message.parse_body(&conn).unwrap();
+        message.apply_body(body);
+
         println!("{message:#?}");
         assert!(!message.components.is_empty());
     }

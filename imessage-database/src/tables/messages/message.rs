@@ -179,7 +179,7 @@ pub struct Message {
     pub rowid: i32,
     /// The globally unique identifier for the message
     pub guid: String,
-    /// The text of the message, which may require calling [`Self::generate_text()`] to populate
+    /// The text of the message, which may require calling [`Self::parse_body()`] and [`Self::apply_body()`] to populate
     pub text: Option<String>,
     /// The service the message was sent from
     pub service: Option<String>,
@@ -239,6 +239,32 @@ pub struct Message {
     pub components: Vec<BubbleComponent>,
     /// The components of the message that may or may not have been edited or unsent
     pub edited_parts: Option<EditedMessage>,
+}
+
+/// The result of parsing a message body via [`Message::parse_body()`].
+///
+/// Use [`Message::apply_body()`] to apply the parsed body back to the message:
+///
+/// ```no_run
+/// # use imessage_database::tables::{messages::Message, table::get_connection};
+/// # use imessage_database::util::dirs::default_db_path;
+/// # let conn = get_connection(&default_db_path()).unwrap();
+/// # let mut message = Message::from_guid("example", &conn).unwrap();
+/// if let Ok(body) = message.parse_body(&conn) {
+///     message.apply_body(body);
+/// }
+/// ```
+#[derive(Debug)]
+#[must_use]
+pub struct ParsedBody {
+    /// The text content of the message
+    pub text: Option<String>,
+    /// The components that make up the message body
+    pub components: Vec<BubbleComponent>,
+    /// The components of the message that may have been edited or unsent
+    pub edited_parts: Option<EditedMessage>,
+    /// The resolved balloon bundle ID, which may differ from the original
+    pub balloon_bundle_id: Option<String>,
 }
 
 // MARK: Table
@@ -489,72 +515,122 @@ impl Message {
     }
 
     // MARK: Text Gen
-    /// Generate the text of a message, deserializing it as [`typedstream`](crate::util::typedstream) (and falling back to [`streamtyped`]) data if necessary.
-    pub fn generate_text<'a>(&'a mut self, db: &'a Connection) -> Result<&'a str, MessageError> {
-        // Generate the edited message data
-        self.edited_parts = self
+    /// Parse the body of a message, deserializing it as [`typedstream`](crate::util::typedstream)
+    /// (and falling back to [`streamtyped`]) data if necessary.
+    ///
+    /// This method performs pure parsing without mutating the message. Use [`Self::apply_body()`]
+    /// to apply the result back to the message.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use imessage_database::tables::{messages::Message, table::get_connection};
+    /// # use imessage_database::util::dirs::default_db_path;
+    /// # let conn = get_connection(&default_db_path()).unwrap();
+    /// # let mut message = Message::from_guid("example", &conn).unwrap();
+    /// if let Ok(body) = message.parse_body(&conn) {
+    ///     message.apply_body(body);
+    /// }
+    /// ```
+    pub fn parse_body(&self, db: &Connection) -> Result<ParsedBody, MessageError> {
+        // Parse the edited message data
+        let edited_parts = self
             .is_edited()
             .then(|| self.message_summary_info(db))
             .flatten()
             .as_ref()
             .and_then(|payload| EditedMessage::from_map(payload).ok());
 
+        // Initialize variables for the text, components, and balloon bundle ID that will be parsed from the body
+        let mut text = None;
+        let mut components = vec![];
+        let mut balloon_bundle_id = None;
+
         // Grab the body data from the table
         if let Some(body) = self.attributed_body(db) {
             // Attempt to deserialize the typedstream data
             let mut typedstream = TypedStreamDeserializer::new(&body);
-            let parsed =
-                parse_body_typedstream(typedstream.iter_root().ok(), self.edited_parts.as_ref());
+            match parse_body_typedstream(typedstream.iter_root().ok(), edited_parts.as_ref()) {
+                Some(parsed) => {
+                    text = parsed.text;
 
-            if let Some(parsed) = parsed {
-                // Determine if the message is a single URL
-                let is_single_url = match &parsed.components[..] {
-                    [BubbleComponent::Text(text_attrs)] => match &text_attrs[..] {
-                        [TextAttributes { effects, .. }] => {
-                            matches!(&effects[..], [TextEffect::Link(_)])
-                        }
+                    // Determine if the message is a single URL
+                    let is_single_url = match &parsed.components[..] {
+                        [BubbleComponent::Text(text_attrs)] => match &text_attrs[..] {
+                            [TextAttributes { effects, .. }] => {
+                                matches!(&effects[..], [TextEffect::Link(_)])
+                            }
+                            _ => false,
+                        },
                         _ => false,
-                    },
-                    _ => false,
-                };
+                    };
 
-                self.text = parsed.text;
-
-                // If the message is a single URL or has a balloon bundle ID
-                // set the components to just the app component
-                if self.balloon_bundle_id.is_some() {
-                    self.components = vec![BubbleComponent::App];
-                } else if is_single_url
-                    && self.has_blob(db, MESSAGE, MESSAGE_PAYLOAD, self.rowid.into())
-                {
-                    // This patch is to handle the case where a message is a single URL
-                    // but the `balloon_bundle_id` is not set.
-                    // This case can only hit if there was payload data provided for the preview,
-                    // but no `balloon_bundle_id` was set.
-                    self.balloon_bundle_id =
-                        Some("com.apple.messages.URLBalloonProvider".to_string());
-                    self.components = vec![BubbleComponent::App];
-                } else {
-                    self.components = parsed.components;
+                    // If the message has a balloon bundle ID or is a single URL,
+                    // set the components to just the app component
+                    if self.balloon_bundle_id.is_some() {
+                        components = vec![BubbleComponent::App];
+                    } else if is_single_url
+                        && self.has_blob(db, MESSAGE, MESSAGE_PAYLOAD, self.rowid.into())
+                    {
+                        // This patch is to handle the case where a message is a single URL
+                        // but the `balloon_bundle_id` is not set.
+                        // This case can only hit if there was payload data provided for the preview,
+                        // but no `balloon_bundle_id` was set.
+                        balloon_bundle_id =
+                            Some("com.apple.messages.URLBalloonProvider".to_string());
+                        components = vec![BubbleComponent::App];
+                    } else {
+                        components = parsed.components;
+                    }
+                }
+                None => {
+                    // Typedstream failed entirely; try self.text before legacy parser
+                    text = self.text.clone();
                 }
             }
 
-            // If the above parsing failed, fall back to the legacy parser instead
-            if self.text.is_none() {
-                self.text = Some(streamtyped::parse(body)?);
-
-                // Fallback component parser as well
-                if self.components.is_empty() {
-                    self.components = parse_body_legacy(&self.text);
-                }
+            // If neither typedstream nor self.text produced text, fall back to legacy streamtyped
+            if text.is_none()
+                && let Some(body) = self.attributed_body(db)
+            {
+                text = Some(streamtyped::parse(body)?);
             }
         }
 
-        if let Some(t) = &self.text {
-            Ok(t)
+        // If there is still no text, try and use the existing text field on the message,
+        // which may be populated for older messages or those that failed to parse as typedstream
+        let text = text.or_else(|| self.text.clone());
+
+        // The balloon bundle ID can be set in the single URL case, otherwise it should fall back to the existing balloon bundle ID on the message
+        let balloon_bundle_id = balloon_bundle_id.or_else(|| self.balloon_bundle_id.clone());
+
+        // If we got here, it means typedstream parsing failed, but we may be
+        // able to get components from the legacy parser
+        if components.is_empty() && text.is_some() {
+            components = parse_body_legacy(&text);
+        }
+
+        // Return Ok if we have text or any meaningful non-text body data
+        // (e.g., Retracted components from fully-unsent messages, or edited_parts metadata)
+        if text.is_some() || !components.is_empty() || edited_parts.is_some() {
+            Ok(ParsedBody {
+                text,
+                components,
+                edited_parts,
+                balloon_bundle_id,
+            })
         } else {
             Err(MessageError::NoText)
         }
+    }
+
+    /// Apply a [`ParsedBody`] to this message, setting its text, components,
+    /// edited parts, and balloon bundle ID.
+    pub fn apply_body(&mut self, body: ParsedBody) {
+        self.text = body.text;
+        self.components = body.components;
+        self.edited_parts = body.edited_parts;
+        self.balloon_bundle_id = body.balloon_bundle_id;
     }
 
     /// Generates the text using the legacy parser only, ignoring any typedstream data.
@@ -586,8 +662,8 @@ impl Message {
     /// This field is stored as a unix timestamp with an epoch of `2001-01-01 00:00:00` in the local time zone
     ///
     /// `offset` can be provided by [`get_offset`](crate::util::dates::get_offset) or manually.
-    pub fn date(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
-        get_local_time(&self.date, offset)
+    pub fn date(&self, offset: i64) -> Result<DateTime<Local>, MessageError> {
+        get_local_time(self.date, offset)
     }
 
     /// Calculates the date a message was marked as delivered.
@@ -595,8 +671,8 @@ impl Message {
     /// This field is stored as a unix timestamp with an epoch of `2001-01-01 00:00:00` in the local time zone
     ///
     /// `offset` can be provided by [`get_offset`](crate::util::dates::get_offset) or manually.
-    pub fn date_delivered(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
-        get_local_time(&self.date_delivered, offset)
+    pub fn date_delivered(&self, offset: i64) -> Result<DateTime<Local>, MessageError> {
+        get_local_time(self.date_delivered, offset)
     }
 
     /// Calculates the date a message was marked as read.
@@ -604,8 +680,8 @@ impl Message {
     /// This field is stored as a unix timestamp with an epoch of `2001-01-01 00:00:00` in the local time zone
     ///
     /// `offset` can be provided by [`get_offset`](crate::util::dates::get_offset) or manually.
-    pub fn date_read(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
-        get_local_time(&self.date_read, offset)
+    pub fn date_read(&self, offset: i64) -> Result<DateTime<Local>, MessageError> {
+        get_local_time(self.date_read, offset)
     }
 
     /// Calculates the date a message was most recently edited.
@@ -613,8 +689,8 @@ impl Message {
     /// This field is stored as a unix timestamp with an epoch of `2001-01-01 00:00:00` in the local time zone
     ///
     /// `offset` can be provided by [`get_offset`](crate::util::dates::get_offset) or manually.
-    pub fn date_edited(&self, offset: &i64) -> Result<DateTime<Local>, MessageError> {
-        get_local_time(&self.date_edited, offset)
+    pub fn date_edited(&self, offset: i64) -> Result<DateTime<Local>, MessageError> {
+        get_local_time(self.date_edited, offset)
     }
 
     /// Gets the time until the message was read. This can happen in two ways:
@@ -631,7 +707,7 @@ impl Message {
     ///
     /// `offset` can be provided by [`get_offset`](crate::util::dates::get_offset) or manually.
     #[must_use]
-    pub fn time_until_read(&self, offset: &i64) -> Option<String> {
+    pub fn time_until_read(&self, offset: i64) -> Option<String> {
         // Message we received
         if !self.is_from_me && self.date_read != 0 && self.date != 0 {
             return readable_diff(self.date(offset), self.date_read(offset));
@@ -698,7 +774,7 @@ impl Message {
         self.associated_message_type == Some(4000)
     }
 
-    /// `true` if the message is a [`Poll`] vote, else `false`
+    /// `true` if the message adds a new option to a [`Poll`], else `false`
     #[must_use]
     pub fn is_poll_update(&self) -> bool {
         matches!(self.variant(), Variant::PollUpdate)
@@ -1248,7 +1324,7 @@ impl Message {
     /// Determine the service the message was sent from, i.e. iMessage, SMS, IRC, etc.
     #[must_use]
     pub fn service(&'_ self) -> Service<'_> {
-        Service::from(self.service.as_deref())
+        Service::from_name(self.service.as_deref())
     }
 
     // MARK: BLOBs
@@ -1365,7 +1441,9 @@ impl Message {
     /// let conn = get_connection(&db_path).unwrap();
     ///
     /// if let Ok(mut message) = Message::from_guid("example-guid", &conn) {
-    ///     let _ = message.generate_text(&conn);
+    ///     if let Ok(body) = message.parse_body(&conn) {
+    ///         message.apply_body(body);
+    ///     }
     ///     println!("{:#?}", message)
     /// }
     ///```

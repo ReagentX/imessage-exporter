@@ -112,7 +112,7 @@ pub(crate) fn update_file_metadata(from: &Path, to: &Path, message: &Message, co
     // Update file metadata
     if let Ok(metadata) = metadata(from) {
         // The modification time is the message's date, otherwise the original file's modification time
-        let mtime = match message.date(&config.offset) {
+        let mtime = match message.date(config.offset) {
             Ok(date) => unix_to_system_time(date.timestamp(), date.timestamp_subsec_nanos())
                 .or_else(|| metadata.modified().ok()),
             Err(_) => metadata.modified().ok(),

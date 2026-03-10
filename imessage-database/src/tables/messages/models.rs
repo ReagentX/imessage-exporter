@@ -52,7 +52,7 @@ pub enum Service<'a> {
 impl<'a> Service<'a> {
     /// Creates a [`Service`] enum variant based on the provided service name string.
     #[must_use]
-    pub fn from(service: Option<&'a str>) -> Self {
+    pub fn from_name(service: Option<&'a str>) -> Self {
         if let Some(service_name) = service {
             return match service_name.trim() {
                 "iMessage" => Service::iMessage,

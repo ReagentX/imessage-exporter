@@ -31,7 +31,9 @@ fn iter_messages() -> Result<(), TableError> {
         match message_result {
             Ok(mut message) => {
                 // Deserialize the message body
-                message.generate_text(&db);
+                if let Ok(body) = message.parse_body(&db) {
+                    message.apply_body(body);
+                }
 
                 // Emit debug info for each message
                 println!("Message: {:#?}", message)

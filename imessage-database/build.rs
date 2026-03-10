@@ -4,9 +4,9 @@ Build script for protobuf-generated modules.
 Build modes:
 
 - Default build (`cargo build -p imessage-database`):
-    validates that generated protobuf Rust files are already present in the repository.
+  validates that generated protobuf Rust files are already present in the repository.
 - Regeneration build (`cargo build -p imessage-database --features proto-regen`):
-    regenerates protobuf Rust files from the `.proto` sources.
+  regenerates protobuf Rust files from the `.proto` sources.
 
 Useful commands:
 

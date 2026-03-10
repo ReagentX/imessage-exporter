@@ -63,7 +63,7 @@ pub struct Chat {
     pub chat_identifier: String,
     /// The service the chat used, i.e. iMessage, SMS, IRC, etc.
     pub service_name: Option<String>,
-    /// Optional custom name created created for the chat
+    /// Optional custom name created for the chat
     pub display_name: Option<String>,
 }
 
@@ -145,7 +145,7 @@ impl Chat {
     /// Get the service used by the chat, i.e. iMessage, SMS, IRC, etc.
     #[must_use]
     pub fn service(&'_ self) -> Service<'_> {
-        Service::from(self.service_name.as_deref())
+        Service::from_name(self.service_name.as_deref())
     }
 
     /// Get the [`Properties`] for the chat, if they exist

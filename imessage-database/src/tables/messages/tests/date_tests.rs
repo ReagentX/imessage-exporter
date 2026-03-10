@@ -18,7 +18,7 @@ mod tests {
         message.date_read = 674530231992568192;
 
         assert_eq!(
-            message.time_until_read(&offset),
+            message.time_until_read(offset),
             Some("1 hour, 49 seconds".to_string())
         );
     }
@@ -37,14 +37,14 @@ mod tests {
         // May 17, 2022  8:29:42 PM
         message.date_read = 674526582885055488;
 
-        assert_eq!(message.time_until_read(&offset), None);
+        assert_eq!(message.time_until_read(offset), None);
     }
 
     #[test]
     fn can_get_time_until_read_none() {
         let offset = get_offset();
         let m = Message::blank();
-        assert_eq!(m.time_until_read(&offset), None);
+        assert_eq!(m.time_until_read(offset), None);
     }
 
     #[test]
@@ -54,7 +54,7 @@ mod tests {
         // May 17, 2022 8:29:42 PM
         m.date_edited = 674526582885055488;
 
-        let result = m.date_edited(&offset);
+        let result = m.date_edited(offset);
         assert!(result.is_ok());
     }
 
@@ -65,7 +65,7 @@ mod tests {
         // May 17, 2022 8:29:42 PM
         m.date_delivered = 674526582885055488;
 
-        let result = m.date_delivered(&offset);
+        let result = m.date_delivered(offset);
         assert!(result.is_ok());
     }
 }

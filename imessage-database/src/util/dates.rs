@@ -47,19 +47,19 @@ pub fn get_offset() -> i64 {
 /// use imessage_database::util::dates::{get_local_time, get_offset};
 ///
 /// let current_offset = get_offset();
-/// let local = get_local_time(&674526582885055488, &current_offset).unwrap();
+/// let local = get_local_time(674526582885055488, current_offset).unwrap();
 /// ```
-pub fn get_local_time(date_stamp: &i64, offset: &i64) -> Result<DateTime<Local>, MessageError> {
+pub fn get_local_time(date_stamp: i64, offset: i64) -> Result<DateTime<Local>, MessageError> {
     // Newer databases store timestamps as nanoseconds since 2001-01-01,
     // while older ones store plain seconds since 2001-01-01.
-    let seconds_since_2001 = if *date_stamp >= 1_000_000_000_000 {
+    let seconds_since_2001 = if date_stamp >= 1_000_000_000_000 {
         date_stamp / TIMESTAMP_FACTOR
     } else {
-        *date_stamp
+        date_stamp
     };
 
     let utc_stamp = DateTime::from_timestamp(seconds_since_2001 + offset, 0)
-        .ok_or(MessageError::InvalidTimestamp(*date_stamp))?
+        .ok_or(MessageError::InvalidTimestamp(date_stamp))?
         .naive_utc();
     Ok(Local.from_utc_datetime(&utc_stamp))
 }
@@ -302,7 +302,7 @@ mod tests {
         // Older databases store seconds since 2001-01-01 00:00:00
         let stamp_secs = expected_utc.timestamp() - offset;
 
-        let local = get_local_time(&stamp_secs, &offset).unwrap();
+        let local = get_local_time(stamp_secs, offset).unwrap();
         let expected_local = expected_utc.with_timezone(&Local);
 
         assert_eq!(local, expected_local);
@@ -319,7 +319,7 @@ mod tests {
         // Newer databases store nanoseconds since 2001-01-01 00:00:00
         let stamp_ns = (expected_utc.timestamp() - offset) * TIMESTAMP_FACTOR;
 
-        let local = get_local_time(&stamp_ns, &offset).unwrap();
+        let local = get_local_time(stamp_ns, offset).unwrap();
         let expected_local = expected_utc.with_timezone(&Local);
 
         assert_eq!(local, expected_local);
@@ -334,7 +334,7 @@ mod tests {
 
         let expected_utc = Utc.timestamp_opt(stamp_secs + offset, 0).single().unwrap();
 
-        let local = get_local_time(&stamp_secs, &offset).unwrap();
+        let local = get_local_time(stamp_secs, offset).unwrap();
         let expected_local = expected_utc.with_timezone(&Local);
 
         assert_eq!(local, expected_local);
@@ -354,7 +354,7 @@ mod tests {
             .single()
             .unwrap();
 
-        let local = get_local_time(&stamp_ns, &offset).unwrap();
+        let local = get_local_time(stamp_ns, offset).unwrap();
         let expected_local = expected_utc.with_timezone(&Local);
 
         assert_eq!(local, expected_local);
