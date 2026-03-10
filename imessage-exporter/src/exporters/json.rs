@@ -171,7 +171,12 @@ impl<'a> Exporter<'a> for JSON<'a> {
                         if let Ok(att_list) =
                             Attachment::from_message(self.config.data_source.db(), &msg)
                         {
-                            for a in att_list {
+                            for mut a in att_list {
+                                // Ensure attachments are copied/converted if the attachment manager is enabled
+                                if let Some(_) = self.config.options.export_type {
+                                    // Use the configured attachment manager to handle copying/conversion
+                                    let _ = self.config.options.attachment_manager.handle_attachment(&msg, &mut a, self.config);
+                                }
                                 let path = self.config.message_attachment_path(&a);
                                 atts.push(AttachmentDto {
                                     filename: a.filename().map(|s| s.to_string()),
