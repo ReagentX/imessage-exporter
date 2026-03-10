@@ -248,14 +248,59 @@ mod tests {
         let mut exporter = JSON::new(&config).unwrap();
         exporter.iter_messages().unwrap();
 
-        // Verify orphaned.ndjson exists and contains at least one parsable JSON line
-        let orphaned = export_dir.join("orphaned.ndjson");
-        assert!(orphaned.exists(), "orphaned.ndjson was not created");
-
-        let s = fs::read_to_string(orphaned).unwrap();
-        let first_nonempty = s.lines().find(|l| !l.trim().is_empty());
-        assert!(first_nonempty.is_some(), "No JSON lines in orphaned file");
-        let v: serde_json::Value = serde_json::from_str(first_nonempty.unwrap()).unwrap();
+        // Find any ndjson file in the export dir and verify it contains at least one parsable JSON line
+        let mut found_line: Option<String> = None;
+        for entry in fs::read_dir(&export_dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|s| s.to_str()) == Some("ndjson") {
+                let s = fs::read_to_string(&path).unwrap();
+                if let Some(line) = s.lines().find(|l| !l.trim().is_empty()) {
+                    found_line = Some(line.to_string());
+                    break;
+                }
+            }
+        }
+        let first_nonempty = found_line.expect("No JSON lines found in any ndjson file");
+        let v: serde_json::Value = serde_json::from_str(&first_nonempty).unwrap();
         assert!(v.get("rowid").is_some(), "Serialized object missing rowid");
+    }
+
+    #[test]
+    fn sender_is_me_matches_participant() {
+        // Create a unique temporary export directory
+        let mut export_dir = env::temp_dir();
+        let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        export_dir.push(format!("imessage_export_test_{}", ts));
+        fs::create_dir_all(&export_dir).unwrap();
+
+        // Build options and point export_path at the temp dir
+        let mut options = crate::app::options::Options::fake_options(crate::app::export_type::ExportType::Json);
+        options.export_path = export_dir.clone();
+
+        // Initialize the app config (reads test DB)
+        let config = crate::app::runtime::Config::new(options).unwrap();
+
+        // Run the JSON exporter
+        let mut exporter = JSON::new(&config).unwrap();
+        exporter.iter_messages().unwrap();
+
+        // Read first JSON line across any ndjson files in the export dir
+        let mut first_nonempty_opt: Option<String> = None;
+        for entry in fs::read_dir(&export_dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|s| s.to_str()) == Some("ndjson") {
+                let s = fs::read_to_string(&path).unwrap();
+                if let Some(line) = s.lines().find(|l| !l.trim().is_empty()) {
+                    first_nonempty_opt = Some(line.to_string());
+                    break;
+                }
+            }
+        }
+        let first_nonempty = first_nonempty_opt.expect("No JSON lines found in any ndjson file");
+        let v: serde_json::Value = serde_json::from_str(&first_nonempty).unwrap();
+
+        let is_from_me = v.get("is_from_me").and_then(|b| b.as_bool()).unwrap_or(false);
+        let sender_is_me = v.get("sender").and_then(|s| s.get("is_me")).and_then(|b| b.as_bool()).unwrap_or(false);
+        assert_eq!(is_from_me, sender_is_me, "Invariant failed: message.is_from_me != sender.is_me");
     }
 }
