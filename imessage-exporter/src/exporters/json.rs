@@ -16,7 +16,7 @@ use imessage_database::{
             Message,
             models::GroupAction,
         },
-        table::{ME, ORPHANED, Table},
+        table::{ME, ORPHANED, UNKNOWN, Table},
     },
     util::dates::TIMESTAMP_FACTOR,
 };
@@ -106,7 +106,7 @@ impl<'a> JSON<'a> {
                     return name.details.clone();
                 }
             }
-            return handle_id.to_string();
+            return UNKNOWN.to_string();
         }
         ME.to_string()
     }
@@ -396,7 +396,14 @@ impl<'a> Exporter<'a> for JSON<'a> {
                 .config
                 .who(msg.handle_id, msg.is_from_me(), &msg.destination_caller_id)
                 .to_string();
-            let timestamp = msg.date / TIMESTAMP_FACTOR + self.config.offset;
+            // Older databases store timestamps as seconds since 2001-01-01;
+            // newer databases store nanoseconds. The guard mirrors get_local_time() in dates.rs.
+            let date_secs = if msg.date >= 1_000_000_000_000 {
+                msg.date / TIMESTAMP_FACTOR
+            } else {
+                msg.date
+            };
+            let timestamp = date_secs + self.config.offset;
             let (msg_type, content) = match self.classify(&msg) {
                 Ok(pair) => pair,
                 Err(err) => {
@@ -410,6 +417,8 @@ impl<'a> Exporter<'a> for JSON<'a> {
 
             // Extract conversation metadata (borrows config immutably)
             let conv_data = self.config.conversation(&msg).map(|(chatroom, &real_id)| {
+                // iMessage group chats always have identifiers that start with "chat";
+                // individual conversations use phone numbers or email addresses.
                 let chat_type = if chatroom.chat_identifier.starts_with("chat") {
                     "group"
                 } else {
@@ -468,7 +477,7 @@ impl<'a> Exporter<'a> for JSON<'a> {
             }
 
             current_message += 1;
-            if current_message % 99 == 0 {
+            if current_message % 100 == 0 {
                 self.pb.set_position(current_message);
             }
         }
@@ -483,6 +492,7 @@ impl<'a> Exporter<'a> for JSON<'a> {
         &mut self,
         _message: &Message,
     ) -> Result<&mut BufWriter<File>, RuntimeError> {
+        // DESIGN: The JSON exporter buffers all messages in memory and writes in write_all(). This trait method is never called.
         unreachable!("JSON exporter buffers in memory; get_or_create_file is never called")
     }
 }
@@ -523,7 +533,7 @@ mod tests {
     }
 
     #[test]
-    fn classify_fully_unsent_is_type_81() {
+    fn classify_announcement_with_no_action_falls_through_to_text() {
         let config = make_config();
         let exporter = JSON {
             config: &config,
@@ -532,15 +542,12 @@ mod tests {
             pb: ExportProgress::new(),
         };
         let mut msg = make_msg();
-        // Mark as announcement with FullyUnsent — set item_type = 0 and edited_parts
-        // The easiest way is to use associated_message_type for tapback detection test
-        // For FullyUnsent we need edited_parts. Just test that announcement path is hit:
-        msg.item_type = 4; // group action item_type triggers is_announcement via get_announcement
+        // item_type=4 marks this as a group action announcement, but group_action_type=0
+        // with no other_handle set means get_announcement() returns None, so the
+        // announcement arm falls through to the catch-all which returns TYPE_TEXT.
+        msg.item_type = 4;
         msg.group_action_type = 0;
-        // Without other_handle set, get_announcement returns None → falls through
-        // So test the tapback path instead, which is simpler to trigger:
         let (t, _) = exporter.classify(&msg).unwrap();
-        // item_type=4 with no matching group action → falls through to text
         assert_eq!(t, TYPE_TEXT);
     }
 
