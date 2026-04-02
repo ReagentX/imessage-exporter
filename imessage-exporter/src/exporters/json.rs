@@ -43,7 +43,7 @@ const GENERATOR: &str = "imessage-exporter";
 
 /// A single message in ChatLab wire format
 #[derive(Clone)]
-struct ChatLabMessage {
+pub(crate) struct ChatLabMessage {
     sender_id: String,
     account_name: String,
     timestamp: i64,
@@ -54,7 +54,7 @@ struct ChatLabMessage {
 }
 
 /// All data for one conversation, buffered during iteration
-struct ConversationBuffer {
+pub(crate) struct ConversationBuffer {
     chat_name: String,
     chat_type: &'static str, // "group" or "private"
     owner_id: String,
@@ -74,8 +74,8 @@ impl ConversationBuffer {
 
 pub struct JSON<'a> {
     pub config: &'a Config,
-    pub conversations: HashMap<i32, ConversationBuffer>,
-    pub orphaned: Vec<ChatLabMessage>,
+    pub(crate) conversations: HashMap<i32, ConversationBuffer>,
+    pub(crate) orphaned: Vec<ChatLabMessage>,
     pb: ExportProgress,
 }
 
@@ -477,7 +477,7 @@ impl<'a> Exporter<'a> for JSON<'a> {
             }
 
             current_message += 1;
-            if current_message % 100 == 0 {
+            if current_message % 99 == 0 {
                 self.pb.set_position(current_message);
             }
         }
