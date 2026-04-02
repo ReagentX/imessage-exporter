@@ -567,6 +567,9 @@ impl Config {
                 ExportType::Txt => {
                     TXT::new(self)?.iter_messages()?;
                 }
+                ExportType::Json => {
+                    todo!("JSON export not yet implemented")
+                }
             }
         }
         println!("Done!");

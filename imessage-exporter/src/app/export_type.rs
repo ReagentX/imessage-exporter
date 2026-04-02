@@ -11,6 +11,8 @@ pub enum ExportType {
     Html,
     /// Text file export
     Txt,
+    /// JSON file export (ChatLab format)
+    Json,
 }
 
 impl ExportType {
@@ -19,6 +21,7 @@ impl ExportType {
         match format.to_lowercase().as_str() {
             "txt" => Some(Self::Txt),
             "html" => Some(Self::Html),
+            "json" => Some(Self::Json),
             _ => None,
         }
     }
@@ -28,6 +31,7 @@ impl ExportType {
         match self {
             ExportType::Html => ".html",
             ExportType::Txt => ".txt",
+            ExportType::Json => ".json",
         }
     }
 }
@@ -37,6 +41,7 @@ impl Display for ExportType {
         match self {
             ExportType::Txt => write!(fmt, "txt"),
             ExportType::Html => write!(fmt, "html"),
+            ExportType::Json => write!(fmt, "json"),
         }
     }
 }
@@ -71,7 +76,22 @@ mod tests {
     #[test]
     fn cant_parse_invalid() {
         assert!(ExportType::from_cli("pdf").is_none());
-        assert!(ExportType::from_cli("json").is_none());
         assert!(ExportType::from_cli("").is_none());
+    }
+
+    #[test]
+    fn can_parse_json_any_case() {
+        assert!(matches!(
+            ExportType::from_cli("json"),
+            Some(ExportType::Json)
+        ));
+        assert!(matches!(
+            ExportType::from_cli("JSON"),
+            Some(ExportType::Json)
+        ));
+        assert!(matches!(
+            ExportType::from_cli("JsOn"),
+            Some(ExportType::Json)
+        ));
     }
 }
