@@ -27,7 +27,7 @@ use imessage_database::{
 };
 
 use crate::{
-    Exporter, HTML, TXT,
+    Exporter, HTML, JSON, TXT,
     app::{
         compatibility::attachment_manager::AttachmentManagerMode, contacts::Name,
         data_source::DataSource, error::RuntimeError, export_type::ExportType, options::Options,
@@ -568,7 +568,7 @@ impl Config {
                     TXT::new(self)?.iter_messages()?;
                 }
                 ExportType::Json => {
-                    todo!("JSON export not yet implemented")
+                    JSON::new(self)?.iter_messages()?;
                 }
             }
         }
