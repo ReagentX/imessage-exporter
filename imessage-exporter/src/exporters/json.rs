@@ -417,8 +417,15 @@ impl<'a> Exporter<'a> for JSON<'a> {
                 };
                 let chat_name = chatroom
                     .display_name()
-                    .unwrap_or(&chatroom.chat_identifier)
-                    .to_string();
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| {
+                        // config.filename() includes the ".json" extension; strip it for the
+                        // human-readable meta.name field.
+                        let full = self.config.filename(chatroom);
+                        full.strip_suffix(".json")
+                            .unwrap_or(&full)
+                            .to_string()
+                    });
                 let owner_id = Self::owner_id(self.config, &msg);
                 let owner_name = self
                     .config
