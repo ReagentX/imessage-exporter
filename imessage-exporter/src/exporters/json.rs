@@ -79,6 +79,30 @@ pub struct JSON<'a> {
     pb: ExportProgress,
 }
 
+// ─── Attachment formatting helpers ───────────────────────────────────────────
+
+/// Human-readable label for an attachment-bearing message type.
+fn content_label(t: u8) -> &'static str {
+    match t {
+        TYPE_IMAGE => "[Image]",
+        TYPE_VOICE => "[Voice]",
+        TYPE_VIDEO => "[Video]",
+        TYPE_FILE  => "[File]",
+        TYPE_EMOJI => "[Sticker]",
+        _          => "[Other]",
+    }
+}
+
+/// Compose `content` for an attachment-bearing message: `"[Label] <path>"` if the path is
+/// non-empty, otherwise just `"[Label]"`.
+fn compose_attachment_content(t: u8, path: Option<&str>) -> String {
+    let label = content_label(t);
+    match path {
+        Some(p) if !p.is_empty() => format!("{label} {p}"),
+        _ => label.to_string(),
+    }
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 impl<'a> JSON<'a> {
@@ -144,19 +168,41 @@ impl<'a> JSON<'a> {
         }
 
         // Attachment-based messages
-        let attachments = Attachment::from_message(self.config.data_source.db(), msg)?;
-        if let Some(first) = attachments.first() {
-            if first.is_sticker {
-                let path = self.config.message_attachment_path(first);
-                return Ok((TYPE_EMOJI, Some(path)));
-            }
-            let t = match first.mime_type() {
-                MediaType::Image(_) => TYPE_IMAGE,
-                MediaType::Audio(_) => TYPE_VOICE,
-                MediaType::Video(_) => TYPE_VIDEO,
-                _ => TYPE_FILE,
+        let mut attachments = Attachment::from_message(self.config.data_source.db(), msg)?;
+        if let Some(first) = attachments.first_mut() {
+            // Copy/transcode the file (no-op when -c disabled)
+            let _ = self.config.options.attachment_manager.handle_attachment(
+                msg,
+                first,
+                self.config,
+            );
+
+            let t = if first.is_sticker {
+                TYPE_EMOJI
+            } else {
+                match first.mime_type() {
+                    MediaType::Image(_) => TYPE_IMAGE,
+                    MediaType::Audio(_) => TYPE_VOICE,
+                    MediaType::Video(_) => TYPE_VIDEO,
+                    _ => TYPE_FILE,
+                }
             };
-            return Ok((t, Some(self.config.message_attachment_path(first))));
+
+            // Use the relative path when the file was copied; otherwise just the filename.
+            let path_str: Option<String> = if first.copied_path.is_some() {
+                Some(self.config.message_attachment_path(first))
+            } else {
+                first.filename().map(|s| {
+                    // Strip directory components to avoid leaking source paths
+                    std::path::Path::new(s)
+                        .file_name()
+                        .and_then(|os| os.to_str())
+                        .unwrap_or(s)
+                        .to_string()
+                })
+            };
+
+            return Ok((t, Some(compose_attachment_content(t, path_str.as_deref()))));
         }
 
         // Plain text
@@ -512,6 +558,51 @@ mod tests {
 
     fn make_msg() -> Message {
         Config::fake_message()
+    }
+
+    // ── content_label / compose_attachment_content ───────────────────────────
+
+    #[test]
+    fn label_for_image_is_bracket_image() {
+        assert_eq!(content_label(TYPE_IMAGE), "[Image]");
+    }
+
+    #[test]
+    fn label_for_voice_is_bracket_voice() {
+        assert_eq!(content_label(TYPE_VOICE), "[Voice]");
+    }
+
+    #[test]
+    fn label_for_video_is_bracket_video() {
+        assert_eq!(content_label(TYPE_VIDEO), "[Video]");
+    }
+
+    #[test]
+    fn label_for_file_is_bracket_file() {
+        assert_eq!(content_label(TYPE_FILE), "[File]");
+    }
+
+    #[test]
+    fn label_for_sticker_is_bracket_sticker() {
+        assert_eq!(content_label(TYPE_EMOJI), "[Sticker]");
+    }
+
+    #[test]
+    fn compose_attachment_content_with_path() {
+        assert_eq!(
+            compose_attachment_content(TYPE_IMAGE, Some("attachments/12/8421.jpeg")),
+            "[Image] attachments/12/8421.jpeg"
+        );
+    }
+
+    #[test]
+    fn compose_attachment_content_without_path() {
+        assert_eq!(compose_attachment_content(TYPE_IMAGE, None), "[Image]");
+    }
+
+    #[test]
+    fn compose_attachment_content_with_empty_path_string() {
+        assert_eq!(compose_attachment_content(TYPE_IMAGE, Some("")), "[Image]");
     }
 
     // ── classify: type code mapping ──────────────────────────────────────────
