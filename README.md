@@ -18,7 +18,7 @@ This free and open-source software can:
 
 ## Binary
 
-The `imessage-exporter` binary exports iMessage data to `txt` or `html` formats. It can also run diagnostics to find problems with the iMessage database.
+The `imessage-exporter` binary exports iMessage data to `txt`, `html`, or `json` formats. The `json` format follows the [ChatLab](https://chatlab.fun) v0.0.2 standard. It can also run diagnostics to find problems with the iMessage database.
 
 Installation instructions for the binary are located [here](imessage-exporter/README.md).
 

@@ -98,7 +98,7 @@ Messages that cannot be associated with any conversation are written to `orphane
 
 ## What export formats are supported? Can I export to PDF?
 
-`imessage-exporter` supports `txt` and `html` export formats. There is no native PDF export, but you can export as HTML and then print to PDF from Safari. Use the `--no-lazy` flag when exporting for PDF, as it disables lazy-loading of images which is required for the print-to-PDF workflow to include all images.
+`imessage-exporter` supports `txt`, `html`, and `json` export formats. The `json` format follows the [ChatLab](https://chatlab.fun) v0.0.2 standard, producing one JSON file per conversation with a `meta` / `members` / `messages` structure, suitable for downstream chat-analytics tools. There is no native PDF export, but you can export as HTML and then print to PDF from Safari. Use the `--no-lazy` flag when exporting for PDF, as it disables lazy-loading of images which is required for the print-to-PDF workflow to include all images.
 
 ***
 

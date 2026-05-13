@@ -1,6 +1,6 @@
 # Binary Documentation
 
-The `imessage-exporter` binary exports iMessage data to `txt` or `html` formats. It can also run diagnostics to find problems with the iMessage database.
+The `imessage-exporter` binary exports iMessage data to `txt`, `html`, or `json` formats. The `json` format follows the [ChatLab](https://chatlab.fun) v0.0.2 standard. It can also run diagnostics to find problems with the iMessage database.
 
 ## Installation
 
@@ -47,8 +47,9 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
 -d, --diagnostics
         Print diagnostic information and exit
         
--f, --format <txt, html>
+-f, --format <txt, html, json>
         Specify a single file format to export messages into
+        `json` produces files compatible with the ChatLab v0.0.2 standard format
         
 -c, --copy-method <clone, basic, full, disabled>
         Specify an optional method to use when copying message attachments
@@ -122,6 +123,11 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         This should be resolved automatically, but can be manually provided
         Handles from the messages table will be mapped to names in the provided database
         Generally, one of `AddressBook-v22.abcddb` or `AddressBook.sqlitedb`
+
+    --embed-avatars <true|false>
+        Embed contact and group avatars as base64 Data URLs in JSON export
+        Applies only to `-f json`; passing it with any other format is an error
+        Defaults to `true`
         
 -h, --help
         Print help
@@ -195,6 +201,18 @@ Export messages from participants using email addresses but not phone numbers as
 
 ```zsh
 imessage-exporter -f html -t "@"
+```
+
+Export as `json` (ChatLab v0.0.2 standard format) and copy attachments to a sibling `attachments/` folder, embedding contact and group avatars inline as base64 Data URLs:
+
+```zsh
+imessage-exporter -f json -c clone -o ~/imessage_export_json
+```
+
+Export as `json` without copying attachments and without embedding avatars (smallest output, paths use bare filenames):
+
+```zsh
+imessage-exporter -f json --embed-avatars=false -o ~/imessage_export_json
 ```
 
 ## Features

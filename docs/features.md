@@ -131,3 +131,19 @@ This tool targets the current latest public release for Messages.app. It may wor
     - Chat participant modifications
     - Phone number changes
     - Chat background settings
+
+## Export Formats
+
+- TXT (`-f txt`)
+  - One file per conversation, plain text
+  - Attachments referenced by path (and copied alongside when `-c` is set)
+- HTML (`-f html`)
+  - One file per conversation, with embedded `<img>` / `<video>` / `<audio>` for media
+  - Configurable lazy loading; `--no-lazy` for print-to-PDF workflows
+- JSON (`-f json`)
+  - Implements the [ChatLab](https://chatlab.fun) v0.0.2 standard format
+  - One JSON file per conversation, with `chatlab` / `meta` / `members` / `messages` sections
+  - Message `type` codes follow the ChatLab enum (`0` text, `1` image, `2` voice, `3` video, `4` file, `5` sticker, `7` link, `23` call, `80` system, `81` recall, `99` other)
+  - Media-bearing messages use labeled placeholders in `content`: `[Image] attachments/12/8421.jpeg`, `[Voice] msg.caf — Transcription: hello`, etc.
+  - Attachment files are copied to `<export>/attachments/<chat_id>/<rowid>.<ext>` when `-c clone|basic|full` is set (matching `html`/`txt` behavior)
+  - `--embed-avatars` (default `true`) inlines contact avatars in `members[].avatar` and the group photo in `meta.groupAvatar` as base64 Data URLs; HEIC/TIFF are transcoded to JPEG via the existing converter pipeline
