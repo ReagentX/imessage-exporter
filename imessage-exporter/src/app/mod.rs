@@ -1,3 +1,4 @@
+pub mod avatar;
 pub mod compatibility;
 pub mod contacts;
 pub mod data_source;
