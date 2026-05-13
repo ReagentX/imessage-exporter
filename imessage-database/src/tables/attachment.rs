@@ -137,6 +137,23 @@ impl Table for Attachment {
 
 // MARK: Impl
 impl Attachment {
+    /// Look up a single attachment by its GUID.
+    ///
+    /// Used by the JSON exporter to resolve `chat.properties.group_photo_guid`
+    /// to a concrete attachment row for the group's avatar image.
+    pub fn from_guid(
+        db: &Connection,
+        guid: &str,
+    ) -> Result<Option<Self>, crate::error::table::TableError> {
+        use crate::tables::table::Table;
+        let mut stmt = db.prepare("SELECT * FROM attachment WHERE guid = ?1 LIMIT 1")?;
+        let mut rows = stmt.query_map([guid], |row| Ok(Self::from_row(row)))?;
+        match rows.next() {
+            Some(row_result) => Ok(Some(Self::extract(row_result)?)),
+            None => Ok(None),
+        }
+    }
+
     /// Gets a Vector of attachments associated with a single message
     ///
     /// The order of the attachments aligns with the order of the [`BubbleComponent::Attachment`](crate::tables::messages::models::BubbleComponent::Attachment)s in the message's [`attributed_body()`](crate::tables::messages::message::Message::attributed_body).
@@ -939,5 +956,17 @@ mod tests {
         attachment.total_bytes = i64::MAX;
 
         assert_eq!(attachment.file_size(), String::from("8388608.00 TB"));
+    }
+
+    #[test]
+    fn from_guid_returns_none_when_no_match() {
+        let db_path = current_dir()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("imessage-database/test_data/db/test.db");
+        let db = get_connection(&db_path).unwrap();
+        let result = Attachment::from_guid(&db, "DOES-NOT-EXIST-0000").unwrap();
+        assert!(result.is_none());
     }
 }
