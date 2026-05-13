@@ -42,6 +42,7 @@ pub const OPTION_USE_CALLER_ID: &str = "use-caller-id";
 pub const OPTION_CONVERSATION_FILTER: &str = "conversation-filter";
 pub const OPTION_CLEARTEXT_PASSWORD: &str = "cleartext-password";
 pub const OPTION_CUSTOM_CONTACTS_DB_PATH: &str = "contacts-path";
+pub const OPTION_EMBED_AVATARS: &str = "embed-avatars";
 
 // Other CLI Text
 pub const SUPPORTED_FILE_TYPES: &str = "txt, html, json";
@@ -86,6 +87,8 @@ pub struct Options {
     pub cleartext_password: Option<String>,
     /// An optional path to a custom contacts database
     pub contacts_path: Option<PathBuf>,
+    /// Whether to embed contact and group avatars as base64 Data URLs in JSON export
+    pub embed_avatars: bool,
 }
 
 // MARK: Validation
@@ -251,6 +254,22 @@ impl Options {
         // Validate the provided export path
         let export_path = validate_path(user_export_path, export_type.as_ref())?;
 
+        // Default: on. Only meaningful for -f json, but parse it the same way regardless;
+        // cross-flag validation happens below.
+        let embed_avatars = match args.get_one::<bool>(OPTION_EMBED_AVATARS).copied() {
+            Some(value) => value,
+            None => true,
+        };
+
+        // --embed-avatars only applies to -f json
+        if args.get_one::<bool>(OPTION_EMBED_AVATARS).is_some()
+            && !matches!(export_type, Some(ExportType::Json))
+        {
+            return Err(RuntimeError::InvalidOptions(format!(
+                "{OPTION_EMBED_AVATARS} only applies when using `-f json`"
+            )));
+        }
+
         Ok(Options {
             db_path,
             attachment_root: attachment_root.cloned(),
@@ -267,6 +286,7 @@ impl Options {
             conversation_filter: conversation_filter.cloned(),
             cleartext_password: cleartext_password.cloned(),
             contacts_path: contacts_path.cloned().map(PathBuf::from),
+            embed_avatars,
         })
     }
 
@@ -463,6 +483,15 @@ fn get_command() -> Command {
                 .display_order(15)
                 .value_name("path"),
         )
+        .arg(
+            Arg::new(OPTION_EMBED_AVATARS)
+                .long(OPTION_EMBED_AVATARS)
+                .help("Embed contact and group avatars as base64 Data URLs in JSON export\nApplies only to -f json. Default: true\n")
+                .required(false)
+                .value_parser(clap::value_parser!(bool))
+                .action(ArgAction::Set)
+                .display_order(16),
+        )
 }
 
 #[cfg(test)]
@@ -488,6 +517,7 @@ impl Options {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            embed_avatars: true,
         }
     }
 }
@@ -537,6 +567,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            embed_avatars: true,
         };
 
         assert_eq!(actual, expected);
@@ -620,6 +651,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            embed_avatars: true,
         };
 
         assert_eq!(actual, expected);
@@ -654,6 +686,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            embed_avatars: true,
         };
 
         assert_eq!(actual, expected);
@@ -734,6 +767,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            embed_avatars: true,
         };
 
         assert_eq!(actual, expected);
@@ -773,6 +807,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: Some("password".to_string()),
             contacts_path: None,
+            embed_avatars: true,
         };
 
         assert_eq!(actual, expected);
@@ -828,6 +863,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            embed_avatars: true,
         };
 
         assert_eq!(actual, expected);
@@ -859,6 +895,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            embed_avatars: true,
         };
 
         assert_eq!(actual, expected);
@@ -891,6 +928,7 @@ mod arg_tests {
             conversation_filter: Some(String::from("steve@apple.com")),
             cleartext_password: None,
             contacts_path: None,
+            embed_avatars: true,
         };
 
         assert_eq!(actual, expected);
@@ -922,6 +960,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            embed_avatars: true,
         };
 
         assert_eq!(actual, expected);
@@ -953,6 +992,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            embed_avatars: true,
         };
 
         assert_eq!(actual, expected);
@@ -1026,6 +1066,7 @@ mod arg_tests {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
+            embed_avatars: true,
         };
 
         assert_eq!(actual, expected);
@@ -1041,6 +1082,31 @@ mod arg_tests {
     fn cant_build_option_invalid_contacts_path() {
         let args = get_command().get_matches_from(["imessage-exporter", "-n", "/does/not/exist"]);
         assert!(Options::from_args(&args).is_err());
+    }
+
+    #[test]
+    fn embed_avatars_default_is_true() {
+        let opts = Options::fake_options(crate::app::export_type::ExportType::Json);
+        assert!(opts.embed_avatars);
+    }
+
+    #[test]
+    fn embed_avatars_off_when_explicitly_disabled() {
+        let mut opts = Options::fake_options(crate::app::export_type::ExportType::Json);
+        opts.embed_avatars = false;
+        assert!(!opts.embed_avatars);
+    }
+
+    #[test]
+    fn embed_avatars_with_html_export_is_error() {
+        let cli_matches = get_command().get_matches_from(vec![
+            "imessage-exporter",
+            "-f", "html",
+            "-o", "/tmp/foo",
+            "--embed-avatars=true",
+        ]);
+        let result = Options::from_args(&cli_matches);
+        assert!(result.is_err(), "expected --embed-avatars with -f html to error");
     }
 }
 
