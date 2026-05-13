@@ -95,27 +95,67 @@ fn content_label(t: u8) -> &'static str {
     }
 }
 
-/// Compose `content` for an attachment-bearing message: `"[Label] <path>"` if the path is
-/// non-empty, otherwise just `"[Label]"`.
-fn compose_attachment_content(t: u8, path: Option<&str>) -> String {
+/// Compose `content` for an attachment-bearing message.
+///
+/// Shape: `"[Label]"`, optionally followed by `" <path>"`, optionally followed by
+/// `" \u{2014} <caption>"` when the user typed text alongside the attachment.
+fn compose_attachment_content(t: u8, path: Option<&str>, caption: Option<&str>) -> String {
     let label = content_label(t);
-    match path {
+    let mut out = match path {
         Some(p) if !p.is_empty() => format!("{label} {p}"),
         _ => label.to_string(),
+    };
+    if let Some(c) = caption
+        && !c.is_empty()
+    {
+        out.push_str(" \u{2014} ");
+        out.push_str(c);
     }
+    out
 }
 
-/// Compose voice-message `content` with an optional transcription suffix.
-fn compose_voice_content(path: &str, transcription: Option<&str>) -> String {
+/// Compose voice-message `content` with an optional transcription suffix and an optional
+/// user-typed caption (rare — voice messages usually have no accompanying text).
+fn compose_voice_content(
+    path: &str,
+    transcription: Option<&str>,
+    caption: Option<&str>,
+) -> String {
     let label = content_label(TYPE_VOICE);
-    let base = if path.is_empty() {
+    let mut out = if path.is_empty() {
         label.to_string()
     } else {
         format!("{label} {path}")
     };
-    match transcription {
-        Some(t) if !t.is_empty() => format!("{base} \u{2014} Transcription: {t}"),
-        _ => base,
+    if let Some(t) = transcription
+        && !t.is_empty()
+    {
+        out.push_str(" \u{2014} Transcription: ");
+        out.push_str(t);
+    }
+    if let Some(c) = caption
+        && !c.is_empty()
+    {
+        out.push_str(" \u{2014} ");
+        out.push_str(c);
+    }
+    out
+}
+
+/// Extract a human-readable caption from a message's text, stripping Object Replacement
+/// Characters (`U+FFFC`) that mark attachment positions and collapsing surrounding
+/// whitespace.  Returns `None` if nothing is left after cleanup.
+fn caption_from_message(msg: &Message) -> Option<String> {
+    let raw = msg.text.as_deref()?;
+    let cleaned: String = raw
+        .replace('\u{FFFC}', " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if cleaned.is_empty() {
+        None
+    } else {
+        Some(cleaned)
     }
 }
 
@@ -185,13 +225,19 @@ impl<'a> JSON<'a> {
 
         // Attachment-based messages
         let mut attachments = Attachment::from_message(self.config.data_source.db(), msg)?;
-        if let Some(first) = attachments.first_mut() {
-            // Copy/transcode the file (no-op when -c disabled)
-            let _ = self.config.options.attachment_manager.handle_attachment(
-                msg,
-                first,
-                self.config,
-            );
+        if !attachments.is_empty() {
+            // Copy/transcode EVERY attachment (no-op when -c disabled) so multi-attachment
+            // messages don't silently lose files alongside the JSON.  ChatLab `content` is
+            // a single string field, so classification below uses the first attachment as
+            // the representative.
+            for att in attachments.iter_mut() {
+                let _ = self.config.options.attachment_manager.handle_attachment(
+                    msg,
+                    att,
+                    self.config,
+                );
+            }
+            let first = &attachments[0];
 
             let t = if first.is_sticker {
                 TYPE_EMOJI
@@ -218,6 +264,11 @@ impl<'a> JSON<'a> {
                 })
             };
 
+            // Preserve user-typed text that accompanies the attachment (e.g. "look at this"
+            // sent with a photo).  Object Replacement Characters that mark attachment
+            // positions in the body are stripped.
+            let caption = caption_from_message(msg);
+
             // For voice, also look up the transcription from the parsed body
             if t == TYPE_VOICE {
                 let transcription = msg.components.iter().find_map(|c| {
@@ -227,11 +278,22 @@ impl<'a> JSON<'a> {
                         None
                     }
                 });
-                let content = compose_voice_content(path_str.as_deref().unwrap_or(""), transcription);
+                let content = compose_voice_content(
+                    path_str.as_deref().unwrap_or(""),
+                    transcription,
+                    caption.as_deref(),
+                );
                 return Ok((TYPE_VOICE, Some(content)));
             }
 
-            return Ok((t, Some(compose_attachment_content(t, path_str.as_deref()))));
+            return Ok((
+                t,
+                Some(compose_attachment_content(
+                    t,
+                    path_str.as_deref(),
+                    caption.as_deref(),
+                )),
+            ));
         }
 
         // Plain text
@@ -678,19 +740,77 @@ mod tests {
     #[test]
     fn compose_attachment_content_with_path() {
         assert_eq!(
-            compose_attachment_content(TYPE_IMAGE, Some("attachments/12/8421.jpeg")),
+            compose_attachment_content(TYPE_IMAGE, Some("attachments/12/8421.jpeg"), None),
             "[Image] attachments/12/8421.jpeg"
         );
     }
 
     #[test]
+    fn compose_attachment_content_with_path_and_caption() {
+        assert_eq!(
+            compose_attachment_content(
+                TYPE_IMAGE,
+                Some("attachments/12/8421.jpeg"),
+                Some("look at this")
+            ),
+            "[Image] attachments/12/8421.jpeg \u{2014} look at this"
+        );
+    }
+
+    #[test]
+    fn compose_attachment_content_caption_only_no_path() {
+        assert_eq!(
+            compose_attachment_content(TYPE_FILE, None, Some("important")),
+            "[File] \u{2014} important"
+        );
+    }
+
+    #[test]
+    fn compose_attachment_content_empty_caption_treated_as_none() {
+        assert_eq!(
+            compose_attachment_content(TYPE_IMAGE, Some("x.jpg"), Some("")),
+            "[Image] x.jpg"
+        );
+    }
+
+    #[test]
     fn compose_attachment_content_without_path() {
-        assert_eq!(compose_attachment_content(TYPE_IMAGE, None), "[Image]");
+        assert_eq!(compose_attachment_content(TYPE_IMAGE, None, None), "[Image]");
     }
 
     #[test]
     fn compose_attachment_content_with_empty_path_string() {
-        assert_eq!(compose_attachment_content(TYPE_IMAGE, Some("")), "[Image]");
+        assert_eq!(compose_attachment_content(TYPE_IMAGE, Some(""), None), "[Image]");
+    }
+
+    // ── caption_from_message ─────────────────────────────────────────────────
+
+    #[test]
+    fn caption_from_message_strips_replacement_chars() {
+        let mut msg = make_msg();
+        msg.text = Some("\u{FFFC}look at this\u{FFFC}".to_string());
+        assert_eq!(caption_from_message(&msg).as_deref(), Some("look at this"));
+    }
+
+    #[test]
+    fn caption_from_message_collapses_whitespace_around_attachments() {
+        let mut msg = make_msg();
+        msg.text = Some("hey \u{FFFC} look \u{FFFC} cool".to_string());
+        assert_eq!(caption_from_message(&msg).as_deref(), Some("hey look cool"));
+    }
+
+    #[test]
+    fn caption_from_message_returns_none_for_attachment_only_text() {
+        let mut msg = make_msg();
+        msg.text = Some("\u{FFFC}\u{FFFC}".to_string());
+        assert_eq!(caption_from_message(&msg), None);
+    }
+
+    #[test]
+    fn caption_from_message_returns_none_when_text_missing() {
+        let mut msg = make_msg();
+        msg.text = None;
+        assert_eq!(caption_from_message(&msg), None);
     }
 
     // ── classify: type code mapping ──────────────────────────────────────────
@@ -844,15 +964,35 @@ mod tests {
     #[test]
     fn compose_voice_content_with_transcription_appends_suffix() {
         assert_eq!(
-            compose_voice_content("attachments/12/8422.caf", Some("on my way")),
+            compose_voice_content("attachments/12/8422.caf", Some("on my way"), None),
             "[Voice] attachments/12/8422.caf — Transcription: on my way"
+        );
+    }
+
+    #[test]
+    fn compose_voice_content_with_caption_appends_after_transcription() {
+        assert_eq!(
+            compose_voice_content(
+                "attachments/12/8422.caf",
+                Some("on my way"),
+                Some("see you soon")
+            ),
+            "[Voice] attachments/12/8422.caf — Transcription: on my way — see you soon"
+        );
+    }
+
+    #[test]
+    fn compose_voice_content_with_caption_only_no_transcription() {
+        assert_eq!(
+            compose_voice_content("path.caf", None, Some("note")),
+            "[Voice] path.caf — note"
         );
     }
 
     #[test]
     fn compose_voice_content_no_transcription_uses_plain_label() {
         assert_eq!(
-            compose_voice_content("attachments/12/8422.caf", None),
+            compose_voice_content("attachments/12/8422.caf", None, None),
             "[Voice] attachments/12/8422.caf"
         );
     }
@@ -860,7 +1000,7 @@ mod tests {
     #[test]
     fn compose_voice_content_empty_path_still_appends_transcription() {
         assert_eq!(
-            compose_voice_content("", Some("hi")),
+            compose_voice_content("", Some("hi"), None),
             "[Voice] — Transcription: hi"
         );
     }
