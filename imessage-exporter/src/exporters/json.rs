@@ -175,7 +175,11 @@ impl<'a> JSON<'a> {
         }
     }
 
-    /// Sender's platform ID: owner ID for outgoing, Handle.id for incoming
+    /// Sender's platform ID: owner ID for outgoing, Handle.id for incoming.
+    ///
+    /// Incoming messages with no `handle_id` (rare — shared-location notifications and
+    /// some app/URL bubbles fall into this bucket) get attributed to `UNKNOWN`, never
+    /// to the owner, since `is_from_me == false` rules out the owner conclusively.
     fn sender_platform_id(&self, msg: &Message) -> String {
         if msg.is_from_me() {
             return Self::owner_id(self.config, msg);
@@ -186,9 +190,8 @@ impl<'a> JSON<'a> {
                     return name.details.clone();
                 }
             }
-            return UNKNOWN.to_string();
         }
-        ME.to_string()
+        UNKNOWN.to_string()
     }
 
     /// Classify a message into a (ChatLab type code, content string) pair.
@@ -829,6 +832,24 @@ mod tests {
         let (t, content) = exporter.classify(&msg).unwrap();
         assert_eq!(t, TYPE_TEXT);
         assert_eq!(content, Some("hello".to_string()));
+    }
+
+    #[test]
+    fn sender_platform_id_returns_unknown_for_incoming_without_handle_id() {
+        // An incoming message (is_from_me == false) with no handle_id must never be
+        // attributed to the owner.  Examples: shared-location notifications, some app
+        // and URL bubbles that the iMessage database materializes without a sender row.
+        let config = make_config();
+        let exporter = JSON {
+            config: &config,
+            conversations: HashMap::new(),
+            orphaned: Vec::new(),
+            pb: ExportProgress::new(),
+        };
+        let mut msg = make_msg();
+        msg.is_from_me = false;
+        msg.handle_id = None;
+        assert_eq!(exporter.sender_platform_id(&msg), UNKNOWN);
     }
 
     #[test]
