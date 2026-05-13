@@ -155,17 +155,28 @@ impl ContactsIndex {
     }
 
     // MARK: macOS
-    /// Build contacts index from macOS Contacts database
+    /// Build contacts index from macOS Contacts database.
+    ///
+    /// `ZABCDIMAGE` is joined when available (modern macOS schemas) so each contact
+    /// can carry its avatar; older fixtures without that table still load names.
     fn build_from_macos(conn: &Connection) -> Result<Self> {
         let mut index = HashMap::new();
 
-        let mut stmt = conn.prepare(
+        let with_images = table_exists(conn, "ZABCDIMAGE");
+        let sql = if with_images {
             "SELECT r.ZFIRSTNAME, r.ZLASTNAME, p.ZFULLNUMBER, e.ZADDRESSNORMALIZED, img.ZIMAGEDATA
              FROM ZABCDRECORD AS r
              LEFT JOIN ZABCDPHONENUMBER AS p ON r.Z_PK = p.ZOWNER
              LEFT JOIN ZABCDEMAILADDRESS AS e ON r.Z_PK = e.ZOWNER
-             LEFT JOIN ZABCDIMAGE         AS img ON r.Z_PK = img.ZOWNER",
-        )?;
+             LEFT JOIN ZABCDIMAGE         AS img ON r.Z_PK = img.ZOWNER"
+        } else {
+            "SELECT r.ZFIRSTNAME, r.ZLASTNAME, p.ZFULLNUMBER, e.ZADDRESSNORMALIZED
+             FROM ZABCDRECORD AS r
+             LEFT JOIN ZABCDPHONENUMBER AS p ON r.Z_PK = p.ZOWNER
+             LEFT JOIN ZABCDEMAILADDRESS AS e ON r.Z_PK = e.ZOWNER"
+        };
+
+        let mut stmt = conn.prepare(sql)?;
 
         let mut rows = stmt.query([])?;
         while let Some(row) = rows.next()? {
@@ -175,10 +186,12 @@ impl ContactsIndex {
             );
 
             if let Some(mut name) = name {
-                // Image data is in column 4 (after first/last/phone/email)
-                if let Ok(Some(img_bytes)) = row.get::<_, Option<Vec<u8>>>(4) {
-                    if !img_bytes.is_empty() {
-                        name.avatar_bytes = Some(img_bytes);
+                if with_images {
+                    // Image data is in column 4 (after first/last/phone/email)
+                    if let Ok(Some(img_bytes)) = row.get::<_, Option<Vec<u8>>>(4) {
+                        if !img_bytes.is_empty() {
+                            name.avatar_bytes = Some(img_bytes);
+                        }
                     }
                 }
 
