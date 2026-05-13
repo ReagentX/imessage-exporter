@@ -14,3 +14,7 @@
 - New `Attachment::from_guid(db, guid)` lookup in `imessage-database`.
 - `Name` (in `contacts.rs`) now carries optional `avatar_bytes` populated from `ZABCDIMAGE` (macOS) or `ABImage` (iOS).
 - `ContactsIndex` gains a `get_avatar(handle_id)` helper that returns the borrowed bytes without cloning.
+
+### Known Limitations
+- Some modern macOS AddressBook schemas don't have a `ZABCDIMAGE` table at all — instead they may use `ZABCDLIKENESS` or store contact photos as external blob files under `.AddressBook-v22_SUPPORT/_EXTERNAL_DATA/`. In those cases this release falls back gracefully (names still load, avatars stay empty). Broader avatar source support is a follow-up.
+- iOS `ABMultiValue.property` numbers for phone/email (3/4) are best-effort; if a backup's schema differs, the iOS avatar pass silently returns zero results.
