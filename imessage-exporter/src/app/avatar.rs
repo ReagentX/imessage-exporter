@@ -77,16 +77,10 @@ fn encode_data_url(mime: ImageMime, bytes: &[u8]) -> String {
     format!("data:{};base64,{}", mime.as_str(), STANDARD.encode(bytes))
 }
 
-/// Convert raw image bytes to a base64 Data URL.  Returns `None` if the format is unrecognized
-/// or (for HEIC/TIFF) no converter is available.  For transcoding support, use
-/// [`bytes_to_data_url_with_converter`].
-pub fn bytes_to_data_url(bytes: &[u8]) -> Option<String> {
-    bytes_to_data_url_with_converter(bytes, None)
-}
-
 use crate::app::compatibility::models::ImageConverter;
 
-/// Variant of [`bytes_to_data_url`] that can transcode HEIC/TIFF input to JPEG via
+/// Convert raw image bytes to a base64 Data URL.  Returns `None` if the format is unrecognized
+/// or HEIC/TIFF input is given without a converter.  Can transcode HEIC/TIFF input to JPEG via
 /// the system image converter.  Returns `None` if the format is unrecognized, or
 /// HEIC/TIFF input is given without a converter available, or transcoding fails.
 pub fn bytes_to_data_url_with_converter(
@@ -202,7 +196,7 @@ mod tests {
     #[test]
     fn bytes_to_data_url_jpeg_round_trips() {
         let bytes = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, b'J', b'F', b'I', b'F', 0, 0];
-        let url = bytes_to_data_url(&bytes).unwrap();
+        let url = bytes_to_data_url_with_converter(&bytes, None).unwrap();
         assert!(url.starts_with("data:image/jpeg;base64,"));
         // Decode the base64 portion and verify it matches the input
         use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -215,13 +209,13 @@ mod tests {
     fn bytes_to_data_url_heic_returns_none_without_transcoder() {
         // Until Task 4 lifts this limit, HEIC bytes can't become a Data URL.
         let bytes = *b"\x00\x00\x00\x18ftypheic";
-        assert_eq!(bytes_to_data_url(&bytes), None);
+        assert_eq!(bytes_to_data_url_with_converter(&bytes, None), None);
     }
 
     #[test]
     fn bytes_to_data_url_unknown_returns_none() {
         let bytes = [0u8; 16];
-        assert_eq!(bytes_to_data_url(&bytes), None);
+        assert_eq!(bytes_to_data_url_with_converter(&bytes, None), None);
     }
 
     #[test]
