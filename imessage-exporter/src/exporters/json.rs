@@ -103,6 +103,20 @@ fn compose_attachment_content(t: u8, path: Option<&str>) -> String {
     }
 }
 
+/// Compose voice-message `content` with an optional transcription suffix.
+fn compose_voice_content(path: &str, transcription: Option<&str>) -> String {
+    let label = content_label(TYPE_VOICE);
+    let base = if path.is_empty() {
+        label.to_string()
+    } else {
+        format!("{label} {path}")
+    };
+    match transcription {
+        Some(t) if !t.is_empty() => format!("{base} \u{2014} Transcription: {t}"),
+        _ => base,
+    }
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 impl<'a> JSON<'a> {
@@ -201,6 +215,19 @@ impl<'a> JSON<'a> {
                         .to_string()
                 })
             };
+
+            // For voice, also look up the transcription from the parsed body
+            if t == TYPE_VOICE {
+                let transcription = msg.components.iter().find_map(|c| {
+                    if let imessage_database::tables::messages::models::BubbleComponent::Attachment(meta) = c {
+                        meta.transcription.as_deref()
+                    } else {
+                        None
+                    }
+                });
+                let content = compose_voice_content(path_str.as_deref().unwrap_or(""), transcription);
+                return Ok((TYPE_VOICE, Some(content)));
+            }
 
             return Ok((t, Some(compose_attachment_content(t, path_str.as_deref()))));
         }
@@ -746,6 +773,32 @@ mod tests {
         let json_str = JSON::serialize_conversation(&buf, 1_700_000_000);
         assert!(json_str.contains("\"replyToMessageId\""));
         assert!(json_str.contains("\"guid-1\""));
+    }
+
+    // ── compose_voice_content ─────────────────────────────────────────────────
+
+    #[test]
+    fn compose_voice_content_with_transcription_appends_suffix() {
+        assert_eq!(
+            compose_voice_content("attachments/12/8422.caf", Some("on my way")),
+            "[Voice] attachments/12/8422.caf — Transcription: on my way"
+        );
+    }
+
+    #[test]
+    fn compose_voice_content_no_transcription_uses_plain_label() {
+        assert_eq!(
+            compose_voice_content("attachments/12/8422.caf", None),
+            "[Voice] attachments/12/8422.caf"
+        );
+    }
+
+    #[test]
+    fn compose_voice_content_empty_path_still_appends_transcription() {
+        assert_eq!(
+            compose_voice_content("", Some("hi")),
+            "[Voice] — Transcription: hi"
+        );
     }
 
     #[test]
