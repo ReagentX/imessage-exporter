@@ -61,6 +61,8 @@ pub(crate) struct ConversationBuffer {
     /// Ordered (platformId, displayName, avatarDataUrl). Owner is always index 0.
     members: Vec<(String, String, Option<String>)>,
     messages: Vec<ChatLabMessage>,
+    /// Pre-encoded base64 Data URL for the group photo, when available
+    group_avatar_url: Option<String>,
 }
 
 impl ConversationBuffer {
@@ -322,6 +324,9 @@ impl<'a> JSON<'a> {
         meta["platform"] = PLATFORM.into();
         meta["type"] = buf.chat_type.into();
         meta["ownerId"] = buf.owner_id.as_str().into();
+        if let Some(url) = &buf.group_avatar_url {
+            meta["groupAvatar"] = url.as_str().into();
+        }
 
         let mut root = JsonValue::new_object();
         root["chatlab"] = header;
@@ -390,6 +395,7 @@ impl<'a> JSON<'a> {
                 owner_id,
                 members,
                 messages: self.orphaned.clone(),
+                group_avatar_url: None,
             };
 
             let mut path = self.config.options.export_path.clone();
@@ -519,7 +525,42 @@ impl<'a> Exporter<'a> for JSON<'a> {
                     .as_deref()
                     .unwrap_or(ME)
                     .to_string();
-                (real_id, chat_type, chat_name, owner_id, owner_name)
+
+                let group_avatar_url: Option<String> =
+                    if self.config.options.embed_avatars && chat_type == "group" {
+                        chatroom
+                            .properties(self.config.data_source.db())
+                            .and_then(|props| props.group_photo_guid)
+                            .and_then(|guid| {
+                                imessage_database::tables::attachment::Attachment::from_guid(
+                                    self.config.data_source.db(),
+                                    &guid,
+                                )
+                                .ok()
+                                .flatten()
+                            })
+                            .and_then(|att| {
+                                att.resolved_attachment_path(
+                                    &self.config.options.platform,
+                                    &self.config.options.db_path,
+                                    self.config.options.attachment_root.as_deref(),
+                                )
+                            })
+                            .and_then(|path| std::fs::read(path).ok())
+                            .and_then(|bytes| {
+                                let conv = self
+                                    .config
+                                    .options
+                                    .attachment_manager
+                                    .image_converter
+                                    .as_ref();
+                                crate::app::avatar::bytes_to_data_url_with_converter(&bytes, conv)
+                            })
+                    } else {
+                        None
+                    };
+
+                (real_id, chat_type, chat_name, owner_id, owner_name, group_avatar_url)
             });
 
             let clm = ChatLabMessage {
@@ -533,7 +574,7 @@ impl<'a> Exporter<'a> for JSON<'a> {
             };
 
             match conv_data {
-                Some((real_id, chat_type, chat_name, owner_id, owner_name)) => {
+                Some((real_id, chat_type, chat_name, owner_id, owner_name, group_avatar_url)) => {
                     // Source the sender's avatar Data URL (only if --embed-avatars is on)
                     let sender_avatar_url: Option<String> = if self.config.options.embed_avatars {
                         msg.handle_id.and_then(|h| {
@@ -559,6 +600,7 @@ impl<'a> Exporter<'a> for JSON<'a> {
                                 owner_id: owner_id.clone(),
                                 members: vec![(owner_id, owner_name, None)],
                                 messages: Vec::new(),
+                                group_avatar_url,
                             });
                     buffer.add_member(sender_id, account_name, sender_avatar_url);
                     buffer.messages.push(clm);
@@ -739,6 +781,7 @@ mod tests {
             owner_id: "Me".to_string(),
             members: vec![("Me".to_string(), "Me".to_string(), None)],
             messages: Vec::new(),
+            group_avatar_url: None,
         };
         let json_str = JSON::serialize_conversation(&buf, 1_700_000_000);
         assert!(json_str.contains("\"chatlab\""));
@@ -766,6 +809,7 @@ mod tests {
                 platform_message_id: "guid-1".to_string(),
                 reply_to_id: None,
             }],
+            group_avatar_url: None,
         };
         let json_str = JSON::serialize_conversation(&buf, 1_700_000_000);
         assert!(json_str.contains("\"content\": null"));
@@ -788,6 +832,7 @@ mod tests {
                 platform_message_id: "guid-2".to_string(),
                 reply_to_id: Some("guid-1".to_string()),
             }],
+            group_avatar_url: None,
         };
         let json_str = JSON::serialize_conversation(&buf, 1_700_000_000);
         assert!(json_str.contains("\"replyToMessageId\""));
@@ -836,6 +881,7 @@ mod tests {
                 platform_message_id: "guid-3".to_string(),
                 reply_to_id: None,
             }],
+            group_avatar_url: None,
         };
         let json_str = JSON::serialize_conversation(&buf, 1_700_000_000);
         assert!(!json_str.contains("replyToMessageId"));
@@ -853,6 +899,7 @@ mod tests {
                  Some("data:image/jpeg;base64,/9j/4A==".to_string())),
             ],
             messages: Vec::new(),
+            group_avatar_url: None,
         };
         let json_str = JSON::serialize_conversation(&buf, 1_700_000_000);
         assert!(json_str.contains("\"avatar\": \"data:image/jpeg;base64,/9j/4A==\""));
@@ -866,8 +913,37 @@ mod tests {
             owner_id: "Me".to_string(),
             members: vec![("Me".to_string(), "Me".to_string(), None)],
             messages: Vec::new(),
+            group_avatar_url: None,
         };
         let json_str = JSON::serialize_conversation(&buf, 1_700_000_000);
         assert!(!json_str.contains("\"avatar\""));
+    }
+
+    #[test]
+    fn serialize_meta_with_group_avatar_emits_key() {
+        let buf = ConversationBuffer {
+            chat_name: "Family".to_string(),
+            chat_type: "group",
+            owner_id: "Me".to_string(),
+            members: vec![("Me".to_string(), "Me".to_string(), None)],
+            messages: Vec::new(),
+            group_avatar_url: Some("data:image/jpeg;base64,/9j/4A==".to_string()),
+        };
+        let json_str = JSON::serialize_conversation(&buf, 1_700_000_000);
+        assert!(json_str.contains("\"groupAvatar\": \"data:image/jpeg;base64,/9j/4A==\""));
+    }
+
+    #[test]
+    fn serialize_meta_without_group_avatar_omits_key() {
+        let buf = ConversationBuffer {
+            chat_name: "Family".to_string(),
+            chat_type: "group",
+            owner_id: "Me".to_string(),
+            members: vec![("Me".to_string(), "Me".to_string(), None)],
+            messages: Vec::new(),
+            group_avatar_url: None,
+        };
+        let json_str = JSON::serialize_conversation(&buf, 1_700_000_000);
+        assert!(!json_str.contains("\"groupAvatar\""));
     }
 }
