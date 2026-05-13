@@ -51,6 +51,19 @@ pub(crate) fn image_copy_convert(
 /// of failing, `sips` will create a file called `fake` in `/`. Subsequent writes
 /// by `sips` to the same location will not fail, but since it is a file instead
 /// of a directory, this will fail for non-`sips` copies.
+/// Public helper: invoke the system image converter to produce a JPEG file at `to`
+/// from `from`.  Returns `true` on success, `false` on failure.
+///
+/// Used by the avatar pipeline to transcode HEIC/TIFF AddressBook images to a
+/// browser-renderable JPEG for inline embedding.
+pub(crate) fn convert_to_jpeg_for_avatar(
+    from: &Path,
+    to: &Path,
+    converter: &ImageConverter,
+) -> bool {
+    convert_heic(from, to, converter, &ImageType::Jpeg).is_some()
+}
+
 fn convert_heic(
     from: &Path,
     to: &Path,
