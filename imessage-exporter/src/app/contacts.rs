@@ -29,6 +29,9 @@ pub struct Name {
     pub details: String,
     /// Set of original handle IDs that map to this name
     pub handle_ids: HashSet<i32>,
+    /// Raw image bytes from AddressBook (JPEG/PNG/HEIC/etc.).  `None` if the
+    /// contact has no photo or the photo column was unreadable.
+    pub avatar_bytes: Option<Vec<u8>>,
 }
 
 impl Name {
@@ -57,6 +60,7 @@ impl Name {
             full,
             details: String::new(),
             handle_ids: HashSet::new(),
+            avatar_bytes: None,
         })
     }
 
@@ -90,6 +94,7 @@ impl Name {
             full: String::new(),
             details: details.into(),
             handle_ids: HashSet::new(),
+            avatar_bytes: None,
         }
     }
 }
@@ -104,6 +109,7 @@ impl Name {
             full: String::new(),
             details: name.to_string(),
             handle_ids: HashSet::new(),
+            avatar_bytes: None,
         }
     }
 }
@@ -154,10 +160,11 @@ impl ContactsIndex {
         let mut index = HashMap::new();
 
         let mut stmt = conn.prepare(
-            "SELECT r.ZFIRSTNAME, r.ZLASTNAME, p.ZFULLNUMBER, e.ZADDRESSNORMALIZED
+            "SELECT r.ZFIRSTNAME, r.ZLASTNAME, p.ZFULLNUMBER, e.ZADDRESSNORMALIZED, img.ZIMAGEDATA
              FROM ZABCDRECORD AS r
              LEFT JOIN ZABCDPHONENUMBER AS p ON r.Z_PK = p.ZOWNER
-             LEFT JOIN ZABCDEMAILADDRESS AS e ON r.Z_PK = e.ZOWNER",
+             LEFT JOIN ZABCDEMAILADDRESS AS e ON r.Z_PK = e.ZOWNER
+             LEFT JOIN ZABCDIMAGE         AS img ON r.Z_PK = img.ZOWNER",
         )?;
 
         let mut rows = stmt.query([])?;
@@ -167,7 +174,14 @@ impl ContactsIndex {
                 row.get::<_, Option<String>>(1)?,
             );
 
-            if let Some(name) = name {
+            if let Some(mut name) = name {
+                // Image data is in column 4 (after first/last/phone/email)
+                if let Ok(Some(img_bytes)) = row.get::<_, Option<Vec<u8>>>(4) {
+                    if !img_bytes.is_empty() {
+                        name.avatar_bytes = Some(img_bytes);
+                    }
+                }
+
                 if let Some(email_raw) = row.get::<_, Option<String>>(3)? {
                     // Some macOS rows are like "<addr@dom>"
                     for email in parse_email_list(&email_raw) {
@@ -223,6 +237,44 @@ impl ContactsIndex {
             }
         }
 
+        // Second pass: attach avatars from ABImage, keyed by phone/email of the owner
+        if let Ok(mut avatar_stmt) = conn.prepare(
+            "SELECT p.ROWID, ph.value, em.value, i.data
+             FROM ABPerson AS p
+             LEFT JOIN ABMultiValue AS ph ON ph.record_id = p.ROWID AND ph.property = 3
+             LEFT JOIN ABMultiValue AS em ON em.record_id = p.ROWID AND em.property = 4
+             LEFT JOIN ABImage      AS i  ON i.record_id  = p.ROWID",
+        ) {
+            if let Ok(mut rows) = avatar_stmt.query([]) {
+                while let Ok(Some(row)) = rows.next() {
+                    let phone: Option<String> = row.get(1).unwrap_or(None);
+                    let email: Option<String> = row.get(2).unwrap_or(None);
+                    let img: Option<Vec<u8>> = row.get(3).unwrap_or(None);
+                    let Some(img_bytes) = img else { continue };
+                    if img_bytes.is_empty() { continue }
+
+                    if let Some(phone) = phone {
+                        for key in phone_keys(&phone) {
+                            if let Some(entry) = index.get_mut(&key) {
+                                if entry.avatar_bytes.is_none() {
+                                    entry.avatar_bytes = Some(img_bytes.clone());
+                                }
+                            }
+                        }
+                    }
+                    if let Some(email) = email {
+                        if let Some(norm) = normalize_email(&email) {
+                            if let Some(entry) = index.get_mut(&norm) {
+                                if entry.avatar_bytes.is_none() {
+                                    entry.avatar_bytes = Some(img_bytes.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(Self { index })
     }
 
@@ -242,6 +294,29 @@ impl ContactsIndex {
             for k in phone_keys(id_part) {
                 if let Some(n) = self.index.get(&k) {
                     return Some(n.clone());
+                }
+            }
+        }
+        None
+    }
+
+    /// Look up just the avatar bytes for a handle, mirroring `lookup`'s matching rules.
+    ///
+    /// Note: we re-walk the index directly (rather than calling `lookup`) because `lookup`
+    /// clones the `Name`, which would force us to clone the avatar bytes on every call.
+    pub fn get_avatar(&self, id: &str) -> Option<&[u8]> {
+        for id_part in id.split_whitespace() {
+            if looks_like_email(id_part) {
+                if let Some(key) = normalize_email(id_part) {
+                    if let Some(n) = self.index.get(&key) {
+                        return n.avatar_bytes.as_deref();
+                    }
+                }
+                continue;
+            }
+            for k in phone_keys(id_part) {
+                if let Some(n) = self.index.get(&k) {
+                    return n.avatar_bytes.as_deref();
                 }
             }
         }
@@ -301,7 +376,14 @@ fn upsert_best(map: &mut HashMap<String, Name>, key: String, incoming: &Name) {
     match map.get_mut(&key) {
         Some(existing) => {
             if incoming.score() > existing.score() {
+                // Preserve avatar from the displaced entry if the new one lacks one
+                let preserved_avatar = existing.avatar_bytes.take();
                 *existing = incoming.clone();
+                if existing.avatar_bytes.is_none() {
+                    existing.avatar_bytes = preserved_avatar;
+                }
+            } else if existing.avatar_bytes.is_none() && incoming.avatar_bytes.is_some() {
+                existing.avatar_bytes = incoming.avatar_bytes.clone();
             }
         }
         None => {
@@ -419,6 +501,39 @@ fn macos_sources_dir() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn name_avatar_bytes_default_is_none() {
+        let n = Name::from_opt(Some("A".to_string()), Some("B".to_string())).unwrap();
+        assert!(n.avatar_bytes.is_none());
+    }
+
+    #[test]
+    fn contacts_index_can_carry_avatar_bytes() {
+        let mut index = ContactsIndex::default();
+        let mut n = Name::from_opt(Some("A".to_string()), Some("B".to_string())).unwrap();
+        n.avatar_bytes = Some(vec![0xFF, 0xD8, 0xFF]);
+        index.index.insert("test@example.com".to_string(), n);
+        let looked_up = index.lookup("test@example.com").unwrap();
+        assert_eq!(looked_up.avatar_bytes, Some(vec![0xFF, 0xD8, 0xFF]));
+    }
+
+    #[test]
+    fn contacts_index_get_avatar_returns_bytes() {
+        let mut index = ContactsIndex::default();
+        let mut n = Name::from_opt(Some("A".to_string()), Some("B".to_string())).unwrap();
+        n.avatar_bytes = Some(vec![1, 2, 3]);
+        index.index.insert("foo@example.com".to_string(), n);
+        assert_eq!(index.get_avatar("foo@example.com"), Some(&[1u8, 2, 3][..]));
+    }
+
+    #[test]
+    fn contacts_index_get_avatar_returns_none_without_bytes() {
+        let mut index = ContactsIndex::default();
+        let n = Name::from_opt(Some("A".to_string()), Some("B".to_string())).unwrap();
+        index.index.insert("foo@example.com".to_string(), n);
+        assert_eq!(index.get_avatar("foo@example.com"), None);
+    }
 
     #[test]
     fn test_phone_lookup_us_with_country_code_with_plus() {
