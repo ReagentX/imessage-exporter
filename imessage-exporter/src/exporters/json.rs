@@ -58,16 +58,16 @@ pub(crate) struct ConversationBuffer {
     chat_name: String,
     chat_type: &'static str, // "group" or "private"
     owner_id: String,
-    /// Ordered (platformId, displayName). Owner is always index 0.
-    members: Vec<(String, String)>,
+    /// Ordered (platformId, displayName, avatarDataUrl). Owner is always index 0.
+    members: Vec<(String, String, Option<String>)>,
     messages: Vec<ChatLabMessage>,
 }
 
 impl ConversationBuffer {
     /// Append member if not already present (linear scan — member count is tiny)
-    fn add_member(&mut self, platform_id: String, display_name: String) {
-        if !self.members.iter().any(|(id, _)| id == &platform_id) {
-            self.members.push((platform_id, display_name));
+    fn add_member(&mut self, platform_id: String, display_name: String, avatar_url: Option<String>) {
+        if !self.members.iter().any(|(id, _, _)| id == &platform_id) {
+            self.members.push((platform_id, display_name, avatar_url));
         }
     }
 }
@@ -280,10 +280,13 @@ impl<'a> JSON<'a> {
         let members: Vec<JsonValue> = buf
             .members
             .iter()
-            .map(|(pid, name)| {
+            .map(|(pid, name, avatar_url)| {
                 let mut obj = JsonValue::new_object();
                 obj["platformId"] = pid.as_str().into();
                 obj["accountName"] = name.as_str().into();
+                if let Some(url) = avatar_url {
+                    obj["avatar"] = url.as_str().into();
+                }
                 obj
             })
             .collect();
@@ -373,11 +376,11 @@ impl<'a> JSON<'a> {
                 .unwrap_or_else(|| ME.to_string());
 
             // Build member list from unique senders
-            let mut members: Vec<(String, String)> =
-                vec![(owner_id.clone(), ME.to_string())];
+            let mut members: Vec<(String, String, Option<String>)> =
+                vec![(owner_id.clone(), ME.to_string(), None)];
             for msg in &self.orphaned {
-                if !members.iter().any(|(id, _)| id == &msg.sender_id) {
-                    members.push((msg.sender_id.clone(), msg.account_name.clone()));
+                if !members.iter().any(|(id, _, _)| id == &msg.sender_id) {
+                    members.push((msg.sender_id.clone(), msg.account_name.clone(), None));
                 }
             }
 
@@ -531,6 +534,22 @@ impl<'a> Exporter<'a> for JSON<'a> {
 
             match conv_data {
                 Some((real_id, chat_type, chat_name, owner_id, owner_name)) => {
+                    // Source the sender's avatar Data URL (only if --embed-avatars is on)
+                    let sender_avatar_url: Option<String> = if self.config.options.embed_avatars {
+                        msg.handle_id.and_then(|h| {
+                            self.config.real_participants.get(&h).and_then(|&internal_id| {
+                                self.config.participants.get(&internal_id).and_then(|n| {
+                                    self.config.data_source.contacts_index.get_avatar(&n.details).and_then(|bytes| {
+                                        let conv = self.config.options.attachment_manager.image_converter.as_ref();
+                                        crate::app::avatar::bytes_to_data_url_with_converter(bytes, conv)
+                                    })
+                                })
+                            })
+                        })
+                    } else {
+                        None
+                    };
+
                     let buffer =
                         self.conversations
                             .entry(real_id)
@@ -538,10 +557,10 @@ impl<'a> Exporter<'a> for JSON<'a> {
                                 chat_name,
                                 chat_type,
                                 owner_id: owner_id.clone(),
-                                members: vec![(owner_id, owner_name)],
+                                members: vec![(owner_id, owner_name, None)],
                                 messages: Vec::new(),
                             });
-                    buffer.add_member(sender_id, account_name);
+                    buffer.add_member(sender_id, account_name, sender_avatar_url);
                     buffer.messages.push(clm);
                 }
                 None => {
@@ -718,7 +737,7 @@ mod tests {
             chat_name: "Test Chat".to_string(),
             chat_type: "private",
             owner_id: "Me".to_string(),
-            members: vec![("Me".to_string(), "Me".to_string())],
+            members: vec![("Me".to_string(), "Me".to_string(), None)],
             messages: Vec::new(),
         };
         let json_str = JSON::serialize_conversation(&buf, 1_700_000_000);
@@ -737,7 +756,7 @@ mod tests {
             chat_name: "Test".to_string(),
             chat_type: "private",
             owner_id: "Me".to_string(),
-            members: vec![("Me".to_string(), "Me".to_string())],
+            members: vec![("Me".to_string(), "Me".to_string(), None)],
             messages: vec![ChatLabMessage {
                 sender_id: "Me".to_string(),
                 account_name: "Me".to_string(),
@@ -759,7 +778,7 @@ mod tests {
             chat_name: "Test".to_string(),
             chat_type: "private",
             owner_id: "Me".to_string(),
-            members: vec![("Me".to_string(), "Me".to_string())],
+            members: vec![("Me".to_string(), "Me".to_string(), None)],
             messages: vec![ChatLabMessage {
                 sender_id: "Me".to_string(),
                 account_name: "Me".to_string(),
@@ -807,7 +826,7 @@ mod tests {
             chat_name: "Test".to_string(),
             chat_type: "private",
             owner_id: "Me".to_string(),
-            members: vec![("Me".to_string(), "Me".to_string())],
+            members: vec![("Me".to_string(), "Me".to_string(), None)],
             messages: vec![ChatLabMessage {
                 sender_id: "Me".to_string(),
                 account_name: "Me".to_string(),
@@ -820,5 +839,35 @@ mod tests {
         };
         let json_str = JSON::serialize_conversation(&buf, 1_700_000_000);
         assert!(!json_str.contains("replyToMessageId"));
+    }
+
+    #[test]
+    fn serialize_member_with_avatar_emits_data_url_key() {
+        let buf = ConversationBuffer {
+            chat_name: "Test".to_string(),
+            chat_type: "private",
+            owner_id: "Me".to_string(),
+            members: vec![
+                ("Me".to_string(), "Me".to_string(), None),
+                ("+15555550100".to_string(), "Alice".to_string(),
+                 Some("data:image/jpeg;base64,/9j/4A==".to_string())),
+            ],
+            messages: Vec::new(),
+        };
+        let json_str = JSON::serialize_conversation(&buf, 1_700_000_000);
+        assert!(json_str.contains("\"avatar\": \"data:image/jpeg;base64,/9j/4A==\""));
+    }
+
+    #[test]
+    fn serialize_member_without_avatar_omits_avatar_key() {
+        let buf = ConversationBuffer {
+            chat_name: "Test".to_string(),
+            chat_type: "private",
+            owner_id: "Me".to_string(),
+            members: vec![("Me".to_string(), "Me".to_string(), None)],
+            messages: Vec::new(),
+        };
+        let json_str = JSON::serialize_conversation(&buf, 1_700_000_000);
+        assert!(!json_str.contains("\"avatar\""));
     }
 }
