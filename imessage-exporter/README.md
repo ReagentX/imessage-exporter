@@ -1,6 +1,6 @@
 # Binary Documentation
 
-The `imessage-exporter` binary exports iMessage data to `txt` or `html` formats. It can also run diagnostics to find problems with the iMessage database.
+The `imessage-exporter` binary exports iMessage data to `txt`, `html`, or `sql` formats. It can also run diagnostics to find problems with the iMessage database.
 
 ## Installation
 
@@ -47,8 +47,10 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
 -d, --diagnostics
         Print diagnostic information and exit
         
--f, --format <txt, html>
+-f, --format <txt, html, sql>
         Specify a single file format to export messages into
+        `sql` produces a queryable SQLite database (`messages.db`) inside the export directory.
+        Aliases for `sql`: `sqlite`, `db`.
         
 -c, --copy-method <clone, basic, full, disabled>
         Specify an optional method to use when copying message attachments
@@ -153,6 +155,12 @@ Export as `html` from `/Volumes/external/chat.db` to `/Volumes/external/export` 
 
 ```zsh
 imessage-exporter -f html -c disabled -p /Volumes/external/chat.db -o /Volumes/external/export
+```
+
+Export to a queryable SQLite database (`output/messages.db`) without copying attachments:
+
+```zsh
+imessage-exporter -f sql -o output
 ```
 
 Export as `html` from `/Volumes/external/chat.db` to `/Volumes/external/export` with attachments in `/Volumes/external/Attachments`:

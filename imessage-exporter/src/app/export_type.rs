@@ -74,6 +74,22 @@ mod tests {
     }
 
     #[test]
+    fn can_parse_sql_any_case() {
+        assert!(matches!(ExportType::from_cli("sql"), Some(ExportType::Sql)));
+        assert!(matches!(ExportType::from_cli("SQL"), Some(ExportType::Sql)));
+        assert!(matches!(ExportType::from_cli("SqL"), Some(ExportType::Sql)));
+    }
+
+    #[test]
+    fn can_parse_sql_aliases() {
+        assert!(matches!(
+            ExportType::from_cli("sqlite"),
+            Some(ExportType::Sql)
+        ));
+        assert!(matches!(ExportType::from_cli("db"), Some(ExportType::Sql)));
+    }
+
+    #[test]
     fn cant_parse_invalid() {
         assert!(ExportType::from_cli("pdf").is_none());
         assert!(ExportType::from_cli("json").is_none());
