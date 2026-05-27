@@ -40,6 +40,7 @@ pub const OPTION_PLATFORM: &str = "platform";
 pub const OPTION_BYPASS_FREE_SPACE_CHECK: &str = "ignore-disk-warning";
 pub const OPTION_USE_CALLER_ID: &str = "use-caller-id";
 pub const OPTION_CONVERSATION_FILTER: &str = "conversation-filter";
+pub const OPTION_GROUP_FILTER: &str = "group-filter";
 pub const OPTION_CLEARTEXT_PASSWORD: &str = "cleartext-password";
 pub const OPTION_CUSTOM_CONTACTS_DB_PATH: &str = "contacts-path";
 pub const OPTION_NO_PROGRESS: &str = "no-progress";
@@ -83,6 +84,8 @@ pub struct Options {
     pub ignore_disk_space: bool,
     /// An optional filter for conversation participants
     pub conversation_filter: Option<String>,
+    /// An optional filter for group chat display names
+    pub group_filter: Option<String>,
     /// An optional password for encrypted backups
     pub cleartext_password: Option<String>,
     /// An optional path to a custom contacts database
@@ -136,6 +139,7 @@ impl Options {
         let platform_type: Option<&String> = args.get_one(OPTION_PLATFORM);
         let ignore_disk_space = args.get_flag(OPTION_BYPASS_FREE_SPACE_CHECK);
         let conversation_filter: Option<&String> = args.get_one(OPTION_CONVERSATION_FILTER);
+        let group_filter: Option<&String> = args.get_one(OPTION_GROUP_FILTER);
         let cleartext_password: Option<&String> = args.get_one(OPTION_CLEARTEXT_PASSWORD);
         let contacts_path: Option<&String> = args.get_one(OPTION_CUSTOM_CONTACTS_DB_PATH);
         let show_progress = !args.get_flag(OPTION_NO_PROGRESS);
@@ -158,9 +162,10 @@ impl Options {
                 (no_lazy, OPTION_DISABLE_LAZY_LOADING),
                 (start_date.is_some(), OPTION_START_DATE),
                 (end_date.is_some(), OPTION_END_DATE),
-                (custom_name.is_some(), OPTION_CUSTOM_NAME),
-                (use_caller_id, OPTION_USE_CALLER_ID),
-                (conversation_filter.is_some(), OPTION_CONVERSATION_FILTER),
+            (custom_name.is_some(), OPTION_CUSTOM_NAME),
+            (use_caller_id, OPTION_USE_CALLER_ID),
+            (conversation_filter.is_some(), OPTION_CONVERSATION_FILTER),
+            (group_filter.is_some(), OPTION_GROUP_FILTER),
             ];
             for (set, opt) in format_deps {
                 if set {
@@ -182,6 +187,7 @@ impl Options {
             (use_caller_id, OPTION_USE_CALLER_ID),
             (custom_name.is_some(), OPTION_CUSTOM_NAME),
             (conversation_filter.is_some(), OPTION_CONVERSATION_FILTER),
+            (group_filter.is_some(), OPTION_GROUP_FILTER),
         ];
         for (set, opt) in diag_conflicts {
             if diagnostic && set {
@@ -297,6 +303,7 @@ impl Options {
             platform,
             ignore_disk_space,
             conversation_filter: conversation_filter.cloned(),
+            group_filter: group_filter.cloned(),
             cleartext_password: cleartext_password.cloned(),
             contacts_path: contacts_path.cloned().map(PathBuf::from),
             show_progress,
@@ -481,11 +488,19 @@ fn get_command() -> Command {
                 .value_name("filter"),
         )
         .arg(
+            Arg::new(OPTION_GROUP_FILTER)
+                .short('g')
+                .long(OPTION_GROUP_FILTER)
+                .help("Filter exported group conversations by their names\nTo provide multiple group names, use a comma-separated string\nExample: `-g \"Family Chat,Work Group\"`\n")
+                .display_order(14)
+                .value_name("group_name"),
+        )
+        .arg(
             Arg::new(OPTION_CLEARTEXT_PASSWORD)
                 .short('x')
                 .long(OPTION_CLEARTEXT_PASSWORD)
                 .help("Optional password for encrypted iOS backups\nThis is only used when the source is an encrypted iOS backup directory\nIf omitted on an encrypted backup, you will be prompted for the password (recommended)\nA password provided with this option is visible on screen, in the process table, and in your shell history\n")
-                .display_order(14)
+                .display_order(15)
                 .value_name("password"),
         )
         .arg(
@@ -493,7 +508,7 @@ fn get_command() -> Command {
                 .short('n')
                 .long(OPTION_CUSTOM_CONTACTS_DB_PATH)
                 .help("Optional custom path for a macOS or iOS contacts database file\nThis should be resolved automatically, but can be manually provided\nHandles from the messages table will be mapped to names in the provided database\nGenerally, one of `AddressBook-v22.abcddb` or `AddressBook.sqlitedb`\n")
-                .display_order(15)
+                .display_order(16)
                 .value_name("path"),
         )
         .arg(
@@ -526,6 +541,7 @@ impl Options {
             platform: Platform::macOS,
             ignore_disk_space: false,
             conversation_filter: None,
+            group_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
@@ -576,6 +592,7 @@ mod arg_tests {
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
+            group_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
@@ -660,6 +677,7 @@ mod arg_tests {
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
+            group_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
@@ -695,6 +713,7 @@ mod arg_tests {
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
+            group_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
@@ -776,6 +795,7 @@ mod arg_tests {
             platform: Platform::iOS,
             ignore_disk_space: false,
             conversation_filter: None,
+            group_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
@@ -816,6 +836,7 @@ mod arg_tests {
             platform: Platform::iOS,
             ignore_disk_space: false,
             conversation_filter: None,
+            group_filter: None,
             cleartext_password: Some("password".to_string()),
             contacts_path: None,
             show_progress: true,
@@ -872,6 +893,7 @@ mod arg_tests {
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
+            group_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
@@ -904,6 +926,7 @@ mod arg_tests {
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
+            group_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
@@ -937,12 +960,22 @@ mod arg_tests {
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: Some(String::from("steve@apple.com")),
+            group_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
         };
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn can_build_option_group_filter() {
+        let command = get_command();
+        let args = command.get_matches_from(["imessage-exporter", "-g", "Family Chat", "-f", "txt"]);
+
+        let actual = Options::from_args(&args).unwrap();
+        assert_eq!(actual.group_filter, Some(String::from("Family Chat")));
     }
 
     #[test]
@@ -969,6 +1002,7 @@ mod arg_tests {
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
+            group_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
@@ -1001,6 +1035,7 @@ mod arg_tests {
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
+            group_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
@@ -1075,6 +1110,7 @@ mod arg_tests {
             platform: Platform::default(),
             ignore_disk_space: true,
             conversation_filter: None,
+            group_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,

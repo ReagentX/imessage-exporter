@@ -58,6 +58,8 @@ pub struct Config {
     pub translated_messages: HashSet<String>,
     /// App configuration options
     pub options: Options,
+    /// Tracks whether the group filter matched any chats
+    pub group_filter_matches: bool,
     /// Global date offset used by the iMessage database:
     pub offset: i64,
     /// Data source for the application
@@ -262,6 +264,7 @@ impl Config {
             tapbacks,
             translated_messages,
             options,
+            group_filter_matches: false,
             offset: get_offset(),
             data_source,
         })
@@ -306,6 +309,65 @@ impl Config {
                 .set_selected_chat_ids(included_chatrooms);
 
             self.log_filtered_handles_and_chats();
+        }
+    }
+
+    /// Convert comma separated list of group name strings into chat IDs that match the display names.
+    pub(crate) fn resolve_filtered_groups(&mut self) {
+        self.group_filter_matches = false;
+
+        if let Some(group_filter) = &self.options.group_filter {
+            let parsed_group_filter = group_filter
+                .split(',')
+                .map(str::trim)
+                .filter(|token| !token.is_empty())
+                .collect::<Vec<&str>>();
+
+            let matched_chat_ids: BTreeSet<i32> = self
+                .chatrooms
+                .iter()
+                .filter_map(|(&chat_id, chat)| {
+                    let chat_name = chat.name();
+                    if parsed_group_filter
+                        .iter()
+                        .any(|included_name| chat_name.contains(included_name))
+                    {
+                        Some(chat_id)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            if matched_chat_ids.is_empty() {
+                self.group_filter_matches = false;
+                return;
+            }
+
+            match &self.options.query_context.selected_chat_ids {
+                Some(existing) => {
+                    let intersection = existing
+                        .intersection(&matched_chat_ids)
+                        .copied()
+                        .collect::<BTreeSet<i32>>();
+
+                    if intersection.is_empty() {
+                        self.group_filter_matches = false;
+                        return;
+                    }
+
+                    self.options
+                        .query_context
+                        .set_selected_chat_ids(intersection);
+                }
+                None => {
+                    self.options
+                        .query_context
+                        .set_selected_chat_ids(matched_chat_ids.clone());
+                }
+            }
+
+            self.group_filter_matches = true;
         }
     }
 
@@ -539,6 +601,12 @@ impl Config {
                 )));
             }
 
+            if let Some(filters) = &self.options.group_filter && !self.group_filter_matches {
+                return Err(RuntimeError::InvalidOptions(format!(
+                    "Selected group filter `{filters}` does not match any chats!"
+                )));
+            }
+
             // Ensure the path we want to export to exists
             create_dir_all(&self.options.export_path)?;
 
@@ -617,6 +685,7 @@ impl Config {
             tapbacks: HashMap::new(),
             translated_messages: HashSet::new(),
             options,
+            group_filter_matches: false,
             offset: get_offset(),
             data_source,
         }
@@ -1406,5 +1475,145 @@ mod chat_filter_tests {
             app.options.query_context.selected_chat_ids,
             Some(BTreeSet::from([4, 6]))
         );
+    }
+}
+
+#[cfg(test)]
+mod group_filter_tests {
+    use std::collections::BTreeSet;
+
+    use crate::{
+        Config, Options,
+        app::{contacts::Name, export_type::ExportType, runtime::filename_tests::fake_chat},
+    };
+
+    /// Verify that when the group filter matches no chats, the conversation filter is still honored.
+    #[test]
+    fn group_filter_with_no_overlap_preserves_existing_selection() {
+        let mut options = Options::fake_options(ExportType::Html);
+        options.conversation_filter = Some(String::from("Person 11"));
+        options.group_filter = Some(String::from("Work"));
+
+        let mut app = Config::fake_app(options);
+
+        app.participants.insert(10, Name::fake_name("Person 10"));
+        app.participants.insert(11, Name::fake_name("Person 11"));
+        app.real_participants.insert(10, 10);
+        app.real_participants.insert(11, 11);
+
+        for (id, participant) in app.participants.iter_mut() {
+            participant.handle_ids.insert(*id);
+        }
+
+        let mut chat1 = fake_chat();
+        chat1.rowid = 1;
+        chat1.display_name = Some("Family Chat".to_string());
+        app.chatrooms.insert(1, chat1);
+
+        let mut chat2 = fake_chat();
+        chat2.rowid = 2;
+        chat2.display_name = Some("Work Chat".to_string());
+        app.chatrooms.insert(2, chat2);
+
+        let mut chatroom_1 = BTreeSet::new();
+        chatroom_1.insert(11);
+        app.chatroom_participants.insert(1, chatroom_1);
+
+        let mut chatroom_2 = BTreeSet::new();
+        chatroom_2.insert(10);
+        app.chatroom_participants.insert(2, chatroom_2);
+
+        app.resolve_filtered_handles();
+        app.resolve_filtered_groups();
+
+        assert_eq!(
+            app.options.query_context.selected_chat_ids,
+            Some(BTreeSet::from([1]))
+        );
+        assert!(!app.group_filter_matches);
+    }
+
+    #[test]
+    fn can_filter_group_names() {
+        let mut options = Options::fake_options(ExportType::Html);
+        options.group_filter = Some(String::from("Family"));
+
+        let mut app = Config::fake_app(options);
+
+        let mut chat = fake_chat();
+        chat.rowid = 1;
+        chat.display_name = Some("Family Chat".to_string());
+        app.chatrooms.insert(chat.rowid, chat);
+
+        app.resolve_filtered_groups();
+
+        assert!(app.group_filter_matches);
+        assert_eq!(
+            app.options.query_context.selected_chat_ids,
+            Some(BTreeSet::from([1]))
+        );
+    }
+
+    #[test]
+    fn group_filter_not_matching_sets_flag_false() {
+        let mut options = Options::fake_options(ExportType::Html);
+        options.group_filter = Some(String::from("Secret"));
+
+        let mut app = Config::fake_app(options);
+
+        let mut chat = fake_chat();
+        chat.rowid = 1;
+        chat.display_name = Some("Family Chat".to_string());
+        app.chatrooms.insert(chat.rowid, chat);
+
+        app.resolve_filtered_groups();
+
+        assert!(!app.group_filter_matches);
+        assert!(app.options.query_context.selected_chat_ids.is_none());
+    }
+
+    #[test]
+    fn group_filter_intersects_with_handle_filter() {
+        let mut options = Options::fake_options(ExportType::Html);
+        options.conversation_filter = Some(String::from("Person 11"));
+        options.group_filter = Some(String::from("Family"));
+
+        let mut app = Config::fake_app(options);
+
+        app.participants.insert(10, Name::fake_name("Person 10"));
+        app.participants.insert(11, Name::fake_name("Person 11"));
+        app.real_participants.insert(10, 10);
+        app.real_participants.insert(11, 11);
+
+        for (id, participant) in app.participants.iter_mut() {
+            participant.handle_ids.insert(*id);
+        }
+
+        let mut chat1 = fake_chat();
+        chat1.rowid = 1;
+        chat1.display_name = Some("Family Chat".to_string());
+        app.chatrooms.insert(1, chat1);
+
+        let mut chat2 = fake_chat();
+        chat2.rowid = 2;
+        chat2.display_name = Some("Work Chat".to_string());
+        app.chatrooms.insert(2, chat2);
+
+        let mut chatroom_1 = BTreeSet::new();
+        chatroom_1.insert(11);
+        app.chatroom_participants.insert(1, chatroom_1);
+
+        let mut chatroom_2 = BTreeSet::new();
+        chatroom_2.insert(11);
+        app.chatroom_participants.insert(2, chatroom_2);
+
+        app.resolve_filtered_handles();
+        app.resolve_filtered_groups();
+
+        assert_eq!(
+            app.options.query_context.selected_chat_ids,
+            Some(BTreeSet::from([1]))
+        );
+        assert!(app.group_filter_matches);
     }
 }
