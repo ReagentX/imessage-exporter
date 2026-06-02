@@ -1,15 +1,10 @@
 #![forbid(unsafe_code)]
-#![doc = include_str!("../README.md")]
-mod app;
-mod exporters;
-
-pub use exporters::{html::HTML, txt::TXT};
 
 use std::process::ExitCode;
 
-use app::{
-    options::{Options, from_command_line},
-    runtime::Config,
+use imessage_exporter::{
+    Config,
+    app::options::{Options, from_command_line},
 };
 
 fn main() -> ExitCode {

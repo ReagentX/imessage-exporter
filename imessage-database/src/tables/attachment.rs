@@ -800,13 +800,12 @@ mod tests {
         let mut attachment = sample_attachment();
         attachment.filename = Some("~/a/b/c.png".to_string());
 
-        assert!(
-            attachment
-                .resolved_attachment_path(&Platform::macOS, &db_path, None)
-                .unwrap()
-                .len()
-                > attachment.filename.unwrap().len()
-        );
+        let result = attachment
+            .resolved_attachment_path(&Platform::macOS, &db_path, None)
+            .unwrap();
+
+        assert!(!result.starts_with('~'));
+        assert!(result.ends_with("/a/b/c.png"));
     }
 
     #[test]

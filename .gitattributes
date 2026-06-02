@@ -1,0 +1,39 @@
+# Normalize line endings across platforms.
+# Text files are stored with LF in the repo and checked out with LF, so the
+# askama templates the exporter embeds match the LF-based expected strings in
+# the test suite even on Windows (where core.autocrlf would otherwise inject
+# CRLF).
+* text=auto eol=lf
+
+# Explicit text types (belt-and-suspenders)
+*.rs   text eol=lf
+*.toml text eol=lf
+*.md   text eol=lf
+*.html text eol=lf
+*.txt  text eol=lf
+*.css  text eol=lf
+*.json text eol=lf
+*.sh   text eol=lf
+
+# Binary assets — never modify or normalize
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.heic binary
+*.pdf  binary
+*.ico  binary
+*.db   binary
+*.sqlite   binary
+*.sqlitedb binary
+*.abcddb   binary
+
+# iMessage test fixtures are raw binary blobs (some are extensionless); keep
+# git from ever touching their bytes.
+imessage-database/test_data/** -text
+
+# …but SVG/ASCII handwriting fixtures are text that the tests compare against
+# LF-generated output, so they must be normalized to LF (these lines come last
+# so they override the blanket rule above).
+*.svg   text eol=lf
+*.ascii text eol=lf

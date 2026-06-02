@@ -39,6 +39,14 @@ use crate::{
 // Maximum length for filenames
 const MAX_LENGTH: usize = 235;
 
+/// Callback invoked during an export to report progress as
+/// `(current_message, total_messages)`. Used by non-terminal front-ends (e.g.
+/// a GUI) to drive their own progress indicator. The callback is invoked
+/// synchronously from the single thread that runs the export, so it only needs
+/// to be `Send` (to allow the owning [`Config`] to be constructed on a worker
+/// thread), not `Sync`.
+pub type ProgressCallback = std::sync::Arc<dyn Fn(u64, u64) + Send>;
+
 // MARK: Config
 /// Stores the application state and handles application lifecycle
 pub struct Config {
@@ -62,9 +70,45 @@ pub struct Config {
     pub offset: i64,
     /// Data source for the application
     pub data_source: DataSource,
+    /// Optional progress callback invoked during exports. When `None` (the
+    /// default), only the built-in terminal progress bar is used. Front-ends
+    /// that are not attached to a terminal can set this to receive
+    /// `(current, total)` updates regardless of TTY state.
+    pub progress_callback: Option<ProgressCallback>,
 }
 
 impl Config {
+    /// Borrow the underlying read-only iMessage database connection.
+    ///
+    /// Exposed so external front-ends (e.g. a GUI) can run their own preview
+    /// queries against the same connection the exporter uses, including for
+    /// decrypted iOS backups.
+    pub fn db(&self) -> &rusqlite::Connection {
+        self.data_source.db()
+    }
+
+    /// Return the number of messages associated with each raw `chat.ROWID`.
+    ///
+    /// This is a single grouped query over the chat↔message join table, so it
+    /// is cheap even on large databases. Front-ends can sum these counts over a
+    /// deduplicated conversation's underlying chat ids to show per-conversation
+    /// totals. Chats with no messages are absent from the map.
+    pub fn message_counts_by_chat(&self) -> HashMap<i32, i64> {
+        use imessage_database::tables::table::CHAT_MESSAGE_JOIN;
+
+        let mut counts = HashMap::new();
+        let sql = format!("SELECT chat_id, COUNT(*) FROM {CHAT_MESSAGE_JOIN} GROUP BY chat_id");
+        if let Ok(mut stmt) = self.db().prepare(&sql)
+            && let Ok(rows) =
+                stmt.query_map([], |row| Ok((row.get::<_, i32>(0)?, row.get::<_, i64>(1)?)))
+        {
+            for row in rows.flatten() {
+                counts.insert(row.0, row.1);
+            }
+        }
+        counts
+    }
+
     /// Get the chatroom and its deduplicated ID for a message, if available
     pub fn conversation(&self, message: &Message) -> Option<(&Chat, &i32)> {
         match message.chat_id.or(message.deleted_from) {
@@ -264,6 +308,7 @@ impl Config {
             options,
             offset: get_offset(),
             data_source,
+            progress_callback: None,
         })
     }
 
@@ -272,7 +317,7 @@ impl Config {
     ///   1) filter `self.participants` values based on name matches with the user-provided filter strings
     ///   2) get the chat IDs keys from `self.chatroom_participants` for values that contain the selected `handle_ids`
     ///   3) send those chat and handle IDs to the query context so they are included in the message table filters
-    pub(crate) fn resolve_filtered_handles(&mut self) {
+    pub fn resolve_filtered_handles(&mut self) {
         if let Some(conversation_filter) = &self.options.conversation_filter {
             let parsed_handle_filter = conversation_filter.split(',').collect::<Vec<&str>>();
 
@@ -624,6 +669,7 @@ impl Config {
             options,
             offset: get_offset(),
             data_source,
+            progress_callback: None,
         }
     }
 
@@ -1261,7 +1307,9 @@ mod directory_tests {
 
         let result = app.message_attachment_path(&attachment);
         let expected = String::from("attachments/d.jpg");
-        assert_eq!(result, expected);
+        // Normalize separators so the assertion holds on Windows, where
+        // `PathBuf::push` introduces a backslash separator.
+        assert_eq!(result.replace('\\', "/"), expected);
     }
 
     #[test]

@@ -11,7 +11,26 @@ use std::{
 
 use imessage_database::tables::messages::Message;
 
-use crate::app::runtime::Config;
+use crate::app::{compatibility::models::resolve_program, runtime::Config};
+
+#[cfg(target_family = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+fn command_no_window(command: &str) -> Option<Command> {
+    #[cfg(target_family = "windows")]
+    let program = resolve_program(command)?;
+
+    #[cfg(not(target_family = "windows"))]
+    let program = resolve_program(command).unwrap_or_else(|| command.into());
+
+    let mut command = Command::new(program);
+    #[cfg(target_family = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    Some(command)
+}
 
 /// Run a command, ignoring output. Returns [`None`] if the process cannot be
 /// spawned, cannot be waited on, or exits with a non-zero status.
@@ -20,7 +39,12 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    match Command::new(command)
+    let Some(mut child) = command_no_window(command) else {
+        eprintln!("Conversion failed: bundled converter `{command}` was not found");
+        return None;
+    };
+
+    match child
         .args(args)
         .stdout(Stdio::null())
         .stderr(Stdio::null())

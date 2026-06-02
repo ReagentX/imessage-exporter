@@ -53,7 +53,7 @@ impl ExportState {
             files: HashMap::new(),
             route: HashMap::new(),
             orphaned: BufWriter::with_capacity(FILE_BUFFER_CAPACITY, file),
-            pb: ExportProgress::new(pb_enabled),
+            pb: ExportProgress::new(pb_enabled, config.progress_callback.clone()),
         })
     }
 }

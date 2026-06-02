@@ -60,29 +60,43 @@ pub struct ExportProgress {
     position: Cell<u64>,
     start_time: Cell<Option<Instant>>,
     message: RefCell<Option<String>>,
+    /// Optional external callback invoked with `(position, length)` whenever
+    /// the position changes. Fires regardless of `enabled`, so front-ends that
+    /// are not attached to a terminal (e.g. a GUI) still receive progress.
+    callback: Option<crate::app::runtime::ProgressCallback>,
 }
 
 impl ExportProgress {
-    /// Creates a new hidden progress bar. Pass `enabled = false` to make
-    /// every subsequent method call a no-op.
-    pub fn new(enabled: bool) -> Self {
+    /// Creates a new hidden progress bar. Pass `enabled = false` to make every
+    /// drawing method a no-op. An optional `callback` is invoked on position
+    /// changes regardless of `enabled`.
+    pub fn new(enabled: bool, callback: Option<crate::app::runtime::ProgressCallback>) -> Self {
         Self {
             enabled,
             length: Cell::new(0),
             position: Cell::new(0),
             start_time: Cell::new(None),
             message: RefCell::new(None),
+            callback,
+        }
+    }
+
+    /// Invoke the external callback, if any, with the current position/length.
+    fn notify(&self) {
+        if let Some(callback) = &self.callback {
+            callback(self.position.get(), self.length.get());
         }
     }
 
     /// Starts the progress bar with the specified total length
     pub fn start(&self, length: i64) {
-        if !self.enabled {
-            return;
-        }
         self.length.set(length.try_into().unwrap_or(0));
         self.position.set(0);
         self.start_time.set(Some(Instant::now()));
+        self.notify();
+        if !self.enabled {
+            return;
+        }
         self.draw();
     }
 
@@ -106,19 +120,21 @@ impl ExportProgress {
 
     /// Sets the position of the progress bar
     pub fn set_position(&self, pos: u64) {
+        self.position.set(pos);
+        self.notify();
         if !self.enabled {
             return;
         }
-        self.position.set(pos);
         self.draw();
     }
 
     /// Finishes the progress bar
     pub fn finish(&self) {
+        self.position.set(self.length.get());
+        self.notify();
         if !self.enabled {
             return;
         }
-        self.position.set(self.length.get());
         self.draw();
         eprintln!();
     }
@@ -207,7 +223,7 @@ impl ExportProgress {
 
 impl Default for ExportProgress {
     fn default() -> Self {
-        Self::new(false)
+        Self::new(false, None)
     }
 }
 

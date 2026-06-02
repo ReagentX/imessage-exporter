@@ -1,0 +1,8 @@
+# Statically link the C runtime on Windows MSVC targets so the produced
+# executables are fully portable: they do not depend on the Visual C++
+# redistributable (VCRUNTIME140.dll etc.) being installed on the target machine.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.i686-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

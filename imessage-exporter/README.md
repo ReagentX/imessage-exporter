@@ -261,7 +261,7 @@ I could not get PDF export to work in a reasonable way. The best way for a user 
 
 `wkhtmltopdf` refuses to render local images, even with the flag enabled like so:
 
-```rust
+```rust,ignore
 let mut process = Command::new("wkhtmltopdf")
 .args(&vec![
     "--enable-local-file-access".to_string(),

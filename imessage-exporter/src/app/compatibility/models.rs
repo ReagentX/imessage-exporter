@@ -3,9 +3,159 @@
 */
 
 use std::{
+    env,
     fmt::{Display, Formatter, Result},
+    fs,
+    path::{Path, PathBuf},
     process::Command,
 };
+
+#[cfg(target_family = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+#[cfg(not(target_family = "windows"))]
+fn command(name: &str) -> Command {
+    Command::new(resolve_program(name).unwrap_or_else(|| PathBuf::from(name)))
+}
+
+#[cfg(target_family = "windows")]
+fn bundled_command(name: &str) -> Option<Command> {
+    let mut command = Command::new(resolve_program(name)?);
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    Some(command)
+}
+
+/// Environment variable that can point at a portable converter tool directory.
+///
+/// Release builds also search beside the executable, but this hook keeps tests
+/// and custom portable bundles deterministic without touching PATH.
+pub const TOOLS_DIR_ENV: &str = "IMESSAGE_EXPORTER_TOOLS_DIR";
+
+/// Resolve a converter executable from the portable tool bundle locations.
+///
+/// On Windows, converter detection uses these bundled locations only so the GUI
+/// is self-contained and reproducible.
+pub fn resolve_program(name: &str) -> Option<PathBuf> {
+    resolve_program_from_roots(name, bundled_tool_roots())
+}
+
+fn resolve_program_from_roots(
+    name: &str,
+    roots: impl IntoIterator<Item = PathBuf>,
+) -> Option<PathBuf> {
+    let exe_name = executable_name(name);
+
+    for root in roots {
+        for candidate in direct_candidates(&root, name, &exe_name) {
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+
+        if let Some(candidate) = nested_candidate(&root, &exe_name) {
+            return Some(candidate);
+        }
+    }
+
+    None
+}
+
+fn bundled_tool_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+
+    if let Ok(dir) = env::var(TOOLS_DIR_ENV) {
+        roots.push(PathBuf::from(dir));
+    }
+
+    if let Ok(exe) = env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        push_roots(&mut roots, dir);
+    }
+
+    if let Ok(dir) = env::current_dir() {
+        push_roots(&mut roots, &dir);
+    }
+
+    roots
+}
+
+fn push_roots(roots: &mut Vec<PathBuf>, dir: &Path) {
+    roots.push(dir.to_path_buf());
+    roots.push(dir.join("tools"));
+    roots.push(dir.join("converters"));
+}
+
+fn direct_candidates(root: &Path, name: &str, exe_name: &str) -> Vec<PathBuf> {
+    let mut candidates = vec![
+        root.join(exe_name),
+        root.join("bin").join(exe_name),
+        root.join(name).join(exe_name),
+        root.join(name).join("bin").join(exe_name),
+    ];
+
+    match name {
+        "ffmpeg" => {
+            candidates.push(root.join("ffmpeg").join(exe_name));
+            candidates.push(root.join("ffmpeg").join("bin").join(exe_name));
+            candidates.push(root.join("FFmpeg").join(exe_name));
+            candidates.push(root.join("FFmpeg").join("bin").join(exe_name));
+        }
+        "magick" => {
+            candidates.push(root.join("imagemagick").join(exe_name));
+            candidates.push(root.join("imagemagick").join("bin").join(exe_name));
+            candidates.push(root.join("ImageMagick").join(exe_name));
+            candidates.push(root.join("ImageMagick").join("bin").join(exe_name));
+        }
+        _ => {}
+    }
+
+    candidates
+}
+
+fn nested_candidate(root: &Path, exe_name: &str) -> Option<PathBuf> {
+    for entry in fs::read_dir(root).ok()?.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+
+        for candidate in [path.join(exe_name), path.join("bin").join(exe_name)] {
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
+}
+
+fn executable_name(name: &str) -> String {
+    #[cfg(target_family = "windows")]
+    {
+        if name.ends_with(".exe") {
+            name.to_string()
+        } else {
+            format!("{name}.exe")
+        }
+    }
+
+    #[cfg(not(target_family = "windows"))]
+    {
+        name.to_string()
+    }
+}
+
+fn display_name(name: &str) -> String {
+    if resolve_program(name).is_some() {
+        format!("bundled {name}")
+    } else {
+        name.to_string()
+    }
+}
 
 pub trait Converter {
     /// Determine the converter type for the current shell environment
@@ -92,7 +242,7 @@ impl Converter for ImageConverter {
 
 impl Display for ImageConverter {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "{}", self.name())
+        write!(f, "{}", display_name(self.name()))
     }
 }
 
@@ -126,7 +276,7 @@ impl Converter for AudioConverter {
 
 impl Display for AudioConverter {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "{}", self.name())
+        write!(f, "{}", display_name(self.name()))
     }
 }
 
@@ -154,7 +304,7 @@ impl Converter for VideoConverter {
 
 impl Display for VideoConverter {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "{}", self.name())
+        write!(f, "{}", display_name(self.name()))
     }
 }
 
@@ -172,10 +322,13 @@ pub enum HardwareEncoder {
 impl HardwareEncoder {
     /// Detect best available hardware encoder in priority order
     pub fn detect() -> Option<Self> {
-        if let Ok(output) = Command::new("ffmpeg")
-            .args(["-hide_banner", "-encoders"])
-            .output()
-        {
+        #[cfg(target_family = "windows")]
+        let mut command = bundled_command("ffmpeg")?;
+
+        #[cfg(not(target_family = "windows"))]
+        let mut command = command("ffmpeg");
+
+        if let Ok(output) = command.args(["-hide_banner", "-encoders"]).output() {
             let out = String::from_utf8_lossy(&output.stdout);
             if out.contains("h264_nvenc") {
                 return Some(Self::Nvenc);
@@ -203,7 +356,11 @@ impl HardwareEncoder {
 /// Determine if a shell program exists on the system
 #[cfg(not(target_family = "windows"))]
 fn exists(name: &str) -> bool {
-    Command::new("which")
+    if resolve_program(name).is_some() {
+        return true;
+    }
+
+    command("which")
         .arg(name)
         .output()
         .map(|output| output.status.success())
@@ -213,20 +370,30 @@ fn exists(name: &str) -> bool {
 /// Determine if a shell program exists on the system
 #[cfg(target_family = "windows")]
 fn exists(name: &str) -> bool {
-    Command::new("where")
-        .arg(name)
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
+    resolve_program(name).is_some()
 }
 
 #[cfg(test)]
 mod test {
-    use super::exists;
+    use super::{executable_name, exists, resolve_program_from_roots};
+    use std::{env, fs};
 
     #[test]
-    fn can_find_program() {
-        assert!(exists("ls"));
+    fn can_find_bundled_program() {
+        let root = env::temp_dir().join(format!(
+            "imessage-exporter-tool-test-{}",
+            std::process::id()
+        ));
+        let tool_dir = root.join("tools").join("ffmpeg").join("bin");
+        fs::create_dir_all(&tool_dir).unwrap();
+
+        let tool = tool_dir.join(executable_name("ffmpeg"));
+        fs::write(&tool, []).unwrap();
+
+        let resolved = resolve_program_from_roots("ffmpeg", [root.join("tools")]);
+        assert_eq!(resolved.as_deref(), Some(tool.as_path()));
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
