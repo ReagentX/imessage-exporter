@@ -16,6 +16,9 @@ eframe = { version = "0.29", default-features = true }
 rfd = "0.15"
 open = "5"
 chrono = "=0.4.44"
+crabapple = "=0.4.7"
+rusqlite = { version = "=0.40.0", features = ["blob", "bundled"] }
+sha1 = "=0.11.0"
 # Pure-Rust PDF generation (no Chromium dependency); `embedded_images`
 # lets PDF exports embed converted PNG/JPEG/GIF attachment pixels in-process.
 printpdf = { version = "0.7", features = ["embedded_images"] }

@@ -58,6 +58,9 @@ pub mod layout {
     pub const EXPORT_PATH_WIDTH: f32 = 320.0;
     pub const PROGRESS_BAR_WIDTH: f32 = 260.0;
     pub const MIN_FIELD_WIDTH: f32 = 0.0;
+    pub const TAB_BUTTON_MIN_WIDTH: f32 = 104.0;
+    pub const CALL_LOG_MIN_COLUMN_WIDTH: f32 = 96.0;
+    pub const CALL_LOG_COLUMN_GAP: f32 = 18.0;
 
     pub const PREVIEW_BUBBLE_MAX_FRACTION: f32 = 0.80;
     pub const PREVIEW_BUBBLE_MIN_WIDTH: f32 = 220.0;
@@ -94,6 +97,8 @@ pub mod timing {
 
 pub mod ids {
     pub const EXPORT_CONTROLS_SCROLL: &str = "export_controls_scroll";
+    pub const CALL_LOGS_SCROLL: &str = "call_logs_scroll";
+    pub const CALL_LOGS_GRID: &str = "call_logs_grid";
 }
 
 mod palette {
@@ -347,6 +352,24 @@ pub fn add_enabled_button(
     text: impl Into<egui::WidgetText>,
 ) -> egui::Response {
     let response = ui.add_enabled(enabled, button(text));
+    paint_control_response_border(ui, &response);
+    response
+}
+
+pub fn add_tab_button(
+    ui: &mut egui::Ui,
+    selected: bool,
+    text: impl Into<egui::WidgetText>,
+) -> egui::Response {
+    let fill = if selected {
+        palette::SELECTION_BG
+    } else {
+        palette::CONTROL_BG
+    };
+    let response = ui.add(button(text).fill(fill).min_size(egui::vec2(
+        layout::TAB_BUTTON_MIN_WIDTH,
+        layout::CONTROL_HEIGHT,
+    )));
     paint_control_response_border(ui, &response);
     response
 }

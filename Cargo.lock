@@ -2171,14 +2171,17 @@ version = "0.0.0"
 dependencies = [
  "ab_glyph",
  "chrono",
+ "crabapple",
  "eframe",
  "imessage-database",
  "imessage-exporter",
  "open",
  "printpdf",
  "rfd",
+ "rusqlite",
  "serde",
  "serde_json",
+ "sha1 0.11.0",
 ]
 
 [[package]]

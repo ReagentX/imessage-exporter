@@ -127,6 +127,40 @@ pub struct PreviewAttachment {
     pub name: String,
 }
 
+/// Direction/status for a call-history row.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CallDirection {
+    Incoming,
+    Outgoing,
+    Missed,
+    Blocked,
+    Unknown,
+}
+
+impl CallDirection {
+    pub fn label(self) -> &'static str {
+        match self {
+            CallDirection::Incoming => "Incoming",
+            CallDirection::Outgoing => "Outgoing",
+            CallDirection::Missed => "Missed",
+            CallDirection::Blocked => "Blocked",
+            CallDirection::Unknown => "Unknown",
+        }
+    }
+}
+
+/// One row from the iOS call-history database.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CallLogEntry {
+    pub id: i64,
+    pub started: String,
+    pub direction: CallDirection,
+    pub address: String,
+    pub duration: String,
+    pub service: String,
+    pub call_type: String,
+}
+
 /// Filters applied to a preview or export.
 #[derive(Clone, Debug, Default)]
 pub struct Filters {

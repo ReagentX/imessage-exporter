@@ -2,8 +2,9 @@
 
 use std::{
     cmp::Reverse,
-    collections::HashSet,
-    path::PathBuf,
+    collections::{HashSet, VecDeque},
+    fs,
+    path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc::{Receiver, Sender},
@@ -14,7 +15,7 @@ use std::{
 
 use eframe::egui;
 
-use imessage_database::util::dirs::home;
+use imessage_database::{tables::table::DEFAULT_PATH_IOS, util::dirs::home};
 
 use crate::{
     backend::{self, Command, Event},
@@ -25,8 +26,33 @@ use crate::{
 
 /// Maximum number of messages pulled into the in-app preview.
 const PREVIEW_LIMIT: usize = 800;
+/// Maximum number of call-history rows pulled into the in-app tab.
+const CALL_LOG_LIMIT: usize = 1_000;
 /// Maximum number of activity-log lines retained.
 const LOG_LIMIT: usize = 300;
+const CALL_LOG_CSV_FILE_NAME: &str = "call_logs.csv";
+const CALL_LOG_CSV_HEADER: &str = "Started,Direction,Address,Duration,Service,Type\n";
+const CSV_QUOTE: char = '"';
+const CSV_COMMA: char = ',';
+const CSV_NEWLINE: char = '\n';
+const CSV_QUOTE_ESCAPE: &str = "\"\"";
+const MACOS_CHAT_DB_FILE_NAME: &str = "chat.db";
+const LOOSE_IOS_MESSAGES_DB_FILE_NAME: &str = "sms.db";
+const DATABASE_SCAN_MAX_DEPTH: usize = 4;
+const DATABASE_SCAN_MAX_ENTRIES: usize = 10_000;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ActiveTab {
+    Messages,
+    CallLogs,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ResolvedSource {
+    path: PathBuf,
+    platform: PlatformChoice,
+    description: &'static str,
+}
 
 pub struct App {
     cmd_tx: Sender<Command>,
@@ -43,6 +69,7 @@ pub struct App {
 
     // Loaded-state info
     opened: bool,
+    opened_platform: Option<PlatformChoice>,
     summary: String,
     date_range: Option<(String, String)>,
     total_messages: usize,
@@ -71,9 +98,15 @@ pub struct App {
     export_path: String,
 
     // Preview
+    active_tab: ActiveTab,
     preview: Vec<PreviewMessage>,
     preview_total: i64,
     preview_note: String,
+
+    // Call logs
+    call_logs: Vec<CallLogEntry>,
+    call_log_total: i64,
+    call_log_note: String,
 
     // Conversation list sorting
     sort_by_count: bool,
@@ -118,6 +151,7 @@ impl App {
             attachment_root: s.attachment_root,
             show_advanced_source: false,
             opened: false,
+            opened_platform: None,
             summary: String::new(),
             date_range: None,
             total_messages: 0,
@@ -138,9 +172,13 @@ impl App {
             custom_name: s.custom_name,
             ignore_disk_space: s.ignore_disk_space,
             export_path,
+            active_tab: ActiveTab::Messages,
             preview: Vec::new(),
             preview_total: 0,
             preview_note: String::new(),
+            call_logs: Vec::new(),
+            call_log_total: 0,
+            call_log_note: String::new(),
             sort_by_count: s.sort_by_count,
             busy: false,
             busy_label: String::new(),
@@ -206,6 +244,7 @@ impl App {
                     date_range,
                     total_messages,
                     summary,
+                    platform,
                 } => {
                     self.conversations = conversations;
                     self.selected.clear();
@@ -213,15 +252,23 @@ impl App {
                     self.total_messages = total_messages;
                     self.summary = summary.clone();
                     self.opened = true;
+                    self.opened_platform = Some(platform);
                     self.busy = false;
                     self.progress = None;
                     self.preview.clear();
                     self.preview_note.clear();
+                    self.call_logs.clear();
+                    self.call_log_total = 0;
+                    self.call_log_note.clear();
                     self.push_log(format!("Opened: {summary}"));
                 }
                 Event::OpenFailed(e) => {
                     self.busy = false;
                     self.opened = false;
+                    self.opened_platform = None;
+                    self.call_logs.clear();
+                    self.call_log_total = 0;
+                    self.call_log_note.clear();
                     self.error = Some(e.clone());
                     self.push_log(format!("Open failed: {e}"));
                 }
@@ -265,6 +312,29 @@ impl App {
                     self.busy = false;
                     self.error = Some(e.clone());
                     self.push_log(format!("HTML preview failed: {e}"));
+                }
+                Event::CallLogsLoaded {
+                    entries,
+                    total,
+                    source,
+                } => {
+                    self.call_log_total = total;
+                    self.call_log_note = format!(
+                        "Showing {} of {} call{} from {}",
+                        entries.len(),
+                        total,
+                        if total == 1 { "" } else { "s" },
+                        source
+                    );
+                    self.call_logs = entries;
+                    self.busy = false;
+                    self.error = None;
+                    self.push_log(format!("Loaded call logs: {}", self.call_log_note));
+                }
+                Event::CallLogsFailed(e) => {
+                    self.busy = false;
+                    self.error = Some(e.clone());
+                    self.push_log(format!("Call logs failed: {e}"));
                 }
             }
         }
@@ -344,7 +414,7 @@ impl App {
 
     fn do_open(&mut self) {
         if self.backup_path.trim().is_empty() {
-            self.error = Some("Choose a backup folder or chat.db file first.".into());
+            self.error = Some("Choose a backup folder, chat.db, or sms.db file first.".into());
             return;
         }
         let params = OpenParams {
@@ -412,6 +482,47 @@ impl App {
         }
     }
 
+    fn do_load_call_logs(&mut self) {
+        if !self.opened {
+            self.error = Some("Open an iOS backup before loading call logs.".into());
+            return;
+        }
+        if self.opened_platform != Some(PlatformChoice::IOS) {
+            self.error = Some("Call logs are available from iOS backup folders only.".into());
+            return;
+        }
+
+        self.start_busy("Loading call logs ...");
+        let _ = self.cmd_tx.send(Command::LoadCallLogs {
+            limit: CALL_LOG_LIMIT,
+        });
+    }
+
+    fn save_call_logs_csv(&mut self) {
+        if self.call_logs.is_empty() {
+            self.error = Some("Load call logs before saving CSV.".into());
+            return;
+        }
+
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("CSV", &["csv"])
+            .set_file_name(CALL_LOG_CSV_FILE_NAME)
+            .save_file()
+        else {
+            return;
+        };
+
+        match fs::write(&path, call_logs_csv(&self.call_logs)) {
+            Ok(()) => {
+                self.error = None;
+                self.push_log(format!("Saved call logs CSV: {}", path.display()));
+            }
+            Err(why) => {
+                self.error = Some(format!("Could not save {}: {why}", path.display()));
+            }
+        }
+    }
+
     // MARK: Panels
 
     fn top_panel(&mut self, ctx: &egui::Context) {
@@ -433,7 +544,7 @@ impl App {
                         ui,
                         &mut self.backup_path,
                         layout::SOURCE_FIELD_WIDTH,
-                        "iOS backup folder or macOS chat.db",
+                        "iOS backup folder, chat.db, or sms.db",
                     );
                     open_from_enter |= !self.busy
                         && source_response.lost_focus()
@@ -441,8 +552,22 @@ impl App {
 
                     if theme::add_enabled_button(ui, !self.busy, "📁 Folder…").clicked() {
                         if let Some(dir) = rfd::FileDialog::new().pick_folder() {
-                            self.backup_path = dir.display().to_string();
-                            self.do_open();
+                            match resolve_source_folder(&dir) {
+                                Ok(source) => {
+                                    self.backup_path = source.path.display().to_string();
+                                    self.platform = source.platform;
+                                    self.push_log(format!(
+                                        "Selected {}: {}",
+                                        source.description,
+                                        source.path.display()
+                                    ));
+                                    self.do_open();
+                                }
+                                Err(why) => {
+                                    self.backup_path = dir.display().to_string();
+                                    self.error = Some(why);
+                                }
+                            }
                         }
                     }
                     if theme::add_enabled_button(ui, !self.busy, "📄 chat.db…").clicked() {
@@ -452,6 +577,7 @@ impl App {
                             .pick_file()
                         {
                             self.backup_path = file.display().to_string();
+                            self.platform = PlatformChoice::MacOS;
                             self.do_open();
                         }
                     }
@@ -872,22 +998,120 @@ impl App {
         egui::CentralPanel::default()
             .frame(theme::content_frame())
             .show(ctx, |ui| {
-                let (preview_height, _export_height) =
-                    theme::preview_export_heights(ui.available_height());
-                theme::fixed_height_area(ui, preview_height, |ui| {
-                    self.preview_contents(ui);
-                });
-                theme::inline_separator(ui);
-                let export_height = ui.available_height();
-                theme::scrollable_fixed_height_area(
-                    ui,
-                    export_height,
-                    theme::ids::EXPORT_CONTROLS_SCROLL,
-                    |ui| {
-                        self.export_controls(ui);
-                    },
-                );
+                self.tab_bar(ui);
+                match self.active_tab {
+                    ActiveTab::Messages => self.messages_tab(ui),
+                    ActiveTab::CallLogs => self.call_logs_tab(ui),
+                }
             });
+    }
+
+    fn tab_bar(&mut self, ui: &mut egui::Ui) {
+        theme::control_row(ui, |ui| {
+            if theme::add_tab_button(ui, self.active_tab == ActiveTab::Messages, "Messages")
+                .clicked()
+            {
+                self.active_tab = ActiveTab::Messages;
+            }
+            if theme::add_tab_button(ui, self.active_tab == ActiveTab::CallLogs, "Call logs")
+                .clicked()
+            {
+                self.active_tab = ActiveTab::CallLogs;
+            }
+        });
+        theme::inline_separator(ui);
+        theme::gap(ui, layout::ROW_GAP);
+    }
+
+    fn messages_tab(&mut self, ui: &mut egui::Ui) {
+        let (preview_height, _export_height) = theme::preview_export_heights(ui.available_height());
+        theme::fixed_height_area(ui, preview_height, |ui| {
+            self.preview_contents(ui);
+        });
+        theme::inline_separator(ui);
+        let export_height = ui.available_height();
+        theme::scrollable_fixed_height_area(
+            ui,
+            export_height,
+            theme::ids::EXPORT_CONTROLS_SCROLL,
+            |ui| {
+                self.export_controls(ui);
+            },
+        );
+    }
+
+    fn call_logs_tab(&mut self, ui: &mut egui::Ui) {
+        theme::panel_header(ui, "Call Logs", |ui| {
+            if !self.call_log_note.is_empty() {
+                ui.label(theme::muted_text(&self.call_log_note));
+            }
+        });
+
+        theme::control_row(ui, |ui| {
+            theme::field_label(ui, "Actions");
+            let load_enabled =
+                self.opened && self.opened_platform == Some(PlatformChoice::IOS) && !self.busy;
+            if theme::add_enabled_button(ui, load_enabled, "Load call logs").clicked() {
+                self.do_load_call_logs();
+            }
+            if theme::add_enabled_button(ui, !self.call_logs.is_empty(), "Save CSV").clicked() {
+                self.save_call_logs_csv();
+            }
+        });
+
+        if self.opened && self.opened_platform != Some(PlatformChoice::IOS) {
+            ui.label(theme::small_muted_text(
+                "Open an iOS backup folder to read call history.",
+            ));
+        } else if !self.opened {
+            ui.label(theme::small_muted_text(
+                "Open an iOS backup folder, then load call logs.",
+            ));
+        }
+
+        theme::inline_separator(ui);
+        self.call_log_table(ui);
+    }
+
+    fn call_log_table(&mut self, ui: &mut egui::Ui) {
+        theme::fixed_height_area(ui, ui.available_height(), |ui| {
+            if self.call_logs.is_empty() {
+                theme::centered_preview_message(ui, "No call logs loaded.");
+                return;
+            }
+
+            egui::ScrollArea::both()
+                .id_salt(theme::ids::CALL_LOGS_SCROLL)
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    egui::Grid::new(theme::ids::CALL_LOGS_GRID)
+                        .striped(true)
+                        .spacing(egui::vec2(
+                            layout::CALL_LOG_COLUMN_GAP,
+                            layout::COMPACT_ROW_GAP,
+                        ))
+                        .min_col_width(layout::CALL_LOG_MIN_COLUMN_WIDTH)
+                        .show(ui, |ui| {
+                            ui.label(theme::strong_small_text("Started"));
+                            ui.label(theme::strong_small_text("Direction"));
+                            ui.label(theme::strong_small_text("Address"));
+                            ui.label(theme::strong_small_text("Duration"));
+                            ui.label(theme::strong_small_text("Service"));
+                            ui.label(theme::strong_small_text("Type"));
+                            ui.end_row();
+
+                            for entry in &self.call_logs {
+                                ui.label(&entry.started);
+                                ui.label(entry.direction.label());
+                                ui.label(&entry.address);
+                                ui.label(&entry.duration);
+                                ui.label(&entry.service);
+                                ui.label(&entry.call_type);
+                                ui.end_row();
+                            }
+                        });
+                });
+        });
     }
 
     fn preview_contents(&mut self, ui: &mut egui::Ui) {
@@ -907,7 +1131,7 @@ impl App {
                 } else {
                     theme::centered_preview_message(
                         ui,
-                        "Open an iOS backup folder or a macOS chat.db to get started.",
+                        "Open an iOS backup folder, chat.db, or sms.db to get started.",
                     );
                 }
             } else {
@@ -963,6 +1187,136 @@ fn render_bubble(ui: &mut egui::Ui, m: &PreviewMessage) {
     });
 }
 
+fn call_logs_csv(entries: &[CallLogEntry]) -> String {
+    let mut out = String::from(CALL_LOG_CSV_HEADER);
+    for entry in entries {
+        append_csv_row(
+            &mut out,
+            [
+                entry.started.as_str(),
+                entry.direction.label(),
+                entry.address.as_str(),
+                entry.duration.as_str(),
+                entry.service.as_str(),
+                entry.call_type.as_str(),
+            ],
+        );
+    }
+    out
+}
+
+fn append_csv_row<'a>(out: &mut String, fields: impl IntoIterator<Item = &'a str>) {
+    let mut first = true;
+    for field in fields {
+        if !first {
+            out.push(CSV_COMMA);
+        }
+        first = false;
+        out.push_str(&csv_escape(field));
+    }
+    out.push(CSV_NEWLINE);
+}
+
+fn csv_escape(field: &str) -> String {
+    let needs_quotes = field.contains(CSV_COMMA)
+        || field.contains(CSV_QUOTE)
+        || field.contains(CSV_NEWLINE)
+        || field.starts_with(' ');
+    if !needs_quotes {
+        return field.to_string();
+    }
+    format!(
+        "{CSV_QUOTE}{}{CSV_QUOTE}",
+        field.replace(CSV_QUOTE, CSV_QUOTE_ESCAPE)
+    )
+}
+
+fn resolve_source_folder(folder: &Path) -> Result<ResolvedSource, String> {
+    if !folder.is_dir() {
+        return Err(format!("{} is not a folder.", folder.display()));
+    }
+
+    let mut chat_db: Option<PathBuf> = None;
+    let mut sms_db: Option<PathBuf> = None;
+    let mut scanned_entries = 0usize;
+    let mut queue = VecDeque::from([(folder.to_path_buf(), 0usize)]);
+
+    while scanned_entries <= DATABASE_SCAN_MAX_ENTRIES {
+        let Some((dir, depth)) = queue.pop_front() else {
+            break;
+        };
+
+        if looks_like_ios_backup_root(&dir) {
+            return Ok(ResolvedSource {
+                path: dir,
+                platform: PlatformChoice::IOS,
+                description: "iOS backup root",
+            });
+        }
+
+        let entries = match sorted_dir_entries(&dir) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+
+        for entry in entries {
+            scanned_entries += 1;
+            if scanned_entries > DATABASE_SCAN_MAX_ENTRIES {
+                break;
+            }
+
+            let path = entry.path();
+            if path.is_dir() {
+                if depth < DATABASE_SCAN_MAX_DEPTH {
+                    queue.push_back((path, depth + 1));
+                }
+                continue;
+            }
+
+            let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+                continue;
+            };
+            if name.eq_ignore_ascii_case(MACOS_CHAT_DB_FILE_NAME) && chat_db.is_none() {
+                chat_db = Some(path);
+            } else if name.eq_ignore_ascii_case(LOOSE_IOS_MESSAGES_DB_FILE_NAME) && sms_db.is_none()
+            {
+                sms_db = Some(path);
+            }
+        }
+    }
+
+    if let Some(path) = chat_db {
+        return Ok(ResolvedSource {
+            path,
+            platform: PlatformChoice::MacOS,
+            description: "chat.db",
+        });
+    }
+
+    if let Some(path) = sms_db {
+        return Ok(ResolvedSource {
+            path,
+            platform: PlatformChoice::MacOS,
+            description: "sms.db",
+        });
+    }
+
+    Err(format!(
+        "No iOS backup root, chat.db, or sms.db was found in {}.",
+        folder.display()
+    ))
+}
+
+fn looks_like_ios_backup_root(folder: &Path) -> bool {
+    folder.join(DEFAULT_PATH_IOS).is_file()
+}
+
+fn sorted_dir_entries(dir: &Path) -> Result<Vec<fs::DirEntry>, std::io::Error> {
+    let mut entries: Vec<fs::DirEntry> = fs::read_dir(dir)?.collect::<Result<_, _>>()?;
+    entries.sort_by_key(|entry| entry.path());
+    Ok(entries)
+}
+
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.drain_events();
@@ -990,5 +1344,80 @@ impl eframe::App for App {
         // Persist settings on exit (portable: beside the executable).
         let _ = self.current_settings().save();
         let _ = self.cmd_tx.send(Command::Shutdown);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or_default();
+        let dir = std::env::temp_dir().join(format!("{name}-{}-{stamp}", std::process::id()));
+        fs::create_dir(&dir).expect("create temp dir");
+        dir
+    }
+
+    fn touch(path: &Path) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create parent dir");
+        }
+        fs::write(path, b"").expect("write temp file");
+    }
+
+    #[test]
+    fn folder_resolver_prefers_ios_backup_root() {
+        let dir = temp_dir("folder-resolver-ios");
+        touch(&dir.join(DEFAULT_PATH_IOS));
+        touch(&dir.join(LOOSE_IOS_MESSAGES_DB_FILE_NAME));
+
+        let source = resolve_source_folder(&dir).expect("resolve folder");
+        let _ = fs::remove_dir_all(&dir);
+
+        assert_eq!(source.path, dir);
+        assert_eq!(source.platform, PlatformChoice::IOS);
+    }
+
+    #[test]
+    fn folder_resolver_finds_nested_chat_db() {
+        let dir = temp_dir("folder-resolver-chat");
+        let chat_db = dir
+            .join("Library")
+            .join("Messages")
+            .join(MACOS_CHAT_DB_FILE_NAME);
+        touch(&chat_db);
+
+        let source = resolve_source_folder(&dir).expect("resolve folder");
+        let _ = fs::remove_dir_all(&dir);
+
+        assert_eq!(source.path, chat_db);
+        assert_eq!(source.platform, PlatformChoice::MacOS);
+    }
+
+    #[test]
+    fn folder_resolver_loads_loose_sms_db() {
+        let dir = temp_dir("folder-resolver-sms");
+        let sms_db = dir.join(LOOSE_IOS_MESSAGES_DB_FILE_NAME);
+        touch(&sms_db);
+
+        let source = resolve_source_folder(&dir).expect("resolve folder");
+        let _ = fs::remove_dir_all(&dir);
+
+        assert_eq!(source.path, sms_db);
+        assert_eq!(source.platform, PlatformChoice::MacOS);
+    }
+
+    #[test]
+    fn folder_resolver_reports_missing_database() {
+        let dir = temp_dir("folder-resolver-empty");
+
+        let error = resolve_source_folder(&dir).expect_err("expected missing source");
+        let _ = fs::remove_dir_all(&dir);
+
+        assert!(error.contains("No iOS backup root"));
     }
 }
