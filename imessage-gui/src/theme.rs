@@ -41,6 +41,11 @@ pub mod layout {
     pub const ACTIVITY_LOG_WINDOW_MAX_HEIGHT: f32 = 680.0;
     pub const ACTIVITY_LOG_WINDOW_ATTACH_GAP: f32 = 0.0;
     pub const ACTIVITY_LOG_WINDOW_TOP_OFFSET: f32 = 0.0;
+    pub const BACKUP_PICKER_WIDTH: f32 = 720.0;
+    pub const BACKUP_PICKER_HEIGHT: f32 = 460.0;
+    pub const BACKUP_PICKER_MIN_WIDTH: f32 = 520.0;
+    pub const BACKUP_PICKER_MIN_HEIGHT: f32 = 320.0;
+    pub const BACKUP_PICKER_SCROLL_HEIGHT: f32 = 330.0;
 
     pub const SOURCE_FIELD_WIDTH: f32 = 380.0;
     pub const PASSWORD_FIELD_WIDTH: f32 = 140.0;

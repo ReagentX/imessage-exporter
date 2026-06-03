@@ -14,6 +14,7 @@ use std::{
 };
 
 use eframe::egui;
+use plist::{Dictionary, Value};
 
 use imessage_database::{tables::table::DEFAULT_PATH_IOS, util::dirs::home};
 
@@ -40,6 +41,36 @@ const MACOS_CHAT_DB_FILE_NAME: &str = "chat.db";
 const LOOSE_IOS_MESSAGES_DB_FILE_NAME: &str = "sms.db";
 const DATABASE_SCAN_MAX_DEPTH: usize = 4;
 const DATABASE_SCAN_MAX_ENTRIES: usize = 10_000;
+const INFO_PLIST_FILE_NAME: &str = "Info.plist";
+const MANIFEST_PLIST_FILE_NAME: &str = "Manifest.plist";
+const MANIFEST_DB_FILE_NAME: &str = "Manifest.db";
+const STATUS_PLIST_FILE_NAME: &str = "Status.plist";
+const BACKUP_UNKNOWN_VALUE: &str = "Unknown";
+const BACKUP_ENCRYPTED_LABEL: &str = "Encrypted";
+const BACKUP_UNENCRYPTED_LABEL: &str = "Unencrypted";
+const BACKUP_PICKER_TITLE: &str = "Available iOS backups";
+const BACKUP_SCAN_CLASSIC_WINDOWS_SOURCE: &str = "Classic iTunes";
+const BACKUP_SCAN_STORE_WINDOWS_SOURCE: &str = "Apple Devices / Microsoft Store";
+const BACKUP_SCAN_PACKAGE_WINDOWS_SOURCE: &str = "Microsoft Store package cache";
+const BACKUP_SCAN_MACOS_SOURCE: &str = "macOS MobileSync";
+const BACKUP_DEVICE_NAME_KEYS: &[&str] = &["Device Name", "Display Name"];
+const BACKUP_PRODUCT_NAME_KEYS: &[&str] = &["Product Name", "Product Type"];
+const BACKUP_VERSION_KEYS: &[&str] = &["Product Version", "Build Version"];
+const BACKUP_LAST_DATE_KEYS: &[&str] = &["Last Backup Date"];
+const BACKUP_IDENTIFIER_KEYS: &[&str] = &["Unique Identifier", "Target Identifier"];
+const WINDOWS_STORE_BACKUP_COMPONENTS: &[&str] = &["Apple", "MobileSync", "Backup"];
+const WINDOWS_CLASSIC_BACKUP_COMPONENTS: &[&str] = &["Apple Computer", "MobileSync", "Backup"];
+const WINDOWS_PACKAGES_COMPONENTS: &[&str] = &["Packages"];
+const WINDOWS_PACKAGE_BACKUP_COMPONENTS: &[&str] = &[
+    "LocalCache",
+    "Roaming",
+    "Apple Computer",
+    "MobileSync",
+    "Backup",
+];
+const WINDOWS_APP_PACKAGE_PREFIXES: &[&str] = &["AppleInc.iTunes_", "AppleInc.AppleDevices_"];
+const MACOS_BACKUP_COMPONENTS: &[&str] =
+    &["Library", "Application Support", "MobileSync", "Backup"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ActiveTab {
@@ -54,6 +85,28 @@ struct ResolvedSource {
     description: &'static str,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct BackupCandidate {
+    path: PathBuf,
+    label: String,
+    detail: String,
+    source: String,
+    encrypted: bool,
+    last_backup: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct BackupSearchRoot {
+    path: PathBuf,
+    source: &'static str,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct BackupScanResult {
+    roots: Vec<BackupSearchRoot>,
+    backups: Vec<BackupCandidate>,
+}
+
 pub struct App {
     cmd_tx: Sender<Command>,
     evt_rx: Receiver<Event>,
@@ -66,6 +119,9 @@ pub struct App {
     contacts_path: String,
     attachment_root: String,
     show_advanced_source: bool,
+    show_backup_picker: bool,
+    backup_candidates: Vec<BackupCandidate>,
+    backup_scan_note: String,
 
     // Loaded-state info
     opened: bool,
@@ -150,6 +206,9 @@ impl App {
             contacts_path: s.contacts_path,
             attachment_root: s.attachment_root,
             show_advanced_source: false,
+            show_backup_picker: false,
+            backup_candidates: Vec::new(),
+            backup_scan_note: String::new(),
             opened: false,
             opened_platform: None,
             summary: String::new(),
@@ -523,6 +582,46 @@ impl App {
         }
     }
 
+    fn scan_backups(&mut self) {
+        let result = scan_standard_backup_locations();
+        self.backup_scan_note = backup_scan_note(&result);
+        self.backup_candidates = result.backups;
+        if self.backup_candidates.is_empty() {
+            self.show_backup_picker = false;
+            self.error = Some(self.backup_scan_note.clone());
+            self.push_log(self.backup_scan_note.clone());
+        } else {
+            self.error = None;
+            self.show_backup_picker = true;
+            self.push_log(format!(
+                "Found {} iOS backup{}",
+                self.backup_candidates.len(),
+                if self.backup_candidates.len() == 1 {
+                    ""
+                } else {
+                    "s"
+                }
+            ));
+        }
+    }
+
+    fn use_backup_candidate(&mut self, backup: BackupCandidate) {
+        self.backup_path = backup.path.display().to_string();
+        self.platform = PlatformChoice::IOS;
+        self.show_backup_picker = false;
+        self.push_log(format!("Selected iOS backup: {}", backup.path.display()));
+
+        if backup.encrypted && self.password.trim().is_empty() {
+            self.error = Some(
+                "Selected encrypted backup. Enter its backup password, then press Enter in the password field."
+                    .into(),
+            );
+            return;
+        }
+
+        self.do_open();
+    }
+
     // MARK: Panels
 
     fn top_panel(&mut self, ctx: &egui::Context) {
@@ -569,6 +668,9 @@ impl App {
                                 }
                             }
                         }
+                    }
+                    if theme::add_enabled_button(ui, !self.busy, "Scan backups…").clicked() {
+                        self.scan_backups();
                     }
                     if theme::add_enabled_button(ui, !self.busy, "📄 chat.db…").clicked() {
                         if let Some(file) = rfd::FileDialog::new()
@@ -761,6 +863,53 @@ impl App {
                     ui.label(theme::small_muted_text(format!("{first}\n→ {last}")));
                 }
             });
+    }
+
+    fn backup_picker_window(&mut self, ctx: &egui::Context) {
+        let mut open = self.show_backup_picker;
+        let candidates = self.backup_candidates.clone();
+        let mut selected: Option<BackupCandidate> = None;
+
+        egui::Window::new(BACKUP_PICKER_TITLE)
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(true)
+            .default_size(egui::vec2(
+                layout::BACKUP_PICKER_WIDTH,
+                layout::BACKUP_PICKER_HEIGHT,
+            ))
+            .min_size(egui::vec2(
+                layout::BACKUP_PICKER_MIN_WIDTH,
+                layout::BACKUP_PICKER_MIN_HEIGHT,
+            ))
+            .show(ctx, |ui| {
+                ui.label(theme::small_muted_text(&self.backup_scan_note));
+                theme::inline_separator(ui);
+
+                egui::ScrollArea::both()
+                    .max_height(layout::BACKUP_PICKER_SCROLL_HEIGHT)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        for backup in &candidates {
+                            ui.horizontal_wrapped(|ui| {
+                                if theme::add_small_button(ui, "Use").clicked() {
+                                    selected = Some(backup.clone());
+                                }
+                                ui.vertical(|ui| {
+                                    ui.label(egui::RichText::new(&backup.label).strong());
+                                    ui.label(theme::small_muted_text(&backup.detail));
+                                    ui.label(theme::log_text(backup.path.display().to_string()));
+                                });
+                            });
+                            theme::inline_separator(ui);
+                        }
+                    });
+            });
+
+        self.show_backup_picker = open;
+        if let Some(backup) = selected {
+            self.use_backup_candidate(backup);
+        }
     }
 
     fn export_controls(&mut self, ui: &mut egui::Ui) {
@@ -1317,6 +1466,260 @@ fn sorted_dir_entries(dir: &Path) -> Result<Vec<fs::DirEntry>, std::io::Error> {
     Ok(entries)
 }
 
+fn scan_standard_backup_locations() -> BackupScanResult {
+    let roots = standard_backup_search_roots();
+    let backups = discover_ios_backups_in_roots(&roots);
+    BackupScanResult { roots, backups }
+}
+
+fn standard_backup_search_roots() -> Vec<BackupSearchRoot> {
+    let mut roots = Vec::new();
+
+    if cfg!(target_os = "windows") {
+        add_windows_backup_roots(&mut roots);
+    }
+    if cfg!(target_os = "macos") || !cfg!(any(target_os = "windows", target_os = "macos")) {
+        add_macos_backup_roots(&mut roots);
+    }
+
+    dedupe_backup_roots(roots)
+}
+
+fn add_windows_backup_roots(roots: &mut Vec<BackupSearchRoot>) {
+    if let Some(path) = env_path("USERPROFILE") {
+        roots.push(BackupSearchRoot {
+            path: join_components(&path, WINDOWS_STORE_BACKUP_COMPONENTS),
+            source: BACKUP_SCAN_STORE_WINDOWS_SOURCE,
+        });
+    }
+    if let Some(path) = env_path("APPDATA") {
+        roots.push(BackupSearchRoot {
+            path: join_components(&path, WINDOWS_CLASSIC_BACKUP_COMPONENTS),
+            source: BACKUP_SCAN_CLASSIC_WINDOWS_SOURCE,
+        });
+    }
+    if let Some(local_app_data) = env_path("LOCALAPPDATA") {
+        add_windows_package_roots(roots, &local_app_data);
+    }
+}
+
+fn add_macos_backup_roots(roots: &mut Vec<BackupSearchRoot>) {
+    if let Some(path) = env_path("HOME") {
+        roots.push(BackupSearchRoot {
+            path: join_components(&path, MACOS_BACKUP_COMPONENTS),
+            source: BACKUP_SCAN_MACOS_SOURCE,
+        });
+    }
+}
+
+fn add_windows_package_roots(roots: &mut Vec<BackupSearchRoot>, local_app_data: &Path) {
+    let packages_root = join_components(local_app_data, WINDOWS_PACKAGES_COMPONENTS);
+    let Ok(entries) = sorted_dir_entries(&packages_root) else {
+        return;
+    };
+
+    for entry in entries {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if WINDOWS_APP_PACKAGE_PREFIXES
+            .iter()
+            .any(|prefix| name.starts_with(prefix))
+        {
+            roots.push(BackupSearchRoot {
+                path: join_components(&path, WINDOWS_PACKAGE_BACKUP_COMPONENTS),
+                source: BACKUP_SCAN_PACKAGE_WINDOWS_SOURCE,
+            });
+        }
+    }
+}
+
+fn env_path(name: &str) -> Option<PathBuf> {
+    std::env::var_os(name)
+        .map(PathBuf::from)
+        .filter(|path| !path.as_os_str().is_empty())
+}
+
+fn join_components(base: &Path, components: &[&str]) -> PathBuf {
+    let mut path = base.to_path_buf();
+    for component in components {
+        path.push(component);
+    }
+    path
+}
+
+fn dedupe_backup_roots(roots: Vec<BackupSearchRoot>) -> Vec<BackupSearchRoot> {
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for root in roots {
+        let key = root.path.to_string_lossy().to_ascii_lowercase();
+        if seen.insert(key) {
+            out.push(root);
+        }
+    }
+    out
+}
+
+fn discover_ios_backups_in_roots(roots: &[BackupSearchRoot]) -> Vec<BackupCandidate> {
+    let mut candidates = Vec::new();
+    let mut seen = HashSet::new();
+
+    for root in roots {
+        if !root.path.is_dir() {
+            continue;
+        }
+
+        if let Some(candidate) = backup_candidate_from_dir(&root.path, root.source) {
+            if seen.insert(candidate.path.to_string_lossy().to_ascii_lowercase()) {
+                candidates.push(candidate);
+            }
+        }
+
+        let Ok(entries) = sorted_dir_entries(&root.path) else {
+            continue;
+        };
+        for entry in entries {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            if let Some(candidate) = backup_candidate_from_dir(&path, root.source) {
+                if seen.insert(candidate.path.to_string_lossy().to_ascii_lowercase()) {
+                    candidates.push(candidate);
+                }
+            }
+        }
+    }
+
+    candidates.sort_by(|a, b| {
+        b.last_backup
+            .cmp(&a.last_backup)
+            .then_with(|| a.label.to_lowercase().cmp(&b.label.to_lowercase()))
+            .then_with(|| a.path.cmp(&b.path))
+    });
+    candidates
+}
+
+fn backup_candidate_from_dir(path: &Path, source: &'static str) -> Option<BackupCandidate> {
+    if !looks_like_ios_backup_set(path) {
+        return None;
+    }
+
+    let info = plist_dictionary(&path.join(INFO_PLIST_FILE_NAME));
+    let manifest = plist_dictionary(&path.join(MANIFEST_PLIST_FILE_NAME));
+
+    let folder_name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| BACKUP_UNKNOWN_VALUE.to_string());
+    let device_name = first_plist_string(info.as_ref(), BACKUP_DEVICE_NAME_KEYS)
+        .or_else(|| first_plist_string(manifest.as_ref(), BACKUP_DEVICE_NAME_KEYS))
+        .unwrap_or_else(|| folder_name.clone());
+    let product = first_plist_string(info.as_ref(), BACKUP_PRODUCT_NAME_KEYS);
+    let version = first_plist_string(info.as_ref(), BACKUP_VERSION_KEYS);
+    let identifier = first_plist_string(info.as_ref(), BACKUP_IDENTIFIER_KEYS)
+        .or_else(|| first_plist_string(manifest.as_ref(), BACKUP_IDENTIFIER_KEYS))
+        .unwrap_or(folder_name);
+    let last_backup = first_plist_date_or_string(info.as_ref(), BACKUP_LAST_DATE_KEYS);
+    let encrypted = plist_bool(manifest.as_ref(), "IsEncrypted").unwrap_or(false);
+
+    let mut detail_parts = Vec::new();
+    if let Some(product) = product.filter(|value| !value.trim().is_empty()) {
+        detail_parts.push(product);
+    }
+    if let Some(version) = version.filter(|value| !value.trim().is_empty()) {
+        detail_parts.push(format!("iOS {version}"));
+    }
+    detail_parts.push(if encrypted {
+        BACKUP_ENCRYPTED_LABEL.to_string()
+    } else {
+        BACKUP_UNENCRYPTED_LABEL.to_string()
+    });
+    if let Some(last_backup) = &last_backup {
+        detail_parts.push(format!("Last backup {last_backup}"));
+    }
+    detail_parts.push(format!("Source {source}"));
+    detail_parts.push(format!("ID {identifier}"));
+
+    Some(BackupCandidate {
+        path: path.to_path_buf(),
+        label: device_name,
+        detail: detail_parts.join(" | "),
+        source: source.to_string(),
+        encrypted,
+        last_backup,
+    })
+}
+
+fn looks_like_ios_backup_set(path: &Path) -> bool {
+    path.join(MANIFEST_PLIST_FILE_NAME).is_file()
+        || path.join(MANIFEST_DB_FILE_NAME).is_file()
+        || path.join(INFO_PLIST_FILE_NAME).is_file()
+        || path.join(STATUS_PLIST_FILE_NAME).is_file()
+        || looks_like_ios_backup_root(path)
+}
+
+fn plist_dictionary(path: &Path) -> Option<Dictionary> {
+    Value::from_file(path).ok()?.into_dictionary()
+}
+
+fn first_plist_string(dict: Option<&Dictionary>, keys: &[&str]) -> Option<String> {
+    let dict = dict?;
+    keys.iter()
+        .filter_map(|key| dict.get(key))
+        .filter_map(Value::as_string)
+        .map(str::trim)
+        .find(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn first_plist_date_or_string(dict: Option<&Dictionary>, keys: &[&str]) -> Option<String> {
+    let dict = dict?;
+    keys.iter()
+        .filter_map(|key| dict.get(key))
+        .find_map(|value| {
+            value
+                .as_date()
+                .map(|date| date.to_xml_format())
+                .or_else(|| value.as_string().map(ToOwned::to_owned))
+        })
+}
+
+fn plist_bool(dict: Option<&Dictionary>, key: &str) -> Option<bool> {
+    dict?.get(key)?.as_boolean()
+}
+
+fn backup_scan_note(result: &BackupScanResult) -> String {
+    if result.backups.is_empty() {
+        return format!(
+            "No iOS backups found in the standard Apple backup folders: {}",
+            backup_root_summary(&result.roots)
+        );
+    }
+
+    format!(
+        "Found {} backup{} in: {}",
+        result.backups.len(),
+        if result.backups.len() == 1 { "" } else { "s" },
+        backup_root_summary(&result.roots)
+    )
+}
+
+fn backup_root_summary(roots: &[BackupSearchRoot]) -> String {
+    if roots.is_empty() {
+        return BACKUP_UNKNOWN_VALUE.to_string();
+    }
+    roots
+        .iter()
+        .map(|root| format!("{} ({})", root.path.display(), root.source))
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.drain_events();
@@ -1332,6 +1735,9 @@ impl eframe::App for App {
         self.central_panel(ctx);
         if self.show_activity_log {
             self.activity_log_viewport(ctx);
+        }
+        if self.show_backup_picker {
+            self.backup_picker_window(ctx);
         }
 
         // Keep polling the backend channel while a long operation runs.
@@ -1352,6 +1758,8 @@ mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    const BACKUP_SCAN_CUSTOM_SOURCE: &str = "Chosen folder";
+
     fn temp_dir(name: &str) -> PathBuf {
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -1367,6 +1775,42 @@ mod tests {
             fs::create_dir_all(parent).expect("create parent dir");
         }
         fs::write(path, b"").expect("write temp file");
+    }
+
+    fn write_plist(path: &Path, entries: &[(&str, Value)]) {
+        let mut dict = Dictionary::new();
+        for (key, value) in entries {
+            dict.insert((*key).to_string(), value.clone());
+        }
+        Value::Dictionary(dict)
+            .to_file_xml(path)
+            .expect("write plist");
+    }
+
+    fn write_backup(dir: &Path, name: &str, encrypted: bool, last_backup: &str) {
+        fs::create_dir_all(dir).expect("create backup dir");
+        write_plist(
+            &dir.join(INFO_PLIST_FILE_NAME),
+            &[
+                ("Device Name", Value::String(name.to_string())),
+                ("Product Name", Value::String("iPhone".to_string())),
+                ("Product Version", Value::String("17.5.1".to_string())),
+                (
+                    "Unique Identifier",
+                    Value::String(
+                        dir.file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .into_owned(),
+                    ),
+                ),
+                ("Last Backup Date", Value::String(last_backup.to_string())),
+            ],
+        );
+        write_plist(
+            &dir.join(MANIFEST_PLIST_FILE_NAME),
+            &[("IsEncrypted", Value::Boolean(encrypted))],
+        );
     }
 
     #[test]
@@ -1419,5 +1863,62 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
 
         assert!(error.contains("No iOS backup root"));
+    }
+
+    #[test]
+    fn backup_candidate_reads_plist_metadata() {
+        let dir = temp_dir("backup-candidate");
+        write_backup(&dir, "Randy's iPhone", true, "2026-06-03T22:00:00Z");
+
+        let candidate =
+            backup_candidate_from_dir(&dir, BACKUP_SCAN_CUSTOM_SOURCE).expect("backup candidate");
+        let _ = fs::remove_dir_all(&dir);
+
+        assert_eq!(candidate.label, "Randy's iPhone");
+        assert!(candidate.encrypted);
+        assert_eq!(
+            candidate.last_backup.as_deref(),
+            Some("2026-06-03T22:00:00Z")
+        );
+        assert!(candidate.detail.contains("iPhone"));
+        assert!(candidate.detail.contains("iOS 17.5.1"));
+        assert!(candidate.detail.contains(BACKUP_ENCRYPTED_LABEL));
+    }
+
+    #[test]
+    fn backup_discovery_scans_roots_and_sorts_newest_first() {
+        let root = temp_dir("backup-discovery-root");
+        let old_backup = root.join("old-backup");
+        let new_backup = root.join("new-backup");
+        let ignored = root.join("not-a-backup");
+        fs::create_dir_all(&ignored).expect("create ignored dir");
+        write_backup(&old_backup, "Old phone", false, "2025-01-01T00:00:00Z");
+        write_backup(&new_backup, "New phone", false, "2026-01-01T00:00:00Z");
+
+        let backups = discover_ios_backups_in_roots(&[BackupSearchRoot {
+            path: root.clone(),
+            source: BACKUP_SCAN_CUSTOM_SOURCE,
+        }]);
+        let _ = fs::remove_dir_all(&root);
+
+        assert_eq!(backups.len(), 2);
+        assert_eq!(backups[0].label, "New phone");
+        assert_eq!(backups[1].label, "Old phone");
+    }
+
+    #[test]
+    fn backup_scan_note_lists_roots() {
+        let result = BackupScanResult {
+            roots: vec![BackupSearchRoot {
+                path: PathBuf::from("C:/Users/test/Apple/MobileSync/Backup"),
+                source: BACKUP_SCAN_STORE_WINDOWS_SOURCE,
+            }],
+            backups: Vec::new(),
+        };
+
+        let note = backup_scan_note(&result);
+
+        assert!(note.contains("No iOS backups found"));
+        assert!(note.contains(BACKUP_SCAN_STORE_WINDOWS_SOURCE));
     }
 }

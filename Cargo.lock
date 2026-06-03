@@ -2176,6 +2176,7 @@ dependencies = [
  "imessage-database",
  "imessage-exporter",
  "open",
+ "plist",
  "printpdf",
  "rfd",
  "rusqlite",

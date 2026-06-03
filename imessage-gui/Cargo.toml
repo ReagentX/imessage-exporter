@@ -17,6 +17,7 @@ rfd = "0.15"
 open = "5"
 chrono = "=0.4.44"
 crabapple = "=0.4.7"
+plist = "=1.9.0"
 rusqlite = { version = "=0.40.0", features = ["blob", "bundled"] }
 sha1 = "=0.11.0"
 # Pure-Rust PDF generation (no Chromium dependency); `embedded_images`
