@@ -1,6 +1,6 @@
 # Binary Documentation
 
-The `imessage-exporter` binary exports iMessage data to `txt` or `html` formats. It can also run diagnostics to find problems with the iMessage database.
+The `imessage-exporter` binary exports iMessage data to `txt`, `html`, or `pdf` formats, runs diagnostics to find problems with the iMessage database, and exports iOS Phone/FaceTime call history when the backup contains it.
 
 ## Installation
 
@@ -47,7 +47,7 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
 -d, --diagnostics
         Print diagnostic information and exit
         
--f, --format <txt, html>
+-f, --format <txt, html, pdf>
         Specify a single file format to export messages into
         
 -c, --copy-method <clone, basic, full, disabled>
@@ -93,7 +93,7 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         
 -l, --no-lazy
         Do not include `loading="lazy"` in HTML export `img` tags
-        This will make pages load slower but PDF generation work
+        This will make pages load slower but can help browser-based HTML-to-PDF workflows
         
 -m, --custom-name <custom-name>
         Specify an optional custom name for the database owner's messages in exports
@@ -130,6 +130,14 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         By default, the progress bar is shown only when stderr is a terminal,
         so headless invocations (CI, output redirected to a logfile) stay clean automatically.
         Use this flag to suppress the bar even in an interactive terminal.
+
+    --call-logs
+        Export iOS Phone/FaceTime call history to call_logs.csv and exit
+        Requires an iOS backup folder source
+
+    --call-log-limit <rows>
+        Maximum number of call-history rows to export
+        Only valid with --call-logs. If omitted, all rows are exported.
         
 -h, --help
         Print help
@@ -155,6 +163,18 @@ Export as `txt` from an iPhone backup located at `~/iphone_backup_latest` to a n
 
 ```zsh
 imessage-exporter -f txt -p ~/iphone_backup_latest -a iOS -o backup_export
+```
+
+Export as `pdf` from an iPhone backup located at `~/iphone_backup_latest` to a new folder in the current working directory called `pdf_export`:
+
+```zsh
+imessage-exporter -f pdf -p ~/iphone_backup_latest -a iOS -o pdf_export
+```
+
+Export iOS Phone/FaceTime call history from an iPhone backup located at `~/iphone_backup_latest` to `call_logs.csv` in a new folder called `backup_export`:
+
+```zsh
+imessage-exporter --call-logs -p ~/iphone_backup_latest -a iOS -o backup_export
 ```
 
 Export as `html` from `/Volumes/external/chat.db` to `/Volumes/external/export` without copying attachments:
@@ -217,6 +237,8 @@ imessage-exporter -f html -t "@"
 
 [ffmpeg](https://ffmpeg.org) is required to make exported audio more compatible on non-macOS platforms and exported video more compatible on all platforms.
 
+These tools are only needed when using `--copy-method basic` or `--copy-method full`. `disabled` and `clone` exports do not require media converters.
+
 ### Contacts
 
 `imessage-exporter` will automatically attempt to resolve handle details (email addresses and phone numbers) against contacts found either in the provided iOS backup or on the local macOS Address Book. Users can optionally pass in a path to an Address Book database, but this should generally not be necessary.
@@ -255,25 +277,12 @@ The default styles can be viewed [here](src/exporters/html/resources/style.css).
 
 ### PDF Exports
 
-I could not get PDF export to work in a reasonable way. The best way for a user to do this is to follow the steps above for Safari and print to PDF.
+PDF export is rendered natively by `imessage-exporter`; it does not require Safari, browser automation, or `wkhtmltopdf`. Each conversation is written as its own PDF. Image attachments are embedded when their files can be resolved, and unavailable attachments are annotated in the transcript.
 
-#### `wkhtmltopdf`
+Very large conversations can produce large, many-page PDFs and may take longer than `txt` or `html` exports.
 
-`wkhtmltopdf` refuses to render local images, even with the flag enabled like so:
+### Call Log Exports
 
-```rust,ignore
-let mut process = Command::new("wkhtmltopdf")
-.args(&vec![
-    "--enable-local-file-access".to_string(),
-    html_path,
-    pdf_path.to_string_lossy().to_string(),
-])
-.spawn()
-.unwrap();
-```
+`--call-logs` exports iOS Phone and FaceTime history from an iOS backup folder to `call_logs.csv`. This reads Apple's call-history database when that database is present in the backup.
 
-This persisted after granting `cargo`, `imessage-exporter`, and `wkhtmltopdf` Full Disk Access permissions as well as after copying files to the same directory as the `HTML` file.
-
-#### Browser Automation
-
-There are several `chomedriver` wrappers for Rust. The ones that use async make this binary too large (over `10mb`) and have too many dependencies. The sync implementation in the `headless-chrome` crate works, but [times out](https://github.com/atroche/rust-headless-chrome/issues/319) when generating large `PDF`s, even with an extreme timeout.
+Recent unencrypted iOS backups may omit call history. If the call-history database is not available, the command reports the exact backup manifest paths it tried so you can confirm whether the backup contains the data. Encrypted backups are more likely to include this database.

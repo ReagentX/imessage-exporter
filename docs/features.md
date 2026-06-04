@@ -12,9 +12,17 @@ This tool targets the current latest public release for Messages.app. It may wor
 - Encrypted or unencrypted local iOS backups
   - Unencrypted backups are resolved normally
   - Encrypted backups are resolved with [crabapple](https://github.com/ReagentX/crabapple)
+  - Phone and FaceTime call history can be exported when Apple's call-history database is present in the backup
 - Jailbroken iOS filesystem data
   - Uses `sms.db`, which follows the same schema as macOS `chat.db`
   - Resolved as a macOS database with an alternate attachment root
+
+## Supported export outputs
+
+- TXT conversation transcripts
+- HTML conversation transcripts with browser-friendly media embeds
+- Native PDF conversation transcripts
+- CSV call-log exports from iOS backups when call history is present
 
 ## Supported Message Features
 
@@ -72,6 +80,7 @@ This tool targets the current latest public release for Messages.app. It may wor
     - File paths in TXT exports
     - Embeds in HTML exports (including `<img>`, `<video>`, and `<audio>`)
       - [Audio messages](https://support.apple.com/guide/messages/send-an-audio-message-icht204ef108/mac) include embedded transcripts
+    - Image previews and attachment annotations in PDF exports
   - Attachment date metadata is set to the date and time of message receipt
 - Expressives
   - Detects both bubble and screen [effects](https://support.apple.com/en-us/104970)

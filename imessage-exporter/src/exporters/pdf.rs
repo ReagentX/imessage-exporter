@@ -10,18 +10,71 @@
 //! is self-contained.
 
 use std::{
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    fs::create_dir_all,
     io::BufWriter,
     path::{Path, PathBuf},
 };
 
 use ab_glyph::{Font, FontVec, PxScale, ScaleFont};
+use imessage_database::{
+    tables::{
+        attachment::{Attachment, MediaType},
+        messages::{Message, models::BubbleComponent},
+        table::Table,
+    },
+    util::{dates::format as fmt_date, query_context::QueryContext},
+};
 use printpdf::image_crate;
 use printpdf::{
     BuiltinFont, Color, Image, ImageTransform, IndirectFontRef, Mm, PdfDocument,
     PdfDocumentReference, PdfLayerReference, Rect, Rgb,
 };
 
-use crate::model::{PreviewAttachment, PreviewMessage};
+use crate::app::{error::RuntimeError, runtime::Config, sanitizers::sanitize_filename};
+
+#[derive(Clone, Debug)]
+pub struct PreviewMessage {
+    pub is_from_me: bool,
+    pub sender: String,
+    pub timestamp: String,
+    pub text: String,
+    /// Total attachment rows referenced by the message.
+    pub attachment_count: usize,
+    /// Image attachments resolved for PDF embedding.
+    pub attachments: Vec<PreviewAttachment>,
+    /// Short badges such as attachment/reply/edit markers.
+    pub annotations: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct PreviewAttachment {
+    pub path: PathBuf,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PdfExportSummary {
+    pub produced_files: usize,
+    pub total_messages: usize,
+}
+
+struct PdfConversation {
+    title: String,
+    raw_chat_ids: BTreeSet<i32>,
+}
+
+#[must_use]
+pub fn filename_stem(name: &str) -> String {
+    let cleaned = sanitize_filename(name);
+    let trimmed = cleaned.trim().trim_matches('.');
+    let stem = if trimmed.is_empty() {
+        "conversation"
+    } else {
+        trimmed
+    };
+    stem.chars().take(120).collect()
+}
 
 // A4 geometry in points (1 pt = 1/72"). printpdf takes Mm; we convert.
 const PT_PER_MM: f32 = 72.0 / 25.4;
@@ -38,7 +91,324 @@ const LINE_GAP: f32 = 2.0; // pt between wrapped lines
 const PARA_GAP: f32 = 6.0; // pt between bubbles
 const BUBBLE_PAD: f32 = 6.0; // pt padding inside a bubble
 const BUBBLE_MAX_FRAC: f32 = 0.74; // bubble width as fraction of content width
+const TEXT_MEASURE_SCALE: f32 = 1.38; // guard for PDF/font renderer metric differences
+const TEXT_WRAP_SAFETY: f32 = 18.0; // pt guard inside the bubble after wrapping
 const IMAGE_GAP: f32 = 4.0; // pt between embedded image thumbnails
+
+pub fn export(config: &Config) -> Result<PdfExportSummary, RuntimeError> {
+    create_dir_all(&config.options.export_path)?;
+
+    let conversations = pdf_conversations(config);
+    if conversations.is_empty() {
+        return Err(RuntimeError::PdfError(
+            "No conversations matched the current selection.".to_string(),
+        ));
+    }
+
+    let total_convs = conversations.len();
+    let mut summary = PdfExportSummary::default();
+    let mut used_names: HashSet<String> = HashSet::new();
+
+    for (idx, conv) in conversations.iter().enumerate() {
+        if let Some(callback) = &config.progress_callback {
+            callback(idx as u64, total_convs as u64);
+        }
+
+        let qc = query_for_conversation(&config.options.query_context, conv);
+        let messages = collect_messages(config, &qc, usize::MAX, true)?;
+        if messages.is_empty() {
+            continue;
+        }
+        summary.total_messages += messages.len();
+
+        let mut stem = filename_stem(&conv.title);
+        let base = stem.clone();
+        let mut n = 1;
+        while !used_names.insert(stem.clone()) {
+            n += 1;
+            stem = format!("{base} ({n})");
+        }
+
+        let pdf_path = config.options.export_path.join(format!("{stem}.pdf"));
+        render(&messages, &conv.title, &pdf_path).map_err(RuntimeError::PdfError)?;
+        summary.produced_files += 1;
+    }
+
+    if let Some(callback) = &config.progress_callback {
+        callback(total_convs as u64, total_convs as u64);
+    }
+
+    if summary.produced_files == 0 {
+        return Err(RuntimeError::PdfError(
+            "No messages matched the current filters.".to_string(),
+        ));
+    }
+
+    Ok(summary)
+}
+
+fn pdf_conversations(config: &Config) -> Vec<PdfConversation> {
+    let selected = config.options.query_context.selected_chat_ids.as_ref();
+    let mut groups: BTreeMap<i32, BTreeSet<i32>> = BTreeMap::new();
+
+    for raw in config.chatrooms.keys() {
+        if selected.is_some_and(|ids| !ids.contains(raw)) {
+            continue;
+        }
+        let real = *config.real_chatrooms.get(raw).unwrap_or(raw);
+        groups.entry(real).or_default().insert(*raw);
+    }
+
+    if groups.is_empty() && selected.is_none() {
+        return vec![PdfConversation {
+            title: "Orphaned".to_string(),
+            raw_chat_ids: BTreeSet::new(),
+        }];
+    }
+
+    let mut out = Vec::with_capacity(groups.len());
+    for raw_chat_ids in groups.into_values() {
+        let title = raw_chat_ids
+            .iter()
+            .filter_map(|id| config.chatrooms.get(id))
+            .find_map(|chat| chat.display_name().map(|title| title.to_string()))
+            .or_else(|| {
+                raw_chat_ids
+                    .iter()
+                    .filter_map(|id| config.chatrooms.get(id))
+                    .map(|chat| chat.chat_identifier.clone())
+                    .next()
+            })
+            .unwrap_or_else(|| "Conversation".to_string());
+
+        out.push(PdfConversation {
+            title,
+            raw_chat_ids,
+        });
+    }
+
+    out.sort_by_key(|conversation| conversation.title.to_lowercase());
+    out
+}
+
+fn query_for_conversation(base: &QueryContext, conversation: &PdfConversation) -> QueryContext {
+    let mut qc = QueryContext {
+        start: base.start,
+        end: base.end,
+        selected_handle_ids: base.selected_handle_ids.clone(),
+        selected_chat_ids: None,
+    };
+    qc.set_selected_chat_ids(conversation.raw_chat_ids.iter().copied().collect());
+    qc
+}
+
+pub fn collect_messages(
+    config: &Config,
+    qc: &QueryContext,
+    limit: usize,
+    include_image_attachments: bool,
+) -> Result<Vec<PreviewMessage>, RuntimeError> {
+    let db = config.db();
+    let mut statement = Message::stream_rows(db, qc)?;
+    let mut out: Vec<PreviewMessage> = Vec::new();
+
+    for row in Message::rows(&mut statement, [])? {
+        let mut msg = row?;
+
+        // Tapbacks and poll updates are rendered in context by the regular
+        // exporters, so the PDF/preview list should not render them as their
+        // own top-level bubbles either.
+        if !msg.is_edited() && (msg.is_tapback() || msg.is_poll_vote() || msg.is_poll_update()) {
+            continue;
+        }
+
+        if let Ok(body) = msg.parse_body(db) {
+            msg.apply_body(body);
+        }
+
+        let sender = config
+            .who(msg.handle_id, msg.is_from_me, &msg.destination_caller_id)
+            .to_string();
+        let timestamp = msg
+            .date(config.offset)
+            .map(|d| fmt_date(&d))
+            .unwrap_or_default();
+        let attachment_count = msg.num_attachments.max(0) as usize;
+        let attachments = if include_image_attachments {
+            collect_image_attachments(config, &msg)?
+        } else {
+            Vec::new()
+        };
+
+        out.push(PreviewMessage {
+            is_from_me: msg.is_from_me,
+            sender,
+            timestamp,
+            text: preview_text(&msg),
+            attachment_count,
+            attachments,
+            annotations: preview_annotations(&msg),
+        });
+
+        if out.len() >= limit {
+            break;
+        }
+    }
+
+    Ok(out)
+}
+
+fn collect_image_attachments(
+    config: &Config,
+    msg: &Message,
+) -> Result<Vec<PreviewAttachment>, RuntimeError> {
+    let attachments = Attachment::from_message(config.db(), msg)?;
+    let mut out = Vec::new();
+
+    for mut attachment in ordered_attachments_for_message(msg, attachments) {
+        if !is_pdf_image_candidate(&attachment) {
+            continue;
+        }
+
+        if let Err(why) =
+            config
+                .options
+                .attachment_manager
+                .handle_attachment(msg, &mut attachment, config)
+        {
+            eprintln!(
+                "Skipping PDF image attachment rowid={} for message rowid={}: {why}",
+                attachment.rowid, msg.rowid
+            );
+            continue;
+        }
+
+        let path = attachment.copied_path.clone().or_else(|| {
+            attachment
+                .resolved_attachment_path(
+                    &config.options.platform,
+                    &config.options.db_path,
+                    config.options.attachment_root.as_deref(),
+                )
+                .map(PathBuf::from)
+        });
+        let Some(path) = path.filter(|p| p.is_file()) else {
+            continue;
+        };
+
+        let name = attachment
+            .filename()
+            .map(ToOwned::to_owned)
+            .or_else(|| path.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .unwrap_or_else(|| "image attachment".to_string());
+
+        out.push(PreviewAttachment { path, name });
+    }
+
+    Ok(out)
+}
+
+fn ordered_attachments_for_message(msg: &Message, attachments: Vec<Attachment>) -> Vec<Attachment> {
+    if attachments.len() <= 1 {
+        return attachments;
+    }
+
+    let by_guid: HashMap<String, usize> = attachments
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, attachment)| attachment.guid.clone().map(|guid| (guid, idx)))
+        .collect();
+    let mut order = Vec::new();
+    let mut seen = HashSet::new();
+    let mut next_positional = 0usize;
+
+    for component in &msg.components {
+        let BubbleComponent::Run(ranges) = component else {
+            continue;
+        };
+        for range in ranges {
+            if let Some(meta) = &range.attachment {
+                let idx = meta
+                    .guid
+                    .as_deref()
+                    .and_then(|guid| by_guid.get(guid).copied())
+                    .unwrap_or_else(|| {
+                        let idx = next_positional;
+                        next_positional += 1;
+                        idx
+                    });
+                if idx < attachments.len() && seen.insert(idx) {
+                    order.push(idx);
+                }
+            }
+        }
+    }
+
+    if order.is_empty() {
+        return attachments;
+    }
+
+    for idx in 0..attachments.len() {
+        if seen.insert(idx) {
+            order.push(idx);
+        }
+    }
+
+    let mut slots: Vec<Option<Attachment>> = attachments.into_iter().map(Some).collect();
+    order
+        .into_iter()
+        .filter_map(|idx| slots.get_mut(idx).and_then(Option::take))
+        .collect()
+}
+
+fn is_pdf_image_candidate(attachment: &Attachment) -> bool {
+    if matches!(attachment.mime_type(), MediaType::Image(_)) {
+        return true;
+    }
+
+    attachment.extension().is_some_and(|ext| {
+        matches!(
+            ext.to_ascii_lowercase().as_str(),
+            "gif" | "jpg" | "jpeg" | "png"
+        )
+    })
+}
+
+fn preview_text(msg: &Message) -> String {
+    let raw = msg.text.clone().unwrap_or_default();
+    let cleaned = raw.replace(['\u{FFFC}', '\u{FFFD}'], " ");
+    let cleaned = cleaned.trim();
+    if !cleaned.is_empty() {
+        return cleaned.to_string();
+    }
+    if msg.is_url() {
+        "Link".to_string()
+    } else {
+        String::new()
+    }
+}
+
+fn preview_annotations(msg: &Message) -> Vec<String> {
+    let mut annotations = Vec::new();
+    if msg.has_attachments() {
+        let n = msg.num_attachments;
+        annotations.push(format!("{n} attachment{}", if n == 1 { "" } else { "s" }));
+    }
+    if msg.is_reply() {
+        annotations.push("reply".to_string());
+    }
+    if msg.has_replies() {
+        let n = msg.num_replies;
+        annotations.push(format!("{n} repl{}", if n == 1 { "y" } else { "ies" }));
+    }
+    if msg.is_edited() {
+        annotations.push("edited".to_string());
+    }
+    if msg.is_expressive() {
+        annotations.push("effect".to_string());
+    }
+    annotations
+}
 
 fn mm(pt: f32) -> Mm {
     Mm(pt / PT_PER_MM)
@@ -88,16 +458,16 @@ struct Typeface {
 
 impl Typeface {
     fn load(doc: &PdfDocumentReference) -> Result<Self, String> {
-        if let Some(bytes) = system_sans_font() {
-            if let (Ok(font), Ok(metrics)) = (
+        if let Some(bytes) = system_sans_font()
+            && let (Ok(font), Ok(metrics)) = (
                 doc.add_external_font(bytes.as_slice()),
                 FontVec::try_from_vec(bytes.clone()),
-            ) {
-                return Ok(Typeface {
-                    pdf_font: font,
-                    metrics: Some(metrics),
-                });
-            }
+            )
+        {
+            return Ok(Typeface {
+                pdf_font: font,
+                metrics: Some(metrics),
+            });
         }
         let pdf_font = doc
             .add_builtin_font(BuiltinFont::Helvetica)
@@ -110,7 +480,7 @@ impl Typeface {
 
     /// Width of `text` at `size` pt, in points.
     fn width(&self, text: &str, size: f32) -> f32 {
-        match &self.metrics {
+        let measured = match &self.metrics {
             Some(font) => {
                 let scaled = font.as_scaled(PxScale::from(size));
                 text.chars()
@@ -119,54 +489,66 @@ impl Typeface {
             }
             // Helvetica average advance is ~0.5em; good enough for fallback.
             None => text.chars().count() as f32 * size * 0.5,
-        }
+        };
+        measured * TEXT_MEASURE_SCALE
     }
 
     /// Greedy word-wrap `text` to `max_width` pt at `size` pt.
     fn wrap(&self, text: &str, size: f32, max_width: f32) -> Vec<String> {
         let mut lines = Vec::new();
         for paragraph in text.split('\n') {
-            if paragraph.is_empty() {
+            if paragraph.trim().is_empty() {
                 lines.push(String::new());
                 continue;
             }
             let mut line = String::new();
-            for word in paragraph.split(' ') {
-                let candidate = if line.is_empty() {
-                    word.to_string()
-                } else {
-                    format!("{line} {word}")
-                };
-                if self.width(&candidate, size) <= max_width || line.is_empty() {
-                    // If a single word is too wide, hard-split it by characters.
-                    if line.is_empty() && self.width(word, size) > max_width {
-                        let mut chunk = String::new();
-                        for ch in word.chars() {
-                            let trial = format!("{chunk}{ch}");
-                            if self.width(&trial, size) > max_width && !chunk.is_empty() {
-                                lines.push(std::mem::take(&mut chunk));
-                            }
-                            chunk.push(ch);
-                        }
-                        line = chunk;
+            for word in paragraph.split_whitespace() {
+                for piece in self.split_word(word, size, max_width) {
+                    let candidate = if line.is_empty() {
+                        piece.clone()
                     } else {
+                        format!("{line} {piece}")
+                    };
+                    if self.width(&candidate, size) <= max_width || line.is_empty() {
                         line = candidate;
+                    } else {
+                        lines.push(std::mem::take(&mut line));
+                        line = piece;
                     }
-                } else {
-                    lines.push(std::mem::take(&mut line));
-                    line = word.to_string();
                 }
             }
-            lines.push(line);
+            if !line.is_empty() {
+                lines.push(line);
+            }
         }
         lines
+    }
+
+    fn split_word(&self, word: &str, size: f32, max_width: f32) -> Vec<String> {
+        if self.width(word, size) <= max_width {
+            return vec![word.to_string()];
+        }
+
+        let mut chunks = Vec::new();
+        let mut chunk = String::new();
+        for ch in word.chars() {
+            let trial = format!("{chunk}{ch}");
+            if self.width(&trial, size) > max_width && !chunk.is_empty() {
+                chunks.push(std::mem::take(&mut chunk));
+            }
+            chunk.push(ch);
+        }
+        if !chunk.is_empty() {
+            chunks.push(chunk);
+        }
+        chunks
     }
 }
 
 /// A bubble laid out and ready to draw.
 struct Bubble {
     from_me: bool,
-    header: String,
+    header_lines: Vec<String>,
     body_lines: Vec<String>,
     chips: Vec<String>,
     image_rows: Vec<ImageRow>,
@@ -191,19 +573,24 @@ struct BubbleImage {
 }
 
 fn layout_bubble(face: &Typeface, msg: &PreviewMessage, content_w: f32) -> Bubble {
-    let max_inner = content_w * BUBBLE_MAX_FRAC - 2.0 * BUBBLE_PAD;
+    let max_inner = (content_w * BUBBLE_MAX_FRAC - 2.0 * BUBBLE_PAD).max(BODY_SIZE);
+    let wrap_inner = (max_inner - TEXT_WRAP_SAFETY).max(BODY_SIZE);
     let header = format!("{} · {}", msg.sender, msg.timestamp);
+    let header_lines = face.wrap(&header, HEADER_SIZE, wrap_inner);
     let body_lines = if msg.text.trim().is_empty() {
         Vec::new()
     } else {
-        face.wrap(&msg.text, BODY_SIZE, max_inner)
+        face.wrap(&msg.text, BODY_SIZE, wrap_inner)
     };
     let (image_rows, image_chips) = layout_image_rows(&msg.attachments, max_inner);
     let mut chips = pdf_chips(msg);
     chips.extend(image_chips);
 
     // Inner content width = widest line we actually draw.
-    let mut inner_w = face.width(&header, HEADER_SIZE);
+    let mut inner_w = HEADER_SIZE;
+    for l in &header_lines {
+        inner_w = inner_w.max(face.width(l, HEADER_SIZE));
+    }
     for l in &body_lines {
         inner_w = inner_w.max(face.width(l, BODY_SIZE));
     }
@@ -215,7 +602,13 @@ fn layout_bubble(face: &Typeface, msg: &PreviewMessage, content_w: f32) -> Bubbl
     }
     inner_w = inner_w.min(max_inner);
 
-    let mut content_h = HEADER_SIZE;
+    let mut content_h = 0.0;
+    for (idx, _) in header_lines.iter().enumerate() {
+        if idx > 0 {
+            content_h += LINE_GAP;
+        }
+        content_h += HEADER_SIZE;
+    }
     for _ in &body_lines {
         content_h += LINE_GAP + BODY_SIZE;
     }
@@ -235,7 +628,7 @@ fn layout_bubble(face: &Typeface, msg: &PreviewMessage, content_w: f32) -> Bubbl
 
     Bubble {
         from_me: msg.is_from_me,
-        header,
+        header_lines,
         body_lines,
         chips,
         image_rows,
@@ -421,18 +814,21 @@ pub fn render(messages: &[PreviewMessage], title: &str, out_path: &Path) -> Resu
 
         // Content inside the bubble, drawn top-down.
         let text_x = bubble_left + BUBBLE_PAD;
-        let mut cursor = bubble_top - BUBBLE_PAD;
-        let ty = cursor - HEADER_SIZE;
-
         page.layer.set_fill_color(header_col.clone());
-        page.layer.use_text(
-            bubble.header.as_str(),
-            HEADER_SIZE,
-            mm(text_x),
-            mm(ty),
-            &face.pdf_font,
-        );
-        cursor = ty;
+        let mut cursor = bubble_top - BUBBLE_PAD;
+        for (idx, line) in bubble.header_lines.iter().enumerate() {
+            if idx > 0 {
+                cursor -= LINE_GAP;
+            }
+            cursor -= HEADER_SIZE;
+            page.layer.use_text(
+                line.as_str(),
+                HEADER_SIZE,
+                mm(text_x),
+                mm(cursor),
+                &face.pdf_font,
+            );
+        }
 
         page.layer.set_fill_color(body_col.clone());
         for line in &bubble.body_lines {
@@ -566,11 +962,59 @@ mod tests {
         let out = dir.join("sample.pdf");
         let messages = vec![
             msg(false, "Hey, how are you?"),
-            msg(true, "Doing great — here is a much longer message that should wrap across multiple lines within the bubble to exercise the word-wrapping logic."),
+            msg(
+                true,
+                "Doing great — here is a much longer message that should wrap across multiple lines within the bubble to exercise the word-wrapping logic.",
+            ),
         ];
         render(&messages, "Sample Conversation", &out).unwrap();
         assert!(std::fs::metadata(&out).unwrap().len() > 0);
         let _ = std::fs::remove_file(&out);
+    }
+
+    #[test]
+    fn wraps_long_tokens_after_existing_text() {
+        let (doc, _, _) = PdfDocument::new("wrap-test", Mm(PAGE_W_MM), Mm(PAGE_H_MM), "Layer 1");
+        let face = Typeface::load(&doc).unwrap();
+        let content_w = (PAGE_W_MM - (2.0 * MARGIN_MM)) * PT_PER_MM;
+        let mut message = msg(
+            true,
+            "See this receipt https://example.com/abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz",
+        );
+        message.attachment_count = 0;
+        message.annotations.clear();
+
+        let bubble = layout_bubble(&face, &message, content_w);
+        let widest_body_line = bubble
+            .body_lines
+            .iter()
+            .map(|line| face.width(line, BODY_SIZE))
+            .fold(0.0_f32, f32::max);
+
+        assert!(bubble.body_lines.len() > 2);
+        assert!(widest_body_line <= bubble.inner_width_pt + 0.1);
+        assert!(bubble.width_pt <= content_w * BUBBLE_MAX_FRAC + 0.1);
+    }
+
+    #[test]
+    fn wraps_long_headers_within_bubble() {
+        let (doc, _, _) = PdfDocument::new("header-test", Mm(PAGE_W_MM), Mm(PAGE_H_MM), "Layer 1");
+        let face = Typeface::load(&doc).unwrap();
+        let content_w = (PAGE_W_MM - (2.0 * MARGIN_MM)) * PT_PER_MM;
+        let mut message = msg(true, "Short message");
+        message.sender = "A Very Long Contact Name That Should Not Clip Inside The PDF Bubble Even When The Sender Label Has Many Words".into();
+        message.timestamp = "Jan 01, 2024 12:00:00 PM".into();
+
+        let bubble = layout_bubble(&face, &message, content_w);
+        let widest_header_line = bubble
+            .header_lines
+            .iter()
+            .map(|line| face.width(line, HEADER_SIZE))
+            .fold(0.0_f32, f32::max);
+
+        assert!(bubble.header_lines.len() > 1);
+        assert!(widest_header_line <= bubble.inner_width_pt + 0.1);
+        assert!(bubble.width_pt <= content_w * BUBBLE_MAX_FRAC + 0.1);
     }
 
     #[test]

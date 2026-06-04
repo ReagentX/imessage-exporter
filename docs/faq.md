@@ -86,19 +86,27 @@ Messages removed by deleting an entire conversation or by deleting a single mess
 
 Messages that have expired from this restoration process are permanently deleted and cannot be recovered.
 
-In some instances, deleted messages are removed from the `chat_message_join` table but not from the `messages` table. These messages will populate in `orphaned.html` or `orphaned.txt`.
+In some instances, deleted messages are removed from the `chat_message_join` table but not from the `messages` table. These messages will populate in `orphaned.html`, `orphaned.txt`, or `orphaned.pdf`, depending on the export format.
 
 ***
 
 ## What is the `orphaned` file in my export?
 
-Messages that cannot be associated with any conversation are written to `orphaned.html` or `orphaned.txt`. This can happen when a message's chat has been deleted from the `chat_message_join` table, or when the database has inconsistencies. These messages are preserved so no data is lost.
+Messages that cannot be associated with any conversation are written to `orphaned.html`, `orphaned.txt`, or `orphaned.pdf`, depending on the export format. This can happen when a message's chat has been deleted from the `chat_message_join` table, or when the database has inconsistencies. These messages are preserved so no data is lost.
 
 ***
 
 ## What export formats are supported? Can I export to PDF?
 
-`imessage-exporter` supports `txt` and `html` export formats. There is no native PDF export, but you can export as HTML and then print to PDF from Safari. Use the `--no-lazy` flag when exporting for PDF, as it disables lazy-loading of images which is required for the print-to-PDF workflow to include all images.
+`imessage-exporter` supports native `txt`, `html`, and `pdf` conversation exports. PDF export is generated directly by the app, without Safari or a browser-based print workflow. You can still use `--no-lazy` with HTML exports if you prefer to print HTML from a browser yourself.
+
+***
+
+## Can it export call logs?
+
+Yes, from iOS backup folders when Apple's call-history database is present. Use `--call-logs -p <backup folder> -a iOS -o <export folder>` to write `call_logs.csv`.
+
+Recent unencrypted iOS backups may omit call history. If the database is missing, the app reports the exact backup manifest paths it tried.
 
 ***
 
@@ -115,7 +123,7 @@ Each HTML export file links to an external `style.css` in the export directory. 
 - `basic`: Copies all files, converting `HEIC` images to `JPEG` for broader compatibility
 - `full`: Copies all files, converting `HEIC` to `JPEG`, `CAF`/`AMR` audio to `MP4`, `MOV` video to `MP4`, and animated sticker `HEICS` to `GIF`
 
-`basic` and `full` require external tools (`sips` or ImageMagick for images, `afconvert` or `ffmpeg` for audio, `ffmpeg` for video). The `--diagnostics` output shows which converters are detected on your system.
+`basic` and `full` require external tools (`sips` or ImageMagick for images, `afconvert` or `ffmpeg` for audio, `ffmpeg` for video). `disabled` and `clone` do not require or probe media converters. The `--diagnostics` output shows which converters are detected on your system.
 
 ***
 

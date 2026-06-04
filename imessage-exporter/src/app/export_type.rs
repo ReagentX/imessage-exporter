@@ -9,6 +9,8 @@ use std::fmt::Display;
 pub enum ExportType {
     /// HTML file export
     Html,
+    /// PDF file export
+    Pdf,
     /// Text file export
     Txt,
 }
@@ -19,6 +21,7 @@ impl ExportType {
         match format.to_lowercase().as_str() {
             "txt" => Some(Self::Txt),
             "html" => Some(Self::Html),
+            "pdf" => Some(Self::Pdf),
             _ => None,
         }
     }
@@ -27,6 +30,7 @@ impl ExportType {
     pub fn extension(&self) -> &str {
         match self {
             ExportType::Html => ".html",
+            ExportType::Pdf => ".pdf",
             ExportType::Txt => ".txt",
         }
     }
@@ -37,6 +41,7 @@ impl Display for ExportType {
         match self {
             ExportType::Txt => write!(fmt, "txt"),
             ExportType::Html => write!(fmt, "html"),
+            ExportType::Pdf => write!(fmt, "pdf"),
         }
     }
 }
@@ -69,8 +74,14 @@ mod tests {
     }
 
     #[test]
+    fn can_parse_pdf_any_case() {
+        assert!(matches!(ExportType::from_cli("pdf"), Some(ExportType::Pdf)));
+        assert!(matches!(ExportType::from_cli("PDF"), Some(ExportType::Pdf)));
+        assert!(matches!(ExportType::from_cli("pDf"), Some(ExportType::Pdf)));
+    }
+
+    #[test]
     fn cant_parse_invalid() {
-        assert!(ExportType::from_cli("pdf").is_none());
         assert!(ExportType::from_cli("json").is_none());
         assert!(ExportType::from_cli("").is_none());
     }

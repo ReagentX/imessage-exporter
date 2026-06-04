@@ -17,6 +17,7 @@ use eframe::egui;
 use plist::{Dictionary, Value};
 
 use imessage_database::{tables::table::DEFAULT_PATH_IOS, util::dirs::home};
+use imessage_exporter::app::call_logs;
 
 use crate::{
     backend::{self, Command, Event},
@@ -31,12 +32,6 @@ const PREVIEW_LIMIT: usize = 800;
 const CALL_LOG_LIMIT: usize = 1_000;
 /// Maximum number of activity-log lines retained.
 const LOG_LIMIT: usize = 300;
-const CALL_LOG_CSV_FILE_NAME: &str = "call_logs.csv";
-const CALL_LOG_CSV_HEADER: &str = "Started,Direction,Address,Duration,Service,Type\n";
-const CSV_QUOTE: char = '"';
-const CSV_COMMA: char = ',';
-const CSV_NEWLINE: char = '\n';
-const CSV_QUOTE_ESCAPE: &str = "\"\"";
 const MACOS_CHAT_DB_FILE_NAME: &str = "chat.db";
 const LOOSE_IOS_MESSAGES_DB_FILE_NAME: &str = "sms.db";
 const DATABASE_SCAN_MAX_DEPTH: usize = 4;
@@ -278,8 +273,13 @@ impl App {
 
     fn save_settings(&mut self) {
         match self.current_settings().save() {
-            Ok(path) => self.settings_msg = Some(format!("Settings saved to {}", path.display())),
-            Err(e) => self.settings_msg = Some(format!("Could not save settings: {e}")),
+            Ok(path) => {
+                self.error = None;
+                self.settings_msg = Some(format!("Settings saved to {}", path.display()));
+            }
+            Err(e) => {
+                self.settings_msg = Some(format!("Could not save settings: {e}"));
+            }
         }
     }
 
@@ -313,7 +313,10 @@ impl App {
                     self.opened = true;
                     self.opened_platform = Some(platform);
                     self.busy = false;
+                    self.busy_label = format!("Opened: {summary}");
                     self.progress = None;
+                    self.error = None;
+                    self.settings_msg = None;
                     self.preview.clear();
                     self.preview_note.clear();
                     self.call_logs.clear();
@@ -341,6 +344,9 @@ impl App {
                     );
                     self.preview = messages;
                     self.busy = false;
+                    self.busy_label = self.preview_note.clone();
+                    self.error = None;
+                    self.settings_msg = None;
                 }
                 Event::PreviewFailed(e) => {
                     self.busy = false;
@@ -352,9 +358,11 @@ impl App {
                 }
                 Event::ExportDone { path, summary } => {
                     self.busy = false;
+                    self.busy_label = summary.clone();
                     self.progress = None;
                     self.last_export = Some(path);
                     self.error = None;
+                    self.settings_msg = None;
                     self.push_log(summary);
                 }
                 Event::ExportFailed(e) => {
@@ -365,6 +373,9 @@ impl App {
                 }
                 Event::HtmlPreviewReady(p) => {
                     self.busy = false;
+                    self.busy_label = format!("Opened HTML preview in browser: {}", p.display());
+                    self.error = None;
+                    self.settings_msg = None;
                     self.push_log(format!("Opened HTML preview in browser: {}", p.display()));
                 }
                 Event::HtmlPreviewFailed(e) => {
@@ -387,11 +398,16 @@ impl App {
                     );
                     self.call_logs = entries;
                     self.busy = false;
+                    self.busy_label = format!("Loaded call logs: {}", self.call_log_note);
                     self.error = None;
+                    self.settings_msg = None;
                     self.push_log(format!("Loaded call logs: {}", self.call_log_note));
                 }
                 Event::CallLogsFailed(e) => {
                     self.busy = false;
+                    self.call_logs.clear();
+                    self.call_log_total = 0;
+                    self.call_log_note.clear();
                     self.error = Some(e.clone());
                     self.push_log(format!("Call logs failed: {e}"));
                 }
@@ -469,6 +485,7 @@ impl App {
         self.busy = true;
         self.busy_label = label.to_string();
         self.error = None;
+        self.settings_msg = None;
     }
 
     fn do_open(&mut self) {
@@ -565,13 +582,13 @@ impl App {
 
         let Some(path) = rfd::FileDialog::new()
             .add_filter("CSV", &["csv"])
-            .set_file_name(CALL_LOG_CSV_FILE_NAME)
+            .set_file_name(call_logs::DEFAULT_CALL_LOG_CSV_FILE_NAME)
             .save_file()
         else {
             return;
         };
 
-        match fs::write(&path, call_logs_csv(&self.call_logs)) {
+        match fs::write(&path, call_logs::call_logs_csv(&self.call_logs)) {
             Ok(()) => {
                 self.error = None;
                 self.push_log(format!("Saved call logs CSV: {}", path.display()));
@@ -1066,50 +1083,62 @@ impl App {
             }
         });
 
-        let has_status = self.busy
-            || self.progress.is_some()
-            || self.error.is_some()
-            || self.settings_msg.is_some();
-        if self.busy || self.progress.is_some() {
-            theme::control_row(ui, |ui| {
-                theme::group_label(ui, "Status");
-                theme::field_label(ui, "Progress");
-                if self.busy {
-                    ui.spinner();
-                    ui.label(&self.busy_label);
-                }
-                if let Some((cur, total)) = self.progress {
-                    let frac = if total > 0 {
-                        (cur as f32 / total as f32)
-                            .clamp(progress::MIN_FRACTION, progress::MAX_FRACTION)
-                    } else {
-                        progress::MIN_FRACTION
-                    };
-                    ui.add(
-                        egui::ProgressBar::new(frac)
-                            .desired_width(layout::PROGRESS_BAR_WIDTH)
-                            .text(format!("{cur}/{total}")),
-                    );
-                }
-            });
-        }
-
-        if let Some(err) = self.error.clone() {
-            theme::control_row(ui, |ui| {
-                theme::group_label(ui, if has_status { "Status" } else { "" });
-                theme::field_label(ui, "Message");
-                ui.label(theme::error_text(format!("⚠ {err}")));
-            });
-        }
-        if let Some(msg) = self.settings_msg.clone() {
-            theme::control_row(ui, |ui| {
-                theme::group_label(ui, if has_status { "Status" } else { "" });
-                theme::field_label(ui, "Message");
-                ui.label(theme::small_muted_text(msg));
-            });
-        }
-
         theme::gap(ui, layout::ROW_GAP);
+    }
+
+    fn bottom_status_bar(&mut self, ctx: &egui::Context) {
+        egui::TopBottomPanel::bottom("status_bar")
+            .exact_height(layout::STATUS_BAR_HEIGHT)
+            .frame(theme::status_bar_frame())
+            .show(ctx, |ui| {
+                let (message, is_error) = self.status_bar_message();
+                theme::control_row(ui, |ui| {
+                    theme::group_label(ui, "Status");
+                    if self.busy {
+                        ui.spinner();
+                    }
+                    if let Some((cur, total)) = self.progress {
+                        let frac = if total > 0 {
+                            (cur as f32 / total as f32)
+                                .clamp(progress::MIN_FRACTION, progress::MAX_FRACTION)
+                        } else {
+                            progress::MIN_FRACTION
+                        };
+                        ui.add(
+                            egui::ProgressBar::new(frac)
+                                .desired_width(layout::PROGRESS_BAR_WIDTH)
+                                .text(format!("{cur}/{total}")),
+                        );
+                    }
+
+                    theme::field_label(ui, "Message");
+                    let line = if is_error {
+                        format!("⚠ {message}")
+                    } else {
+                        message.clone()
+                    };
+                    let text = if is_error {
+                        theme::error_text(line)
+                    } else {
+                        theme::small_muted_text(line)
+                    };
+                    ui.add(egui::Label::new(text).truncate())
+                        .on_hover_text(message);
+                });
+            });
+    }
+
+    fn status_bar_message(&self) -> (String, bool) {
+        if let Some(err) = &self.error {
+            return (one_line_status(err), true);
+        }
+        if let Some(msg) = &self.settings_msg {
+            return (one_line_status(msg), false);
+        }
+        if !self.busy_label.trim().is_empty() {
+            return (one_line_status(&self.busy_label), false);
+        }
+        ("Ready".to_string(), false)
     }
 
     fn activity_log_viewport(&self, ctx: &egui::Context) {
@@ -1334,50 +1363,6 @@ fn render_bubble(ui: &mut egui::Ui, m: &PreviewMessage) {
             });
         });
     });
-}
-
-fn call_logs_csv(entries: &[CallLogEntry]) -> String {
-    let mut out = String::from(CALL_LOG_CSV_HEADER);
-    for entry in entries {
-        append_csv_row(
-            &mut out,
-            [
-                entry.started.as_str(),
-                entry.direction.label(),
-                entry.address.as_str(),
-                entry.duration.as_str(),
-                entry.service.as_str(),
-                entry.call_type.as_str(),
-            ],
-        );
-    }
-    out
-}
-
-fn append_csv_row<'a>(out: &mut String, fields: impl IntoIterator<Item = &'a str>) {
-    let mut first = true;
-    for field in fields {
-        if !first {
-            out.push(CSV_COMMA);
-        }
-        first = false;
-        out.push_str(&csv_escape(field));
-    }
-    out.push(CSV_NEWLINE);
-}
-
-fn csv_escape(field: &str) -> String {
-    let needs_quotes = field.contains(CSV_COMMA)
-        || field.contains(CSV_QUOTE)
-        || field.contains(CSV_NEWLINE)
-        || field.starts_with(' ');
-    if !needs_quotes {
-        return field.to_string();
-    }
-    format!(
-        "{CSV_QUOTE}{}{CSV_QUOTE}",
-        field.replace(CSV_QUOTE, CSV_QUOTE_ESCAPE)
-    )
 }
 
 fn resolve_source_folder(folder: &Path) -> Result<ResolvedSource, String> {
@@ -1720,6 +1705,17 @@ fn backup_root_summary(roots: &[BackupSearchRoot]) -> String {
         .join("; ")
 }
 
+fn one_line_status(text: &str) -> String {
+    let mut out = String::new();
+    for part in text.split_whitespace() {
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        out.push_str(part);
+    }
+    out
+}
+
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.drain_events();
@@ -1731,6 +1727,7 @@ impl eframe::App for App {
         }
 
         self.top_panel(ctx);
+        self.bottom_status_bar(ctx);
         self.left_panel(ctx);
         self.central_panel(ctx);
         if self.show_activity_log {

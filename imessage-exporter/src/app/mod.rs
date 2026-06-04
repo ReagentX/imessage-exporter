@@ -1,3 +1,4 @@
+pub mod call_logs;
 pub mod compatibility;
 pub mod contacts;
 pub mod data_source;

@@ -29,11 +29,11 @@ use imessage_database::{
 use crate::{
     HTML, TXT,
     app::{
-        compatibility::attachment_manager::AttachmentManagerMode, contacts::Name,
+        call_logs, compatibility::attachment_manager::AttachmentManagerMode, contacts::Name,
         data_source::DataSource, error::RuntimeError, export_type::ExportType, options::Options,
         sanitizers::sanitize_filename,
     },
-    exporters::shared::driver::run_export,
+    exporters::{pdf, shared::driver::run_export},
 };
 
 // Maximum length for filenames
@@ -579,6 +579,15 @@ impl Config {
     pub fn start(&self) -> Result<(), RuntimeError> {
         if self.options.diagnostic {
             self.run_diagnostic()?;
+        } else if self.options.export_call_logs {
+            let (path, result) = call_logs::export_csv(self)?;
+            println!(
+                "Exported {} call log{} from {} to {}",
+                result.entries.len(),
+                if result.entries.len() == 1 { "" } else { "s" },
+                result.source,
+                path.display()
+            );
         } else if let Some(export_type) = &self.options.export_type {
             // Ensure that if we want to filter on things, we have stuff to filter for
             if let Some(filters) = &self.options.conversation_filter
@@ -612,6 +621,16 @@ impl Config {
             match export_type {
                 ExportType::Html => {
                     run_export(&mut HTML::new(self)?)?;
+                }
+                ExportType::Pdf => {
+                    let summary = pdf::export(self)?;
+                    println!(
+                        "Exported {} PDF file{} ({} messages) to {}",
+                        summary.produced_files,
+                        if summary.produced_files == 1 { "" } else { "s" },
+                        summary.total_messages,
+                        self.options.export_path.display()
+                    );
                 }
                 ExportType::Txt => {
                     run_export(&mut TXT::new(self)?)?;

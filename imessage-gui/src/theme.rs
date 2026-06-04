@@ -51,7 +51,7 @@ pub mod layout {
     pub const PASSWORD_FIELD_WIDTH: f32 = 140.0;
     pub const ADVANCED_SOURCE_FIELD_WIDTH: f32 = 320.0;
     pub const CONVERSATION_SEARCH_WIDTH: f32 = 190.0;
-    pub const FIELD_LABEL_WIDTH: f32 = 76.0;
+    pub const FIELD_LABEL_WIDTH: f32 = 112.0;
     pub const GROUP_LABEL_WIDTH: f32 = 76.0;
     pub const DATE_FIELD_WIDTH: f32 = 96.0;
     pub const TIME_FIELD_WIDTH: f32 = 70.0;
@@ -80,6 +80,7 @@ pub mod layout {
     pub const TEXT_FIELD_MARGIN_X: f32 = 6.0;
     pub const TEXT_FIELD_MARGIN_Y: f32 = 2.0;
     pub const CONTROL_HEIGHT: f32 = 24.0;
+    pub const STATUS_BAR_HEIGHT: f32 = CONTROL_HEIGHT + 8.0;
     pub const TEXT_FIELD_INNER_HEIGHT: f32 = CONTROL_HEIGHT - (TEXT_FIELD_MARGIN_Y * 2.0);
     pub const MENU_MARGIN_X: f32 = 8.0;
     pub const MENU_MARGIN_Y: f32 = 8.0;
@@ -232,6 +233,13 @@ pub fn content_frame() -> egui::Frame {
         .inner_margin(egui::Margin::same(layout::PANEL_PADDING))
 }
 
+pub fn status_bar_frame() -> egui::Frame {
+    egui::Frame::none()
+        .fill(palette::PANEL_BG)
+        .stroke(panel_stroke(palette::BORDER_SOFT))
+        .inner_margin(egui::Margin::symmetric(layout::PANEL_PADDING, 4.0))
+}
+
 pub fn button(text: impl Into<egui::WidgetText>) -> egui::Button<'static> {
     egui::Button::new(text)
         .frame(true)
@@ -320,9 +328,9 @@ pub fn preview_export_heights(available_height: f32) -> (f32, f32) {
 pub fn field_label(ui: &mut egui::Ui, text: &str) {
     ui.allocate_ui_with_layout(
         egui::vec2(layout::FIELD_LABEL_WIDTH, layout::INTERACT_HEIGHT),
-        egui::Layout::right_to_left(egui::Align::Center),
+        egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
-            ui.label(text);
+            ui.add(egui::Label::new(text).truncate());
         },
     );
 }
@@ -426,6 +434,7 @@ fn add_configured_text_field(
             configure(
                 egui::TextEdit::singleline(text)
                     .hint_text(hint)
+                    .vertical_align(egui::Align::Center)
                     .frame(false)
                     .margin(egui::Margin::ZERO),
             ),
@@ -629,7 +638,11 @@ fn preview_tablet_screen(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui:
     let size = egui::vec2(ui.available_width(), ui.available_height().max(0.0));
     ui.allocate_ui_with_layout(size, egui::Layout::top_down(egui::Align::Min), |ui| {
         preview_tablet_screen_frame().show(ui, |ui| {
-            ui.set_min_size(tablet_screen_inner_size(size));
+            let inner_size = tablet_screen_inner_size(size);
+            let clip_rect = ui.max_rect().intersect(ui.clip_rect());
+            ui.set_clip_rect(clip_rect);
+            ui.set_min_size(inner_size);
+            ui.set_max_size(inner_size);
             add_contents(ui);
         });
     });

@@ -4,7 +4,6 @@
 mod app;
 mod backend;
 mod model;
-mod pdf;
 mod settings;
 mod theme;
 
@@ -16,6 +15,8 @@ fn main() -> eframe::Result<()> {
             .with_inner_size([theme::window::INITIAL_WIDTH, theme::window::INITIAL_HEIGHT])
             .with_min_inner_size([theme::window::MIN_WIDTH, theme::window::MIN_HEIGHT])
             .with_title("iMessage Exporter"),
+        renderer: eframe::Renderer::Glow,
+        run_and_return: false,
         ..Default::default()
     };
 

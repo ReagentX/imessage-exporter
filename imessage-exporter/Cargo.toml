@@ -18,3 +18,7 @@ imessage-database = { path = "../imessage-database" }
 rpassword = "=7.5.3"
 rusqlite = { version = "=0.40.0", features = ["blob", "bundled"] }
 crabapple = { version = "=0.4.7" }
+sha1 = "=0.11.0"
+plist = "=1.9.0"
+printpdf = { version = "0.7", features = ["embedded_images"] }
+ab_glyph = "0.2"

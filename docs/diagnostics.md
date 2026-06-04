@@ -61,7 +61,7 @@ The total number of rows in the `messages` table.
 
 ### Messages not associated with a chat
 
-If a message exists in the `messages` table but does not have an entry in the `chat_message_join` table, it is considered orphaned and will be listed in either the `Orphaned.html` or `Orphaned.txt` file in the export directory. Likely, these come from messages that were deleted and the chat removed from the `chat_message_join` table, but the corresponding messages were not removed from the `messages` table.
+If a message exists in the `messages` table but does not have an entry in the `chat_message_join` table, it is considered orphaned and will be listed in the `Orphaned.html`, `Orphaned.txt`, or `Orphaned.pdf` file in the export directory, depending on the export format. Likely, these come from messages that were deleted and the chat removed from the `chat_message_join` table, but the corresponding messages were not removed from the `messages` table.
 
 ### Messages belonging to more than one chat
 
@@ -129,7 +129,7 @@ The number of handles in the database that were successfully matched to contact 
 
 ## Detected converters
 
-`imessage-exporter` uses third-party tools to convert images when using `--copy-method basic` or `--copy-method full`. This section shows what programs are detected on the current system.
+`imessage-exporter` uses third-party tools to convert media when using `--copy-method basic` or `--copy-method full`. `disabled` and `clone` exports do not require or probe media converters. This section shows what programs are detected on the current system.
 
 ### Image converter
 

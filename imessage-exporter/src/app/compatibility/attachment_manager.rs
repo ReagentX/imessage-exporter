@@ -44,12 +44,28 @@ pub struct AttachmentManager {
 
 impl AttachmentManager {
     pub fn from(mode: AttachmentManagerMode) -> Self {
-        AttachmentManager {
-            mode,
-            image_converter: ImageConverter::determine(),
-            audio_converter: AudioConverter::determine(),
-            video_converter: VideoConverter::determine(),
-            hardware_encoder: HardwareEncoder::detect(),
+        match mode {
+            AttachmentManagerMode::Disabled | AttachmentManagerMode::Clone => AttachmentManager {
+                mode,
+                ..Default::default()
+            },
+            AttachmentManagerMode::Basic => AttachmentManager {
+                mode,
+                image_converter: ImageConverter::determine(),
+                ..Default::default()
+            },
+            AttachmentManagerMode::Full => {
+                let video_converter = VideoConverter::determine();
+                AttachmentManager {
+                    mode,
+                    image_converter: ImageConverter::determine(),
+                    audio_converter: AudioConverter::determine(),
+                    hardware_encoder: video_converter
+                        .as_ref()
+                        .and_then(|_| HardwareEncoder::detect()),
+                    video_converter,
+                }
+            }
         }
     }
 }
@@ -324,7 +340,7 @@ impl Display for AttachmentManagerMode {
 
 #[cfg(test)]
 mod tests {
-    use crate::app::compatibility::attachment_manager::AttachmentManagerMode;
+    use crate::app::compatibility::attachment_manager::{AttachmentManager, AttachmentManagerMode};
 
     #[test]
     fn test_attachment_manager_mode() {
@@ -345,5 +361,25 @@ mod tests {
             Some(AttachmentManagerMode::Full)
         );
         assert_eq!(AttachmentManagerMode::from_cli("invalid"), None);
+    }
+
+    #[test]
+    fn disabled_and_clone_modes_do_not_probe_converters() {
+        for mode in [
+            AttachmentManagerMode::Disabled,
+            AttachmentManagerMode::Clone,
+        ] {
+            let manager = AttachmentManager::from(mode);
+            assert!(manager.image_converter.is_none());
+            assert!(manager.audio_converter.is_none());
+            assert!(manager.video_converter.is_none());
+        }
+    }
+
+    #[test]
+    fn basic_mode_only_needs_image_converter() {
+        let manager = AttachmentManager::from(AttachmentManagerMode::Basic);
+        assert!(manager.audio_converter.is_none());
+        assert!(manager.video_converter.is_none());
     }
 }

@@ -5,5 +5,12 @@
 /target
 /output
 
+# Local verification and private exports
+/3u File Export/
+/imessage_export/
+/backup_export/
+/export/
+/live-backup-verify*/
+
 # OS Files
 .DS_Store

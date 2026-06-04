@@ -43,15 +43,18 @@ pub const OPTION_CONVERSATION_FILTER: &str = "conversation-filter";
 pub const OPTION_CLEARTEXT_PASSWORD: &str = "cleartext-password";
 pub const OPTION_CUSTOM_CONTACTS_DB_PATH: &str = "contacts-path";
 pub const OPTION_NO_PROGRESS: &str = "no-progress";
+pub const OPTION_CALL_LOGS: &str = "call-logs";
+pub const OPTION_CALL_LOG_LIMIT: &str = "call-log-limit";
 
 // Other CLI Text
-pub const SUPPORTED_FILE_TYPES: &str = "txt, html";
+pub const SUPPORTED_FILE_TYPES: &str = "txt, html, pdf";
 pub const SUPPORTED_PLATFORMS: &str = "macOS, iOS";
 pub const SUPPORTED_ATTACHMENT_MANAGER_MODES: &str = "clone, basic, full, disabled";
 pub const ABOUT: &str = concat!(
     "The `imessage-exporter` binary exports iMessage data to\n",
-    "`txt` or `html` formats. It can also run diagnostics\n",
-    "to find problems with the iMessage database."
+    "`txt`, `html`, or `pdf` formats. It can also run diagnostics\n",
+    "to find problems with the iMessage database, and export\n",
+    "call logs from iOS backup folders."
 );
 
 // MARK: Options
@@ -89,6 +92,10 @@ pub struct Options {
     pub contacts_path: Option<PathBuf>,
     /// If false, suppress the export progress bar regardless of TTY state
     pub show_progress: bool,
+    /// If true, export iOS call history to CSV instead of exporting messages
+    pub export_call_logs: bool,
+    /// Optional maximum number of call-history rows to export
+    pub call_log_limit: Option<usize>,
 }
 
 // Override Debug default impl to avoid printing the cleartext password if it's set
@@ -115,6 +122,8 @@ impl std::fmt::Debug for Options {
             )
             .field("contacts_path", &self.contacts_path)
             .field("show_progress", &self.show_progress)
+            .field("export_call_logs", &self.export_call_logs)
+            .field("call_log_limit", &self.call_log_limit)
             .finish()
     }
 }
@@ -139,6 +148,24 @@ impl Options {
         let cleartext_password: Option<&String> = args.get_one(OPTION_CLEARTEXT_PASSWORD);
         let contacts_path: Option<&String> = args.get_one(OPTION_CUSTOM_CONTACTS_DB_PATH);
         let show_progress = !args.get_flag(OPTION_NO_PROGRESS);
+        let export_call_logs = args.get_flag(OPTION_CALL_LOGS);
+        let call_log_limit_raw: Option<&String> = args.get_one(OPTION_CALL_LOG_LIMIT);
+        let call_log_limit = match call_log_limit_raw {
+            Some(value) => {
+                let parsed = value.parse::<usize>().map_err(|_| {
+                    RuntimeError::InvalidOptions(format!(
+                        "--{OPTION_CALL_LOG_LIMIT} must be a positive integer"
+                    ))
+                })?;
+                if parsed == 0 {
+                    return Err(RuntimeError::InvalidOptions(format!(
+                        "--{OPTION_CALL_LOG_LIMIT} must be greater than zero"
+                    )));
+                }
+                Some(parsed)
+            }
+            None => None,
+        };
 
         // Build the export type
         let export_type: Option<ExportType> = match export_file_type {
@@ -150,23 +177,54 @@ impl Options {
             None => None,
         };
 
+        if diagnostic && export_call_logs {
+            return Err(RuntimeError::InvalidOptions(format!(
+                "Diagnostics are enabled; `{OPTION_CALL_LOGS}` is disallowed"
+            )));
+        }
+
+        if export_type.is_some() && export_call_logs {
+            return Err(RuntimeError::InvalidOptions(format!(
+                "--{OPTION_CALL_LOGS} cannot be combined with --{OPTION_EXPORT_TYPE}"
+            )));
+        }
+
+        if call_log_limit.is_some() && !export_call_logs {
+            return Err(RuntimeError::InvalidOptions(format!(
+                "--{OPTION_CALL_LOG_LIMIT} requires --{OPTION_CALL_LOGS}"
+            )));
+        }
+
         // Anything in here requires `--format`
         if export_file_type.is_none() {
             let format_deps = [
                 (attachment_manager_type.is_some(), OPTION_ATTACHMENT_MANAGER),
-                (user_export_path.is_some(), OPTION_EXPORT_PATH),
                 (no_lazy, OPTION_DISABLE_LAZY_LOADING),
                 (start_date.is_some(), OPTION_START_DATE),
                 (end_date.is_some(), OPTION_END_DATE),
                 (custom_name.is_some(), OPTION_CUSTOM_NAME),
                 (use_caller_id, OPTION_USE_CALLER_ID),
                 (conversation_filter.is_some(), OPTION_CONVERSATION_FILTER),
-                (!show_progress, OPTION_NO_PROGRESS),
             ];
             for (set, opt) in format_deps {
                 if set {
                     return Err(RuntimeError::InvalidOptions(format!(
                         "Option --{opt} is enabled, which requires --{OPTION_EXPORT_TYPE}"
+                    )));
+                }
+            }
+        }
+
+        // Anything in here requires an export operation of some kind
+        if export_file_type.is_none() && !export_call_logs {
+            let operation_deps = [
+                (user_export_path.is_some(), OPTION_EXPORT_PATH),
+                (!show_progress, OPTION_NO_PROGRESS),
+            ];
+            for (set, opt) in operation_deps {
+                if set {
+                    return Err(RuntimeError::InvalidOptions(format!(
+                        "Option --{opt} is enabled, which requires --{OPTION_EXPORT_TYPE} or --{OPTION_CALL_LOGS}"
                     )));
                 }
             }
@@ -184,6 +242,8 @@ impl Options {
             (custom_name.is_some(), OPTION_CUSTOM_NAME),
             (conversation_filter.is_some(), OPTION_CONVERSATION_FILTER),
             (!show_progress, OPTION_NO_PROGRESS),
+            (export_call_logs, OPTION_CALL_LOGS),
+            (call_log_limit.is_some(), OPTION_CALL_LOG_LIMIT),
         ];
         for (set, opt) in diag_conflicts {
             if diagnostic && set {
@@ -228,6 +288,12 @@ impl Options {
             }
             None => Platform::determine(&db_path)?,
         };
+
+        if export_call_logs && !matches!(platform, Platform::iOS) {
+            return Err(RuntimeError::InvalidOptions(format!(
+                "--{OPTION_CALL_LOGS} can only be used with iOS backup folders."
+            )));
+        }
 
         // Prevent cleartext_password from being set if the source is not an iOS backup
         if cleartext_password.is_some() && !matches!(platform, Platform::iOS) {
@@ -281,6 +347,11 @@ impl Options {
             }
             None => AttachmentManagerMode::default(),
         };
+        let attachment_manager = if export_call_logs {
+            AttachmentManager::default()
+        } else {
+            AttachmentManager::from(attachment_manager_mode)
+        };
 
         // Validate the provided export path
         let export_path = validate_path(user_export_path, export_type.as_ref())?;
@@ -288,7 +359,7 @@ impl Options {
         Ok(Options {
             db_path,
             attachment_root: attachment_root.cloned(),
-            attachment_manager: AttachmentManager::from(attachment_manager_mode),
+            attachment_manager,
             diagnostic,
             export_type,
             export_path,
@@ -302,6 +373,8 @@ impl Options {
             cleartext_password: cleartext_password.cloned(),
             contacts_path: contacts_path.cloned().map(PathBuf::from),
             show_progress,
+            export_call_logs,
+            call_log_limit,
         })
     }
 
@@ -447,7 +520,7 @@ fn get_command() -> Command {
             Arg::new(OPTION_DISABLE_LAZY_LOADING)
                 .short('l')
                 .long(OPTION_DISABLE_LAZY_LOADING)
-                .help("Do not include `loading=\"lazy\"` in HTML export `img` tags\nThis will make pages load slower but PDF generation work\n")
+                .help("Do not include `loading=\"lazy\"` in HTML export `img` tags\nThis will make pages load slower but can help browser-based HTML-to-PDF workflows\n")
                 .action(ArgAction::SetTrue)
                 .display_order(9),
         )
@@ -505,6 +578,20 @@ fn get_command() -> Command {
                 .action(ArgAction::SetTrue)
                 .display_order(16),
         )
+        .arg(
+            Arg::new(OPTION_CALL_LOGS)
+                .long(OPTION_CALL_LOGS)
+                .help("Export iOS Phone/FaceTime call history to call_logs.csv and exit\nRequires an iOS backup folder source.\n")
+                .action(ArgAction::SetTrue)
+                .display_order(17),
+        )
+        .arg(
+            Arg::new(OPTION_CALL_LOG_LIMIT)
+                .long(OPTION_CALL_LOG_LIMIT)
+                .help("Maximum number of call-history rows to export\nOnly valid with --call-logs. If omitted, all rows are exported.\n")
+                .display_order(18)
+                .value_name("rows"),
+        )
 }
 
 #[cfg(test)]
@@ -533,6 +620,8 @@ impl Options {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            export_call_logs: false,
+            call_log_limit: None,
         }
     }
 }
@@ -544,6 +633,8 @@ pub fn from_command_line() -> ArgMatches {
 
 #[cfg(test)]
 mod arg_tests {
+    use std::path::PathBuf;
+
     use imessage_database::util::{
         dirs::default_db_path, platform::Platform, query_context::QueryContext,
     };
@@ -582,6 +673,8 @@ mod arg_tests {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            export_call_logs: false,
+            call_log_limit: None,
         };
 
         assert_eq!(actual, expected);
@@ -665,6 +758,8 @@ mod arg_tests {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            export_call_logs: false,
+            call_log_limit: None,
         };
 
         assert_eq!(actual, expected);
@@ -697,6 +792,8 @@ mod arg_tests {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            export_call_logs: false,
+            call_log_limit: None,
         };
 
         assert_eq!(actual, expected);
@@ -778,6 +875,8 @@ mod arg_tests {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            export_call_logs: false,
+            call_log_limit: None,
         };
 
         assert_eq!(actual, expected);
@@ -818,6 +917,8 @@ mod arg_tests {
             cleartext_password: Some("password".to_string()),
             contacts_path: None,
             show_progress: true,
+            export_call_logs: false,
+            call_log_limit: None,
         };
 
         assert_eq!(actual, expected);
@@ -843,7 +944,7 @@ mod arg_tests {
     fn cant_build_option_invalid_export_type() {
         // Get matches from sample args
         let command = get_command();
-        let args = command.get_matches_from(["imessage-exporter", "-f", "pdf"]);
+        let args = command.get_matches_from(["imessage-exporter", "-f", "json"]);
         assert!(Options::from_args(&args).is_err());
     }
 
@@ -874,6 +975,8 @@ mod arg_tests {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            export_call_logs: false,
+            call_log_limit: None,
         };
 
         assert_eq!(actual, expected);
@@ -906,6 +1009,8 @@ mod arg_tests {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            export_call_logs: false,
+            call_log_limit: None,
         };
 
         assert_eq!(actual, expected);
@@ -939,6 +1044,8 @@ mod arg_tests {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            export_call_logs: false,
+            call_log_limit: None,
         };
 
         assert_eq!(actual, expected);
@@ -971,6 +1078,8 @@ mod arg_tests {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            export_call_logs: false,
+            call_log_limit: None,
         };
 
         assert_eq!(actual, expected);
@@ -1003,6 +1112,8 @@ mod arg_tests {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            export_call_logs: false,
+            call_log_limit: None,
         };
 
         assert_eq!(actual, expected);
@@ -1077,6 +1188,8 @@ mod arg_tests {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            export_call_logs: false,
+            call_log_limit: None,
         };
 
         assert_eq!(actual, expected);
@@ -1118,6 +1231,81 @@ mod arg_tests {
     #[test]
     fn cant_build_option_diagnostic_flag_with_no_progress() {
         let args = get_command().get_matches_from(["imessage-exporter", "-d", "--no-progress"]);
+        assert!(Options::from_args(&args).is_err());
+    }
+
+    #[test]
+    fn can_build_option_call_logs() {
+        let dir = unique_test_dir("build-option-call-logs");
+        let dir_str = dir.to_string_lossy().into_owned();
+
+        let args = get_command().get_matches_from([
+            "imessage-exporter",
+            "--call-logs",
+            "--call-log-limit",
+            "25",
+            "-a",
+            "ios",
+            "-p",
+            "backup",
+            "-o",
+            &dir_str,
+        ]);
+
+        let actual = Options::from_args(&args).unwrap();
+        let expected = Options {
+            db_path: PathBuf::from("backup"),
+            attachment_root: None,
+            attachment_manager: AttachmentManager::default(),
+            diagnostic: false,
+            export_type: None,
+            export_path: validate_path(Some(&dir_str), None).unwrap(),
+            query_context: QueryContext::default(),
+            no_lazy: false,
+            custom_name: None,
+            use_caller_id: false,
+            platform: Platform::iOS,
+            ignore_disk_space: false,
+            conversation_filter: None,
+            cleartext_password: None,
+            contacts_path: None,
+            show_progress: true,
+            export_call_logs: true,
+            call_log_limit: Some(25),
+        };
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn cant_build_option_call_logs_with_format() {
+        let args = get_command().get_matches_from([
+            "imessage-exporter",
+            "--call-logs",
+            "-a",
+            "ios",
+            "-f",
+            "txt",
+        ]);
+        assert!(Options::from_args(&args).is_err());
+    }
+
+    #[test]
+    fn cant_build_option_call_log_limit_without_call_logs() {
+        let args = get_command().get_matches_from([
+            "imessage-exporter",
+            "--call-log-limit",
+            "25",
+            "-a",
+            "ios",
+        ]);
+        assert!(Options::from_args(&args).is_err());
+    }
+
+    #[test]
+    fn cant_build_option_call_logs_with_no_lazy() {
+        let args =
+            get_command().get_matches_from(["imessage-exporter", "--call-logs", "-a", "ios", "-l"]);
         assert!(Options::from_args(&args).is_err());
     }
 }

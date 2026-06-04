@@ -7,6 +7,8 @@ use std::path::PathBuf;
 
 use chrono::{Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone};
 use imessage_database::util::dates::{get_offset, TIMESTAMP_FACTOR};
+pub use imessage_exporter::app::call_logs::CallLogEntry;
+pub use imessage_exporter::exporters::pdf::PreviewMessage;
 
 /// Which platform the source database came from.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -35,7 +37,7 @@ impl PlatformChoice {
 pub enum FormatChoice {
     Html,
     Txt,
-    /// Portable PDF, rendered in-process from the text export (no browser).
+    /// Portable PDF, rendered in-process from shared exporter code.
     Pdf,
 }
 
@@ -74,7 +76,7 @@ impl CopyMethod {
         match self {
             CopyMethod::Disabled => "disabled (reference originals)",
             CopyMethod::Clone => "clone (copy, no conversion)",
-            CopyMethod::Basic => "basic (copy + HEIC→JPEG)",
+            CopyMethod::Basic => "basic (copy + HEIC->JPEG)",
             CopyMethod::Full => "full (copy + convert media)",
         }
     }
@@ -103,62 +105,6 @@ pub struct ConversationSummary {
     pub participants: String,
     /// Total number of messages across the underlying chats.
     pub message_count: i64,
-}
-
-/// One message rendered for the preview pane.
-#[derive(Clone, Debug)]
-pub struct PreviewMessage {
-    pub is_from_me: bool,
-    pub sender: String,
-    pub timestamp: String,
-    pub text: String,
-    /// Total attachment rows referenced by the message.
-    pub attachment_count: usize,
-    /// Image attachments resolved for PDF embedding.
-    pub attachments: Vec<PreviewAttachment>,
-    /// Short badges such as "📎 2 attachments", "↪ reply", "✎ edited".
-    pub annotations: Vec<String>,
-}
-
-/// A raster image attachment available to render into a PDF bubble.
-#[derive(Clone, Debug)]
-pub struct PreviewAttachment {
-    pub path: PathBuf,
-    pub name: String,
-}
-
-/// Direction/status for a call-history row.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CallDirection {
-    Incoming,
-    Outgoing,
-    Missed,
-    Blocked,
-    Unknown,
-}
-
-impl CallDirection {
-    pub fn label(self) -> &'static str {
-        match self {
-            CallDirection::Incoming => "Incoming",
-            CallDirection::Outgoing => "Outgoing",
-            CallDirection::Missed => "Missed",
-            CallDirection::Blocked => "Blocked",
-            CallDirection::Unknown => "Unknown",
-        }
-    }
-}
-
-/// One row from the iOS call-history database.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CallLogEntry {
-    pub id: i64,
-    pub started: String,
-    pub direction: CallDirection,
-    pub address: String,
-    pub duration: String,
-    pub service: String,
-    pub call_type: String,
 }
 
 /// Filters applied to a preview or export.

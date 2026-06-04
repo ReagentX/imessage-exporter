@@ -2155,21 +2155,24 @@ dependencies = [
 name = "imessage-exporter"
 version = "0.0.0"
 dependencies = [
+ "ab_glyph",
  "askama",
  "clap",
  "crabapple",
  "fdlimit",
  "fs2",
  "imessage-database",
+ "plist",
+ "printpdf",
  "rpassword",
  "rusqlite",
+ "sha1 0.11.0",
 ]
 
 [[package]]
 name = "imessage-gui"
 version = "0.0.0"
 dependencies = [
- "ab_glyph",
  "chrono",
  "crabapple",
  "eframe",
@@ -2177,7 +2180,6 @@ dependencies = [
  "imessage-exporter",
  "open",
  "plist",
- "printpdf",
  "rfd",
  "rusqlite",
  "serde",

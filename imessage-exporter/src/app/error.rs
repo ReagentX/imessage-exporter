@@ -25,6 +25,8 @@ pub enum RuntimeError {
     DatabaseError(TableError),
     MessageError(MessageError),
     BackupError(BackupError),
+    CallLogError(String),
+    PdfError(String),
     NotEnoughAvailableSpace(u64, u64),
     FileNameError { path: PathBuf, reason: &'static str },
 }
@@ -36,6 +38,7 @@ impl Display for RuntimeError {
             RuntimeError::DiskError(why) => write!(fmt, "{why}"),
             RuntimeError::DatabaseError(why) => write!(fmt, "{why}"),
             RuntimeError::MessageError(why) => write!(fmt, "{why}"),
+            RuntimeError::CallLogError(why) => write!(fmt, "{why}"),
             RuntimeError::NotEnoughAvailableSpace(estimated_bytes, available_bytes) => {
                 write!(
                     fmt,
@@ -48,6 +51,7 @@ impl Display for RuntimeError {
             RuntimeError::FileNameError { path, reason } => {
                 write!(fmt, "Invalid file name at {}: {reason}", path.display())
             }
+            RuntimeError::PdfError(why) => write!(fmt, "{why}"),
         }
     }
 }
@@ -60,6 +64,8 @@ impl Error for RuntimeError {
             RuntimeError::MessageError(why) => Some(why),
             RuntimeError::BackupError(why) => Some(why),
             RuntimeError::InvalidOptions(_)
+            | RuntimeError::CallLogError(_)
+            | RuntimeError::PdfError(_)
             | RuntimeError::NotEnoughAvailableSpace(_, _)
             | RuntimeError::FileNameError { .. } => None,
         }
