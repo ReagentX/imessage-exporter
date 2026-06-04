@@ -4,7 +4,7 @@
 //!
 //! The database password is intentionally never persisted.
 
-use std::path::PathBuf;
+use std::{io::ErrorKind, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -37,6 +37,11 @@ pub struct Settings {
 
     pub sort_by_count: bool,
     pub show_activity_log: bool,
+}
+
+pub struct LoadResult {
+    pub settings: Settings,
+    pub warning: Option<String>,
 }
 
 impl Default for Settings {
@@ -191,16 +196,35 @@ fn fallback_path() -> Option<PathBuf> {
 
 impl Settings {
     /// Load settings from the primary location, then the fallback. Returns
-    /// `Settings::default()` if neither exists or parsing fails.
-    pub fn load() -> Self {
+    /// `Settings::default()` if neither exists, with warnings for real read or
+    /// parse failures so the GUI can surface them.
+    pub fn load() -> LoadResult {
+        let mut warnings = Vec::new();
         for path in [primary_path(), fallback_path()].into_iter().flatten() {
-            if let Ok(text) = std::fs::read_to_string(&path) {
-                if let Ok(settings) = serde_json::from_str::<Settings>(&text) {
-                    return settings;
-                }
+            match std::fs::read_to_string(&path) {
+                Ok(text) => match serde_json::from_str::<Settings>(&text) {
+                    Ok(settings) => {
+                        return LoadResult {
+                            settings,
+                            warning: (!warnings.is_empty()).then(|| warnings.join("; ")),
+                        };
+                    }
+                    Err(why) => warnings.push(format!(
+                        "Could not parse settings at {}: {why}",
+                        path.display()
+                    )),
+                },
+                Err(why) if why.kind() == ErrorKind::NotFound => {}
+                Err(why) => warnings.push(format!(
+                    "Could not read settings at {}: {why}",
+                    path.display()
+                )),
             }
         }
-        Settings::default()
+        LoadResult {
+            settings: Settings::default(),
+            warning: (!warnings.is_empty()).then(|| warnings.join("; ")),
+        }
     }
 
     #[cfg(test)]
@@ -221,7 +245,10 @@ impl Settings {
         let mut last_err = String::from("no writable settings location found");
         for path in [primary_path(), fallback_path()].into_iter().flatten() {
             if let Some(parent) = path.parent() {
-                let _ = std::fs::create_dir_all(parent);
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    last_err = format!("{}: {e}", parent.display());
+                    continue;
+                }
             }
             match std::fs::write(&path, &json) {
                 Ok(()) => return Ok(path),

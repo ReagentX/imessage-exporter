@@ -46,9 +46,15 @@ See [here](../imessage-exporter/README.md#how-to-use) for details on `imessage-e
 
 ## How does the exporter handle previously exported messages?
 
-If files with the current output type exist in the output directory, `imessage-exporter` will alert the user and the export will not start. If the export directory is clear, `imessage-exporter` will export all messages by default. Alternatively, it will export messages between the dates specified by the `--start-date` and `--end-date` arguments.
+If files with the current output type exist in the output directory, `imessage-exporter` will alert the user and the export will not start. If the export directory is clear, the command-line binary exports all messages by default. The desktop GUI adds a safeguard: if no conversations are selected, it asks for confirmation and shows the total number of conversations and messages before exporting everything. Alternatively, exports can be narrowed with selected conversations, participant filters, or the `--start-date` and `--end-date` arguments.
 
 See [here](../imessage-exporter/README.md#how-to-use) for details on `imessage-exporter` arguments.
+
+***
+
+## Can I cancel an export after it starts?
+
+Yes. In the desktop GUI, press **Cancel export** while an export is running. The exporter stops at safe checkpoints and reports that the export was cancelled. The command-line binary is intended for headless use; stop it with your shell or process supervisor if needed.
 
 ***
 

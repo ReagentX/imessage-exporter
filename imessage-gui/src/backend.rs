@@ -9,10 +9,12 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
     sync::{
+        atomic::{AtomicBool, Ordering},
         mpsc::{channel, Receiver, Sender},
         Arc,
     },
     thread,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use eframe::egui;
@@ -29,8 +31,9 @@ use imessage_exporter::{
     app::{
         call_logs,
         compatibility::attachment_manager::{AttachmentManager, AttachmentManagerMode},
+        error::RuntimeError,
         export_type::ExportType,
-        runtime::ProgressCallback,
+        runtime::{CancelCallback, ProgressCallback},
     },
     exporters::pdf,
     Config, Options,
@@ -47,10 +50,20 @@ struct OpenedSource {
 /// Messages sent from the UI to the backend.
 pub enum Command {
     Open(OpenParams),
-    Preview { filters: Filters, limit: usize },
-    Export(ExportParams),
-    HtmlPreview { filters: Filters },
-    LoadCallLogs { limit: usize },
+    Preview {
+        filters: Filters,
+        limit: usize,
+    },
+    Export {
+        params: ExportParams,
+        cancel_token: Arc<AtomicBool>,
+    },
+    HtmlPreview {
+        filters: Filters,
+    },
+    LoadCallLogs {
+        limit: usize,
+    },
     Shutdown,
 }
 
@@ -78,6 +91,7 @@ pub enum Event {
         path: PathBuf,
         summary: String,
     },
+    ExportCancelled,
     ExportFailed(String),
     HtmlPreviewReady(PathBuf),
     HtmlPreviewFailed(String),
@@ -117,7 +131,10 @@ fn backend_loop(cmd_rx: &Receiver<Command>, evt_tx: &Sender<Event>, ctx: &egui::
             Command::Preview { filters, limit } => {
                 handle_preview(config.as_ref(), &filters, limit, evt_tx, ctx)
             }
-            Command::Export(params) => handle_export(config.as_mut(), params, evt_tx, ctx),
+            Command::Export {
+                params,
+                cancel_token,
+            } => handle_export(config.as_mut(), params, cancel_token, evt_tx, ctx),
             Command::HtmlPreview { filters } => {
                 handle_html_preview(config.as_mut(), &filters, evt_tx, ctx)
             }
@@ -209,27 +226,43 @@ fn handle_open(
     };
 
     // Build the conversation list and summary stats.
-    let counts = config.message_counts_by_chat();
+    let counts = match config.message_counts_by_chat() {
+        Ok(counts) => counts,
+        Err(why) => {
+            send(
+                evt_tx,
+                ctx,
+                Event::OpenFailed(format!("Could not load conversation message counts: {why}")),
+            );
+            return;
+        }
+    };
     let conversations = build_conversations(&config, &counts);
 
-    let (date_range, total_messages) = match Message::run_diagnostic(config.db()) {
-        Ok(diag) => {
-            let range = match (diag.first_message_date, diag.last_message_date) {
-                (Some(first), Some(last)) => {
-                    match (
-                        get_local_time(first, config.offset),
-                        get_local_time(last, config.offset),
-                    ) {
-                        (Ok(f), Ok(l)) => Some((fmt_date(&f), fmt_date(&l))),
-                        _ => None,
-                    }
-                }
-                _ => None,
-            };
-            (range, diag.total_messages)
+    let diag = match Message::run_diagnostic(config.db()) {
+        Ok(diag) => diag,
+        Err(why) => {
+            send(
+                evt_tx,
+                ctx,
+                Event::OpenFailed(format!("Could not read message diagnostics: {why}")),
+            );
+            return;
         }
-        Err(_) => (None, 0),
     };
+    let date_range = match (diag.first_message_date, diag.last_message_date) {
+        (Some(first), Some(last)) => {
+            match (
+                get_local_time(first, config.offset),
+                get_local_time(last, config.offset),
+            ) {
+                (Ok(f), Ok(l)) => Some((fmt_date(&f), fmt_date(&l))),
+                _ => None,
+            }
+        }
+        _ => None,
+    };
+    let total_messages = diag.total_messages;
 
     let summary = format!(
         "{} • {} conversations • {} messages",
@@ -402,7 +435,17 @@ fn handle_preview(
 
     match collect_preview(config, &qc, limit) {
         Ok(messages) => {
-            let total = Message::get_count(config.db(), &qc).unwrap_or(messages.len() as i64);
+            let total = match Message::get_count(config.db(), &qc) {
+                Ok(total) => total,
+                Err(why) => {
+                    send(
+                        evt_tx,
+                        ctx,
+                        Event::PreviewFailed(format!("Could not count preview messages: {why}")),
+                    );
+                    return;
+                }
+            };
             send(evt_tx, ctx, Event::Preview { messages, total });
         }
         Err(why) => send(evt_tx, ctx, Event::PreviewFailed(why)),
@@ -503,6 +546,7 @@ fn apply_export_options(
 fn handle_export(
     config: Option<&mut Config>,
     params: ExportParams,
+    cancel_token: Arc<AtomicBool>,
     evt_tx: &Sender<Event>,
     ctx: &egui::Context,
 ) {
@@ -535,8 +579,19 @@ fn handle_export(
     };
 
     let qc = build_query_context(config, &params.filters);
-    let total = Message::get_count(config.db(), &qc).unwrap_or(0);
+    let total = match Message::get_count(config.db(), &qc) {
+        Ok(total) => total,
+        Err(why) => {
+            send(
+                evt_tx,
+                ctx,
+                Event::ExportFailed(format!("Could not count messages for export: {why}")),
+            );
+            return;
+        }
+    };
     apply_export_options(config, &params, export_type, qc);
+    cancel_token.store(false, Ordering::Relaxed);
 
     // Install a progress callback that forwards to the UI.
     let etx = evt_tx.clone();
@@ -546,6 +601,9 @@ fn handle_export(
         cctx.request_repaint();
     });
     config.progress_callback = Some(callback);
+    let token = cancel_token.clone();
+    let cancel_callback: CancelCallback = Arc::new(move || token.load(Ordering::Relaxed));
+    config.cancel_callback = Some(cancel_callback);
 
     send(
         evt_tx,
@@ -558,6 +616,8 @@ fn handle_export(
 
     let result = config.start();
     config.progress_callback = None;
+    config.cancel_callback = None;
+    cancel_token.store(false, Ordering::Relaxed);
 
     match result {
         Ok(()) => send(
@@ -568,6 +628,7 @@ fn handle_export(
                 summary: format!("Exported {total} messages to {}", export_path.display()),
             },
         ),
+        Err(RuntimeError::Cancelled) => send(evt_tx, ctx, Event::ExportCancelled),
         Err(why) => send(evt_tx, ctx, Event::ExportFailed(format!("{why}"))),
     }
 }
@@ -579,7 +640,9 @@ fn ensure_export_dir_clear(dir: &Path, extension: &str) -> Result<(), String> {
     }
     let entries = std::fs::read_dir(dir)
         .map_err(|e| format!("Cannot read export folder {}: {e}", dir.display()))?;
-    for entry in entries.flatten() {
+    for entry in entries {
+        let entry = entry
+            .map_err(|e| format!("Cannot read entry in export folder {}: {e}", dir.display()))?;
         if entry
             .path()
             .extension()
@@ -613,10 +676,17 @@ fn handle_html_preview(
     };
 
     // Unique temp directory for this preview render.
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
+    let stamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(duration) => duration.as_millis(),
+        Err(why) => {
+            send(
+                evt_tx,
+                ctx,
+                Event::HtmlPreviewFailed(format!("Could not create preview timestamp: {why}")),
+            );
+            return;
+        }
+    };
     let dir = std::env::temp_dir().join(format!("imessage-gui-preview-{stamp}"));
     if let Err(why) = std::fs::create_dir_all(&dir) {
         send(
@@ -641,6 +711,7 @@ fn handle_html_preview(
     let qc = build_query_context(config, filters);
     apply_export_options(config, &preview_params, ExportType::Html, qc);
     config.progress_callback = None;
+    config.cancel_callback = None;
 
     send(
         evt_tx,
@@ -654,8 +725,22 @@ fn handle_html_preview(
     }
 
     match largest_html_file(&dir) {
-        Some(file) => {
-            if let Err(why) = open::that(&file) {
+        Ok(Some(file)) => {
+            let file = match std::fs::canonicalize(&file) {
+                Ok(file) => file,
+                Err(why) => {
+                    send(
+                        evt_tx,
+                        ctx,
+                        Event::HtmlPreviewFailed(format!(
+                            "Could not resolve preview file {}: {why}",
+                            file.display()
+                        )),
+                    );
+                    return;
+                }
+            };
+            if let Err(why) = open::that_detached(&file) {
                 send(
                     evt_tx,
                     ctx,
@@ -665,28 +750,39 @@ fn handle_html_preview(
                 send(evt_tx, ctx, Event::HtmlPreviewReady(file));
             }
         }
-        None => send(
+        Ok(None) => send(
             evt_tx,
             ctx,
             Event::HtmlPreviewFailed("No messages matched the current filters.".into()),
         ),
+        Err(why) => send(evt_tx, ctx, Event::HtmlPreviewFailed(why)),
     }
 }
 
 /// Find the largest `.html` file in `dir` (the conversation file, as opposed to
 /// the near-empty `orphaned.html`).
-fn largest_html_file(dir: &Path) -> Option<PathBuf> {
+fn largest_html_file(dir: &Path) -> Result<Option<PathBuf>, String> {
     let mut best: Option<(u64, PathBuf)> = None;
-    for entry in std::fs::read_dir(dir).ok()?.flatten() {
+    let entries =
+        std::fs::read_dir(dir).map_err(|why| format!("Could not read preview folder: {why}"))?;
+    for entry in entries {
+        let entry = entry.map_err(|why| format!("Could not read preview folder entry: {why}"))?;
         let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) == Some("html") {
-            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+        if path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("html"))
+        {
+            let size = entry
+                .metadata()
+                .map_err(|why| format!("Could not inspect preview file {}: {why}", path.display()))?
+                .len();
             if best.as_ref().is_none_or(|(b, _)| size > *b) {
                 best = Some((size, path));
             }
         }
     }
-    best.map(|(_, p)| p)
+    Ok(best.map(|(_, p)| p))
 }
 
 #[cfg(test)]
@@ -728,7 +824,9 @@ mod tests {
     fn builds_conversation_list_without_panicking() {
         let config = test_config();
         // The synthetic fixture has no chats; this must still succeed cleanly.
-        let counts = config.message_counts_by_chat();
+        let counts = config
+            .message_counts_by_chat()
+            .expect("message counts should load");
         let _ = build_conversations(&config, &counts);
     }
 
@@ -756,7 +854,8 @@ mod tests {
     #[test]
     fn date_filter_narrows_results() {
         let config = test_config();
-        let all = Message::get_count(config.db(), &QueryContext::default()).unwrap_or(0);
+        let all = Message::get_count(config.db(), &QueryContext::default())
+            .expect("message count should load");
         // A start date far in the future should exclude everything.
         let future = QueryContext {
             start: crate::model::parse_local_timestamp("2099-01-01", "00:00").ok(),
@@ -768,5 +867,36 @@ mod tests {
             none.is_empty(),
             "future start date should exclude all messages"
         );
+    }
+
+    #[test]
+    fn largest_html_file_prefers_largest_html_file() {
+        let dir = std::env::temp_dir().join(format!(
+            "imessage-gui-html-preview-test-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock should be valid")
+                .as_nanos()
+        ));
+        std::fs::create_dir(&dir).expect("create temp preview dir");
+        let small = dir.join("small.html");
+        let large = dir.join("large.HTML");
+        std::fs::write(&small, b"small").expect("write small html");
+        std::fs::write(&large, b"large html file").expect("write large html");
+        std::fs::write(dir.join("style.css"), b"body {}").expect("write css");
+
+        let found = largest_html_file(&dir)
+            .expect("preview scan should succeed")
+            .expect("html file should be found");
+
+        assert_eq!(found, large);
+        std::fs::remove_dir_all(&dir).expect("cleanup temp preview dir");
+    }
+
+    #[test]
+    fn largest_html_file_reports_unreadable_preview_folder() {
+        let missing = std::env::temp_dir().join("imessage-gui-missing-preview-folder");
+        let err = largest_html_file(&missing).expect_err("missing folder should error");
+        assert!(err.contains("Could not read preview folder"));
     }
 }

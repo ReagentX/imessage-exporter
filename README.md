@@ -22,6 +22,12 @@ The `imessage-exporter` binary exports iMessage data to `txt`, `html`, or `pdf` 
 
 Installation instructions for the binary are located [here](imessage-exporter/README.md).
 
+## Desktop GUI
+
+The native desktop GUI can open macOS message databases, iOS backup folders, and loose `sms.db` files, then preview messages, open a browser-based HTML preview, export messages, and load call logs from iOS backups when Apple's call-history database is present.
+
+The GUI uses the same exporter pipeline as the command-line binary. It also adds desktop-specific safeguards: in-progress exports can be cancelled, and exporting with no conversations selected prompts for confirmation with the total number of conversations and messages that would be exported.
+
 ## Library
 
 The `imessage_database` library provides models that allow us to access iMessage information as native, cross-platform data structures.

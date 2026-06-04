@@ -20,6 +20,7 @@ use crate::app::options::OPTION_BYPASS_FREE_SPACE_CHECK;
 /// Errors that can happen during the application's runtime
 #[derive(Debug)]
 pub enum RuntimeError {
+    Cancelled,
     InvalidOptions(String),
     DiskError(IoError),
     DatabaseError(TableError),
@@ -34,6 +35,7 @@ pub enum RuntimeError {
 impl Display for RuntimeError {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result {
         match self {
+            RuntimeError::Cancelled => write!(fmt, "Export cancelled."),
             RuntimeError::InvalidOptions(why) => write!(fmt, "Invalid options!\n{why}"),
             RuntimeError::DiskError(why) => write!(fmt, "{why}"),
             RuntimeError::DatabaseError(why) => write!(fmt, "{why}"),
@@ -64,6 +66,7 @@ impl Error for RuntimeError {
             RuntimeError::MessageError(why) => Some(why),
             RuntimeError::BackupError(why) => Some(why),
             RuntimeError::InvalidOptions(_)
+            | RuntimeError::Cancelled
             | RuntimeError::CallLogError(_)
             | RuntimeError::PdfError(_)
             | RuntimeError::NotEnoughAvailableSpace(_, _)

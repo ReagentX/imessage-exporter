@@ -117,6 +117,8 @@ pub struct App {
     show_backup_picker: bool,
     backup_candidates: Vec<BackupCandidate>,
     backup_scan_note: String,
+    show_export_all_confirm: bool,
+    pending_export: Option<ExportParams>,
 
     // Loaded-state info
     opened: bool,
@@ -169,6 +171,9 @@ pub struct App {
     log: Vec<String>,
     show_activity_log: bool,
     activity_log_close_requested: Arc<AtomicBool>,
+    export_cancel_token: Arc<AtomicBool>,
+    export_in_progress: bool,
+    export_cancel_requested: bool,
     last_export: Option<PathBuf>,
     error: Option<String>,
     settings_msg: Option<String>,
@@ -181,7 +186,11 @@ impl App {
         let (cmd_tx, evt_rx) = backend::spawn(cc.egui_ctx.clone());
 
         // Load persisted settings (portable: stored next to the executable).
-        let s = settings::Settings::load();
+        let settings::LoadResult {
+            settings: s,
+            warning: settings_warning,
+        } = settings::Settings::load();
+        let initial_log = settings_warning.iter().cloned().collect();
 
         let export_path = if s.export_path.trim().is_empty() {
             let mut p = PathBuf::from(home());
@@ -204,6 +213,8 @@ impl App {
             show_backup_picker: false,
             backup_candidates: Vec::new(),
             backup_scan_note: String::new(),
+            show_export_all_confirm: false,
+            pending_export: None,
             opened: false,
             opened_platform: None,
             summary: String::new(),
@@ -237,12 +248,15 @@ impl App {
             busy: false,
             busy_label: String::new(),
             progress: None,
-            log: Vec::new(),
+            log: initial_log,
             show_activity_log: s.show_activity_log,
             activity_log_close_requested: Arc::new(AtomicBool::new(false)),
+            export_cancel_token: Arc::new(AtomicBool::new(false)),
+            export_in_progress: false,
+            export_cancel_requested: false,
             last_export: None,
             error: None,
-            settings_msg: None,
+            settings_msg: settings_warning,
         }
     }
 
@@ -360,14 +374,25 @@ impl App {
                     self.busy = false;
                     self.busy_label = summary.clone();
                     self.progress = None;
+                    self.clear_export_state();
                     self.last_export = Some(path);
                     self.error = None;
                     self.settings_msg = None;
                     self.push_log(summary);
                 }
+                Event::ExportCancelled => {
+                    self.busy = false;
+                    self.busy_label = "Export cancelled.".to_string();
+                    self.progress = None;
+                    self.clear_export_state();
+                    self.error = None;
+                    self.settings_msg = Some("Export cancelled.".to_string());
+                    self.push_log("Export cancelled.");
+                }
                 Event::ExportFailed(e) => {
                     self.busy = false;
                     self.progress = None;
+                    self.clear_export_state();
                     self.error = Some(e.clone());
                     self.push_log(format!("Export failed: {e}"));
                 }
@@ -488,6 +513,19 @@ impl App {
         self.settings_msg = None;
     }
 
+    fn send_command(&mut self, command: Command, action: &str) -> bool {
+        if let Err(why) = self.cmd_tx.send(command) {
+            self.busy = false;
+            self.progress = None;
+            let message = format!("Could not {action}: backend worker is not available ({why})");
+            self.error = Some(message.clone());
+            self.push_log(message);
+            false
+        } else {
+            true
+        }
+    }
+
     fn do_open(&mut self) {
         if self.backup_path.trim().is_empty() {
             self.error = Some("Choose a backup folder, chat.db, or sms.db file first.".into());
@@ -522,17 +560,20 @@ impl App {
             },
         };
         self.start_busy("Opening backup …");
-        let _ = self.cmd_tx.send(Command::Open(params));
+        self.send_command(Command::Open(params), "open source");
     }
 
     fn do_preview(&mut self) {
         match self.build_filters() {
             Ok(filters) => {
                 self.start_busy("Loading preview …");
-                let _ = self.cmd_tx.send(Command::Preview {
-                    filters,
-                    limit: PREVIEW_LIMIT,
-                });
+                self.send_command(
+                    Command::Preview {
+                        filters,
+                        limit: PREVIEW_LIMIT,
+                    },
+                    "load preview",
+                );
             }
             Err(e) => self.error = Some(e),
         }
@@ -542,7 +583,7 @@ impl App {
         match self.build_filters() {
             Ok(filters) => {
                 self.start_busy("Rendering HTML preview …");
-                let _ = self.cmd_tx.send(Command::HtmlPreview { filters });
+                self.send_command(Command::HtmlPreview { filters }, "open HTML preview");
             }
             Err(e) => self.error = Some(e),
         }
@@ -551,11 +592,79 @@ impl App {
     fn do_export(&mut self) {
         match self.build_export_params() {
             Ok(params) => {
-                self.start_busy("Exporting …");
-                let _ = self.cmd_tx.send(Command::Export(params));
+                if self.selected.is_empty() {
+                    self.pending_export = Some(params);
+                    self.show_export_all_confirm = true;
+                    self.error = None;
+                    self.settings_msg = Some(self.export_all_confirmation_message());
+                    self.push_log("Export paused: no conversations are selected.");
+                } else {
+                    self.start_export(params);
+                }
             }
             Err(e) => self.error = Some(e),
         }
+    }
+
+    fn start_export(&mut self, params: ExportParams) {
+        let cancel_token = self.export_cancel_token.clone();
+        cancel_token.store(false, Ordering::Relaxed);
+        self.export_in_progress = true;
+        self.export_cancel_requested = false;
+        self.start_busy("Exporting …");
+        if !self.send_command(
+            Command::Export {
+                params,
+                cancel_token,
+            },
+            "export messages",
+        ) {
+            self.clear_export_state();
+        }
+    }
+
+    fn cancel_export(&mut self) {
+        if !self.export_in_progress || self.export_cancel_requested {
+            return;
+        }
+        self.export_cancel_token.store(true, Ordering::Relaxed);
+        self.export_cancel_requested = true;
+        self.busy_label = "Cancelling export …".to_string();
+        self.error = None;
+        self.settings_msg = None;
+        self.push_log("Cancellation requested for active export.");
+    }
+
+    fn clear_export_state(&mut self) {
+        self.export_cancel_token.store(false, Ordering::Relaxed);
+        self.export_in_progress = false;
+        self.export_cancel_requested = false;
+        self.show_export_all_confirm = false;
+        self.pending_export = None;
+    }
+
+    fn export_all_confirmation_message(&self) -> String {
+        let conversations = self.conversations.len();
+        let messages = self.total_messages;
+        let conv_word = if conversations == 1 {
+            "conversation"
+        } else {
+            "conversations"
+        };
+        let msg_word = if messages == 1 { "message" } else { "messages" };
+        if self.has_active_export_filters() {
+            format!(
+                "No conversations are selected. Are you sure you want to export every message matched by the active filters? The opened source contains {conversations} {conv_word} and {messages} {msg_word} before filters."
+            )
+        } else {
+            format!(
+                "No conversations are selected. Are you sure you want to export all {conversations} {conv_word} and {messages} {msg_word}?"
+            )
+        }
+    }
+
+    fn has_active_export_filters(&self) -> bool {
+        self.start_enabled || self.end_enabled || !self.participant_filter.trim().is_empty()
     }
 
     fn do_load_call_logs(&mut self) {
@@ -569,9 +678,12 @@ impl App {
         }
 
         self.start_busy("Loading call logs ...");
-        let _ = self.cmd_tx.send(Command::LoadCallLogs {
-            limit: CALL_LOG_LIMIT,
-        });
+        self.send_command(
+            Command::LoadCallLogs {
+                limit: CALL_LOG_LIMIT,
+            },
+            "load call logs",
+        );
     }
 
     fn save_call_logs_csv(&mut self) {
@@ -929,6 +1041,49 @@ impl App {
         }
     }
 
+    fn export_all_confirmation_window(&mut self, ctx: &egui::Context) {
+        let mut open = self.show_export_all_confirm;
+        let mut confirmed = false;
+        let mut dismissed = false;
+        let message = self.export_all_confirmation_message();
+
+        egui::Window::new("Confirm export")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .default_width(layout::CONFIRM_DIALOG_WIDTH)
+            .show(ctx, |ui| {
+                ui.add(
+                    egui::Label::new(egui::RichText::new(message).color(egui::Color32::BLACK))
+                        .wrap(),
+                );
+                theme::inline_separator(ui);
+                theme::control_row(ui, |ui| {
+                    if theme::add_enabled_button(ui, !self.busy, "Export all").clicked() {
+                        confirmed = true;
+                    }
+                    if theme::add_button(ui, "Cancel").clicked() {
+                        dismissed = true;
+                    }
+                });
+            });
+
+        if confirmed {
+            self.show_export_all_confirm = false;
+            self.settings_msg = None;
+            if let Some(params) = self.pending_export.take() {
+                self.start_export(params);
+            }
+        } else if dismissed || !open {
+            self.show_export_all_confirm = false;
+            self.pending_export = None;
+            self.settings_msg = Some("Export cancelled before starting.".to_string());
+            self.push_log("Export cancelled before starting.");
+        } else {
+            self.show_export_all_confirm = open;
+        }
+    }
+
     fn export_controls(&mut self, ui: &mut egui::Ui) {
         theme::panel_header(ui, "Export", |ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1057,22 +1212,36 @@ impl App {
             if theme::add_enabled_button(ui, enabled, "👁 Preview").clicked() {
                 self.do_preview();
             }
-            if theme::add_enabled_button(
-                ui,
-                enabled && self.format == FormatChoice::Html,
-                "🌐 Open HTML preview",
-            )
-            .on_hover_text("Render the current selection to HTML and open it in your browser")
-            .clicked()
+            if theme::add_enabled_button(ui, enabled, "🌐 Open HTML preview")
+                .on_hover_text("Render the current selection to HTML and open it in your browser")
+                .clicked()
             {
                 self.do_html_preview();
             }
             if theme::add_enabled_button(ui, enabled, "⬇ Export").clicked() {
                 self.do_export();
             }
+            if self.export_in_progress {
+                let label = if self.export_cancel_requested {
+                    "Cancelling …"
+                } else {
+                    "Cancel export"
+                };
+                if theme::add_enabled_button(ui, !self.export_cancel_requested, label).clicked() {
+                    self.cancel_export();
+                }
+            }
             if let Some(path) = self.last_export.clone() {
                 if theme::add_button(ui, "📂 Open last export").clicked() {
-                    let _ = open::that(&path);
+                    match open::that_detached(&path) {
+                        Ok(()) => {
+                            self.error = None;
+                            self.push_log(format!("Opened last export: {}", path.display()));
+                        }
+                        Err(why) => {
+                            self.error = Some(format!("Could not open {}: {why}", path.display()));
+                        }
+                    }
                 }
             }
             if theme::add_button(ui, "💾 Save settings")
@@ -1341,24 +1510,30 @@ fn render_bubble(ui: &mut egui::Ui, m: &PreviewMessage) {
     };
 
     ui.with_layout(bubble_layout, |ui| {
-        // Constrain bubble width so long threads stay readable.
-        let max_w = (ui.available_width() * layout::PREVIEW_BUBBLE_MAX_FRACTION)
-            .max(layout::PREVIEW_BUBBLE_MIN_WIDTH);
+        let inner_w = theme::preview_bubble_inner_width(ui.available_width());
         theme::preview_bubble_frame(m.is_from_me).show(ui, |ui| {
-            ui.set_max_width(max_w);
+            ui.set_width(inner_w);
             ui.with_layout(egui::Layout::top_down(align), |ui| {
-                ui.label(theme::preview_meta_text(
-                    format!("{} · {}", m.sender, m.timestamp),
-                    m.is_from_me,
-                ));
+                ui.add(
+                    egui::Label::new(theme::preview_meta_text(
+                        format!("{} · {}", m.sender, m.timestamp),
+                        m.is_from_me,
+                    ))
+                    .wrap(),
+                );
                 if !m.text.is_empty() {
-                    ui.label(theme::preview_body_text(&m.text, m.is_from_me));
+                    ui.add(
+                        egui::Label::new(theme::preview_body_text(&m.text, m.is_from_me)).wrap(),
+                    );
                 }
                 if !m.annotations.is_empty() {
-                    ui.label(theme::preview_annotation_text(
-                        m.annotations.join("   "),
-                        m.is_from_me,
-                    ));
+                    ui.add(
+                        egui::Label::new(theme::preview_annotation_text(
+                            m.annotations.join("   "),
+                            m.is_from_me,
+                        ))
+                        .wrap(),
+                    );
                 }
             });
         });
@@ -1736,6 +1911,9 @@ impl eframe::App for App {
         if self.show_backup_picker {
             self.backup_picker_window(ctx);
         }
+        if self.show_export_all_confirm {
+            self.export_all_confirmation_window(ctx);
+        }
 
         // Keep polling the backend channel while a long operation runs.
         if self.busy {
@@ -1744,9 +1922,14 @@ impl eframe::App for App {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.export_cancel_token.store(true, Ordering::Relaxed);
         // Persist settings on exit (portable: beside the executable).
-        let _ = self.current_settings().save();
-        let _ = self.cmd_tx.send(Command::Shutdown);
+        if let Err(why) = self.current_settings().save() {
+            eprintln!("Could not save settings on exit: {why}");
+        }
+        if let Err(why) = self.cmd_tx.send(Command::Shutdown) {
+            eprintln!("Could not stop backend worker on exit: {why}");
+        }
     }
 }
 

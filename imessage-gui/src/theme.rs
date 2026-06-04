@@ -19,8 +19,8 @@ pub mod layout {
     pub const PREVIEW_MIN_HEIGHT: f32 = 180.0;
     pub const EXPORT_CONTROLS_HEIGHT: f32 = 330.0;
     pub const EXPORT_CONTROLS_MIN_VISIBLE_HEIGHT: f32 = 140.0;
-    pub const PREVIEW_TABLET_MIN_WIDTH: f32 = 360.0;
-    pub const PREVIEW_TABLET_MAX_WIDTH: f32 = 640.0;
+    pub const PREVIEW_TABLET_MIN_WIDTH: f32 = 480.0;
+    pub const PREVIEW_TABLET_MAX_WIDTH: f32 = 760.0;
     pub const PREVIEW_TABLET_MIN_HEIGHT: f32 = 260.0;
     pub const PREVIEW_TABLET_MAX_HEIGHT: f32 = 460.0;
     pub const PREVIEW_TABLET_ASPECT_RATIO: f32 = 4.0 / 3.0;
@@ -46,6 +46,7 @@ pub mod layout {
     pub const BACKUP_PICKER_MIN_WIDTH: f32 = 520.0;
     pub const BACKUP_PICKER_MIN_HEIGHT: f32 = 320.0;
     pub const BACKUP_PICKER_SCROLL_HEIGHT: f32 = 330.0;
+    pub const CONFIRM_DIALOG_WIDTH: f32 = 460.0;
 
     pub const SOURCE_FIELD_WIDTH: f32 = 380.0;
     pub const PASSWORD_FIELD_WIDTH: f32 = 140.0;
@@ -565,6 +566,22 @@ pub fn preview_tablet_area(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egu
     );
 }
 
+pub fn preview_bubble_outer_width(available_width: f32) -> f32 {
+    let available_width = available_width.max(0.0);
+    if available_width <= 0.0 {
+        return 0.0;
+    }
+
+    let min_width = layout::PREVIEW_BUBBLE_MIN_WIDTH.min(available_width);
+    (available_width * layout::PREVIEW_BUBBLE_MAX_FRACTION)
+        .max(min_width)
+        .min(available_width)
+}
+
+pub fn preview_bubble_inner_width(available_width: f32) -> f32 {
+    (preview_bubble_outer_width(available_width) - layout::BUTTON_PADDING_X * 2.0).max(0.0)
+}
+
 fn preview_tablet_size(available: egui::Vec2) -> egui::Vec2 {
     let max_width = (available.x - layout::PREVIEW_TABLET_CENTER_PADDING * 2.0)
         .clamp(0.0, layout::PREVIEW_TABLET_MAX_WIDTH);
@@ -842,6 +859,26 @@ mod tests {
         assert!(size.x <= available.x - layout::PREVIEW_TABLET_CENTER_PADDING * 2.0);
         assert!(size.y <= available.y - layout::PREVIEW_TABLET_CENTER_PADDING * 2.0);
         assert!((size.x / size.y - layout::PREVIEW_TABLET_ASPECT_RATIO).abs() < 0.01);
+    }
+
+    #[test]
+    fn preview_tablet_uses_readable_minimum_width_when_space_allows() {
+        let available = egui::vec2(700.0, 520.0);
+        let size = preview_tablet_size(available);
+
+        assert!(size.x >= layout::PREVIEW_TABLET_MIN_WIDTH);
+        assert!(size.x <= available.x - layout::PREVIEW_TABLET_CENTER_PADDING * 2.0);
+    }
+
+    #[test]
+    fn preview_bubble_width_never_exceeds_available_screen() {
+        for available in [0.0, 120.0, 320.0, 600.0] {
+            let outer = preview_bubble_outer_width(available);
+            let inner = preview_bubble_inner_width(available);
+
+            assert!(outer <= available.max(0.0));
+            assert!(inner <= outer);
+        }
     }
 
     #[test]

@@ -174,6 +174,8 @@ pub fn run_export<'a, W>(writer: &mut W) -> Result<(), RuntimeError>
 where
     W: MessageWriter<'a>,
 {
+    writer.config().check_cancelled()?;
+
     eprintln!(
         "Exporting to {} as {}...",
         writer.config().options.export_path.display(),
@@ -201,6 +203,8 @@ where
     // and `clear()` retains it.
     let mut msg_buf = String::with_capacity(W::BUFFER_CAPACITY);
     for message in Message::rows(&mut statement, [])? {
+        writer.config().check_cancelled()?;
+
         let mut msg = message?;
 
         // Early escape if we try and render the same message GUID twice
@@ -245,6 +249,7 @@ where
         }
         advance_progress(&writer.state().pb, &mut current_message);
     }
+    writer.config().check_cancelled()?;
     writer.state().pb.finish();
 
     if failures > 0 {

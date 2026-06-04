@@ -21,8 +21,18 @@ This tool targets the current latest public release for Messages.app. It may wor
 
 - TXT conversation transcripts
 - HTML conversation transcripts with browser-friendly media embeds
-- Native PDF conversation transcripts
+- Native PDF conversation transcripts with rounded chat-bubble styling
 - CSV call-log exports from iOS backups when call history is present
+
+## Desktop GUI features
+
+- Opens macOS `chat.db` files, iOS backup folders, and loose `sms.db` files
+- Lists conversations with selection, search, and message counts
+- Shows an in-app message preview and can open an HTML preview in the default browser
+- Exports with the same shared `txt`, `html`, and `pdf` pipeline as the command-line binary
+- Can cancel in-progress exports
+- Confirms before exporting every conversation when no conversations are selected
+- Loads and saves iOS Phone/FaceTime call logs when Apple's call-history database is present
 
 ## Supported Message Features
 

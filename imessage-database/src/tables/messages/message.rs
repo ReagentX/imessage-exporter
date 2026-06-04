@@ -145,7 +145,7 @@ use crate::{
         variants::{Announcement, BalloonProvider, CustomBalloon, Tapback, TapbackAction, Variant},
     },
     tables::{
-        diagnostic::{MessageDiagnostic, count_query, table_exists},
+        diagnostic::{MessageDiagnostic, column_exists, count_query, table_exists},
         messages::{
             body::{parse_body_legacy, parse_body_typedstream},
             models::{BubbleComponent, GroupAction, Service, SharedLocation},
@@ -913,14 +913,18 @@ impl Message {
 
     /// Cache all message GUIDs that contain translation data. Only works on iOS 16+ databases.
     pub fn cache_translations(db: &Connection) -> Result<HashSet<String>, TableError> {
+        if !column_exists(db, MESSAGE, MESSAGE_SUMMARY_INFO)? {
+            return Ok(HashSet::new());
+        }
+
         // `7472616E736C6174696F6E4C616E6775616765` -> "translationLanguage"
         // `7472616E736C6174656454657874` -> "translatedText"
         let query = format!(
-            "SELECT guid FROM {MESSAGE} 
-                WHERE message_summary_info IS NOT NULL 
-                AND length(message_summary_info) > 61 
-                AND instr(message_summary_info, X'7472616E736C6174696F6E4C616E6775616765') > 0 
-                AND instr(message_summary_info, X'7472616E736C6174656454657874') > 0"
+            "SELECT guid FROM {MESSAGE}
+                WHERE {MESSAGE_SUMMARY_INFO} IS NOT NULL
+                AND length({MESSAGE_SUMMARY_INFO}) > 61
+                AND instr({MESSAGE_SUMMARY_INFO}, X'7472616E736C6174696F6E4C616E6775616765') > 0
+                AND instr({MESSAGE_SUMMARY_INFO}, X'7472616E736C6174656454657874') > 0"
         );
 
         let mut statement = db.prepare(&query)?;
@@ -1019,32 +1023,28 @@ impl Message {
     /// ```
     pub fn get_count(db: &Connection, context: &QueryContext) -> Result<i64, TableError> {
         let mut statement = if context.has_filters() {
+            let include_deleted = table_exists(db, RECENTLY_DELETED)?;
             db.prepare_cached(&format!(
                 "SELECT
                      COUNT(*)
                  FROM {MESSAGE} as m
                  LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
-                 LEFT JOIN {RECENTLY_DELETED} as d ON m.ROWID = d.message_id
+                 {}
                  {}",
-                Self::generate_filter_statement(context, true)
-            ))
-            .or_else(|_| {
-                db.prepare_cached(&format!(
-                    "SELECT
-                         COUNT(*)
-                     FROM {MESSAGE} as m
-                     LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
-                    {}",
-                    Self::generate_filter_statement(context, false)
-                ))
-            })?
+                if include_deleted {
+                    format!("LEFT JOIN {RECENTLY_DELETED} as d ON m.ROWID = d.message_id")
+                } else {
+                    String::new()
+                },
+                Self::generate_filter_statement(context, include_deleted)
+            ))?
         } else {
             db.prepare_cached(&format!("SELECT COUNT(*) FROM {MESSAGE}"))?
         };
-        // Execute query, defaulting to zero if it fails
-        let count: i64 = statement.query_row([], |r| r.get(0)).unwrap_or(0);
 
-        Ok(count)
+        statement
+            .query_row([], |r| r.get(0))
+            .map_err(TableError::from)
     }
 
     /// Stream messages from the database with optional filters.
@@ -1565,5 +1565,30 @@ mod diagnostic_tests {
         let diagnostic = Message::run_diagnostic(&db).unwrap();
 
         assert_eq!(diagnostic.recoverable_messages, Some(1));
+    }
+
+    #[test]
+    fn cache_translations_returns_empty_when_summary_column_is_missing() {
+        let db = diagnostic_db();
+
+        let translations = Message::cache_translations(&db).unwrap();
+
+        assert!(translations.is_empty());
+    }
+
+    #[test]
+    fn cache_translations_surfaces_malformed_translation_schema() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "
+            CREATE TABLE message (
+                ROWID INTEGER PRIMARY KEY,
+                message_summary_info BLOB
+            );
+            ",
+        )
+        .unwrap();
+
+        Message::cache_translations(&db).expect_err("missing guid column should fail");
     }
 }

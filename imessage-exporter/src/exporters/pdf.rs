@@ -26,9 +26,10 @@ use imessage_database::{
     util::{dates::format as fmt_date, query_context::QueryContext},
 };
 use printpdf::image_crate;
+use printpdf::path::{PaintMode, WindingOrder};
 use printpdf::{
     BuiltinFont, Color, Image, ImageTransform, IndirectFontRef, Mm, PdfDocument,
-    PdfDocumentReference, PdfLayerReference, Rect, Rgb,
+    PdfDocumentReference, PdfLayerReference, Point, Polygon, Rect, Rgb,
 };
 
 use crate::app::{error::RuntimeError, runtime::Config, sanitizers::sanitize_filename};
@@ -91,11 +92,14 @@ const LINE_GAP: f32 = 2.0; // pt between wrapped lines
 const PARA_GAP: f32 = 6.0; // pt between bubbles
 const BUBBLE_PAD: f32 = 6.0; // pt padding inside a bubble
 const BUBBLE_MAX_FRAC: f32 = 0.74; // bubble width as fraction of content width
+const BUBBLE_RADIUS: f32 = 18.75; // 25 CSS px at 96dpi, matching the HTML bubble radius
 const TEXT_MEASURE_SCALE: f32 = 1.38; // guard for PDF/font renderer metric differences
 const TEXT_WRAP_SAFETY: f32 = 18.0; // pt guard inside the bubble after wrapping
 const IMAGE_GAP: f32 = 4.0; // pt between embedded image thumbnails
+const PDF_EXPORT_CANCELLED: &str = "Export cancelled.";
 
 pub fn export(config: &Config) -> Result<PdfExportSummary, RuntimeError> {
+    config.check_cancelled()?;
     create_dir_all(&config.options.export_path)?;
 
     let conversations = pdf_conversations(config);
@@ -110,12 +114,14 @@ pub fn export(config: &Config) -> Result<PdfExportSummary, RuntimeError> {
     let mut used_names: HashSet<String> = HashSet::new();
 
     for (idx, conv) in conversations.iter().enumerate() {
+        config.check_cancelled()?;
         if let Some(callback) = &config.progress_callback {
             callback(idx as u64, total_convs as u64);
         }
 
         let qc = query_for_conversation(&config.options.query_context, conv);
         let messages = collect_messages(config, &qc, usize::MAX, true)?;
+        config.check_cancelled()?;
         if messages.is_empty() {
             continue;
         }
@@ -130,9 +136,11 @@ pub fn export(config: &Config) -> Result<PdfExportSummary, RuntimeError> {
         }
 
         let pdf_path = config.options.export_path.join(format!("{stem}.pdf"));
-        render(&messages, &conv.title, &pdf_path).map_err(RuntimeError::PdfError)?;
+        render_with_cancel(&messages, &conv.title, &pdf_path, || config.is_cancelled())
+            .map_err(pdf_render_error)?;
         summary.produced_files += 1;
     }
+    config.check_cancelled()?;
 
     if let Some(callback) = &config.progress_callback {
         callback(total_convs as u64, total_convs as u64);
@@ -145,6 +153,14 @@ pub fn export(config: &Config) -> Result<PdfExportSummary, RuntimeError> {
     }
 
     Ok(summary)
+}
+
+fn pdf_render_error(why: String) -> RuntimeError {
+    if why == PDF_EXPORT_CANCELLED {
+        RuntimeError::Cancelled
+    } else {
+        RuntimeError::PdfError(why)
+    }
 }
 
 fn pdf_conversations(config: &Config) -> Vec<PdfConversation> {
@@ -213,6 +229,7 @@ pub fn collect_messages(
     let mut out: Vec<PreviewMessage> = Vec::new();
 
     for row in Message::rows(&mut statement, [])? {
+        config.check_cancelled()?;
         let mut msg = row?;
 
         // Tapbacks and poll updates are rendered in context by the regular
@@ -736,6 +753,15 @@ struct Page {
 
 /// Render the conversation `messages` to a styled PDF at `out_path`.
 pub fn render(messages: &[PreviewMessage], title: &str, out_path: &Path) -> Result<(), String> {
+    render_with_cancel(messages, title, out_path, || false)
+}
+
+fn render_with_cancel(
+    messages: &[PreviewMessage],
+    title: &str,
+    out_path: &Path,
+    is_cancelled: impl Fn() -> bool,
+) -> Result<(), String> {
     let (doc, page1, layer1) = PdfDocument::new(title, Mm(PAGE_W_MM), Mm(PAGE_H_MM), "Layer 1");
     let face = Typeface::load(&doc)?;
 
@@ -770,6 +796,10 @@ pub fn render(messages: &[PreviewMessage], title: &str, out_path: &Path) -> Resu
     y -= TITLE_SIZE + PARA_GAP * 2.0;
 
     for msg in messages {
+        if is_cancelled() {
+            return Err(PDF_EXPORT_CANCELLED.to_string());
+        }
+
         let bubble = layout_bubble(&face, msg, content_w);
 
         // Page break if the bubble won't fit here. Very image-heavy bubbles may
@@ -803,12 +833,13 @@ pub fn render(messages: &[PreviewMessage], title: &str, out_path: &Path) -> Resu
                 rgb(90, 90, 95),
             )
         };
-        draw_rect(
+        draw_rounded_rect(
             &page.layer,
             bubble_left,
             bubble_bottom,
             bubble.width_pt,
             bubble.height_pt,
+            BUBBLE_RADIUS,
             &fill,
         );
 
@@ -874,11 +905,68 @@ pub fn render(messages: &[PreviewMessage], title: &str, out_path: &Path) -> Resu
         y = bubble_bottom - PARA_GAP;
     }
 
+    if is_cancelled() {
+        return Err(PDF_EXPORT_CANCELLED.to_string());
+    }
+
     let file = std::fs::File::create(out_path)
         .map_err(|e| format!("cannot create {}: {e}", out_path.display()))?;
     doc.save(&mut BufWriter::new(file))
         .map_err(|e| format!("cannot write PDF {}: {e}", out_path.display()))?;
     Ok(())
+}
+
+fn rounded_rect_points(x: f32, y: f32, w: f32, h: f32, radius: f32) -> Vec<(Point, bool)> {
+    let r = radius.min(w / 2.0).min(h / 2.0).max(0.0);
+    if r == 0.0 {
+        return vec![
+            (Point::new(mm(x), mm(y + h)), false),
+            (Point::new(mm(x + w), mm(y + h)), false),
+            (Point::new(mm(x + w), mm(y)), false),
+            (Point::new(mm(x), mm(y)), false),
+        ];
+    }
+
+    // Same cubic approximation printpdf uses for circles.
+    const C: f32 = 0.551_915_05;
+    let c = C * r;
+    vec![
+        (Point::new(mm(x + r), mm(y + h)), false),
+        (Point::new(mm(x + w - r), mm(y + h)), true),
+        (Point::new(mm(x + w - r + c), mm(y + h)), true),
+        (Point::new(mm(x + w), mm(y + h - r + c)), true),
+        (Point::new(mm(x + w), mm(y + h - r)), false),
+        (Point::new(mm(x + w), mm(y + r)), true),
+        (Point::new(mm(x + w), mm(y + r - c)), true),
+        (Point::new(mm(x + w - r + c), mm(y)), true),
+        (Point::new(mm(x + w - r), mm(y)), false),
+        (Point::new(mm(x + r), mm(y)), true),
+        (Point::new(mm(x + r - c), mm(y)), true),
+        (Point::new(mm(x), mm(y + r - c)), true),
+        (Point::new(mm(x), mm(y + r)), false),
+        (Point::new(mm(x), mm(y + h - r)), true),
+        (Point::new(mm(x), mm(y + h - r + c)), true),
+        (Point::new(mm(x + r - c), mm(y + h)), true),
+        (Point::new(mm(x + r), mm(y + h)), false),
+    ]
+}
+
+fn draw_rounded_rect(
+    layer: &PdfLayerReference,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    radius: f32,
+    fill: &Color,
+) {
+    let mut poly: Polygon = rounded_rect_points(x, y, w, h, radius)
+        .into_iter()
+        .collect();
+    poly.mode = PaintMode::Fill;
+    poly.winding_order = WindingOrder::NonZero;
+    layer.set_fill_color(fill.clone());
+    layer.add_polygon(poly);
 }
 
 /// Draw a filled rectangle given bottom-left origin and size in points.
@@ -954,6 +1042,28 @@ mod tests {
         0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 156, 99, 248, 207, 192, 240,
         31, 0, 5, 0, 1, 255, 137, 153, 61, 29, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
     ];
+
+    #[test]
+    fn rounded_rect_uses_curved_corners_and_clamps_radius() {
+        let points = rounded_rect_points(0.0, 0.0, 20.0, 10.0, 25.0);
+
+        assert_eq!(points.len(), 17);
+        assert_eq!(points.iter().filter(|(_, bezier)| *bezier).count(), 12);
+        assert_eq!(points.first().unwrap().0, points.last().unwrap().0);
+    }
+
+    #[test]
+    fn render_with_cancel_stops_before_writing_file() {
+        let dir = std::env::temp_dir().join("imessage-gui-pdf-cancel-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let out = dir.join("cancelled.pdf");
+        let _ = std::fs::remove_file(&out);
+
+        let err = render_with_cancel(&[msg(true, "stop")], "Cancelled", &out, || true).unwrap_err();
+
+        assert_eq!(err, PDF_EXPORT_CANCELLED);
+        assert!(!out.exists());
+    }
 
     #[test]
     fn renders_styled_pdf() {

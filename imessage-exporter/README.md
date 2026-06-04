@@ -277,9 +277,9 @@ The default styles can be viewed [here](src/exporters/html/resources/style.css).
 
 ### PDF Exports
 
-PDF export is rendered natively by `imessage-exporter`; it does not require Safari, browser automation, or `wkhtmltopdf`. Each conversation is written as its own PDF. Image attachments are embedded when their files can be resolved, and unavailable attachments are annotated in the transcript.
+PDF export is rendered natively by `imessage-exporter`; it does not require Safari, browser automation, or `wkhtmltopdf`. Each conversation is written as its own PDF using the same rounded chat-bubble styling as the HTML transcript. Image attachments are embedded when their files can be resolved, and unavailable attachments are annotated in the transcript.
 
-Very large conversations can produce large, many-page PDFs and may take longer than `txt` or `html` exports.
+Very large conversations can produce large, many-page PDFs and may take longer than `txt` or `html` exports. Front-ends built on the library can provide cancellation while an export is running; the command-line binary remains fully headless-friendly and reports progress only when attached to a terminal unless `--no-progress` is used.
 
 ### Call Log Exports
 

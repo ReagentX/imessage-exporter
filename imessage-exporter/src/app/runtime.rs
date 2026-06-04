@@ -46,6 +46,10 @@ const MAX_LENGTH: usize = 235;
 /// to be `Send` (to allow the owning [`Config`] to be constructed on a worker
 /// thread), not `Sync`.
 pub type ProgressCallback = std::sync::Arc<dyn Fn(u64, u64) + Send>;
+/// Callback queried by long-running exporters to decide whether the current
+/// operation should stop early. Front-ends can set this to wire a cancel button
+/// without coupling exporter code to any UI runtime.
+pub type CancelCallback = std::sync::Arc<dyn Fn() -> bool + Send + Sync>;
 
 // MARK: Config
 /// Stores the application state and handles application lifecycle
@@ -75,9 +79,28 @@ pub struct Config {
     /// that are not attached to a terminal can set this to receive
     /// `(current, total)` updates regardless of TTY state.
     pub progress_callback: Option<ProgressCallback>,
+    /// Optional cancellation callback for front-ends that need to stop an
+    /// in-flight export. Headless/CLI exports leave this unset.
+    pub cancel_callback: Option<CancelCallback>,
 }
 
 impl Config {
+    /// Return `true` when an owning front-end has requested cancellation.
+    pub fn is_cancelled(&self) -> bool {
+        self.cancel_callback
+            .as_ref()
+            .is_some_and(|callback| callback())
+    }
+
+    /// Convert the cancellation callback into the standard runtime error.
+    pub fn check_cancelled(&self) -> Result<(), RuntimeError> {
+        if self.is_cancelled() {
+            Err(RuntimeError::Cancelled)
+        } else {
+            Ok(())
+        }
+    }
+
     /// Borrow the underlying read-only iMessage database connection.
     ///
     /// Exposed so external front-ends (e.g. a GUI) can run their own preview
@@ -93,20 +116,20 @@ impl Config {
     /// is cheap even on large databases. Front-ends can sum these counts over a
     /// deduplicated conversation's underlying chat ids to show per-conversation
     /// totals. Chats with no messages are absent from the map.
-    pub fn message_counts_by_chat(&self) -> HashMap<i32, i64> {
+    pub fn message_counts_by_chat(&self) -> Result<HashMap<i32, i64>, RuntimeError> {
         use imessage_database::tables::table::CHAT_MESSAGE_JOIN;
 
         let mut counts = HashMap::new();
         let sql = format!("SELECT chat_id, COUNT(*) FROM {CHAT_MESSAGE_JOIN} GROUP BY chat_id");
-        if let Ok(mut stmt) = self.db().prepare(&sql)
-            && let Ok(rows) =
-                stmt.query_map([], |row| Ok((row.get::<_, i32>(0)?, row.get::<_, i64>(1)?)))
-        {
-            for row in rows.flatten() {
-                counts.insert(row.0, row.1);
-            }
+        let mut stmt = self.db().prepare(&sql)?;
+        let rows = stmt.query_map([], |row| Ok((row.get::<_, i32>(0)?, row.get::<_, i64>(1)?)))?;
+
+        for row in rows {
+            let (chat_id, message_count) = row?;
+            counts.insert(chat_id, message_count);
         }
-        counts
+
+        Ok(counts)
     }
 
     /// Get the chatroom and its deduplicated ID for a message, if available
@@ -293,8 +316,7 @@ impl Config {
         let tapbacks = Message::cache(data_source.db())?;
 
         eprintln!("  [5/5] Caching translations...");
-        // Translations are not available in older database versions, so we default to an empty set
-        let translated_messages = Message::cache_translations(data_source.db()).unwrap_or_default();
+        let translated_messages = Message::cache_translations(data_source.db())?;
         eprintln!("Cache built!");
 
         Ok(Config {
@@ -309,6 +331,7 @@ impl Config {
             offset: get_offset(),
             data_source,
             progress_callback: None,
+            cancel_callback: None,
         })
     }
 
@@ -614,8 +637,10 @@ impl Config {
                 self.ensure_free_space()?;
             }
 
-            // Ensure we have enough file handles to export
-            let _ = raise_fd_limit();
+            // Ensure we have enough file handles to export.
+            if let Err(why) = raise_fd_limit() {
+                eprintln!("warning: could not raise file descriptor limit: {why}");
+            }
 
             // Create exporter, pass it data we care about, then kick it off
             match export_type {
@@ -689,6 +714,7 @@ impl Config {
             offset: get_offset(),
             data_source,
             progress_callback: None,
+            cancel_callback: None,
         }
     }
 
