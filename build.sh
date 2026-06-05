@@ -34,10 +34,9 @@ esac
 mkdir -p output
 cp "target/release/imessage-exporter${bin_ext}" "output/imessage-exporter-${host}${bin_ext}"
 cp "target/release/imessage-gui${bin_ext}" "output/imessage-gui-${host}${bin_ext}"
-cp LICENSE THIRD_PARTY_NOTICES.md output/
+cp LICENSE output/
 
 echo "Built:"
 echo "  output/imessage-exporter-${host}${bin_ext}"
 echo "  output/imessage-gui-${host}${bin_ext}"
 echo "  output/LICENSE"
-echo "  output/THIRD_PARTY_NOTICES.md"
