@@ -369,9 +369,7 @@ fn build_conversations(
 
 // MARK: Filters
 
-/// Build a [`QueryContext`] from UI filters. The text participant filter is
-/// resolved against the cached participant/chat maps exactly as
-/// `Config::resolve_filtered_handles` does.
+/// Build a [`QueryContext`] from UI filters.
 fn build_query_context(config: &Config, filters: &Filters) -> QueryContext {
     let mut qc = QueryContext {
         start: filters.start_ns,
@@ -386,28 +384,7 @@ fn build_query_context(config: &Config, filters: &Filters) -> QueryContext {
         .as_ref()
         .filter(|t| !t.trim().is_empty())
     {
-        let parsed: Vec<&str> = text
-            .split(',')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .collect();
-
-        let mut handles: BTreeSet<i32> = BTreeSet::new();
-        for name in config.participants.values() {
-            for needle in &parsed {
-                if name.contains(needle) {
-                    handles.extend(name.handle_ids.iter().copied());
-                }
-            }
-        }
-        let mut chats: BTreeSet<i32> = BTreeSet::new();
-        for (chat_id, parts) in &config.chatroom_participants {
-            if !parts.is_disjoint(&handles) {
-                chats.insert(*chat_id);
-            }
-        }
-        qc.set_selected_handle_ids(handles);
-        qc.set_selected_chat_ids(chats);
+        config.apply_conversation_filter(&mut qc, text);
     }
 
     qc

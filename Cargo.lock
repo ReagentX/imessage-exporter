@@ -2174,17 +2174,14 @@ name = "imessage-gui"
 version = "0.0.0"
 dependencies = [
  "chrono",
- "crabapple",
  "eframe",
  "imessage-database",
  "imessage-exporter",
  "open",
  "plist",
  "rfd",
- "rusqlite",
  "serde",
  "serde_json",
- "sha1 0.11.0",
 ]
 
 [[package]]

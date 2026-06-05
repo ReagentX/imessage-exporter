@@ -22,6 +22,7 @@ use imessage_database::{
     },
     util::{
         dates::{format as format_date, get_local_time, get_offset, readable_diff},
+        query_context::QueryContext,
         size::format_file_size,
     },
 };
@@ -336,39 +337,69 @@ impl Config {
     }
 
     // MARK: Filters
+    /// Resolve a comma-separated participant filter into matching handle IDs
+    /// and chat IDs using the cached contacts and chat membership maps.
+    ///
+    /// Empty terms are ignored, so filters like `"Alice, Bob,"` do not
+    /// accidentally match every participant via `str::contains("")`.
+    pub fn resolve_conversation_filter_ids(
+        &self,
+        conversation_filter: &str,
+    ) -> (BTreeSet<i32>, BTreeSet<i32>) {
+        let parsed_handle_filter = conversation_filter
+            .split(',')
+            .map(str::trim)
+            .filter(|filter| !filter.is_empty())
+            .collect::<Vec<&str>>();
+
+        if parsed_handle_filter.is_empty() {
+            return (BTreeSet::new(), BTreeSet::new());
+        }
+
+        let mut included_handles: BTreeSet<i32> = BTreeSet::new();
+        for handle_name in self.participants.values() {
+            for included_name in &parsed_handle_filter {
+                if handle_name.contains(included_name) {
+                    included_handles.extend(&handle_name.handle_ids);
+                }
+            }
+        }
+
+        let mut included_chatrooms: BTreeSet<i32> = BTreeSet::new();
+        for (chat_id, participants) in &self.chatroom_participants {
+            if !participants.is_disjoint(&included_handles) {
+                included_chatrooms.insert(*chat_id);
+            }
+        }
+
+        (included_handles, included_chatrooms)
+    }
+
+    /// Apply a comma-separated participant filter to a query context.
+    pub fn apply_conversation_filter(
+        &self,
+        query_context: &mut QueryContext,
+        conversation_filter: &str,
+    ) {
+        let (included_handles, included_chatrooms) =
+            self.resolve_conversation_filter_ids(conversation_filter);
+
+        query_context.set_selected_handle_ids(included_handles);
+        query_context.set_selected_chat_ids(included_chatrooms);
+    }
+
     /// Convert comma separated list of participant strings into table chat IDs using
     ///   1) filter `self.participants` values based on name matches with the user-provided filter strings
     ///   2) get the chat IDs keys from `self.chatroom_participants` for values that contain the selected `handle_ids`
     ///   3) send those chat and handle IDs to the query context so they are included in the message table filters
     pub fn resolve_filtered_handles(&mut self) {
         if let Some(conversation_filter) = &self.options.conversation_filter {
-            let parsed_handle_filter = conversation_filter.split(',').collect::<Vec<&str>>();
-
-            let mut included_chatrooms: BTreeSet<i32> = BTreeSet::new();
-            let mut included_handles: BTreeSet<i32> = BTreeSet::new();
-
-            // First: Scan the list of participants for included handle IDs
-            self.participants.iter().for_each(|(_, handle_name)| {
-                for included_name in &parsed_handle_filter {
-                    if handle_name.contains(included_name) {
-                        included_handles.extend(&handle_name.handle_ids);
-                    }
-                }
-            });
-
-            // Second: scan the list of chatrooms for IDs that contain the selected participants
-            self.chatroom_participants
-                .iter()
-                .for_each(|(chat_id, participants)| {
-                    if !participants.is_disjoint(&included_handles) {
-                        included_chatrooms.insert(*chat_id);
-                    }
-                });
+            let (included_handles, included_chatrooms) =
+                self.resolve_conversation_filter_ids(conversation_filter);
 
             self.options
                 .query_context
                 .set_selected_handle_ids(included_handles);
-
             self.options
                 .query_context
                 .set_selected_chat_ids(included_chatrooms);
@@ -1508,5 +1539,41 @@ mod chat_filter_tests {
             app.options.query_context.selected_chat_ids,
             Some(BTreeSet::from([4, 6]))
         );
+    }
+
+    #[test]
+    fn conversation_filter_trims_and_ignores_empty_terms() {
+        let options = Options::fake_options(ExportType::Html);
+        let mut app = Config::fake_app(options);
+
+        app.participants.insert(10, Name::fake_name("Person 10"));
+        app.participants.insert(11, Name::fake_name("Person 11"));
+
+        for (id, participant) in app.participants.iter_mut() {
+            participant.handle_ids.insert(*id);
+        }
+
+        app.chatroom_participants.insert(1, BTreeSet::from([10]));
+        app.chatroom_participants.insert(2, BTreeSet::from([11]));
+
+        let (handles, chats) = app.resolve_conversation_filter_ids(" Person 10, , ");
+
+        assert_eq!(handles, BTreeSet::from([10]));
+        assert_eq!(chats, BTreeSet::from([1]));
+    }
+
+    #[test]
+    fn empty_conversation_filter_terms_match_nothing() {
+        let options = Options::fake_options(ExportType::Html);
+        let mut app = Config::fake_app(options);
+
+        app.participants.insert(10, Name::fake_name("Person 10"));
+        app.participants.get_mut(&10).unwrap().handle_ids.insert(10);
+        app.chatroom_participants.insert(1, BTreeSet::from([10]));
+
+        let (handles, chats) = app.resolve_conversation_filter_ids(" , ");
+
+        assert!(handles.is_empty());
+        assert!(chats.is_empty());
     }
 }

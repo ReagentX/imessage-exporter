@@ -23,13 +23,15 @@ fn command_no_window(command: &str) -> Option<Command> {
     #[cfg(not(target_family = "windows"))]
     let program = resolve_program(command).unwrap_or_else(|| command.into());
 
-    let mut command = Command::new(program);
     #[cfg(target_family = "windows")]
     {
         use std::os::windows::process::CommandExt;
+        let mut command = Command::new(program);
         command.creation_flags(CREATE_NO_WINDOW);
+        Some(command)
     }
-    Some(command)
+    #[cfg(not(target_family = "windows"))]
+    Some(Command::new(program))
 }
 
 /// Run a command, ignoring output. Returns [`None`] if the process cannot be
