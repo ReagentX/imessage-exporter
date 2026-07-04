@@ -8,7 +8,6 @@ use sha1::{Digest, Sha1};
 
 use std::{
     borrow::Cow,
-    fmt::Write,
     fs::File,
     io::Read,
     path::{Path, PathBuf},
@@ -20,11 +19,14 @@ use crate::{
     tables::{
         diagnostic::AttachmentDiagnostic,
         messages::Message,
-        table::{ATTACHMENT, ATTRIBUTION_INFO, STICKER_USER_INFO, Table},
+        table::{
+            ATTACHMENT, ATTRIBUTION_INFO, CHAT_MESSAGE_JOIN, MESSAGE, MESSAGE_ATTACHMENT_JOIN,
+            STICKER_USER_INFO, Table,
+        },
     },
     util::{
-        dates::TIMESTAMP_FACTOR, dirs::home, platform::Platform, plist::plist_as_dictionary,
-        query_context::QueryContext, size::format_file_size,
+        dirs::home, platform::Platform, plist::plist_as_dictionary, query_context::QueryContext,
+        size::format_file_size,
     },
 };
 
@@ -314,39 +316,32 @@ impl Attachment {
         format_file_size(u64::try_from(self.total_bytes).unwrap_or(0))
     }
 
-    /// Sum attachment bytes, applying date filters from [`QueryContext`].
+    /// Sum on-disk bytes for attachments the export would copy under this [`QueryContext`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TableError`] if the query fails.
     pub fn get_total_attachment_bytes(
         db: &Connection,
         context: &QueryContext,
     ) -> Result<u64, TableError> {
-        let mut bytes_query = if context.start.is_some() || context.end.is_some() {
-            let mut statement = format!("SELECT IFNULL(SUM(total_bytes), 0) FROM {ATTACHMENT} a");
-
-            statement.push_str(" WHERE ");
-            if let Some(start) = context.start {
-                let _ = write!(
-                    statement,
-                    "    a.created_date >= {}",
-                    start / TIMESTAMP_FACTOR
-                );
-            }
-            if let Some(end) = context.end {
-                if context.start.is_some() {
-                    statement.push_str(" AND ");
-                }
-                let _ = write!(
-                    statement,
-                    "    a.created_date <= {}",
-                    end / TIMESTAMP_FACTOR
-                );
-            }
-
-            db.prepare(&statement)?
+        let statement = if context.has_filters() {
+            format!(
+                "SELECT IFNULL(SUM(a.total_bytes), 0) FROM {ATTACHMENT} a \
+             WHERE a.ROWID IN ( \
+                 SELECT maj.attachment_id \
+                 FROM {MESSAGE_ATTACHMENT_JOIN} maj \
+                 JOIN {MESSAGE} m ON m.ROWID = maj.message_id \
+                 LEFT JOIN {CHAT_MESSAGE_JOIN} c ON c.message_id = m.ROWID \
+                 {} \
+             )",
+                Message::generate_filter_statement(context, false)
+            )
         } else {
-            db.prepare(&format!(
-                "SELECT IFNULL(SUM(total_bytes), 0) FROM {ATTACHMENT}"
-            ))?
+            format!("SELECT IFNULL(SUM(total_bytes), 0) FROM {ATTACHMENT}")
         };
+
+        let mut bytes_query = db.prepare(&statement)?;
         Ok(bytes_query
             .query_row([], |r| -> Result<i64> { r.get(0) })
             .map(|res: i64| u64::try_from(res).unwrap_or(0))?)
