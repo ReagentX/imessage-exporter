@@ -88,8 +88,9 @@ pub fn dispatch_app_balloon<F: BalloonFormatter>(
             URLOverride::SharedPlacemark(b) => formatter.format_placemark(&b),
         }
     } else {
-        match AppMessage::from_map(&parsed) {
-            Ok(bubble) => match balloon {
+        {
+            let bubble = AppMessage::from_map(&parsed)?;
+            match balloon {
                 CustomBalloon::Application(bundle_id) => {
                     formatter.format_generic_app(&bubble, bundle_id, attachments, message)
                 }
@@ -116,8 +117,7 @@ pub fn dispatch_app_balloon<F: BalloonFormatter>(
                 | CustomBalloon::URL => {
                     return Err(PlistParseError::WrongMessageType.into());
                 }
-            },
-            Err(why) => return Err(why.into()),
+            }
         }
     };
 
