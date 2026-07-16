@@ -103,10 +103,9 @@ impl AppMessage<'_> {
             (CheckInKind::Expected, *d)
         } else if let Some(d) = metadata.get("triggerTime") {
             (CheckInKind::WasExpected, *d)
-        } else if let Some(d) = metadata.get("sendDate") {
-            (CheckInKind::CheckedIn, *d)
         } else {
-            return None;
+            let d = metadata.get("sendDate")?;
+            (CheckInKind::CheckedIn, *d)
         };
         let date_stamp = (date_str.parse::<f64>().ok()? as i64).checked_mul(TIMESTAMP_FACTOR)?;
         let date_time = get_local_time(date_stamp, offset).ok()?;
