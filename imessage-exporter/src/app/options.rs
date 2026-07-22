@@ -2,7 +2,7 @@
  CLI option parsing and validation.
 */
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 
@@ -305,10 +305,35 @@ impl Options {
         })
     }
 
+    pub const SMS_DB_HASH: &str = "3d0d7e5fb2ce288813306e4d4636395e047a3d28";
+
+    /// Resolves a file hash inside an iOS backup directory.
+    /// Tries subfolder layout `<hash[..2]>/<hash>` (iOS 10+) first,
+    /// then falls back to flat layout `<hash>` (iOS 9 and earlier).
+    pub fn resolve_backup_path(backup_root: &Path, hash: &str) -> PathBuf {
+        if hash.len() >= 2 {
+            let nested = backup_root.join(&hash[..2]).join(hash);
+            if nested.exists() {
+                return nested;
+            }
+        }
+        backup_root.join(hash)
+    }
+
     /// Return the database path for the selected platform.
     pub fn get_db_path(&self) -> PathBuf {
         match self.platform {
-            Platform::iOS => self.db_path.join(DEFAULT_PATH_IOS),
+            Platform::iOS => {
+                let hash = "3d0d7e5fb2ce288813306e4d4636395e047a3d28";
+                let nested = self.db_path.join("3d").join(hash);
+                
+                // If subfolder 3d/ exists (iOS 10+), use it; otherwise use root (iOS 9)
+                if nested.exists() {
+                    nested
+                } else {
+                    self.db_path.join(hash)
+                }
+            }
             Platform::macOS => self.db_path.clone(),
         }
     }

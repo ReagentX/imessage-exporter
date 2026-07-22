@@ -506,15 +506,19 @@ impl Attachment {
 
     /// Resolve an encrypted iOS backup attachment path.
     fn gen_ios_attachment(file_path: &str, db_path: &Path) -> Option<String> {
-        let input = file_path.get(2..)?;
-        let digest = Sha1::digest(format!("MediaDomain-{input}").as_bytes());
-        let filename = digest
-            .iter()
-            .map(|byte| format!("{:02x}", byte))
-            .collect::<String>();
-        let directory = filename.get(0..2)?;
+        if file_path.len() < 2 {
+            return None;
+        }
 
-        Some(format!("{}/{directory}/{filename}", db_path.display()))
+        let nested = db_path.join(&file_path[..2]).join(file_path);
+
+        let final_path = if nested.exists() {
+            nested // iOS 10+ subfolder structure
+        } else {
+            db_path.join(file_path) // iOS 9 flat structure fallback
+        };
+
+        final_path.to_str().map(|s| s.to_string())
     }
 
     /// Parse the [`STICKER_USER_INFO`] `BLOB` column as a property list.

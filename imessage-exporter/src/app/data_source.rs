@@ -107,9 +107,19 @@ impl DataSource {
                 }
                 None => {
                     let messages_path = options.get_db_path();
-                    let contacts_index =
-                        Self::get_contacts_index(Some(&options.db_path.join(DEFAULT_PATH_IOS)))
-                            .unwrap_or_default();
+                    // let contacts_index =
+                    //     Self::get_contacts_index(Some(&options.db_path.join(DEFAULT_PATH_IOS)))
+                    //         .unwrap_or_default();
+                    let contacts_hash = "31bb7ba8914766d4ba40d6dfb6113c8b614be442";
+                    let nested_contacts = options.db_path.join("31").join(contacts_hash);
+
+                    let contacts_path = if nested_contacts.exists() {
+                        nested_contacts
+                    } else {
+                        options.db_path.join(contacts_hash)
+                    };
+
+                    let contacts_index = Self::get_contacts_index(Some(&contacts_path)).unwrap_or_default();
 
                     Ok(Self {
                         messages_connection: Some(get_connection(&messages_path)?),
