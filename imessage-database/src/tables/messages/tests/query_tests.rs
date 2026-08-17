@@ -291,6 +291,78 @@ mod query_string_tests {
     };
 
     #[test]
+    fn can_generate_no_filters_27() {
+        let query_string = query_parts::ios_27_newer_query(None);
+        let expected = "\nSELECT
+    rowid, guid, text, service, handle_id, destination_caller_id, subject, date, date_read, date_delivered, is_from_me, is_read, item_type, other_handle, share_status, share_direction, group_title, group_action_type, associated_message_guid, associated_message_type, balloon_bundle_id, expressive_send_style_id, thread_originator_guid, thread_originator_part, date_edited, associated_message_emoji,
+    c.chat_id,
+    (SELECT COUNT(*) FROM message_attachment_join a WHERE m.ROWID = a.message_id) as num_attachments,
+    d.chat_id as deleted_from,
+    (SELECT COUNT(*) FROM message m2 WHERE m2.thread_originator_guid = m.guid) as num_replies,
+    m.filter_action,
+    m.filter_sub_action
+FROM
+    message as m
+LEFT JOIN chat_message_join as c ON m.ROWID = c.message_id
+LEFT JOIN chat_recoverable_message_join as d ON m.ROWID = d.message_id
+
+ORDER BY
+    m.date;\n";
+        assert_eq!(query_string, expected);
+    }
+
+    #[test]
+    fn can_generate_filters_27() {
+        let query_string = query_parts::ios_27_newer_query(Some("WHERE m.guid = \"fake\""));
+        let expected = "\nSELECT
+    rowid, guid, text, service, handle_id, destination_caller_id, subject, date, date_read, date_delivered, is_from_me, is_read, item_type, other_handle, share_status, share_direction, group_title, group_action_type, associated_message_guid, associated_message_type, balloon_bundle_id, expressive_send_style_id, thread_originator_guid, thread_originator_part, date_edited, associated_message_emoji,
+    c.chat_id,
+    (SELECT COUNT(*) FROM message_attachment_join a WHERE m.ROWID = a.message_id) as num_attachments,
+    d.chat_id as deleted_from,
+    (SELECT COUNT(*) FROM message m2 WHERE m2.thread_originator_guid = m.guid) as num_replies,
+    m.filter_action,
+    m.filter_sub_action
+FROM
+    message as m
+LEFT JOIN chat_message_join as c ON m.ROWID = c.message_id
+LEFT JOIN chat_recoverable_message_join as d ON m.ROWID = d.message_id
+WHERE m.guid = \"fake\"
+ORDER BY
+    m.date;\n";
+        assert_eq!(query_string, expected);
+    }
+
+    #[test]
+    fn can_generate_filters_27_context() {
+        let mut context = QueryContext::default();
+        context.set_start("2020-01-01").unwrap();
+        context.set_selected_chat_ids(BTreeSet::from([1, 2, 3]));
+        let start_ns = context.start.unwrap();
+
+        let filters = Message::generate_filter_statement(&context, true);
+
+        let query_string = query_parts::ios_27_newer_query(Some(&filters));
+        let expected = format!(
+            "\nSELECT
+    rowid, guid, text, service, handle_id, destination_caller_id, subject, date, date_read, date_delivered, is_from_me, is_read, item_type, other_handle, share_status, share_direction, group_title, group_action_type, associated_message_guid, associated_message_type, balloon_bundle_id, expressive_send_style_id, thread_originator_guid, thread_originator_part, date_edited, associated_message_emoji,
+    c.chat_id,
+    (SELECT COUNT(*) FROM message_attachment_join a WHERE m.ROWID = a.message_id) as num_attachments,
+    d.chat_id as deleted_from,
+    (SELECT COUNT(*) FROM message m2 WHERE m2.thread_originator_guid = m.guid) as num_replies,
+    m.filter_action,
+    m.filter_sub_action
+FROM
+    message as m
+LEFT JOIN chat_message_join as c ON m.ROWID = c.message_id
+LEFT JOIN chat_recoverable_message_join as d ON m.ROWID = d.message_id
+WHERE  m.date >= {start_ns} AND  (c.chat_id IN (1, 2, 3) OR d.chat_id IN (1, 2, 3))
+ORDER BY
+    m.date;\n"
+        );
+        assert_eq!(query_string, expected);
+    }
+
+    #[test]
     fn can_generate_no_filters_16() {
         let query_string = query_parts::ios_16_newer_query(None);
         let expected = "\nSELECT
@@ -298,7 +370,9 @@ mod query_string_tests {
     c.chat_id,
     (SELECT COUNT(*) FROM message_attachment_join a WHERE m.ROWID = a.message_id) as num_attachments,
     d.chat_id as deleted_from,
-    (SELECT COUNT(*) FROM message m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
+    (SELECT COUNT(*) FROM message m2 WHERE m2.thread_originator_guid = m.guid) as num_replies,
+    NULL as filter_action,
+    NULL as filter_sub_action
 FROM
     message as m
 LEFT JOIN chat_message_join as c ON m.ROWID = c.message_id
@@ -317,7 +391,9 @@ ORDER BY
     c.chat_id,
     (SELECT COUNT(*) FROM message_attachment_join a WHERE m.ROWID = a.message_id) as num_attachments,
     d.chat_id as deleted_from,
-    (SELECT COUNT(*) FROM message m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
+    (SELECT COUNT(*) FROM message m2 WHERE m2.thread_originator_guid = m.guid) as num_replies,
+    NULL as filter_action,
+    NULL as filter_sub_action
 FROM
     message as m
 LEFT JOIN chat_message_join as c ON m.ROWID = c.message_id
@@ -344,7 +420,9 @@ ORDER BY
     c.chat_id,
     (SELECT COUNT(*) FROM message_attachment_join a WHERE m.ROWID = a.message_id) as num_attachments,
     d.chat_id as deleted_from,
-    (SELECT COUNT(*) FROM message m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
+    (SELECT COUNT(*) FROM message m2 WHERE m2.thread_originator_guid = m.guid) as num_replies,
+    NULL as filter_action,
+    NULL as filter_sub_action
 FROM
     message as m
 LEFT JOIN chat_message_join as c ON m.ROWID = c.message_id
