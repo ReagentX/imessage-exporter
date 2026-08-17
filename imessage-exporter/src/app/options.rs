@@ -43,6 +43,7 @@ pub const OPTION_CONVERSATION_FILTER: &str = "conversation-filter";
 pub const OPTION_CLEARTEXT_PASSWORD: &str = "cleartext-password";
 pub const OPTION_CUSTOM_CONTACTS_DB_PATH: &str = "contacts-path";
 pub const OPTION_NO_PROGRESS: &str = "no-progress";
+pub const OPTION_USE_MESSAGE_TIMES: &str = "use-message-times";
 
 // Other CLI Text
 pub const SUPPORTED_FILE_TYPES: &str = "txt, html";
@@ -89,6 +90,8 @@ pub struct Options {
     pub contacts_path: Option<PathBuf>,
     /// Whether to show the export progress bar when the terminal supports it.
     pub show_progress: bool,
+    /// Whether to stamp transcript and attachment files with message dates.
+    pub use_message_times: bool,
 }
 
 // Redact the cleartext backup password from debug output.
@@ -115,6 +118,7 @@ impl std::fmt::Debug for Options {
             )
             .field("contacts_path", &self.contacts_path)
             .field("show_progress", &self.show_progress)
+            .field("use_message_times", &self.use_message_times)
             .finish()
     }
 }
@@ -139,6 +143,7 @@ impl Options {
         let cleartext_password: Option<&String> = args.get_one(OPTION_CLEARTEXT_PASSWORD);
         let contacts_path: Option<&String> = args.get_one(OPTION_CUSTOM_CONTACTS_DB_PATH);
         let show_progress = !args.get_flag(OPTION_NO_PROGRESS);
+        let use_message_times = args.get_flag(OPTION_USE_MESSAGE_TIMES);
 
         // Build the export type
         let export_type: Option<ExportType> = match export_file_type {
@@ -162,6 +167,7 @@ impl Options {
                 (use_caller_id, OPTION_USE_CALLER_ID),
                 (conversation_filter.is_some(), OPTION_CONVERSATION_FILTER),
                 (!show_progress, OPTION_NO_PROGRESS),
+                (use_message_times, OPTION_USE_MESSAGE_TIMES),
             ];
             for (set, opt) in format_deps {
                 if set {
@@ -184,6 +190,7 @@ impl Options {
             (custom_name.is_some(), OPTION_CUSTOM_NAME),
             (conversation_filter.is_some(), OPTION_CONVERSATION_FILTER),
             (!show_progress, OPTION_NO_PROGRESS),
+            (use_message_times, OPTION_USE_MESSAGE_TIMES),
         ];
         for (set, opt) in diag_conflicts {
             if diagnostic && set {
@@ -302,6 +309,7 @@ impl Options {
             cleartext_password: cleartext_password.cloned(),
             contacts_path: contacts_path.cloned().map(PathBuf::from),
             show_progress,
+            use_message_times,
         })
     }
 
@@ -506,6 +514,13 @@ fn get_command() -> Command {
                 .action(ArgAction::SetTrue)
                 .display_order(16),
         )
+        .arg(
+            Arg::new(OPTION_USE_MESSAGE_TIMES)
+                .long(OPTION_USE_MESSAGE_TIMES)
+                .help("Stamp transcripts with the earliest and latest message dates in this export\nAlso set each new attachment file's creation time to its message date\nCreation time is set only on macOS and Windows\n")
+                .action(ArgAction::SetTrue)
+                .display_order(17),
+        )
 }
 
 #[cfg(test)]
@@ -533,7 +548,10 @@ impl Options {
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
-            show_progress: true,
+            // The harness leaves stderr as a TTY, so a true default draws `\r`
+            // bars over test output.
+            show_progress: false,
+            use_message_times: false,
         }
     }
 }
@@ -582,6 +600,7 @@ mod arg_tests {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            use_message_times: false,
         };
 
         assert_eq!(actual, expected);
@@ -658,6 +677,7 @@ mod arg_tests {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            use_message_times: false,
         };
 
         assert_eq!(actual, expected);
@@ -689,6 +709,7 @@ mod arg_tests {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            use_message_times: false,
         };
 
         assert_eq!(actual, expected);
@@ -763,6 +784,7 @@ mod arg_tests {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            use_message_times: false,
         };
 
         assert_eq!(actual, expected);
@@ -802,6 +824,7 @@ mod arg_tests {
             cleartext_password: Some("password".to_string()),
             contacts_path: None,
             show_progress: true,
+            use_message_times: false,
         };
 
         assert_eq!(actual, expected);
@@ -855,6 +878,7 @@ mod arg_tests {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            use_message_times: false,
         };
 
         assert_eq!(actual, expected);
@@ -886,6 +910,7 @@ mod arg_tests {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            use_message_times: false,
         };
 
         assert_eq!(actual, expected);
@@ -918,6 +943,7 @@ mod arg_tests {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            use_message_times: false,
         };
 
         assert_eq!(actual, expected);
@@ -949,6 +975,7 @@ mod arg_tests {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            use_message_times: false,
         };
 
         assert_eq!(actual, expected);
@@ -980,6 +1007,7 @@ mod arg_tests {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            use_message_times: false,
         };
 
         assert_eq!(actual, expected);
@@ -1050,6 +1078,7 @@ mod arg_tests {
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            use_message_times: false,
         };
 
         assert_eq!(actual, expected);
@@ -1091,6 +1120,43 @@ mod arg_tests {
     #[test]
     fn cant_build_option_diagnostic_flag_with_no_progress() {
         let args = get_command().get_matches_from(["imessage-exporter", "-d", "--no-progress"]);
+        assert!(Options::from_args(&args).is_err());
+    }
+
+    #[test]
+    fn can_build_option_use_message_times() {
+        let args = get_command().get_matches_from([
+            "imessage-exporter",
+            "-f",
+            "txt",
+            "--use-message-times",
+        ]);
+        let actual = Options::from_args(&args).unwrap();
+        assert!(actual.use_message_times);
+    }
+
+    #[test]
+    fn use_message_times_defaults_to_false() {
+        let args = get_command().get_matches_from(["imessage-exporter", "-f", "txt"]);
+        let actual = Options::from_args(&args).unwrap();
+        assert!(!actual.use_message_times);
+    }
+
+    #[test]
+    fn cant_build_option_use_message_times_no_export_type() {
+        let args = get_command().get_matches_from(["imessage-exporter", "--use-message-times"]);
+        let error = Options::from_args(&args).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Invalid options!\nOption --use-message-times is enabled, which requires --format"
+        );
+    }
+
+    #[test]
+    fn cant_build_option_diagnostic_flag_with_use_message_times() {
+        let args =
+            get_command().get_matches_from(["imessage-exporter", "-d", "--use-message-times"]);
+        // `--use-message-times` requires `--format`, which diagnostics forbids.
         assert!(Options::from_args(&args).is_err());
     }
 }
