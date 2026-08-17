@@ -5,6 +5,7 @@ use std::{
     },
     fs::File,
     io::{BufWriter, IsTerminal, Write, stderr},
+    path::PathBuf,
 };
 
 use imessage_database::tables::{
@@ -15,7 +16,10 @@ use rusqlite::Connection;
 
 use crate::{
     app::{error::RuntimeError, progress::ExportProgress, runtime::Config},
-    exporters::formatter::{MessageFormatter, RenderContext},
+    exporters::{
+        formatter::{MessageFormatter, RenderContext},
+        shared::date_span::{DateSpan, Timestamp},
+    },
 };
 
 /// Capacity for each chat file's [`BufWriter`].
@@ -31,10 +35,20 @@ pub struct ExportState {
     pub files: HashMap<String, BufWriter<File>>,
     /// Cache each chat's resolved filename by chat rowid
     pub route: HashMap<i32, String>,
-    /// Destination for messages that don't have a conversation route.
-    pub orphaned: BufWriter<File>,
+    /// Destination for messages that don't have a conversation route. Held in
+    /// an [`Option`] so [`ExportState::finish`] can drop the writer before the
+    /// file is stamped.
+    pub orphaned: Option<BufWriter<File>>,
+    /// Path to the orphaned file, retained for stamping after its writer drops.
+    pub orphaned_path: PathBuf,
     /// Drives the on-screen progress indicator.
     pub pb: ExportProgress,
+    /// Message date span per chat file, keyed like [`Self::files`]. Populated
+    /// only when `use_message_times` is set.
+    spans: HashMap<String, DateSpan>,
+    /// Message date span for the orphaned file. The file opens eagerly, but
+    /// stays unstamped when no message routes to it.
+    orphaned_span: Option<DateSpan>,
 }
 
 impl ExportState {
@@ -42,20 +56,91 @@ impl ExportState {
     /// `config.options.export_path` with the supplied extension, then build
     /// the empty file cache and progress bar.
     pub fn new(config: &Config, extension: &str) -> Result<Self, RuntimeError> {
-        let mut orphaned = config.options.export_path.clone();
-        orphaned.push(ORPHANED);
-        orphaned.set_extension(extension);
-        let file = File::options().append(true).create(true).open(&orphaned)?;
+        let mut orphaned_path = config.options.export_path.clone();
+        orphaned_path.push(ORPHANED);
+        orphaned_path.set_extension(extension);
+        let file = File::options()
+            .append(true)
+            .create(true)
+            .open(&orphaned_path)?;
         // `--no-progress` forces off; otherwise show only when stderr is a TTY
         // so headless invocations (CI, redirects to logfiles) stay clean.
         let pb_enabled = config.options.show_progress && stderr().is_terminal();
         Ok(Self {
             files: HashMap::new(),
             route: HashMap::new(),
-            orphaned: BufWriter::with_capacity(FILE_BUFFER_CAPACITY, file),
+            orphaned: Some(BufWriter::with_capacity(FILE_BUFFER_CAPACITY, file)),
+            orphaned_path,
             pb: ExportProgress::new(pb_enabled),
+            spans: HashMap::new(),
+            orphaned_span: None,
         })
     }
+
+    /// Widen the chat file's span to cover `at`, allocating the key only the
+    /// first time a message lands in that file.
+    fn record_chat(&mut self, filename: &str, at: Timestamp) {
+        match self.spans.get_mut(filename) {
+            Some(span) => span.extend(at),
+            None => {
+                self.spans.insert(filename.to_string(), DateSpan::new(at));
+            }
+        }
+    }
+
+    /// Widen the orphaned file's span to cover `at`.
+    fn record_orphaned(&mut self, at: Timestamp) {
+        match &mut self.orphaned_span {
+            Some(span) => span.extend(at),
+            None => self.orphaned_span = Some(DateSpan::new(at)),
+        }
+    }
+
+    /// Drop every writer, then stamp each file with a recorded date span.
+    ///
+    /// Call-site details:
+    /// - Write and flush footers first so buffered output cannot replace the
+    ///   stamped modification time. Dropping a [`BufWriter`] discards flush
+    ///   errors.
+    /// - Files with no recorded span in the current export are left untouched,
+    ///   including the orphaned file when no message routes to it.
+    /// - Only files are stamped. Their parent directories remain unchanged.
+    /// - No span is ever recorded while `use_message_times` is off, so this
+    ///   stamps nothing in that case.
+    fn finish(&mut self, config: &Config) {
+        self.files.clear();
+        self.orphaned = None;
+
+        for (filename, span) in self.spans.drain() {
+            span.apply(&config.options.export_path.join(filename));
+        }
+        if let Some(span) = self.orphaned_span.take() {
+            span.apply(&self.orphaned_path);
+        }
+    }
+}
+
+/// Convert the message date into a file-span timestamp.
+///
+/// A date that [`Message::date`] cannot convert contributes nothing to the span.
+fn message_timestamp(config: &Config, message: &Message) -> Option<Timestamp> {
+    let date = message.date(config.offset).ok()?;
+    Some((date.timestamp(), date.timestamp_subsec_nanos()))
+}
+
+/// Return the cached orphaned writer, reopening the file for append if absent.
+fn orphaned_writer(state: &mut ExportState) -> Result<&mut BufWriter<File>, RuntimeError> {
+    let writer = match state.orphaned.take() {
+        Some(writer) => writer,
+        None => {
+            let file = File::options()
+                .append(true)
+                .create(true)
+                .open(&state.orphaned_path)?;
+            BufWriter::with_capacity(FILE_BUFFER_CAPACITY, file)
+        }
+    };
+    Ok(state.orphaned.insert(writer))
 }
 
 /// Decode the message's body via [`Message::parse_body`] and apply it.
@@ -106,6 +191,9 @@ pub trait MessageWriter<'a>: MessageFormatter<'a> {
 /// Resolve the `BufWriter` for `message`, creating the chat file (and writing
 /// its header) on first sight. Messages without a conversation route to the
 /// shared orphaned writer.
+///
+/// With `use_message_times` set, this also extends the destination file's date
+/// span. Callers invoke it only for rendered messages.
 pub fn get_or_create_file_for<'a, 'b, W>(
     writer: &'b mut W,
     message: &Message,
@@ -114,6 +202,12 @@ where
     W: MessageWriter<'a>,
 {
     let config = writer.config();
+    // Skip date conversion when the export will not apply the resulting span.
+    let at = config
+        .options
+        .use_message_times
+        .then(|| message_timestamp(config, message))
+        .flatten();
     match config.conversation(message) {
         Some((chatroom, _)) => {
             let chatroom_rowid = chatroom.rowid;
@@ -129,6 +223,9 @@ where
                     name
                 }
             };
+            if let Some(at) = at {
+                state.record_chat(&filename, at);
+            }
             match state.files.entry(filename) {
                 Occupied(entry) => Ok(entry.into_mut()),
                 Vacant(entry) => {
@@ -146,7 +243,13 @@ where
                 }
             }
         }
-        None => Ok(&mut writer.state_mut().orphaned),
+        None => {
+            let state = writer.state_mut();
+            if let Some(at) = at {
+                state.record_orphaned(at);
+            }
+            orphaned_writer(state)
+        }
     }
 }
 
@@ -169,6 +272,12 @@ fn advance_progress(pb: &ExportProgress, current_message: &mut u64) {
 /// after the progress bar only when one or more messages were skipped.
 /// Row-deserialization errors and I/O errors remain fatal.
 ///
+/// With `use_message_times` set, teardown stamps each transcript that received
+/// a message during the current export: creation time from its earliest
+/// rendered message and modification time from its latest. Writers are dropped
+/// first. Directories remain unchanged, and metadata failures do not fail the
+/// export.
+///
 /// [issue #135]: https://github.com/ReagentX/imessage-exporter/issues/135
 pub fn run_export<'a, W>(writer: &mut W) -> Result<(), RuntimeError>
 where
@@ -180,7 +289,7 @@ where
         W::LABEL,
     );
 
-    W::write_file_header(&mut writer.state_mut().orphaned)?;
+    W::write_file_header(orphaned_writer(writer.state_mut())?)?;
 
     let mut current_message_row = -1;
     let mut current_message = 0;
@@ -254,6 +363,7 @@ where
     if let Some(notice) = W::footer_notice() {
         eprintln!("{notice}");
     }
+    let config = writer.config();
     let state = writer.state_mut();
     for file in state.files.values_mut() {
         W::write_file_footer(file)?;
@@ -261,8 +371,160 @@ where
         // rather than letting `BufWriter::Drop` discard them silently.
         file.flush()?;
     }
-    W::write_file_footer(&mut state.orphaned)?;
-    state.orphaned.flush()?;
+    let orphaned = orphaned_writer(state)?;
+    W::write_file_footer(orphaned)?;
+    orphaned.flush()?;
+
+    // Stamp only after every footer write and checked flush succeeds.
+    state.finish(config);
 
     Ok(())
+}
+
+// MARK: Tests
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs::metadata,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use imessage_database::tables::{
+        messages::Message,
+        table::{ORPHANED, Table},
+    };
+
+    use crate::{
+        Config, HTML, Options, TXT, app::export_type::ExportType,
+        exporters::shared::driver::run_export,
+    };
+
+    /// Whole Unix seconds, so no assertion can trip over a filesystem that
+    /// truncates sub-second precision.
+    fn seconds(time: SystemTime) -> i64 {
+        time.duration_since(UNIX_EPOCH)
+            .expect("time is after the Unix epoch")
+            .as_secs() as i64
+    }
+
+    /// Read the fixture's earliest and latest message dates through the same
+    /// conversion path as the exporter.
+    fn expected_span(config: &Config) -> (i64, i64) {
+        let mut statement =
+            Message::stream_rows(config.data_source.db(), &config.options.query_context).unwrap();
+        let dates: Vec<i64> = Message::rows(&mut statement, [])
+            .unwrap()
+            .map(|message| message.unwrap().date(config.offset).unwrap().timestamp())
+            .collect();
+        (
+            *dates.iter().min().expect("fixture has messages"),
+            *dates.iter().max().expect("fixture has messages"),
+        )
+    }
+
+    /// The fixture's `chat` and `chat_message_join` tables are empty, so every
+    /// message routes here.
+    fn orphaned_file(config: &Config, extension: &str) -> PathBuf {
+        config
+            .options
+            .export_path
+            .join(format!("{ORPHANED}.{extension}"))
+    }
+
+    #[test]
+    fn can_stamp_export_with_message_times() {
+        let mut options = Options::fake_options(ExportType::Txt);
+        options.use_message_times = true;
+        let config = Config::fake_app(options);
+
+        let (earliest, latest) = expected_span(&config);
+        assert_ne!(
+            earliest, latest,
+            "fixture must span two distinct dates to catch first-seen/last-seen bugs"
+        );
+
+        let mut exporter = TXT::new(&config).unwrap();
+        run_export(&mut exporter).unwrap();
+
+        let metadata = metadata(orphaned_file(&config, "txt")).unwrap();
+        assert!(metadata.len() > 0, "export wrote no messages");
+        assert_eq!(seconds(metadata.modified().unwrap()), latest);
+
+        // Birth time is settable only on macOS and Windows.
+        #[cfg(any(target_vendor = "apple", windows))]
+        assert_eq!(seconds(metadata.created().unwrap()), earliest);
+    }
+
+    /// HTML writes a footer after the last message; stamping before that write
+    /// would replace the expected modification time.
+    #[test]
+    fn can_stamp_html_export_with_message_times() {
+        let mut options = Options::fake_options(ExportType::Html);
+        options.use_message_times = true;
+        let config = Config::fake_app(options);
+
+        let (earliest, latest) = expected_span(&config);
+        assert_ne!(
+            earliest, latest,
+            "fixture must span two distinct dates to catch first-seen/last-seen bugs"
+        );
+
+        let mut exporter = HTML::new(&config).unwrap();
+        run_export(&mut exporter).unwrap();
+
+        let metadata = metadata(orphaned_file(&config, "html")).unwrap();
+        assert!(metadata.len() > 0, "export wrote no messages");
+        assert_eq!(seconds(metadata.modified().unwrap()), latest);
+
+        // Birth time is settable only on macOS and Windows.
+        #[cfg(any(target_vendor = "apple", windows))]
+        assert_eq!(seconds(metadata.created().unwrap()), earliest);
+    }
+
+    #[test]
+    fn cannot_stamp_export_without_message_times() {
+        let options = Options::fake_options(ExportType::Txt);
+        assert!(!options.use_message_times);
+        let config = Config::fake_app(options);
+
+        let (_, latest) = expected_span(&config);
+        let before = seconds(SystemTime::now());
+
+        let mut exporter = TXT::new(&config).unwrap();
+        run_export(&mut exporter).unwrap();
+
+        let modified = seconds(
+            metadata(orphaned_file(&config, "txt"))
+                .unwrap()
+                .modified()
+                .unwrap(),
+        );
+        assert_ne!(modified, latest);
+        assert!(
+            modified >= before,
+            "unstamped file should keep its wall-clock mtime: {modified} < {before}"
+        );
+    }
+
+    #[test]
+    fn cannot_stamp_file_without_messages() {
+        let mut options = Options::fake_options(ExportType::Txt);
+        options.use_message_times = true;
+        // Exclude every fixture message; the orphaned file is still created.
+        options.query_context.set_start("2100-01-01").unwrap();
+        let config = Config::fake_app(options);
+
+        let before = seconds(SystemTime::now());
+
+        let mut exporter = TXT::new(&config).unwrap();
+        run_export(&mut exporter).unwrap();
+
+        let metadata = metadata(orphaned_file(&config, "txt")).unwrap();
+        assert_eq!(metadata.len(), 0);
+        assert!(
+            seconds(metadata.modified().unwrap()) >= before,
+            "an empty file must keep its real timestamps"
+        );
+    }
 }
