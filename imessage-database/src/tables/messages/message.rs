@@ -48,6 +48,11 @@
  - [`Message::deleted_from`]
  - [`Message::num_replies`]
 
+ [`Message::filter_action`] and [`Message::filter_sub_action`] map optional
+ `message` columns. Queries that use the explicit positional shape must select
+ `NULL` for both fields when the source schema omits them. The `SELECT *` query
+ heads decode by name and map missing columns to `None`.
+
  ## Sample Queries
 
  Custom queries must include those derived columns:
@@ -148,8 +153,10 @@ use crate::{
         diagnostic::{MessageDiagnostic, count_query, table_exists},
         messages::{
             body::{parse_body_legacy, parse_body_typedstream},
-            models::{BubbleComponent, GroupAction, Service, SharedLocation},
-            query_parts::{ios_13_older_query, ios_14_15_query, ios_16_newer_query},
+            models::{BubbleComponent, FilterAction, GroupAction, Service, SharedLocation},
+            query_parts::{
+                ios_13_older_query, ios_14_15_query, ios_16_newer_query, ios_27_newer_query,
+            },
         },
         table::{
             ATTRIBUTED_BODY, CHAT_MESSAGE_JOIN, Cacheable, MESSAGE, MESSAGE_ATTACHMENT_JOIN,
@@ -165,7 +172,7 @@ use crate::{
 };
 
 // MARK: Columns
-/// Columns selected by the newest message query shape.
+/// Columns shared by the explicit message query heads, in positional decode order.
 pub(crate) const COLS: &str = "rowid, guid, text, service, handle_id, destination_caller_id, subject, date, date_read, date_delivered, is_from_me, is_read, item_type, other_handle, share_status, share_direction, group_title, group_action_type, associated_message_guid, associated_message_type, balloon_bundle_id, expressive_send_style_id, thread_originator_guid, thread_originator_part, date_edited, associated_message_emoji";
 
 /// Row from the `message` table, plus body/edit metadata populated by [`parse_body`](Self::parse_body).
@@ -232,6 +239,10 @@ pub struct Message {
     pub deleted_from: Option<i32>,
     /// Number of replies to the message.
     pub num_replies: i32,
+    /// Raw message filter category code, read by [`filter_action`](Self::filter_action).
+    pub filter_action: Option<i32>,
+    /// Raw message filter subcategory code. This field has no parsed representation.
+    pub filter_sub_action: Option<i32>,
     /// The components of the message body, parsed by a [`TypedStreamDeserializer`] or [`streamtyped::parse()`]
     pub components: Vec<BubbleComponent>,
     /// Parsed edit/unsent metadata from `message_summary_info`.
@@ -270,10 +281,11 @@ impl Table for Message {
         Self::from_row_idx(row).or_else(|_| Self::from_row_named(row))
     }
 
-    /// Prepare the newest compatible message query, falling back through older schemas.
+    /// Prepare the first message query compatible with the database schema.
     fn get(db: &'_ Connection) -> Result<CachedStatement<'_>, TableError> {
         Ok(db
-            .prepare_cached(&ios_16_newer_query(None))
+            .prepare_cached(&ios_27_newer_query(None))
+            .or_else(|_| db.prepare_cached(&ios_16_newer_query(None)))
             .or_else(|_| db.prepare_cached(&ios_14_15_query(None)))
             .or_else(|_| db.prepare_cached(&ios_13_older_query(None)))?)
     }
@@ -398,7 +410,9 @@ impl Cacheable for Message {
                  c.chat_id,
                  (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
                  NULL as deleted_from,
-                 0 as num_replies
+                 0 as num_replies,
+                 NULL as filter_action,
+                 NULL as filter_sub_action
              FROM
                  {MESSAGE} as m
              LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
@@ -472,6 +486,8 @@ impl Message {
             num_attachments: row.get(27)?,
             deleted_from: row.get(28).unwrap_or(None),
             num_replies: row.get(29)?,
+            filter_action: row.get(30).unwrap_or(None),
+            filter_sub_action: row.get(31).unwrap_or(None),
             components: vec![],
             edited_parts: None,
         })
@@ -510,6 +526,8 @@ impl Message {
             num_attachments: row.get("num_attachments")?,
             deleted_from: row.get("deleted_from").unwrap_or(None),
             num_replies: row.get("num_replies")?,
+            filter_action: row.get("filter_action").unwrap_or(None),
+            filter_sub_action: row.get("filter_sub_action").unwrap_or(None),
             components: vec![],
             edited_parts: None,
         })
@@ -1066,9 +1084,14 @@ impl Message {
             return Self::get(db);
         }
         Ok(db
-            .prepare_cached(&ios_16_newer_query(Some(&Self::generate_filter_statement(
+            .prepare_cached(&ios_27_newer_query(Some(&Self::generate_filter_statement(
                 context, true,
             ))))
+            .or_else(|_| {
+                db.prepare_cached(&ios_16_newer_query(Some(&Self::generate_filter_statement(
+                    context, true,
+                ))))
+            })
             .or_else(|_| {
                 db.prepare_cached(&ios_14_15_query(Some(&Self::generate_filter_statement(
                     context, false,
@@ -1121,7 +1144,8 @@ impl Message {
 
             // `thread_originator_guid` is absent from the iOS 13-era schema.
             let mut statement = db
-                .prepare_cached(&ios_16_newer_query(Some(filters)))
+                .prepare_cached(&ios_27_newer_query(Some(filters)))
+                .or_else(|_| db.prepare_cached(&ios_16_newer_query(Some(filters))))
                 .or_else(|_| db.prepare_cached(&ios_14_15_query(Some(filters))))?;
 
             for message in Message::rows(&mut statement, [self.guid.as_str()])? {
@@ -1151,7 +1175,8 @@ impl Message {
 
             // `associated_message_guid` is absent from the iOS 13-era schema.
             let mut statement = db
-                .prepare_cached(&ios_16_newer_query(Some(filters)))
+                .prepare_cached(&ios_27_newer_query(Some(filters)))
+                .or_else(|_| db.prepare_cached(&ios_16_newer_query(Some(filters))))
                 .or_else(|_| db.prepare_cached(&ios_14_15_query(Some(filters))))?;
 
             for message in Message::rows(&mut statement, [self.guid.as_str()])? {
@@ -1320,6 +1345,15 @@ impl Message {
         Service::from_name(self.service.as_deref())
     }
 
+    /// Parse the message's raw filter category.
+    ///
+    /// A raw `0` maps to [`FilterAction::Unfiltered`]; an absent or `NULL` value
+    /// maps to `None`.
+    #[must_use]
+    pub fn filter_action(&self) -> Option<FilterAction> {
+        FilterAction::from_code(self.filter_action)
+    }
+
     // MARK: BLOBs
     /// Parse the [`MESSAGE_PAYLOAD`] `BLOB` column as a property list.
     ///
@@ -1443,7 +1477,8 @@ impl Message {
     /// ```
     pub fn from_guid(guid: &str, db: &Connection) -> Result<Self, TableError> {
         let mut statement = db
-            .prepare_cached(&ios_16_newer_query(Some("WHERE m.guid = ?1")))
+            .prepare_cached(&ios_27_newer_query(Some("WHERE m.guid = ?1")))
+            .or_else(|_| db.prepare_cached(&ios_16_newer_query(Some("WHERE m.guid = ?1"))))
             .or_else(|_| db.prepare_cached(&ios_14_15_query(Some("WHERE m.guid = ?1"))))
             .or_else(|_| db.prepare_cached(&ios_13_older_query(Some("WHERE m.guid = ?1"))))?;
 
@@ -1490,6 +1525,8 @@ impl Message {
             num_attachments: 0,
             deleted_from: None,
             num_replies: 0,
+            filter_action: None,
+            filter_sub_action: None,
             components: vec![],
             edited_parts: None,
         }
