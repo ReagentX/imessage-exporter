@@ -25,6 +25,9 @@ use std::{
 const PREFIX: &str = "imessage-exporter-test-";
 
 /// Sweep entries older than this on first call per process.
+///
+/// Directory names carry creation time because tests may change filesystem
+/// timestamps beneath them.
 const STALE_AFTER: Duration = Duration::from_secs(60 * 60);
 
 /// Build a fresh, uniquely-named directory under [`temp_dir`] and return its
@@ -48,8 +51,23 @@ pub fn unique_test_dir(label: &str) -> PathBuf {
     path
 }
 
-/// Remove leftover [`PREFIX`]-tagged directories whose mtime is older than
-/// [`STALE_AFTER`].
+/// The creation time [`unique_test_dir`] recorded in a directory name, or
+/// [`None`] when the name carries no parseable one.
+///
+/// The name is `{PREFIX}{pid}-{nanos}-{counter}-{label}`, so the second
+/// hyphen-separated field is Unix-epoch nanoseconds at creation. `label` may
+/// itself contain hyphens, which is why the split is bounded.
+fn creation_time_from_name(name: &str) -> Option<SystemTime> {
+    let mut fields = name.strip_prefix(PREFIX)?.splitn(3, '-');
+    fields.next()?;
+    let nanos: u128 = fields.next()?.parse().ok()?;
+    let seconds = u64::try_from(nanos / 1_000_000_000).ok()?;
+    let subsec = u32::try_from(nanos % 1_000_000_000).ok()?;
+    UNIX_EPOCH.checked_add(Duration::new(seconds, subsec))
+}
+
+/// Remove leftover [`PREFIX`]-tagged directories created more than
+/// [`STALE_AFTER`] ago, dating each one from its name.
 fn sweep_stale_test_dirs() {
     let Ok(entries) = read_dir(temp_dir()) else {
         return;
@@ -60,15 +78,12 @@ fn sweep_stale_test_dirs() {
     for entry in entries.flatten() {
         let name = entry.file_name();
         let Some(name) = name.to_str() else { continue };
-        if !name.starts_with(PREFIX) {
+        // Require both the module prefix and its parseable timestamp before
+        // removing an entry from the shared temp directory.
+        let Some(created) = creation_time_from_name(name) else {
             continue;
-        }
-        let stale = entry
-            .metadata()
-            .and_then(|m| m.modified())
-            .map(|m| m < cutoff)
-            .unwrap_or(false);
-        if stale {
+        };
+        if created < cutoff {
             let _ = remove_dir_all(entry.path());
         }
     }
@@ -76,7 +91,70 @@ fn sweep_stale_test_dirs() {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::metadata;
+
     use super::*;
+    use crate::app::file_times::set_file_times;
+
+    /// The timestamp in the name controls age even when mtime predates the
+    /// stale cutoff.
+    #[test]
+    #[cfg(unix)]
+    fn can_keep_backdated_directory_with_recent_name() {
+        let dir = unique_test_dir("sweep-backdated");
+        set_file_times(
+            &dir,
+            None,
+            Some(UNIX_EPOCH + Duration::from_secs(1_000_000_000)),
+            None,
+        );
+        let modified = metadata(&dir).unwrap().modified().unwrap();
+        assert!(
+            modified < SystemTime::now() - STALE_AFTER,
+            "precondition: the directory must look stale by mtime"
+        );
+
+        sweep_stale_test_dirs();
+
+        assert!(
+            dir.is_dir(),
+            "sweep deleted a directory created seconds ago"
+        );
+    }
+
+    /// An epoch-old timestamp in the name is stale even when mtime is recent.
+    #[test]
+    fn can_sweep_directory_with_old_name() {
+        let path = temp_dir().join(format!("{PREFIX}{}-1-0-sweep-old", process::id()));
+        create_dir_all(&path).unwrap();
+
+        sweep_stale_test_dirs();
+
+        assert!(!path.exists(), "sweep kept a directory named as epoch-old");
+    }
+
+    #[test]
+    fn cannot_sweep_directory_without_a_parseable_name() {
+        let path = temp_dir().join(format!("{PREFIX}{}-undatable", process::id()));
+        create_dir_all(&path).unwrap();
+
+        sweep_stale_test_dirs();
+
+        assert!(path.is_dir(), "sweep deleted a directory it cannot date");
+        // Undated entries are deliberately retained, so remove the fixture.
+        remove_dir_all(&path).unwrap();
+    }
+
+    #[test]
+    fn can_read_creation_time_from_name() {
+        let dir = unique_test_dir("name-time");
+        let name = dir.file_name().unwrap().to_str().unwrap();
+        let created = creation_time_from_name(name).expect("name carries a timestamp");
+
+        // The encoded creation time falls within the live window.
+        assert!(created > SystemTime::now() - STALE_AFTER);
+        assert!(creation_time_from_name("unrelated-temp-entry").is_none());
+    }
 
     #[test]
     fn unique_test_dir_is_unique_per_call() {
