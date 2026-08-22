@@ -59,7 +59,7 @@ pub fn dispatch_app_balloon<F: BalloonFormatter>(
 
     // Poll messages use a different payload type
     if message.is_poll() {
-        let poll = message.as_poll(config.data_source.db())?;
+        let poll = message.as_poll(config.data_source.db(), &config.data_source.capabilities)?;
         return match poll {
             Some(poll) => Ok(formatter.format_poll(&poll)),
             None => Err(PlistParseError::PollError.into()),

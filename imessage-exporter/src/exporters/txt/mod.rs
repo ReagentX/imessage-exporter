@@ -300,7 +300,11 @@ impl<'a> MessageFormatter<'a> for TXT<'a> {
         context: RenderContext,
         out: &mut String,
     ) -> Result<(), RuntimeError> {
-        let mut ctx = MessageContext::resolve(message, self.config.data_source.db())?;
+        let mut ctx = MessageContext::resolve(
+            message,
+            self.config.data_source.db(),
+            &self.config.data_source.capabilities,
+        )?;
         let mut resolver = AttachmentResolver::new(&ctx.attachments);
 
         let mut parts = Vec::with_capacity(message.components.len());

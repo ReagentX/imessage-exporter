@@ -296,12 +296,14 @@ where
     let mut failures: u64 = 0;
     let total_messages = Message::get_count(
         writer.config().data_source.db(),
+        &writer.config().data_source.capabilities,
         &writer.config().options.query_context,
     )?;
     writer.state().pb.start(total_messages);
 
     let mut statement = Message::stream_rows(
         writer.config().data_source.db(),
+        &writer.config().data_source.capabilities,
         &writer.config().options.query_context,
     )?;
 
@@ -411,8 +413,12 @@ mod tests {
     /// Read the fixture's earliest and latest message dates through the same
     /// conversion path as the exporter.
     fn expected_span(config: &Config) -> (i64, i64) {
-        let mut statement =
-            Message::stream_rows(config.data_source.db(), &config.options.query_context).unwrap();
+        let mut statement = Message::stream_rows(
+            config.data_source.db(),
+            &config.data_source.capabilities,
+            &config.options.query_context,
+        )
+        .unwrap();
         let dates: Vec<i64> = Message::rows(&mut statement, [])
             .unwrap()
             .map(|message| message.unwrap().date(config.offset).unwrap().timestamp())
