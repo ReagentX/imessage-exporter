@@ -178,6 +178,13 @@ impl Options {
             }
         }
 
+        // Absent both of these, there is no work to do: bail before any data source is opened
+        if !diagnostic && export_type.is_none() {
+            return Err(RuntimeError::InvalidOptions(format!(
+                "Neither --{OPTION_EXPORT_TYPE} nor --{OPTION_DIAGNOSTIC} was set; nothing to do! Use --help to see usage."
+            )));
+        }
+
         // During `diagnostics`, none of these may be set
         let diag_conflicts = [
             (attachment_manager_type.is_some(), OPTION_ATTACHMENT_MANAGER),
@@ -754,7 +761,7 @@ mod arg_tests {
     #[test]
     fn cant_build_option_invalid_platform() {
         let command = get_command();
-        let args = command.get_matches_from(["imessage-exporter", "-a", "iPad"]);
+        let args = command.get_matches_from(["imessage-exporter", "-a", "iPad", "-f", "txt"]);
         assert!(Options::from_args(&args).is_err());
     }
 
@@ -1086,13 +1093,31 @@ mod arg_tests {
 
     #[test]
     fn cant_build_option_invalid_attachment_root() {
-        let args = get_command().get_matches_from(["imessage-exporter", "-r", "/does/not/exist"]);
+        let args = get_command().get_matches_from([
+            "imessage-exporter",
+            "-f",
+            "txt",
+            "-r",
+            "/does/not/exist",
+        ]);
         assert!(Options::from_args(&args).is_err());
     }
 
     #[test]
     fn cant_build_option_invalid_contacts_path() {
-        let args = get_command().get_matches_from(["imessage-exporter", "-n", "/does/not/exist"]);
+        let args = get_command().get_matches_from([
+            "imessage-exporter",
+            "-f",
+            "txt",
+            "-n",
+            "/does/not/exist",
+        ]);
+        assert!(Options::from_args(&args).is_err());
+    }
+
+    #[test]
+    fn cant_build_option_db_path_only() {
+        let args = get_command().get_matches_from(["imessage-exporter", "-p", "/does/not/exist"]);
         assert!(Options::from_args(&args).is_err());
     }
 
