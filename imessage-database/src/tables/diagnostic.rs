@@ -6,6 +6,8 @@ use rusqlite::Connection;
 
 use crate::error::table::TableError;
 
+use std::collections::HashSet;
+
 pub(crate) fn count_query(db: &Connection, sql: &str) -> Result<usize, TableError> {
     let count = db.prepare(sql)?.query_row([], |row| row.get::<_, i64>(0))?;
 
@@ -48,6 +50,27 @@ pub(crate) fn column_exists(
     }
 
     Ok(false)
+}
+
+/// Collect the declared column names of `table_name`, lowercased for
+/// case-insensitive membership checks.
+///
+/// A missing table yields an empty set rather than an error, so callers can
+/// treat "table absent" and "no recognized columns" uniformly.
+pub(crate) fn column_names(
+    db: &Connection,
+    table_name: &str,
+) -> Result<HashSet<String>, TableError> {
+    let mut statement = db.prepare(&format!(
+        "PRAGMA table_info({})",
+        quote_sqlite_identifier(table_name)
+    ))?;
+    let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
+    let mut names = HashSet::new();
+    for name in columns {
+        names.insert(name?.to_ascii_lowercase());
+    }
+    Ok(names)
 }
 
 fn quote_sqlite_identifier(identifier: &str) -> String {
