@@ -6,6 +6,7 @@ of macOS, the schema of the iMessage database can vary.
 */
 
 pub mod attachment;
+pub mod capabilities;
 pub mod chat;
 pub mod chat_handle;
 pub mod diagnostic;
