@@ -58,58 +58,13 @@ mod filter_action_mapping_tests {
 mod filter_action_query_tests {
     use rusqlite::Connection;
 
-    use crate::tables::messages::{
-        Message, models::FilterAction, query_parts::prepare_ios_27_newer,
+    use crate::{
+        tables::{
+            capabilities::Capabilities,
+            messages::{Message, models::FilterAction},
+        },
+        test_support::schema_db,
     };
-
-    /// Build the minimum schema consumed by the message query. `macos_27`
-    /// controls whether the filter columns are present and which query can prepare.
-    fn schema_db(macos_27: bool) -> Connection {
-        let filter_columns = if macos_27 {
-            ", filter_action INTEGER DEFAULT 0, filter_sub_action INTEGER DEFAULT 0"
-        } else {
-            ""
-        };
-
-        let db = Connection::open_in_memory().unwrap();
-        db.execute_batch(&format!(
-            "
-            CREATE TABLE message (
-                ROWID INTEGER PRIMARY KEY,
-                guid TEXT,
-                text TEXT,
-                service TEXT,
-                handle_id INTEGER,
-                destination_caller_id TEXT,
-                subject TEXT,
-                date INTEGER,
-                date_read INTEGER,
-                date_delivered INTEGER,
-                is_from_me INTEGER,
-                is_read INTEGER,
-                item_type INTEGER,
-                other_handle INTEGER,
-                share_status INTEGER,
-                share_direction INTEGER,
-                group_title TEXT,
-                group_action_type INTEGER,
-                associated_message_guid TEXT,
-                associated_message_type INTEGER,
-                balloon_bundle_id TEXT,
-                expressive_send_style_id TEXT,
-                thread_originator_guid TEXT,
-                thread_originator_part TEXT,
-                date_edited INTEGER,
-                associated_message_emoji TEXT{filter_columns}
-            );
-            CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER);
-            CREATE TABLE message_attachment_join (attachment_id INTEGER, message_id INTEGER);
-            CREATE TABLE chat_recoverable_message_join (chat_id INTEGER, message_id INTEGER, delete_date INTEGER);
-            "
-        ))
-        .unwrap();
-        db
-    }
 
     fn insert(db: &Connection, guid: &str, filter_action: Option<i32>) {
         match filter_action {
@@ -126,19 +81,20 @@ mod filter_action_query_tests {
     }
 
     #[test]
-    fn can_read_filter_action_from_macos_27_schema() {
-        let db = schema_db(true);
+    fn can_read_filter_action_from_schema_with_filters() {
+        let db = schema_db(true, true, true);
         insert(&db, "junk", Some(2));
 
-        let message = Message::from_guid("junk", &db).unwrap();
+        let capabilities = Capabilities::determine(&db).unwrap();
+        let message = Message::from_guid("junk", &db, &capabilities).unwrap();
 
         assert_eq!(message.filter_action, Some(2));
         assert_eq!(message.filter_action(), Some(FilterAction::Junk));
     }
 
     #[test]
-    fn can_read_every_category_from_macos_27_schema() {
-        let db = schema_db(true);
+    fn can_read_every_category_from_schema_with_filters() {
+        let db = schema_db(true, true, true);
         let cases = [
             ("unfiltered", 0, FilterAction::Unfiltered),
             ("allow", 1, FilterAction::Allow),
@@ -151,20 +107,22 @@ mod filter_action_query_tests {
             insert(&db, guid, Some(code));
         }
 
+        let capabilities = Capabilities::determine(&db).unwrap();
         for (guid, _, expected) in cases {
-            let message = Message::from_guid(guid, &db).unwrap();
+            let message = Message::from_guid(guid, &db, &capabilities).unwrap();
             assert_eq!(message.filter_action(), Some(expected), "guid: {guid}");
         }
     }
 
     #[test]
     fn older_schema_reports_no_filter_action() {
-        let db = schema_db(false);
+        let db = schema_db(false, true, true);
         insert(&db, "old", None);
 
-        let message = Message::from_guid("old", &db).unwrap();
+        let capabilities = Capabilities::determine(&db).unwrap();
+        let message = Message::from_guid("old", &db, &capabilities).unwrap();
 
-        // The compatible query head pads both missing filter columns with `NULL`.
+        // The composed query pads both missing filter columns with `NULL`.
         // `None` remains distinct from `Unfiltered`.
         assert_eq!(message.filter_action, None);
         assert_eq!(message.filter_action(), None);
@@ -172,10 +130,11 @@ mod filter_action_query_tests {
 
     #[test]
     fn older_schema_still_reads_the_rest_of_the_row() {
-        let db = schema_db(false);
+        let db = schema_db(false, true, true);
         insert(&db, "old", None);
 
-        let message = Message::from_guid("old", &db).unwrap();
+        let capabilities = Capabilities::determine(&db).unwrap();
+        let message = Message::from_guid("old", &db, &capabilities).unwrap();
 
         assert_eq!(message.guid, "old");
         assert_eq!(message.date, 0);
@@ -184,58 +143,17 @@ mod filter_action_query_tests {
 
     #[test]
     fn filter_sub_action_is_read_raw() {
-        let db = schema_db(true);
+        let db = schema_db(true, true, true);
         db.execute(
             "INSERT INTO message (guid, date, is_from_me, filter_action, filter_sub_action) VALUES ('sub', 0, 0, 4, 2)",
             [],
         )
         .unwrap();
 
-        let message = Message::from_guid("sub", &db).unwrap();
+        let capabilities = Capabilities::determine(&db).unwrap();
+        let message = Message::from_guid("sub", &db, &capabilities).unwrap();
 
         assert_eq!(message.filter_action(), Some(FilterAction::Transaction));
         assert_eq!(message.filter_sub_action, Some(2));
-    }
-
-    #[test]
-    fn can_prepare_filter_head_on_macos_27_schema() {
-        let db = schema_db(true);
-
-        assert!(prepare_ios_27_newer(&db, None).is_ok());
-    }
-
-    #[test]
-    fn cannot_prepare_filter_head_on_older_schema() {
-        let db = schema_db(false);
-
-        assert!(prepare_ios_27_newer(&db, None).is_err());
-    }
-
-    #[test]
-    fn cannot_prepare_filter_head_with_only_one_filter_column() {
-        let db = schema_db(false);
-        db.execute_batch("ALTER TABLE message ADD COLUMN filter_action INTEGER")
-            .unwrap();
-
-        assert!(prepare_ios_27_newer(&db, None).is_err());
-    }
-
-    #[test]
-    fn half_a_filter_schema_reads_no_filter_action() {
-        let db = schema_db(false);
-        db.execute_batch("ALTER TABLE message ADD COLUMN filter_action INTEGER")
-            .unwrap();
-        db.execute(
-            "INSERT INTO message (guid, date, is_from_me, filter_action) VALUES ('half', 0, 0, 2)",
-            [],
-        )
-        .unwrap();
-
-        // The iOS 16 head projects `NULL` for both filter fields, even when the
-        // schema contains `filter_action` alone.
-        let message = Message::from_guid("half", &db).unwrap();
-
-        assert_eq!(message.filter_action, None);
-        assert_eq!(message.filter_sub_action, None);
     }
 }
