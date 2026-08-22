@@ -154,18 +154,17 @@ use crate::{
         variants::{Announcement, BalloonProvider, CustomBalloon, Tapback, TapbackAction, Variant},
     },
     tables::{
+        capabilities::Capabilities,
         diagnostic::{MessageDiagnostic, count_query, table_exists},
         messages::{
             body::{parse_body_legacy, parse_body_typedstream},
-            columns::{COMMON_COLS, MessageColumns},
+            columns::MessageColumns,
             models::{BubbleComponent, FilterAction, GroupAction, Service, SharedLocation},
-            query_parts::{
-                ios_13_older_query, ios_14_15_query, ios_16_newer_query, prepare_ios_27_newer,
-            },
+            query_parts::{from_clause, message_query, prepare_message_query},
         },
         table::{
-            ATTRIBUTED_BODY, CHAT_MESSAGE_JOIN, Cacheable, MESSAGE, MESSAGE_ATTACHMENT_JOIN,
-            MESSAGE_PAYLOAD, MESSAGE_SUMMARY_INFO, RECENTLY_DELETED, Table, flatten_row,
+            ATTRIBUTED_BODY, CHAT_MESSAGE_JOIN, Cacheable, MESSAGE, MESSAGE_PAYLOAD,
+            MESSAGE_SUMMARY_INFO, RECENTLY_DELETED, Table, flatten_row,
         },
     },
     util::{
@@ -255,10 +254,15 @@ pub struct Message {
 /// Use [`Message::apply_body()`] to apply the parsed body back to the message:
 ///
 /// ```no_run
-/// # use imessage_database::tables::{messages::Message, table::get_connection};
+/// # use imessage_database::tables::{
+/// #     capabilities::Capabilities,
+/// #     messages::Message,
+/// #     table::get_connection,
+/// # };
 /// # use imessage_database::util::dirs::default_db_path;
 /// # let conn = get_connection(&default_db_path()).unwrap();
-/// # let mut message = Message::from_guid("example", &conn).unwrap();
+/// # let capabilities = Capabilities::determine(&conn).unwrap();
+/// # let mut message = Message::from_guid("example", &conn, &capabilities).unwrap();
 /// if let Ok(body) = message.parse_body(&conn) {
 ///     message.apply_body(body);
 /// }
@@ -287,12 +291,14 @@ impl Table for Message {
         Self::from_row_named(row)
     }
 
-    /// Prepare the first message query compatible with the database schema.
+    /// Prepare the message query for the database's probed schema.
+    ///
+    /// Convenience wrapper over [`stream_rows`](Self::stream_rows) that probes
+    /// the schema itself; prefer threading [`Capabilities`] when calling
+    /// repeatedly.
     fn get(db: &'_ Connection) -> Result<CachedStatement<'_>, TableError> {
-        Ok(prepare_ios_27_newer(db, None)
-            .or_else(|_| db.prepare_cached(&ios_16_newer_query(None)))
-            .or_else(|_| db.prepare_cached(&ios_14_15_query(None)))
-            .or_else(|_| db.prepare_cached(&ios_13_older_query(None)))?)
+        let capabilities = Capabilities::determine(db)?;
+        prepare_message_query(db, &capabilities, None)
     }
 
     /// Resolve the column layout after the first step, then deserialize every
@@ -444,47 +450,30 @@ impl Cacheable for Message {
         // Create cache for user IDs
         let mut map: HashMap<Self::K, Self::V> = HashMap::new();
 
-        // Create query
-        let statement = db.prepare(&format!(
-            "SELECT
-                 {COMMON_COLS},
-                 c.chat_id,
-                 (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
-                 NULL as deleted_from,
-                 0 as num_replies,
-                 NULL as filter_action,
-                 NULL as filter_sub_action
-             FROM
-                 {MESSAGE} as m
-             LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
-             WHERE m.associated_message_guid IS NOT NULL
-            "
-        )).or_else(|_| db.prepare(&format!(
-            "SELECT
-                 *,
-                 c.chat_id,
-                 (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
-                 NULL as deleted_from,
-                 0 as num_replies
-             FROM
-                 {MESSAGE} as m
-             LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
-             WHERE m.associated_message_guid IS NOT NULL
-            "
-        )));
+        let capabilities = Capabilities::determine(db)?;
+        if !capabilities.associated_message_guids {
+            return Ok(map);
+        }
 
-        if let Ok(mut statement) = statement {
-            for message in Self::rows(&mut statement, [])? {
-                let message = message?;
-                if message.is_tapback()
-                    && let Some((idx, tapback_target_guid)) = message.clean_associated_guid()
-                {
-                    map.entry(tapback_target_guid.to_string())
-                        .or_insert_with(HashMap::new)
-                        .entry(idx)
-                        .or_insert_with(Vec::new)
-                        .push(message);
-                }
+        // The cache only maps each tapback to its target GUID and component
+        // index, so the derived features stay off: this full scan skips their
+        // correlated subqueries and the recoverable-message join.
+        let cache_capabilities = capabilities.without_derived_features();
+        let mut statement = db.prepare_cached(&message_query(
+            &cache_capabilities,
+            Some("WHERE m.associated_message_guid IS NOT NULL"),
+        ))?;
+
+        for message in Self::rows(&mut statement, [])? {
+            let message = message?;
+            if message.is_tapback()
+                && let Some((idx, tapback_target_guid)) = message.clean_associated_guid()
+            {
+                map.entry(tapback_target_guid.to_string())
+                    .or_insert_with(HashMap::new)
+                    .entry(idx)
+                    .or_insert_with(Vec::new)
+                    .push(message);
             }
         }
 
@@ -504,10 +493,15 @@ impl Message {
     /// # Example
     ///
     /// ```no_run
-    /// # use imessage_database::tables::{messages::Message, table::get_connection};
+    /// # use imessage_database::tables::{
+    /// #     capabilities::Capabilities,
+    /// #     messages::Message,
+    /// #     table::get_connection,
+    /// # };
     /// # use imessage_database::util::dirs::default_db_path;
     /// # let conn = get_connection(&default_db_path()).unwrap();
-    /// # let mut message = Message::from_guid("example", &conn).unwrap();
+    /// # let capabilities = Capabilities::determine(&conn).unwrap();
+    /// # let mut message = Message::from_guid("example", &conn, &capabilities).unwrap();
     /// if let Ok(body) = message.parse_body(&conn) {
     ///     message.apply_body(body);
     /// }
@@ -977,37 +971,35 @@ impl Message {
     /// # Example
     ///
     /// ```no_run
+    /// use imessage_database::tables::{
+    ///     capabilities::Capabilities,
+    ///     messages::Message,
+    ///     table::get_connection,
+    /// };
     /// use imessage_database::util::dirs::default_db_path;
-    /// use imessage_database::tables::table::get_connection;
-    /// use imessage_database::tables::messages::Message;
     /// use imessage_database::util::query_context::QueryContext;
     ///
     /// let db_path = default_db_path();
     /// let conn = get_connection(&db_path).unwrap();
+    /// let capabilities = Capabilities::determine(&conn).unwrap();
     /// let context = QueryContext::default();
-    /// Message::get_count(&conn, &context);
+    /// Message::get_count(&conn, &capabilities, &context);
     /// ```
-    pub fn get_count(db: &Connection, context: &QueryContext) -> Result<i64, TableError> {
+    pub fn get_count(
+        db: &Connection,
+        capabilities: &Capabilities,
+        context: &QueryContext,
+    ) -> Result<i64, TableError> {
+        // The unfiltered count skips the chat join: `chat_message_join` can
+        // associate one message with several chats, and every extra
+        // association would inflate `COUNT(*)`.
         let mut statement = if context.has_filters() {
+            let filters =
+                Self::generate_filter_statement(context, capabilities.recoverable_messages);
             db.prepare_cached(&format!(
-                "SELECT
-                     COUNT(*)
-                 FROM {MESSAGE} as m
-                 LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
-                 LEFT JOIN {RECENTLY_DELETED} as d ON m.ROWID = d.message_id
-                 {}",
-                Self::generate_filter_statement(context, true)
-            ))
-            .or_else(|_| {
-                db.prepare_cached(&format!(
-                    "SELECT
-                         COUNT(*)
-                     FROM {MESSAGE} as m
-                     LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
-                    {}",
-                    Self::generate_filter_statement(context, false)
-                ))
-            })?
+                "SELECT COUNT(*){}\n{filters}",
+                from_clause(capabilities)
+            ))?
         } else {
             db.prepare_cached(&format!("SELECT COUNT(*) FROM {MESSAGE}"))?
         };
@@ -1022,16 +1014,20 @@ impl Message {
     /// # Example
     ///
     /// ```no_run
+    /// use imessage_database::tables::{
+    ///     capabilities::Capabilities,
+    ///     messages::Message,
+    ///     table::{get_connection, Table},
+    /// };
     /// use imessage_database::util::dirs::default_db_path;
-    /// use imessage_database::tables::table::get_connection;
-    /// use imessage_database::tables::{messages::Message, table::Table};
     /// use imessage_database::util::query_context::QueryContext;
     ///
     /// let db_path = default_db_path();
     /// let conn = get_connection(&db_path).unwrap();
+    /// let capabilities = Capabilities::determine(&conn).unwrap();
     /// let context = QueryContext::default();
     ///
-    /// let mut statement = Message::stream_rows(&conn, &context).unwrap();
+    /// let mut statement = Message::stream_rows(&conn, &capabilities, &context).unwrap();
     ///
     /// for message in Message::rows(&mut statement, []).unwrap() {
     ///     println!("{:#?}", message);
@@ -1039,29 +1035,13 @@ impl Message {
     /// ```
     pub fn stream_rows<'a>(
         db: &'a Connection,
+        capabilities: &Capabilities,
         context: &'a QueryContext,
     ) -> Result<CachedStatement<'a>, TableError> {
-        if !context.has_filters() {
-            return Self::get(db);
-        }
-        Ok(
-            prepare_ios_27_newer(db, Some(&Self::generate_filter_statement(context, true)))
-                .or_else(|_| {
-                    db.prepare_cached(&ios_16_newer_query(Some(&Self::generate_filter_statement(
-                        context, true,
-                    ))))
-                })
-                .or_else(|_| {
-                    db.prepare_cached(&ios_14_15_query(Some(&Self::generate_filter_statement(
-                        context, false,
-                    ))))
-                })
-                .or_else(|_| {
-                    db.prepare_cached(&ios_13_older_query(Some(&Self::generate_filter_statement(
-                        context, false,
-                    ))))
-                })?,
-        )
+        let filters = context
+            .has_filters()
+            .then(|| Self::generate_filter_statement(context, capabilities.recoverable_messages));
+        prepare_message_query(db, capabilities, filters.as_deref())
     }
 
     /// Parse the target body component index and GUID from `associated_message_guid`.
@@ -1094,18 +1074,20 @@ impl Message {
     }
 
     /// Group replies by target body component index.
-    pub fn get_replies(&self, db: &Connection) -> Result<HashMap<usize, Vec<Self>>, TableError> {
+    pub fn get_replies(
+        &self,
+        db: &Connection,
+        capabilities: &Capabilities,
+    ) -> Result<HashMap<usize, Vec<Self>>, TableError> {
         let mut out_h: HashMap<usize, Vec<Self>> = HashMap::new();
 
-        // No need to hit the DB if we know we don't have replies
+        // No need to hit the DB if we know we don't have replies. A nonzero
+        // `num_replies` also proves the schema has `thread_originator_guid`,
+        // so the filter below always prepares.
         if self.has_replies() {
             // Use a parameterized filter so the prepared statement can be cached/reused
             let filters = "WHERE m.thread_originator_guid = ?1";
-
-            // `thread_originator_guid` is absent from the iOS 13-era schema.
-            let mut statement = prepare_ios_27_newer(db, Some(filters))
-                .or_else(|_| db.prepare_cached(&ios_16_newer_query(Some(filters))))
-                .or_else(|_| db.prepare_cached(&ios_14_15_query(Some(filters))))?;
+            let mut statement = prepare_message_query(db, capabilities, Some(filters))?;
 
             for message in Message::rows(&mut statement, [self.guid.as_str()])? {
                 let m = message?;
@@ -1124,18 +1106,20 @@ impl Message {
 
     // MARK: Polls
     /// Load messages that vote on or update the parent poll.
-    pub fn get_votes(&self, db: &Connection) -> Result<Vec<Self>, TableError> {
+    pub fn get_votes(
+        &self,
+        db: &Connection,
+        capabilities: &Capabilities,
+    ) -> Result<Vec<Self>, TableError> {
         let mut out_v: Vec<Self> = Vec::new();
 
-        // No need to hit the DB if we know we don't have a poll
+        // No need to hit the DB if we know we don't have a poll. Polls carry
+        // app payload data, which postdates `associated_message_guid`, so the
+        // filter below always prepares.
         if self.is_poll() {
             // Use a parameterized filter so the prepared statement can be cached/reused
             let filters = "WHERE m.associated_message_guid = ?1";
-
-            // `associated_message_guid` is absent from the iOS 13-era schema.
-            let mut statement = prepare_ios_27_newer(db, Some(filters))
-                .or_else(|_| db.prepare_cached(&ios_16_newer_query(Some(filters))))
-                .or_else(|_| db.prepare_cached(&ios_14_15_query(Some(filters))))?;
+            let mut statement = prepare_message_query(db, capabilities, Some(filters))?;
 
             for message in Message::rows(&mut statement, [self.guid.as_str()])? {
                 out_v.push(message?);
@@ -1146,14 +1130,18 @@ impl Message {
     }
 
     /// Parse this message as a poll, including vote counts and option updates.
-    pub fn as_poll(&self, db: &Connection) -> Result<Option<Poll>, MessageError> {
+    pub fn as_poll(
+        &self,
+        db: &Connection,
+        capabilities: &Capabilities,
+    ) -> Result<Option<Poll>, MessageError> {
         if self.is_poll()
             && let Some(payload) = self.payload_data(db)
         {
             let mut poll = Poll::from_payload(&payload)?;
 
             // Get all votes associated with this poll
-            let votes = self.get_votes(db).unwrap_or_default();
+            let votes = self.get_votes(db, capabilities).unwrap_or_default();
 
             // Later poll-option updates are stored as messages referencing the original poll.
             for vote in votes.iter().rev() {
@@ -1417,6 +1405,7 @@ impl Message {
     /// ```no_run
     /// use imessage_database::{
     ///     tables::{
+    ///         capabilities::Capabilities,
     ///         messages::Message,
     ///         table::get_connection,
     ///     },
@@ -1425,19 +1414,21 @@ impl Message {
     ///
     /// let db_path = default_db_path();
     /// let conn = get_connection(&db_path).unwrap();
+    /// let capabilities = Capabilities::determine(&conn).unwrap();
     ///
-    /// if let Ok(mut message) = Message::from_guid("example-guid", &conn) {
+    /// if let Ok(mut message) = Message::from_guid("example-guid", &conn, &capabilities) {
     ///     if let Ok(body) = message.parse_body(&conn) {
     ///         message.apply_body(body);
     ///     }
     ///     println!("{:#?}", message)
     /// }
     /// ```
-    pub fn from_guid(guid: &str, db: &Connection) -> Result<Self, TableError> {
-        let mut statement = prepare_ios_27_newer(db, Some("WHERE m.guid = ?1"))
-            .or_else(|_| db.prepare_cached(&ios_16_newer_query(Some("WHERE m.guid = ?1"))))
-            .or_else(|_| db.prepare_cached(&ios_14_15_query(Some("WHERE m.guid = ?1"))))
-            .or_else(|_| db.prepare_cached(&ios_13_older_query(Some("WHERE m.guid = ?1"))))?;
+    pub fn from_guid(
+        guid: &str,
+        db: &Connection,
+        capabilities: &Capabilities,
+    ) -> Result<Self, TableError> {
+        let mut statement = prepare_message_query(db, capabilities, Some("WHERE m.guid = ?1"))?;
 
         Message::row(&mut statement, [guid])
     }

@@ -1,13 +1,13 @@
 /*!
  Column layout resolution and row decoding for the `message` table.
 
- [`Message`] reads 32 columns whose ordinals differ per schema: the explicit
- query heads project them directly, while the `m.*` heads append derived
- columns after every `message` column. Decoding each field by name repeats a
- scan of the result set for every field of every row.
- [`MessageColumns`] resolves that mapping once per statement so rows decode by
- ordinal, and [`Message::from_row_named`] is the fallback for layouts it
- rejects.
+ [`Message`] reads 32 columns whose ordinals differ per schema: the composed
+ query projects the recognized columns contiguously, while custom queries
+ (such as `m.*` projections) may append derived columns after every `message`
+ column. Decoding each field by name repeats a scan of the result set for
+ every field of every row. [`MessageColumns`] resolves that mapping once per
+ statement so rows decode by ordinal, and [`Message::from_row_named`] is the
+ fallback for layouts it rejects.
 */
 
 use rusqlite::{Result, Row, Statement, types::FromSql};
@@ -15,11 +15,39 @@ use rusqlite::{Result, Row, Statement, types::FromSql};
 use crate::tables::messages::Message;
 
 // MARK: Columns
-/// Source columns shared by the iOS 16+ and iOS 27+ explicit query heads.
-/// Filter columns remain schema-specific: each head appends real or `NULL`
-/// values. Deserialization resolves names before reading ordinals, so runtime
-/// behavior does not depend on this order.
-pub(crate) const COMMON_COLS: &str = "m.rowid, m.guid, m.text, m.service, m.handle_id, m.destination_caller_id, m.subject, m.date, m.date_read, m.date_delivered, m.is_from_me, m.is_read, m.item_type, m.other_handle, m.share_status, m.share_direction, m.group_title, m.group_action_type, m.associated_message_guid, m.associated_message_type, m.balloon_bundle_id, m.expressive_send_style_id, m.thread_originator_guid, m.thread_originator_part, m.date_edited, m.associated_message_emoji";
+/// Recognized `message` source columns in canonical projection order.
+///
+/// [`Capabilities`](crate::tables::capabilities::Capabilities) probes these
+/// names against the live schema; query composition projects exactly the
+/// subset that exists, qualified with `m.`.
+pub(crate) const MESSAGE_COLUMNS: [&str; 26] = [
+    "rowid",
+    "guid",
+    "text",
+    "service",
+    "handle_id",
+    "destination_caller_id",
+    "subject",
+    "date",
+    "date_read",
+    "date_delivered",
+    "is_from_me",
+    "is_read",
+    "item_type",
+    "other_handle",
+    "share_status",
+    "share_direction",
+    "group_title",
+    "group_action_type",
+    "associated_message_guid",
+    "associated_message_type",
+    "balloon_bundle_id",
+    "expressive_send_style_id",
+    "thread_originator_guid",
+    "thread_originator_part",
+    "date_edited",
+    "associated_message_emoji",
+];
 
 /// Size of the stack buffer used to case-fold column names. The two longest
 /// recognized names, `associated_message_emoji` and
@@ -328,14 +356,14 @@ mod tests {
 
     use super::{LONGEST_COL, Message, MessageColumns};
     use crate::tables::{
-        messages::query_parts::{
-            ios_13_older_query, ios_14_15_query, ios_16_newer_query, ios_27_newer_query,
-        },
+        capabilities::Capabilities,
+        messages::query_parts::message_query,
         table::{Table, get_connection},
     };
 
-    /// A `message` schema whose column order differs from [`super::COMMON_COLS`]. Its
-    /// `m.*` result exercises name resolution rather than projection order.
+    /// A `message` schema whose column order differs from
+    /// [`super::MESSAGE_COLUMNS`]. Its `m.*` result exercises name resolution
+    /// rather than projection order.
     const SCRAMBLED_SCHEMA: &str = "
         CREATE TABLE message (
             associated_message_emoji TEXT,
@@ -406,6 +434,12 @@ mod tests {
         let db = Connection::open_in_memory().unwrap();
         db.execute_batch(SCRAMBLED_SCHEMA).unwrap();
         db
+    }
+
+    /// Prepare the composed message query for `db`'s probed schema.
+    fn prepared(db: &Connection) -> Statement<'_> {
+        let capabilities = Capabilities::determine(db).unwrap();
+        db.prepare(&message_query(&capabilities, None)).unwrap()
     }
 
     /// Every [`MessageColumns`] field paired with its column name and resolved
@@ -566,9 +600,8 @@ mod tests {
     fn every_column_name_fits_the_fold_buffer() {
         // A name longer than the buffer is skipped before the match, so it
         // would silently never resolve.
-        let columns =
-            MessageColumns::resolve(&ventura_db().prepare(&ios_16_newer_query(None)).unwrap())
-                .unwrap();
+        let db = ventura_db();
+        let columns = MessageColumns::resolve(&prepared(&db)).unwrap();
         for (name, _) in slots(&columns) {
             assert!(name.len() <= LONGEST_COL, "`{name}` exceeds LONGEST_COL");
         }
@@ -576,38 +609,45 @@ mod tests {
 
     #[test]
     fn slots_cover_every_resolved_field() {
-        let columns =
-            MessageColumns::resolve(&ventura_db().prepare(&ios_16_newer_query(None)).unwrap())
-                .unwrap();
+        let db = ventura_db();
+        let columns = MessageColumns::resolve(&prepared(&db)).unwrap();
         assert_eq!(slots(&columns).len(), MessageColumns::FIELDS);
     }
 
     #[test]
-    fn resolve_matches_rusqlite_for_explicit_head() {
+    fn resolve_matches_rusqlite_for_composed_head() {
         let db = ventura_db();
-        assert_resolve_matches_rusqlite(&db.prepare(&ios_16_newer_query(None)).unwrap());
+        assert_resolve_matches_rusqlite(&prepared(&db));
+
+        let scrambled = scrambled_db();
+        assert_resolve_matches_rusqlite(&prepared(&scrambled));
     }
 
     #[test]
-    fn resolve_matches_rusqlite_for_wildcard_heads() {
+    fn resolve_matches_rusqlite_for_wildcard_projection() {
+        // Custom queries may project `m.*`; resolution must still work when
+        // derived columns follow every `message` column.
         let db = ventura_db();
-        assert_resolve_matches_rusqlite(&db.prepare(&ios_14_15_query(None)).unwrap());
-        assert_resolve_matches_rusqlite(&db.prepare(&ios_13_older_query(None)).unwrap());
-    }
-
-    #[test]
-    fn resolve_matches_rusqlite_for_filter_heads() {
-        let db = scrambled_db();
-        assert_resolve_matches_rusqlite(&db.prepare(&ios_27_newer_query(None)).unwrap());
-        assert_resolve_matches_rusqlite(&db.prepare(&ios_13_older_query(None)).unwrap());
+        let stmt = db
+            .prepare(
+                "
+                SELECT m.*, c.chat_id,
+                    (SELECT COUNT(*) FROM message_attachment_join a WHERE m.ROWID = a.message_id) as num_attachments,
+                    0 as num_replies
+                FROM message as m
+                LEFT JOIN chat_message_join as c ON m.ROWID = c.message_id
+                ",
+            )
+            .unwrap();
+        assert_resolve_matches_rusqlite(&stmt);
     }
 
     fn assert_exact_explicit_projection(stmt: &Statement<'_>) {
         let columns = MessageColumns::resolve(stmt).unwrap();
 
-        // Exact count catches drift between the explicit projection and the
-        // mapped fields. Ordinal equality constrains `COMMON_COLS`, not
-        // deserialization.
+        // Exact count catches drift between the composed projection and the
+        // mapped fields. Ordinal equality constrains the composer's column
+        // order, not deserialization.
         assert_eq!(stmt.column_count(), slots(&columns).len());
         for (idx, (name, resolved)) in slots(&columns).into_iter().enumerate() {
             assert_eq!(resolved, Some(idx), "`{name}` is not at ordinal {idx}");
@@ -615,18 +655,18 @@ mod tests {
     }
 
     #[test]
-    fn explicit_heads_select_exactly_what_message_reads() {
+    fn composed_head_selects_exactly_what_message_reads() {
         let ventura = ventura_db();
-        assert_exact_explicit_projection(&ventura.prepare(&ios_16_newer_query(None)).unwrap());
+        assert_exact_explicit_projection(&prepared(&ventura));
 
         let scrambled = scrambled_db();
-        assert_exact_explicit_projection(&scrambled.prepare(&ios_27_newer_query(None)).unwrap());
+        assert_exact_explicit_projection(&prepared(&scrambled));
     }
 
     #[test]
     fn source_qualified_head_has_one_chat_id() {
         let db = ventura_db();
-        let stmt = db.prepare(&ios_14_15_query(None)).unwrap();
+        let stmt = prepared(&db);
 
         let matches: Vec<usize> = stmt
             .column_names()
@@ -647,22 +687,20 @@ mod tests {
         // declared name even where the head writes `rowid`, so a
         // case-sensitive match would fail to resolve a required column.
         let db = ventura_db();
-        let stmt = db.prepare(&ios_16_newer_query(None)).unwrap();
+        let stmt = prepared(&db);
         assert_eq!(stmt.column_name(0).unwrap(), "ROWID");
         assert_eq!(MessageColumns::resolve(&stmt).unwrap().rowid, 0);
     }
 
     #[test]
-    fn paths_agree_for_every_query_head() {
+    fn paths_agree_for_composed_query() {
         let ventura = ventura_db();
-        assert_paths_agree(&ventura, &ios_16_newer_query(None));
-        assert_paths_agree(&ventura, &ios_14_15_query(None));
-        assert_paths_agree(&ventura, &ios_13_older_query(None));
+        let capabilities = Capabilities::determine(&ventura).unwrap();
+        assert_paths_agree(&ventura, &message_query(&capabilities, None));
 
         let scrambled = scrambled_db();
-        assert_paths_agree(&scrambled, &ios_27_newer_query(None));
-        assert_paths_agree(&scrambled, &ios_16_newer_query(None));
-        assert_paths_agree(&scrambled, &ios_13_older_query(None));
+        let capabilities = Capabilities::determine(&scrambled).unwrap();
+        assert_paths_agree(&scrambled, &message_query(&capabilities, None));
     }
 
     #[test]
@@ -670,7 +708,7 @@ mod tests {
         // No mapped field occupies its explicit-projection ordinal. Correct
         // values therefore depend on name resolution.
         let db = scrambled_db();
-        let mut stmt = db.prepare(&ios_13_older_query(None)).unwrap();
+        let mut stmt = prepared(&db);
         let messages: Vec<Message> = Message::rows(&mut stmt, [])
             .unwrap()
             .map(Result::unwrap)
@@ -710,10 +748,12 @@ mod tests {
         )
         .unwrap();
 
-        let mut stmt = db.prepare(&ios_13_older_query(None)).unwrap();
+        let mut stmt = prepared(&db);
         let columns = MessageColumns::resolve(&stmt).expect("required columns are present");
         assert_eq!(columns.date_edited, None);
-        assert_eq!(columns.filter_action, None);
+        // The composer always projects the filter aliases, so their ordinals
+        // resolve even though the schema lacks the columns.
+        assert!(columns.filter_action.is_some());
 
         let messages: Vec<Message> = Message::rows(&mut stmt, [])
             .unwrap()

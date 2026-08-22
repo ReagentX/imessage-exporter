@@ -17,6 +17,7 @@ use crate::{
     error::{attachment::AttachmentError, table::TableError},
     message_types::sticker::{StickerDecoration, StickerEffect, StickerSource, get_sticker_effect},
     tables::{
+        capabilities::Capabilities,
         diagnostic::AttachmentDiagnostic,
         messages::Message,
         table::{
@@ -46,7 +47,19 @@ pub const DEFAULT_SMS_ROOT: &str = "~/Library/SMS";
 pub const DEFAULT_ATTACHMENT_ROOT: &str = "~/Library/Messages/Attachments";
 /// Default macOS sticker cache root.
 pub const DEFAULT_STICKER_CACHE_ROOT: &str = "~/Library/Messages/StickerCache";
-const COLS: &str = "a.rowid, a.guid, a.filename, a.uti, a.mime_type, a.transfer_name, a.total_bytes, a.is_sticker, a.hide_attachment, a.emoji_image_short_description";
+/// Recognized `attachment` columns in canonical projection order.
+pub(crate) const ATTACHMENT_COLUMNS: [&str; 10] = [
+    "rowid",
+    "guid",
+    "filename",
+    "uti",
+    "mime_type",
+    "transfer_name",
+    "total_bytes",
+    "is_sticker",
+    "hide_attachment",
+    "emoji_image_short_description",
+];
 
 // MARK: MediaType
 /// Represents the [MIME type](https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_Types) of a message's attachment data
@@ -200,28 +213,28 @@ impl Attachment {
     /// [`attributed_body()`](crate::tables::messages::message::Message::attributed_body).
     /// Callers pairing body ranges to rows should match on the file-transfer GUID
     /// rather than relying on position.
-    pub fn from_message(db: &Connection, msg: &Message) -> Result<Vec<Attachment>, TableError> {
+    pub fn from_message(
+        db: &Connection,
+        msg: &Message,
+        capabilities: &Capabilities,
+    ) -> Result<Vec<Attachment>, TableError> {
         let mut out_l = vec![];
         if msg.has_attachments() {
-            let mut statement = db
-                .prepare_cached(&format!(
-                    "
-                        SELECT {COLS}
-                        FROM message_attachment_join j 
-                        LEFT JOIN {ATTACHMENT} a ON j.attachment_id = a.ROWID
-                        WHERE j.message_id = ?1
-                    ",
-                ))
-                .or_else(|_| {
-                    db.prepare_cached(&format!(
-                        "
-                            SELECT *
-                            FROM message_attachment_join j 
-                            LEFT JOIN {ATTACHMENT} a ON j.attachment_id = a.ROWID
-                            WHERE j.message_id = ?1
-                        ",
-                    ))
-                })?;
+            let projection = capabilities
+                .attachment_columns()
+                .iter()
+                .map(|column| format!("a.{column}"))
+                .collect::<Vec<String>>()
+                .join(", ");
+
+            let mut statement = db.prepare_cached(&format!(
+                "
+                    SELECT {projection}
+                    FROM {MESSAGE_ATTACHMENT_JOIN} j
+                    LEFT JOIN {ATTACHMENT} a ON j.attachment_id = a.ROWID
+                    WHERE j.message_id = ?1
+                ",
+            ))?;
 
             for attachment in Attachment::rows(&mut statement, [msg.rowid])? {
                 out_l.push(attachment?);
