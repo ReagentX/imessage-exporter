@@ -750,6 +750,9 @@ mod filename_tests {
             chat_identifier: "Default".to_string(),
             service_name: Some(String::new()),
             display_name: None,
+            is_filtered: None,
+            is_blackholed: None,
+            is_pending_review: None,
         }
     }
 
