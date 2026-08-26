@@ -3,6 +3,7 @@
 */
 
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 
 use plist::Value;
 use rusqlite::{CachedStatement, Connection, Result, Row};
@@ -52,6 +53,54 @@ impl Properties {
     }
 }
 
+// MARK: Chat Filter Status
+/// Conversation-list tier stored in `chat.is_filtered`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChatFilterStatus {
+    /// Main conversation list (`0`).
+    Unfiltered,
+    /// Unknown Senders bucket (`1`).
+    UnknownSenders,
+    /// Junk bucket (`2`).
+    Junk,
+    /// Unrecognized raw value.
+    Unknown(i32),
+}
+
+impl ChatFilterStatus {
+    /// Map a raw `is_filtered` value to its conversation-list tier.
+    ///
+    /// Preserve a missing value as `None` and an unrecognized value as
+    /// [`Self::Unknown`].
+    #[must_use]
+    pub fn from_code(code: Option<i32>) -> Option<Self> {
+        Some(match code? {
+            0 => Self::Unfiltered,
+            1 => Self::UnknownSenders,
+            2 => Self::Junk,
+            other => Self::Unknown(other),
+        })
+    }
+
+    /// Return whether the status is outside the main conversation list.
+    ///
+    /// Every variant except [`Self::Unfiltered`] is filtered, including
+    /// [`Self::Unknown`].
+    #[must_use]
+    pub fn is_filtered(&self) -> bool {
+        !matches!(self, Self::Unfiltered)
+    }
+}
+
+impl Display for ChatFilterStatus {
+    fn fmt(&self, fmt: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unknown(code) => write!(fmt, "Unknown ({code})"),
+            _ => write!(fmt, "{self:?}"),
+        }
+    }
+}
+
 // MARK: Chat Struct
 /// Row from the `chat` table.
 #[derive(Debug)]
@@ -64,6 +113,15 @@ pub struct Chat {
     pub service_name: Option<String>,
     /// User-provided chat display name.
     pub display_name: Option<String>,
+    /// Raw conversation-list tier from `chat.is_filtered`, used to build
+    /// the [`ChatFilterStatus`] via [`Self::filter_status`].
+    pub is_filtered: Option<i32>,
+    /// Raw `chat.is_blackholed` flag: `1` denotes a chat whose incoming
+    /// messages are silently dropped.
+    pub is_blackholed: Option<bool>,
+    /// Raw `chat.is_pending_review` flag: `1` denotes a filtered chat awaiting
+    /// review.
+    pub is_pending_review: Option<bool>,
 }
 
 // MARK: Table
@@ -74,6 +132,9 @@ impl Table for Chat {
             chat_identifier: row.get("chat_identifier")?,
             service_name: row.get("service_name")?,
             display_name: row.get("display_name").unwrap_or(None),
+            is_filtered: row.get("is_filtered").unwrap_or(None),
+            is_blackholed: row.get("is_blackholed").unwrap_or(None),
+            is_pending_review: row.get("is_pending_review").unwrap_or(None),
         })
     }
 
@@ -145,6 +206,15 @@ impl Chat {
         Service::from_name(self.service_name.as_deref())
     }
 
+    /// Parse the conversation-list tier from [`Self::is_filtered`].
+    ///
+    /// A raw `0` maps to [`ChatFilterStatus::Unfiltered`]. `None` remains
+    /// `None`, and every unrecognized value maps to [`ChatFilterStatus::Unknown`].
+    #[must_use]
+    pub fn filter_status(&self) -> Option<ChatFilterStatus> {
+        ChatFilterStatus::from_code(self.is_filtered)
+    }
+
     /// Parse [`Properties`] from the chat's plist blob.
     ///
     /// Calling this reads a BLOB from the database.
@@ -158,6 +228,136 @@ impl Chat {
 }
 
 // MARK: Tests
+#[cfg(test)]
+mod test_filter_status {
+    use crate::tables::chat::ChatFilterStatus;
+
+    #[test]
+    fn maps_known_codes() {
+        assert_eq!(
+            ChatFilterStatus::from_code(Some(0)),
+            Some(ChatFilterStatus::Unfiltered)
+        );
+        assert_eq!(
+            ChatFilterStatus::from_code(Some(1)),
+            Some(ChatFilterStatus::UnknownSenders)
+        );
+        assert_eq!(
+            ChatFilterStatus::from_code(Some(2)),
+            Some(ChatFilterStatus::Junk)
+        );
+    }
+
+    #[test]
+    fn preserves_unrecognized_code() {
+        assert_eq!(
+            ChatFilterStatus::from_code(Some(7)),
+            Some(ChatFilterStatus::Unknown(7))
+        );
+    }
+
+    #[test]
+    fn missing_value_is_none() {
+        assert_eq!(ChatFilterStatus::from_code(None), None);
+    }
+
+    #[test]
+    fn is_filtered_covers_every_nonzero_tier() {
+        assert!(!ChatFilterStatus::Unfiltered.is_filtered());
+        assert!(ChatFilterStatus::UnknownSenders.is_filtered());
+        assert!(ChatFilterStatus::Junk.is_filtered());
+        assert!(ChatFilterStatus::Unknown(7).is_filtered());
+    }
+
+    #[test]
+    fn display_names_the_unknown_code() {
+        assert_eq!(ChatFilterStatus::Junk.to_string(), "Junk");
+        assert_eq!(ChatFilterStatus::Unknown(7).to_string(), "Unknown (7)");
+    }
+}
+
+#[cfg(test)]
+mod test_from_row {
+    use rusqlite::Connection;
+
+    use crate::tables::{
+        chat::{Chat, ChatFilterStatus},
+        table::Table,
+    };
+
+    /// Build a minimal in-memory `chat` table, optionally including filter-state columns.
+    fn chat_db(with_filter_columns: bool) -> Connection {
+        let filter_columns = if with_filter_columns {
+            ",
+                is_filtered INTEGER DEFAULT 0,
+                is_blackholed INTEGER DEFAULT 0,
+                is_pending_review INTEGER DEFAULT 0"
+        } else {
+            ""
+        };
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(&format!(
+            "CREATE TABLE chat (
+                ROWID INTEGER PRIMARY KEY,
+                chat_identifier TEXT,
+                service_name TEXT,
+                display_name TEXT{filter_columns}
+            );"
+        ))
+        .unwrap();
+        db
+    }
+
+    fn all_chats(db: &Connection) -> Vec<Chat> {
+        let mut statement = Chat::get(db).unwrap();
+        Chat::rows(&mut statement, [])
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    }
+
+    #[test]
+    fn reads_filter_state_codes() {
+        let db = chat_db(true);
+        db.execute_batch(
+            "INSERT INTO chat (ROWID, chat_identifier, is_filtered, is_blackholed, is_pending_review) VALUES
+                (1, 'a', 0, 0, 0),
+                (2, 'b', 1, 1, 1),
+                (3, 'c', NULL, NULL, NULL);",
+        )
+        .unwrap();
+
+        let chats = all_chats(&db);
+        assert_eq!(chats[0].is_filtered, Some(0));
+        assert_eq!(chats[0].filter_status(), Some(ChatFilterStatus::Unfiltered));
+        assert_eq!(chats[0].is_blackholed, Some(false));
+        assert_eq!(chats[0].is_pending_review, Some(false));
+        assert_eq!(chats[1].is_filtered, Some(1));
+        assert_eq!(
+            chats[1].filter_status(),
+            Some(ChatFilterStatus::UnknownSenders)
+        );
+        assert_eq!(chats[1].is_blackholed, Some(true));
+        assert_eq!(chats[1].is_pending_review, Some(true));
+        assert_eq!(chats[2].is_filtered, None);
+        assert_eq!(chats[2].filter_status(), None);
+        assert_eq!(chats[2].is_blackholed, None);
+        assert_eq!(chats[2].is_pending_review, None);
+    }
+
+    #[test]
+    fn schema_without_filter_columns_reads_none() {
+        let db = chat_db(false);
+        db.execute_batch("INSERT INTO chat (ROWID, chat_identifier) VALUES (1, 'a');")
+            .unwrap();
+
+        let chats = all_chats(&db);
+        assert_eq!(chats[0].is_filtered, None);
+        assert_eq!(chats[0].is_blackholed, None);
+        assert_eq!(chats[0].is_pending_review, None);
+    }
+}
+
 #[cfg(test)]
 mod test_properties {
     use plist::Value;

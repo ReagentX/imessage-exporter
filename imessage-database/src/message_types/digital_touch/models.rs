@@ -194,7 +194,9 @@ impl Color {
     /// Decode a packed buffer of consecutive RGBA colors.
     #[must_use]
     pub fn decode_all(buf: &[u8]) -> Vec<Color> {
-        buf.chunks_exact(4)
+        buf.as_chunks::<4>()
+            .0
+            .iter()
             .map(|c| Color {
                 r: c[0],
                 g: c[1],
@@ -221,7 +223,9 @@ impl Color {
 /// Decode a packed buffer of little-endian `u16` values (delays, rotations).
 #[must_use]
 pub fn decode_u16s(buf: &[u8]) -> Vec<u16> {
-    buf.chunks_exact(2)
+    buf.as_chunks::<2>()
+        .0
+        .iter()
         .map(|c| u16::from_le_bytes([c[0], c[1]]))
         .collect()
 }
@@ -233,7 +237,9 @@ pub fn decode_u16s(buf: &[u8]) -> Vec<u16> {
 /// arrays disagree on how many events it contains.
 pub fn decode_points<T>(raw: &[u8], extras: Vec<T>) -> Result<Vec<Point<T>>, DigitalTouchError> {
     let coords: Vec<(u16, u16)> = raw
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|c| {
             (
                 u16::from_le_bytes([c[0], c[1]]),
@@ -286,7 +292,9 @@ pub fn decode_strokes(raw: &[u8], count: usize) -> Result<Vec<Vec<(u16, u16)>>, 
 
         strokes.push(
             raw[idx..end]
-                .chunks_exact(4)
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .map(|c| {
                     (
                         u16::from_le_bytes([c[0], c[1]]),

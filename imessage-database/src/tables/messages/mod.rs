@@ -5,6 +5,7 @@
 pub use message::{Message, ParsedBody};
 
 pub(crate) mod body;
+pub(crate) mod columns;
 pub mod message;
 pub mod models;
 pub(crate) mod query_parts;

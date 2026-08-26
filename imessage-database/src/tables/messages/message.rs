@@ -48,6 +48,15 @@
  - [`Message::deleted_from`]
  - [`Message::num_replies`]
 
+ [`Message::rows`] and [`Message::row`] resolve result columns by name once,
+ then decode by ordinal. Column order is immaterial; column names are not. Six
+ columns are mandatory: `rowid`, `guid`, `date`, `is_from_me`,
+ `num_attachments`, and `num_replies`. A query that omits any of them fails to
+ deserialize. Every other column [`Message`] reads may be omitted and takes its
+ default. Thus,
+ [`Message::filter_action`] and [`Message::filter_sub_action`] read as `None`
+ against schemas without those columns.
+
  ## Sample Queries
 
  Custom queries must include those derived columns:
@@ -132,7 +141,7 @@ use std::{
 use chrono::{DateTime, offset::Local};
 use crabstep::TypedStreamDeserializer;
 use plist::Value;
-use rusqlite::{CachedStatement, Connection, Result, Row};
+use rusqlite::{CachedStatement, Connection, Params, Result, Row, Statement};
 
 use crate::{
     error::{message::MessageError, table::TableError},
@@ -145,15 +154,17 @@ use crate::{
         variants::{Announcement, BalloonProvider, CustomBalloon, Tapback, TapbackAction, Variant},
     },
     tables::{
+        capabilities::Capabilities,
         diagnostic::{MessageDiagnostic, count_query, table_exists},
         messages::{
             body::{parse_body_legacy, parse_body_typedstream},
-            models::{BubbleComponent, GroupAction, Service, SharedLocation},
-            query_parts::{ios_13_older_query, ios_14_15_query, ios_16_newer_query},
+            columns::MessageColumns,
+            models::{BubbleComponent, FilterAction, GroupAction, Service, SharedLocation},
+            query_parts::{from_clause, message_query, prepare_message_query},
         },
         table::{
-            ATTRIBUTED_BODY, CHAT_MESSAGE_JOIN, Cacheable, MESSAGE, MESSAGE_ATTACHMENT_JOIN,
-            MESSAGE_PAYLOAD, MESSAGE_SUMMARY_INFO, RECENTLY_DELETED, Table,
+            ATTRIBUTED_BODY, CHAT_MESSAGE_JOIN, Cacheable, MESSAGE, MESSAGE_PAYLOAD,
+            MESSAGE_SUMMARY_INFO, RECENTLY_DELETED, Table, flatten_row,
         },
     },
     util::{
@@ -163,10 +174,6 @@ use crate::{
         streamtyped,
     },
 };
-
-// MARK: Columns
-/// Columns selected by the newest message query shape.
-pub(crate) const COLS: &str = "rowid, guid, text, service, handle_id, destination_caller_id, subject, date, date_read, date_delivered, is_from_me, is_read, item_type, other_handle, share_status, share_direction, group_title, group_action_type, associated_message_guid, associated_message_type, balloon_bundle_id, expressive_send_style_id, thread_originator_guid, thread_originator_part, date_edited, associated_message_emoji";
 
 /// Row from the `message` table, plus body/edit metadata populated by [`parse_body`](Self::parse_body).
 #[derive(Debug)]
@@ -232,6 +239,10 @@ pub struct Message {
     pub deleted_from: Option<i32>,
     /// Number of replies to the message.
     pub num_replies: i32,
+    /// Raw message filter category code, read by [`filter_action`](Self::filter_action).
+    pub filter_action: Option<i32>,
+    /// Raw message filter subcategory code. This field has no parsed representation.
+    pub filter_sub_action: Option<i32>,
     /// The components of the message body, parsed by a [`TypedStreamDeserializer`] or [`streamtyped::parse()`]
     pub components: Vec<BubbleComponent>,
     /// Parsed edit/unsent metadata from `message_summary_info`.
@@ -243,10 +254,15 @@ pub struct Message {
 /// Use [`Message::apply_body()`] to apply the parsed body back to the message:
 ///
 /// ```no_run
-/// # use imessage_database::tables::{messages::Message, table::get_connection};
+/// # use imessage_database::tables::{
+/// #     capabilities::Capabilities,
+/// #     messages::Message,
+/// #     table::get_connection,
+/// # };
 /// # use imessage_database::util::dirs::default_db_path;
 /// # let conn = get_connection(&default_db_path()).unwrap();
-/// # let mut message = Message::from_guid("example", &conn).unwrap();
+/// # let capabilities = Capabilities::determine(&conn).unwrap();
+/// # let mut message = Message::from_guid("example", &conn, &capabilities).unwrap();
 /// if let Ok(body) = message.parse_body(&conn) {
 ///     message.apply_body(body);
 /// }
@@ -266,16 +282,59 @@ pub struct ParsedBody {
 
 // MARK: Table
 impl Table for Message {
+    /// Deserialize a row by column name.
+    ///
+    /// Direct `rusqlite::query_map` callers use this method. [`rows`](Self::rows)
+    /// and [`row`](Self::row) read by resolved ordinal and fall back here when a
+    /// required column is absent.
     fn from_row(row: &Row) -> Result<Message> {
-        Self::from_row_idx(row).or_else(|_| Self::from_row_named(row))
+        Self::from_row_named(row)
     }
 
-    /// Prepare the newest compatible message query, falling back through older schemas.
+    /// Prepare the message query for the database's probed schema.
+    ///
+    /// Convenience wrapper over [`stream_rows`](Self::stream_rows) that probes
+    /// the schema itself; prefer threading [`Capabilities`] when calling
+    /// repeatedly.
     fn get(db: &'_ Connection) -> Result<CachedStatement<'_>, TableError> {
-        Ok(db
-            .prepare_cached(&ios_16_newer_query(None))
-            .or_else(|_| db.prepare_cached(&ios_14_15_query(None)))
-            .or_else(|_| db.prepare_cached(&ios_13_older_query(None)))?)
+        let capabilities = Capabilities::determine(db)?;
+        prepare_message_query(db, &capabilities, None)
+    }
+
+    /// Resolve the column layout after the first step, then deserialize every
+    /// row by ordinal. An absent required column selects
+    /// [`from_row`](Self::from_row) for the complete iteration.
+    ///
+    /// Resolving through the first [`Row`] observes metadata after
+    /// `sqlite3_step`, which may recompile a statement when its schema changed
+    /// after preparation.
+    fn rows<'stmt, P: Params>(
+        stmt: &'stmt mut Statement<'_>,
+        params: P,
+    ) -> Result<impl Iterator<Item = Result<Self, TableError>> + 'stmt, TableError>
+    where
+        Self: 'stmt,
+    {
+        let mut columns = None;
+        let mapped = stmt.query_map(params, move |row| {
+            let columns = columns.get_or_insert_with(|| MessageColumns::resolve(row.as_ref()));
+            Ok(match columns.as_ref() {
+                Some(columns) => Self::from_row_mapped(row, columns),
+                None => Self::from_row(row),
+            })
+        })?;
+        Ok(mapped.map(flatten_row))
+    }
+
+    /// Resolve the stepped row's column layout, then deserialize by ordinal.
+    /// An absent required column falls back to [`from_row`](Self::from_row).
+    fn row<P: Params>(stmt: &mut Statement<'_>, params: P) -> Result<Self, TableError> {
+        flatten_row(stmt.query_row(params, |row| {
+            Ok(match MessageColumns::resolve(row.as_ref()) {
+                Some(columns) => Self::from_row_mapped(row, &columns),
+                None => Self::from_row(row),
+            })
+        }))
     }
 }
 
@@ -391,45 +450,30 @@ impl Cacheable for Message {
         // Create cache for user IDs
         let mut map: HashMap<Self::K, Self::V> = HashMap::new();
 
-        // Create query
-        let statement = db.prepare(&format!(
-            "SELECT
-                 {COLS},
-                 c.chat_id,
-                 (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
-                 NULL as deleted_from,
-                 0 as num_replies
-             FROM
-                 {MESSAGE} as m
-             LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
-             WHERE m.associated_message_guid IS NOT NULL
-            "
-        )).or_else(|_| db.prepare(&format!(
-            "SELECT
-                 *,
-                 c.chat_id,
-                 (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
-                 NULL as deleted_from,
-                 0 as num_replies
-             FROM
-                 {MESSAGE} as m
-             LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
-             WHERE m.associated_message_guid IS NOT NULL
-            "
-        )));
+        let capabilities = Capabilities::determine(db)?;
+        if !capabilities.associated_message_guids {
+            return Ok(map);
+        }
 
-        if let Ok(mut statement) = statement {
-            for message in Self::rows(&mut statement, [])? {
-                let message = message?;
-                if message.is_tapback()
-                    && let Some((idx, tapback_target_guid)) = message.clean_associated_guid()
-                {
-                    map.entry(tapback_target_guid.to_string())
-                        .or_insert_with(HashMap::new)
-                        .entry(idx)
-                        .or_insert_with(Vec::new)
-                        .push(message);
-                }
+        // The cache only maps each tapback to its target GUID and component
+        // index, so the derived features stay off: this full scan skips their
+        // correlated subqueries and the recoverable-message join.
+        let cache_capabilities = capabilities.without_derived_features();
+        let mut statement = db.prepare_cached(&message_query(
+            &cache_capabilities,
+            Some("WHERE m.associated_message_guid IS NOT NULL"),
+        ))?;
+
+        for message in Self::rows(&mut statement, [])? {
+            let message = message?;
+            if message.is_tapback()
+                && let Some((idx, tapback_target_guid)) = message.clean_associated_guid()
+            {
+                map.entry(tapback_target_guid.to_string())
+                    .or_insert_with(HashMap::new)
+                    .entry(idx)
+                    .or_insert_with(Vec::new)
+                    .push(message);
             }
         }
 
@@ -439,82 +483,6 @@ impl Cacheable for Message {
 
 // MARK: Impl
 impl Message {
-    /// Build a [`Message`] from a row using indexed columns.
-    fn from_row_idx(row: &Row) -> Result<Message> {
-        Ok(Message {
-            rowid: row.get(0)?,
-            guid: row.get(1)?,
-            text: row.get(2).unwrap_or(None),
-            service: row.get(3).unwrap_or(None),
-            handle_id: row.get(4).unwrap_or(None),
-            destination_caller_id: row.get(5).unwrap_or(None),
-            subject: row.get(6).unwrap_or(None),
-            date: row.get(7)?,
-            date_read: row.get(8).unwrap_or(0),
-            date_delivered: row.get(9).unwrap_or(0),
-            is_from_me: row.get(10)?,
-            is_read: row.get(11).unwrap_or(false),
-            item_type: row.get(12).unwrap_or_default(),
-            other_handle: row.get(13).unwrap_or(None),
-            share_status: row.get(14).unwrap_or(false),
-            share_direction: row.get(15).unwrap_or(None),
-            group_title: row.get(16).unwrap_or(None),
-            group_action_type: row.get(17).unwrap_or(0),
-            associated_message_guid: row.get(18).unwrap_or(None),
-            associated_message_type: row.get(19).unwrap_or(None),
-            balloon_bundle_id: row.get(20).unwrap_or(None),
-            expressive_send_style_id: row.get(21).unwrap_or(None),
-            thread_originator_guid: row.get(22).unwrap_or(None),
-            thread_originator_part: row.get(23).unwrap_or(None),
-            date_edited: row.get(24).unwrap_or(0),
-            associated_message_emoji: row.get(25).unwrap_or(None),
-            chat_id: row.get(26).unwrap_or(None),
-            num_attachments: row.get(27)?,
-            deleted_from: row.get(28).unwrap_or(None),
-            num_replies: row.get(29)?,
-            components: vec![],
-            edited_parts: None,
-        })
-    }
-
-    /// Build a [`Message`] from a row using named columns.
-    fn from_row_named(row: &Row) -> Result<Message> {
-        Ok(Message {
-            rowid: row.get("rowid")?,
-            guid: row.get("guid")?,
-            text: row.get("text").unwrap_or(None),
-            service: row.get("service").unwrap_or(None),
-            handle_id: row.get("handle_id").unwrap_or(None),
-            destination_caller_id: row.get("destination_caller_id").unwrap_or(None),
-            subject: row.get("subject").unwrap_or(None),
-            date: row.get("date")?,
-            date_read: row.get("date_read").unwrap_or(0),
-            date_delivered: row.get("date_delivered").unwrap_or(0),
-            is_from_me: row.get("is_from_me")?,
-            is_read: row.get("is_read").unwrap_or(false),
-            item_type: row.get("item_type").unwrap_or_default(),
-            other_handle: row.get("other_handle").unwrap_or(None),
-            share_status: row.get("share_status").unwrap_or(false),
-            share_direction: row.get("share_direction").unwrap_or(None),
-            group_title: row.get("group_title").unwrap_or(None),
-            group_action_type: row.get("group_action_type").unwrap_or(0),
-            associated_message_guid: row.get("associated_message_guid").unwrap_or(None),
-            associated_message_type: row.get("associated_message_type").unwrap_or(None),
-            balloon_bundle_id: row.get("balloon_bundle_id").unwrap_or(None),
-            expressive_send_style_id: row.get("expressive_send_style_id").unwrap_or(None),
-            thread_originator_guid: row.get("thread_originator_guid").unwrap_or(None),
-            thread_originator_part: row.get("thread_originator_part").unwrap_or(None),
-            date_edited: row.get("date_edited").unwrap_or(0),
-            associated_message_emoji: row.get("associated_message_emoji").unwrap_or(None),
-            chat_id: row.get("chat_id").unwrap_or(None),
-            num_attachments: row.get("num_attachments")?,
-            deleted_from: row.get("deleted_from").unwrap_or(None),
-            num_replies: row.get("num_replies")?,
-            components: vec![],
-            edited_parts: None,
-        })
-    }
-
     // MARK: Text Gen
     /// Parse the body of a message, deserializing it as [`typedstream`](crate::util::typedstream)
     /// (and falling back to [`streamtyped`]) data if necessary.
@@ -525,10 +493,15 @@ impl Message {
     /// # Example
     ///
     /// ```no_run
-    /// # use imessage_database::tables::{messages::Message, table::get_connection};
+    /// # use imessage_database::tables::{
+    /// #     capabilities::Capabilities,
+    /// #     messages::Message,
+    /// #     table::get_connection,
+    /// # };
     /// # use imessage_database::util::dirs::default_db_path;
     /// # let conn = get_connection(&default_db_path()).unwrap();
-    /// # let mut message = Message::from_guid("example", &conn).unwrap();
+    /// # let capabilities = Capabilities::determine(&conn).unwrap();
+    /// # let mut message = Message::from_guid("example", &conn, &capabilities).unwrap();
     /// if let Ok(body) = message.parse_body(&conn) {
     ///     message.apply_body(body);
     /// }
@@ -998,37 +971,35 @@ impl Message {
     /// # Example
     ///
     /// ```no_run
+    /// use imessage_database::tables::{
+    ///     capabilities::Capabilities,
+    ///     messages::Message,
+    ///     table::get_connection,
+    /// };
     /// use imessage_database::util::dirs::default_db_path;
-    /// use imessage_database::tables::table::get_connection;
-    /// use imessage_database::tables::messages::Message;
     /// use imessage_database::util::query_context::QueryContext;
     ///
     /// let db_path = default_db_path();
     /// let conn = get_connection(&db_path).unwrap();
+    /// let capabilities = Capabilities::determine(&conn).unwrap();
     /// let context = QueryContext::default();
-    /// Message::get_count(&conn, &context);
+    /// Message::get_count(&conn, &capabilities, &context);
     /// ```
-    pub fn get_count(db: &Connection, context: &QueryContext) -> Result<i64, TableError> {
+    pub fn get_count(
+        db: &Connection,
+        capabilities: &Capabilities,
+        context: &QueryContext,
+    ) -> Result<i64, TableError> {
+        // The unfiltered count skips the chat join: `chat_message_join` can
+        // associate one message with several chats, and every extra
+        // association would inflate `COUNT(*)`.
         let mut statement = if context.has_filters() {
+            let filters =
+                Self::generate_filter_statement(context, capabilities.recoverable_messages);
             db.prepare_cached(&format!(
-                "SELECT
-                     COUNT(*)
-                 FROM {MESSAGE} as m
-                 LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
-                 LEFT JOIN {RECENTLY_DELETED} as d ON m.ROWID = d.message_id
-                 {}",
-                Self::generate_filter_statement(context, true)
-            ))
-            .or_else(|_| {
-                db.prepare_cached(&format!(
-                    "SELECT
-                         COUNT(*)
-                     FROM {MESSAGE} as m
-                     LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
-                    {}",
-                    Self::generate_filter_statement(context, false)
-                ))
-            })?
+                "SELECT COUNT(*){}\n{filters}",
+                from_clause(capabilities)
+            ))?
         } else {
             db.prepare_cached(&format!("SELECT COUNT(*) FROM {MESSAGE}"))?
         };
@@ -1043,16 +1014,20 @@ impl Message {
     /// # Example
     ///
     /// ```no_run
+    /// use imessage_database::tables::{
+    ///     capabilities::Capabilities,
+    ///     messages::Message,
+    ///     table::{get_connection, Table},
+    /// };
     /// use imessage_database::util::dirs::default_db_path;
-    /// use imessage_database::tables::table::get_connection;
-    /// use imessage_database::tables::{messages::Message, table::Table};
     /// use imessage_database::util::query_context::QueryContext;
     ///
     /// let db_path = default_db_path();
     /// let conn = get_connection(&db_path).unwrap();
+    /// let capabilities = Capabilities::determine(&conn).unwrap();
     /// let context = QueryContext::default();
     ///
-    /// let mut statement = Message::stream_rows(&conn, &context).unwrap();
+    /// let mut statement = Message::stream_rows(&conn, &capabilities, &context).unwrap();
     ///
     /// for message in Message::rows(&mut statement, []).unwrap() {
     ///     println!("{:#?}", message);
@@ -1060,25 +1035,13 @@ impl Message {
     /// ```
     pub fn stream_rows<'a>(
         db: &'a Connection,
+        capabilities: &Capabilities,
         context: &'a QueryContext,
     ) -> Result<CachedStatement<'a>, TableError> {
-        if !context.has_filters() {
-            return Self::get(db);
-        }
-        Ok(db
-            .prepare_cached(&ios_16_newer_query(Some(&Self::generate_filter_statement(
-                context, true,
-            ))))
-            .or_else(|_| {
-                db.prepare_cached(&ios_14_15_query(Some(&Self::generate_filter_statement(
-                    context, false,
-                ))))
-            })
-            .or_else(|_| {
-                db.prepare_cached(&ios_13_older_query(Some(&Self::generate_filter_statement(
-                    context, false,
-                ))))
-            })?)
+        let filters = context
+            .has_filters()
+            .then(|| Self::generate_filter_statement(context, capabilities.recoverable_messages));
+        prepare_message_query(db, capabilities, filters.as_deref())
     }
 
     /// Parse the target body component index and GUID from `associated_message_guid`.
@@ -1111,18 +1074,20 @@ impl Message {
     }
 
     /// Group replies by target body component index.
-    pub fn get_replies(&self, db: &Connection) -> Result<HashMap<usize, Vec<Self>>, TableError> {
+    pub fn get_replies(
+        &self,
+        db: &Connection,
+        capabilities: &Capabilities,
+    ) -> Result<HashMap<usize, Vec<Self>>, TableError> {
         let mut out_h: HashMap<usize, Vec<Self>> = HashMap::new();
 
-        // No need to hit the DB if we know we don't have replies
+        // No need to hit the DB if we know we don't have replies. A nonzero
+        // `num_replies` also proves the schema has `thread_originator_guid`,
+        // so the filter below always prepares.
         if self.has_replies() {
             // Use a parameterized filter so the prepared statement can be cached/reused
             let filters = "WHERE m.thread_originator_guid = ?1";
-
-            // `thread_originator_guid` is absent from the iOS 13-era schema.
-            let mut statement = db
-                .prepare_cached(&ios_16_newer_query(Some(filters)))
-                .or_else(|_| db.prepare_cached(&ios_14_15_query(Some(filters))))?;
+            let mut statement = prepare_message_query(db, capabilities, Some(filters))?;
 
             for message in Message::rows(&mut statement, [self.guid.as_str()])? {
                 let m = message?;
@@ -1141,18 +1106,20 @@ impl Message {
 
     // MARK: Polls
     /// Load messages that vote on or update the parent poll.
-    pub fn get_votes(&self, db: &Connection) -> Result<Vec<Self>, TableError> {
+    pub fn get_votes(
+        &self,
+        db: &Connection,
+        capabilities: &Capabilities,
+    ) -> Result<Vec<Self>, TableError> {
         let mut out_v: Vec<Self> = Vec::new();
 
-        // No need to hit the DB if we know we don't have a poll
+        // No need to hit the DB if we know we don't have a poll. Polls carry
+        // app payload data, which postdates `associated_message_guid`, so the
+        // filter below always prepares.
         if self.is_poll() {
             // Use a parameterized filter so the prepared statement can be cached/reused
             let filters = "WHERE m.associated_message_guid = ?1";
-
-            // `associated_message_guid` is absent from the iOS 13-era schema.
-            let mut statement = db
-                .prepare_cached(&ios_16_newer_query(Some(filters)))
-                .or_else(|_| db.prepare_cached(&ios_14_15_query(Some(filters))))?;
+            let mut statement = prepare_message_query(db, capabilities, Some(filters))?;
 
             for message in Message::rows(&mut statement, [self.guid.as_str()])? {
                 out_v.push(message?);
@@ -1163,14 +1130,18 @@ impl Message {
     }
 
     /// Parse this message as a poll, including vote counts and option updates.
-    pub fn as_poll(&self, db: &Connection) -> Result<Option<Poll>, MessageError> {
+    pub fn as_poll(
+        &self,
+        db: &Connection,
+        capabilities: &Capabilities,
+    ) -> Result<Option<Poll>, MessageError> {
         if self.is_poll()
             && let Some(payload) = self.payload_data(db)
         {
             let mut poll = Poll::from_payload(&payload)?;
 
             // Get all votes associated with this poll
-            let votes = self.get_votes(db).unwrap_or_default();
+            let votes = self.get_votes(db, capabilities).unwrap_or_default();
 
             // Later poll-option updates are stored as messages referencing the original poll.
             for vote in votes.iter().rev() {
@@ -1320,6 +1291,15 @@ impl Message {
         Service::from_name(self.service.as_deref())
     }
 
+    /// Parse the message's raw filter category.
+    ///
+    /// A raw `0` maps to [`FilterAction::Unfiltered`]; an absent or `NULL` value
+    /// maps to `None`.
+    #[must_use]
+    pub fn filter_action(&self) -> Option<FilterAction> {
+        FilterAction::from_code(self.filter_action)
+    }
+
     // MARK: BLOBs
     /// Parse the [`MESSAGE_PAYLOAD`] `BLOB` column as a property list.
     ///
@@ -1425,6 +1405,7 @@ impl Message {
     /// ```no_run
     /// use imessage_database::{
     ///     tables::{
+    ///         capabilities::Capabilities,
     ///         messages::Message,
     ///         table::get_connection,
     ///     },
@@ -1433,19 +1414,21 @@ impl Message {
     ///
     /// let db_path = default_db_path();
     /// let conn = get_connection(&db_path).unwrap();
+    /// let capabilities = Capabilities::determine(&conn).unwrap();
     ///
-    /// if let Ok(mut message) = Message::from_guid("example-guid", &conn) {
+    /// if let Ok(mut message) = Message::from_guid("example-guid", &conn, &capabilities) {
     ///     if let Ok(body) = message.parse_body(&conn) {
     ///         message.apply_body(body);
     ///     }
     ///     println!("{:#?}", message)
     /// }
     /// ```
-    pub fn from_guid(guid: &str, db: &Connection) -> Result<Self, TableError> {
-        let mut statement = db
-            .prepare_cached(&ios_16_newer_query(Some("WHERE m.guid = ?1")))
-            .or_else(|_| db.prepare_cached(&ios_14_15_query(Some("WHERE m.guid = ?1"))))
-            .or_else(|_| db.prepare_cached(&ios_13_older_query(Some("WHERE m.guid = ?1"))))?;
+    pub fn from_guid(
+        guid: &str,
+        db: &Connection,
+        capabilities: &Capabilities,
+    ) -> Result<Self, TableError> {
+        let mut statement = prepare_message_query(db, capabilities, Some("WHERE m.guid = ?1"))?;
 
         Message::row(&mut statement, [guid])
     }
@@ -1490,6 +1473,8 @@ impl Message {
             num_attachments: 0,
             deleted_from: None,
             num_replies: 0,
+            filter_action: None,
+            filter_sub_action: None,
             components: vec![],
             edited_parts: None,
         }

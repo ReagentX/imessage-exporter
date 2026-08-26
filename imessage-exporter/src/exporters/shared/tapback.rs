@@ -49,7 +49,11 @@ pub(crate) fn resolve_tapback<'a, S>(
     let who = config.who(msg.handle_id, msg.is_from_me(), &msg.destination_caller_id);
     let kind = match tapback {
         Tapback::Sticker => {
-            let mut paths = Attachment::from_message(config.data_source.db(), msg)?;
+            let mut paths = Attachment::from_message(
+                config.data_source.db(),
+                msg,
+                &config.data_source.capabilities,
+            )?;
             match paths.get_mut(0) {
                 Some(sticker) => TapbackKind::Sticker {
                     payload: sticker_renderer(sticker),

@@ -51,15 +51,20 @@ pub trait Table: Sized {
     /// Prepare the table's default `SELECT *` statement.
     fn get(db: &'_ Connection) -> Result<CachedStatement<'_>, TableError>;
 
-    /// Iterate over rows produced by `stmt`, deserializing each via
-    /// [`from_row`](Self::from_row). Errors at row-fetch or row-deserialize
-    /// time are surfaced uniformly as [`TableError`]. Accepts both
-    /// [`rusqlite::Statement`] and [`rusqlite::CachedStatement`] (the
-    /// latter via deref coercion).
+    /// Iterate over rows produced by `stmt`. The default implementation
+    /// deserializes each through [`from_row`](Self::from_row). Row-fetch and
+    /// row-deserialization failures are surfaced uniformly as [`TableError`].
+    /// Accepts both [`rusqlite::Statement`] and [`rusqlite::CachedStatement`]
+    /// (the latter via deref coercion).
     ///
     /// Use this when the caller owns a custom prepared statement (with
     /// filters, joins, or bound parameters). For a full-table scan against
     /// the default `SELECT *` with a callback API, see [`Table::stream`].
+    ///
+    /// Implementations may override this method to resolve column layout once
+    /// and reuse it for every row. Resolve through the first [`Row`] when the
+    /// schema may change concurrently: `sqlite3_step` may recompile the
+    /// statement after preparation.
     fn rows<'stmt, P: Params>(
         stmt: &'stmt mut Statement<'_>,
         params: P,
@@ -75,6 +80,9 @@ pub trait Table: Sized {
     /// [`TableError::QueryError`] if the row is missing or fails to
     /// deserialize. Accepts both [`rusqlite::Statement`] and
     /// [`rusqlite::CachedStatement`] (the latter via deref coercion).
+    ///
+    /// Implementations may override this method to resolve the stepped row's
+    /// column layout instead of decoding by name.
     fn row<P: Params>(stmt: &mut Statement<'_>, params: P) -> Result<Self, TableError> {
         flatten_row(stmt.query_row(params, |row| Ok(Self::from_row(row))))
     }
@@ -152,7 +160,7 @@ pub trait Table: Sized {
 /// `query_row` callbacks into a single [`TableError`]. The outer layer
 /// represents row-fetch failures, the inner layer represents row-deserialize
 /// failures from [`Table::from_row`].
-fn flatten_row<T>(item: Result<Result<T, Error>, Error>) -> Result<T, TableError> {
+pub(crate) fn flatten_row<T>(item: Result<Result<T, Error>, Error>) -> Result<T, TableError> {
     match item {
         Ok(Ok(row)) => Ok(row),
         Err(why) | Ok(Err(why)) => Err(TableError::QueryError(why)),
