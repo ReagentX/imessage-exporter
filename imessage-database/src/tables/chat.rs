@@ -118,10 +118,10 @@ pub struct Chat {
     pub is_filtered: Option<i32>,
     /// Raw `chat.is_blackholed` flag: `1` denotes a chat whose incoming
     /// messages are silently dropped.
-    pub is_blackholed: Option<i32>,
+    pub is_blackholed: Option<bool>,
     /// Raw `chat.is_pending_review` flag: `1` denotes a filtered chat awaiting
     /// review.
-    pub is_pending_review: Option<i32>,
+    pub is_pending_review: Option<bool>,
 }
 
 // MARK: Table
@@ -330,15 +330,15 @@ mod test_from_row {
         let chats = all_chats(&db);
         assert_eq!(chats[0].is_filtered, Some(0));
         assert_eq!(chats[0].filter_status(), Some(ChatFilterStatus::Unfiltered));
-        assert_eq!(chats[0].is_blackholed, Some(0));
-        assert_eq!(chats[0].is_pending_review, Some(0));
+        assert_eq!(chats[0].is_blackholed, Some(false));
+        assert_eq!(chats[0].is_pending_review, Some(false));
         assert_eq!(chats[1].is_filtered, Some(1));
         assert_eq!(
             chats[1].filter_status(),
             Some(ChatFilterStatus::UnknownSenders)
         );
-        assert_eq!(chats[1].is_blackholed, Some(1));
-        assert_eq!(chats[1].is_pending_review, Some(1));
+        assert_eq!(chats[1].is_blackholed, Some(true));
+        assert_eq!(chats[1].is_pending_review, Some(true));
         assert_eq!(chats[2].is_filtered, None);
         assert_eq!(chats[2].filter_status(), None);
         assert_eq!(chats[2].is_blackholed, None);
