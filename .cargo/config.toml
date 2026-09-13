@@ -1,0 +1,15 @@
+# Pin the timezone for processes cargo launches, so a local `cargo test` matches CI.
+#
+# Many tests in `imessage-exporter` assert exact rendered timestamps, and rendering
+# goes through `chrono::Local` — the host timezone. On a machine outside
+# America/Los_Angeles the suite reports ~104 failures that are purely clock offset
+# rather than real regressions, which is a confusing first experience for a new
+# contributor and easy to mistake for a broken checkout.
+#
+# CI already sets this same variable (.github/workflows/test.yml), so this only makes
+# a local run agree with it.
+#
+# A fixed UTC offset would not work: the fixtures span May, October and December, so
+# they cross a DST boundary and need a real IANA zone.
+[env]
+TZ = "America/Los_Angeles"
