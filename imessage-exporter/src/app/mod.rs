@@ -4,6 +4,7 @@ pub mod data_source;
 pub mod error;
 pub mod escaping;
 pub mod export_type;
+pub mod file_times;
 pub mod options;
 pub mod progress;
 pub mod runtime;

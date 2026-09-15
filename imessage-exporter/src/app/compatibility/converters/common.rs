@@ -3,15 +3,17 @@
 */
 use std::{
     ffi::OsStr,
-    fs::{File, FileTimes, copy, create_dir_all, metadata, read_dir},
+    fs::{copy, create_dir_all, metadata, read_dir},
     path::Path,
     process::{Command, Stdio},
-    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use imessage_database::tables::messages::Message;
 
-use crate::app::runtime::Config;
+use crate::app::{
+    file_times::{set_file_times, unix_to_system_time},
+    runtime::Config,
+};
 
 /// Run a command, ignoring output. Returns [`None`] if the process cannot be
 /// spawned, cannot be waited on, or exits with a non-zero status.
@@ -105,7 +107,12 @@ pub(crate) fn copy_raw(from: &Path, to: &Path) {
     }
 }
 
-/// Update copied-file timestamps from the message date and source metadata.
+/// Update an attachment output's access and modification times.
+///
+/// Access time comes from `from`. Modification time comes from the message
+/// date, with `from`'s modification time as a fallback. With
+/// `use_message_times` set, creation time matches modification time. Directory
+/// targets and metadata errors leave `to` unchanged.
 pub(crate) fn update_file_metadata(from: &Path, to: &Path, message: &Message, config: &Config) {
     if to.is_dir() {
         return;
@@ -123,37 +130,99 @@ pub(crate) fn update_file_metadata(from: &Path, to: &Path, message: &Message, co
         // The new last access time comes from the metadata of the original file
         let atime = metadata.accessed().ok();
 
+        // Apply both values or leave the destination unchanged.
         if let (Some(atime), Some(mtime)) = (atime, mtime) {
-            // On Unix, `set_times` uses `futimens`, which does not require the file
-            // descriptor to have write access. On Windows, `SetFileTime` requires
-            // `FILE_WRITE_ATTRIBUTES`, so the file must be opened with write access.
-            #[cfg(unix)]
-            let file_result = File::open(to);
-            #[cfg(not(unix))]
-            let file_result = File::options().write(true).open(to);
-            match file_result {
-                Ok(file) => {
-                    let file_times = FileTimes::new().set_accessed(atime).set_modified(mtime);
-                    if let Err(why) = file.set_times(file_times) {
-                        eprintln!("Unable to update {} metadata: {why}", to.display());
-                    }
-                }
-                Err(why) => {
-                    eprintln!("Unable to open {} to update metadata: {why}", to.display());
-                }
-            }
+            // Modification and access time always apply; the option also sets
+            // creation time.
+            let ctime = config.options.use_message_times.then_some(mtime);
+            set_file_times(to, ctime, Some(mtime), Some(atime));
         }
     }
 }
 
-fn unix_to_system_time(secs: i64, nanos: u32) -> Option<SystemTime> {
-    if secs >= 0 {
-        UNIX_EPOCH
-            .checked_add(Duration::from_secs(secs as u64))?
-            .checked_add(Duration::from_nanos(u64::from(nanos)))
-    } else {
-        UNIX_EPOCH
-            .checked_sub(Duration::from_secs(secs.unsigned_abs()))?
-            .checked_add(Duration::from_nanos(u64::from(nanos)))
+// MARK: Tests
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs::{File, metadata},
+        time::{Duration, SystemTime, UNIX_EPOCH},
+    };
+
+    use imessage_database::tables::messages::Message;
+
+    use crate::app::{
+        export_type::ExportType,
+        file_times::{set_file_times, unix_to_system_time},
+        options::Options,
+        runtime::Config,
+        test_dir::unique_test_dir,
+    };
+
+    use super::update_file_metadata;
+
+    /// Whole Unix seconds so assertions cannot trip over a filesystem that
+    /// truncates sub-second precision.
+    const MESSAGE_UNIX_SECS: i64 = 1_500_000_000;
+
+    fn expected_message_time(config: &Config, message: &Message) -> SystemTime {
+        let date = message.date(config.offset).unwrap();
+        unix_to_system_time(date.timestamp(), date.timestamp_subsec_nanos()).unwrap()
+    }
+
+    #[test]
+    fn can_stamp_attachment_with_message_times() {
+        let mut options = Options::fake_options(ExportType::Txt);
+        options.use_message_times = true;
+        let config = Config::fake_app(options);
+
+        let dir = unique_test_dir("attachment-times-on");
+        let from = dir.join("src.bin");
+        let to = dir.join("dest.bin");
+        File::create(&from).unwrap();
+        File::create(&to).unwrap();
+
+        let mut message = Config::fake_message();
+        message.date = MESSAGE_UNIX_SECS - config.offset;
+
+        update_file_metadata(&from, &to, &message, &config);
+
+        let expected = expected_message_time(&config, &message);
+        let metadata = metadata(&to).unwrap();
+        assert_eq!(metadata.modified().unwrap(), expected);
+
+        // Birth time is settable only on macOS and Windows.
+        #[cfg(any(target_vendor = "apple", windows))]
+        assert_eq!(metadata.created().unwrap(), expected);
+    }
+
+    #[test]
+    fn cannot_stamp_attachment_created_without_message_times() {
+        let options = Options::fake_options(ExportType::Txt);
+        assert!(!options.use_message_times);
+        let config = Config::fake_app(options);
+
+        let dir = unique_test_dir("attachment-times-off");
+        let from = dir.join("src.bin");
+        let to = dir.join("dest.bin");
+        File::create(&from).unwrap();
+        File::create(&to).unwrap();
+
+        // A known birthtime distinct from the message date, so a regression
+        // that always writes `ctime = Some(mtime)` cannot stay green.
+        let prior_created = UNIX_EPOCH + Duration::from_secs(1_300_000_000);
+        set_file_times(&to, Some(prior_created), None, None);
+
+        let mut message = Config::fake_message();
+        message.date = MESSAGE_UNIX_SECS - config.offset;
+
+        update_file_metadata(&from, &to, &message, &config);
+
+        let expected = expected_message_time(&config, &message);
+        let metadata = metadata(&to).unwrap();
+        assert_eq!(metadata.modified().unwrap(), expected);
+
+        // Birth time is settable only on macOS and Windows.
+        #[cfg(any(target_vendor = "apple", windows))]
+        assert_eq!(metadata.created().unwrap(), prior_created);
     }
 }

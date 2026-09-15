@@ -5,4 +5,6 @@
 pub mod error;
 pub mod message_types;
 pub mod tables;
+#[cfg(test)]
+mod test_support;
 pub mod util;

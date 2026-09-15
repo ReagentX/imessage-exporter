@@ -125,12 +125,17 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         Handles from the messages table will be mapped to names in the provided database
         Generally, one of `AddressBook-v22.abcddb` or `AddressBook.sqlitedb`
         
-    --no-progress
+--no-progress
         Disable the on-screen progress bar regardless of context
         By default, the progress bar is shown only when stderr is a terminal,
         so headless invocations (CI, output redirected to a logfile) stay clean automatically.
         Use this flag to suppress the bar even in an interactive terminal.
         
+--use-message-times
+        Stamp transcripts with the earliest and latest message dates in this export
+        Also set each new attachment file's creation time to its message date
+        Creation time is set only on macOS and Windows
+
 -h, --help
         Print help
 -V, --version
@@ -220,6 +225,15 @@ imessage-exporter -f html -t "@"
 ### Contacts
 
 `imessage-exporter` will automatically attempt to resolve handle details (email addresses and phone numbers) against contacts found either in the provided iOS backup or on the local macOS Address Book. Users can optionally pass in a path to an Address Book database, but this should generally not be necessary.
+
+### Message-derived file timestamps
+
+`--use-message-times` sets each transcript file's creation time to the earliest message rendered into it during the current export and its modification time to the latest. Newly written attachment files receive the associated message's modification time regardless of this option; enabling it also sets their creation time to that date. The option is disabled by default because these timestamps describe message content rather than the export operation.
+
+- Transcript files that receive no messages during the current export retain their existing timestamps. Directories also remain unchanged.
+- The exporter can set creation time only on macOS and Windows. On other platforms, this option changes transcript modification times but no attachment timestamps.
+- Re-exporting content can leave the same modification time when the latest rendered message has not changed. Any process that uses only modification time to detect rewritten files can therefore miss the new contents.
+- A stamped transcript file's timestamps no longer record when the current export wrote it.
 
 ### HTML Exports
 

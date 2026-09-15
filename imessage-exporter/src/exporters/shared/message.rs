@@ -4,7 +4,7 @@ use rusqlite::Connection;
 
 use imessage_database::{
     message_types::expressives::Expressive,
-    tables::{attachment::Attachment, messages::Message},
+    tables::{attachment::Attachment, capabilities::Capabilities, messages::Message},
 };
 
 use crate::app::error::RuntimeError;
@@ -23,10 +23,14 @@ pub(crate) struct MessageContext<'a> {
 }
 
 impl<'a> MessageContext<'a> {
-    pub fn resolve(message: &'a Message, db: &Connection) -> Result<Self, RuntimeError> {
+    pub fn resolve(
+        message: &'a Message,
+        db: &Connection,
+        capabilities: &Capabilities,
+    ) -> Result<Self, RuntimeError> {
         Ok(Self {
-            attachments: Attachment::from_message(db, message)?,
-            replies_map: message.get_replies(db)?,
+            attachments: Attachment::from_message(db, message, capabilities)?,
+            replies_map: message.get_replies(db, capabilities)?,
             expressive: match message.get_expressive() {
                 Expressive::None | Expressive::Unknown("") => None,
                 other => Some(other),

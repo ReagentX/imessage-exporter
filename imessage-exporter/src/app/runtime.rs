@@ -448,10 +448,8 @@ impl Config {
                 message_diag.messages_in_multiple_chats
             );
         }
-        if let Some(recoverable_messages) = message_diag.recoverable_messages
-            && recoverable_messages > 0
-        {
-            println!("    Recoverable deleted messages: {}", recoverable_messages);
+        if let Some(recoverable_messages) = message_diag.recoverable_messages {
+            println!("    Recoverable messages: {}", recoverable_messages);
         }
         if let (Some(first), Some(last)) = (
             message_diag.first_message_date,
@@ -538,6 +536,41 @@ impl Config {
             "    Handles with resolved names: {}/{} ({resolved_percent}%)",
             total_resolved,
             self.participants.len(),
+        );
+
+        println!("    Schema capabilities:");
+        let capabilities = &self.data_source.capabilities;
+        println!(
+            "        Recoverable deleted messages: {}",
+            if capabilities.recoverable_messages {
+                "Detected"
+            } else {
+                "Not found"
+            }
+        );
+        println!(
+            "        Reply threads: {}",
+            if capabilities.replies {
+                "Detected"
+            } else {
+                "Not found"
+            }
+        );
+        println!(
+            "        Tapbacks and poll votes: {}",
+            if capabilities.associated_message_guids {
+                "Detected"
+            } else {
+                "Not found"
+            }
+        );
+        println!(
+            "        Message filter categories: {}",
+            if capabilities.filter_actions {
+                "Detected"
+            } else {
+                "Not found"
+            }
         );
 
         println!("\nEnvironment Diagnostics\n");
@@ -675,6 +708,8 @@ impl Config {
             num_attachments: 0,
             deleted_from: None,
             num_replies: 0,
+            filter_action: None,
+            filter_sub_action: None,
             components: vec![],
             edited_parts: None,
         }
@@ -715,6 +750,9 @@ mod filename_tests {
             chat_identifier: "Default".to_string(),
             service_name: Some(String::new()),
             display_name: None,
+            is_filtered: None,
+            is_blackholed: None,
+            is_pending_review: None,
         }
     }
 

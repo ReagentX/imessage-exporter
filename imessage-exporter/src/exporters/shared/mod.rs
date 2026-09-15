@@ -1,6 +1,7 @@
 pub(crate) mod announcement;
 pub(crate) mod attachment;
 pub(crate) mod balloon;
+pub(crate) mod date_span;
 pub(crate) mod driver;
 pub(crate) mod edited;
 pub(crate) mod message;

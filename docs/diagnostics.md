@@ -13,7 +13,7 @@ Message diagnostic data:
     Total messages: 183453
     Messages not associated with a chat: 43210
     Messages belonging to more than one chat: 36
-    Recoverable deleted messages: 1
+    Recoverable messages: 1
     Date range: Sep 20, 2019  1:53:14 PM to Mar 09, 2026  5:03:14 PM
                 6 years, 170 days, 4 hours, 58 minutes, 24 seconds
 Attachment diagnostic data:
@@ -30,6 +30,11 @@ Thread diagnostic data:
 Global diagnostic data:
     Total database size: 339.88 MB
     Handles with resolved names: 231/452 (51%)
+    Schema capabilities:
+        Recoverable deleted messages: Detected
+        Reply threads: Detected
+        Tapbacks and poll votes: Detected
+        Message filter categories: Detected
 
 Environment Diagnostics
 
@@ -67,7 +72,7 @@ If a message exists in the `messages` table but does not have an entry in the `c
 
 If a message exists in the `messages` table and maps to multiple chats in `chat_message_join`, the message will exist in all of those chats when exported.
 
-## Recoverable deleted messages
+## Recoverable messages
 
 The number of messages that were marked as deleted from conversations but are recoverable and will be rendered in-line in exports.
 
@@ -126,6 +131,26 @@ The total size of the database file on the disk.
 ### Handles with resolved names
 
 The number of handles in the database that were successfully matched to contact names from the contacts index, out of the total number of handles found. This is followed by the match ratio as a percentage.
+
+### Schema capabilities
+
+`imessage-database` probes the database schema once and builds its queries from what the schema actually supports, so databases missing optional features still read correctly. This section shows which optional features the reader detected.
+
+#### Recoverable deleted messages
+
+Whether the `chat_recoverable_message_join` table exists. When present, messages deleted within the last 30 days can be read and filtered.
+
+#### Reply threads
+
+Whether the `message.thread_originator_guid` column exists. When present, replies can be grouped under the messages they respond to.
+
+#### Tapbacks and poll votes
+
+Whether the `message.associated_message_guid` column exists. When present, tapbacks and poll votes can be resolved to the messages they target.
+
+#### Message filter categories
+
+Whether the `message.filter_action` and `message.filter_sub_action` columns exist. When present, the filter category each message was received under is read alongside the row.
 
 ## Detected converters
 

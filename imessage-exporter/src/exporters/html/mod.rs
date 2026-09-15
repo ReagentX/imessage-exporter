@@ -480,7 +480,11 @@ impl<'a> MessageFormatter<'a> for HTML<'a> {
         out: &mut String,
     ) -> Result<(), RuntimeError> {
         let is_reply = matches!(context, RenderContext::Reply);
-        let mut ctx = MessageContext::resolve(message, self.config.data_source.db())?;
+        let mut ctx = MessageContext::resolve(
+            message,
+            self.config.data_source.db(),
+            &self.config.data_source.capabilities,
+        )?;
         let parts = self.build_message_parts(message, &mut ctx)?;
 
         let (date, read_after) = self.get_time(message);

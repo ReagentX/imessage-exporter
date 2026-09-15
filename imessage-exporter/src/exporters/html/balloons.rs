@@ -52,10 +52,14 @@ fn digital_touch_attachment(
     state: &ExportState,
     msg: &Message,
 ) -> Option<Attachment> {
-    let mut attachment = Attachment::from_message(config.data_source.db(), msg)
-        .ok()?
-        .into_iter()
-        .next()?;
+    let mut attachment = Attachment::from_message(
+        config.data_source.db(),
+        msg,
+        &config.data_source.capabilities,
+    )
+    .ok()?
+    .into_iter()
+    .next()?;
 
     // Prepare this as a normal attachment. Depending on the attachment-manager
     // mode this may copy, convert, reuse an existing export copy, or leave the

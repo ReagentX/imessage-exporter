@@ -4,7 +4,10 @@ use std::{
 };
 
 use crabapple::Backup;
-use imessage_database::{tables::table::get_connection, util::platform::Platform};
+use imessage_database::{
+    tables::{capabilities::Capabilities, table::get_connection},
+    util::platform::Platform,
+};
 use rusqlite::Connection;
 
 use crate::app::{
@@ -43,6 +46,8 @@ pub struct DataSource {
     /// This is wrapped in `Option` to allow for taking/dropping it when cleaning up temporary files,
     /// but should always be `Some` during normal operation.
     messages_connection: Option<Connection>,
+    /// Schema capabilities probed from the Messages database at construction.
+    pub capabilities: Capabilities,
     /// Contacts index keyed by email and phone number.
     ///
     /// If construction fails, this will be an empty index, and a warning will be logged.
@@ -61,20 +66,16 @@ impl DataSource {
     /// Options constructor determines the platform and database location logic already,
     /// so this just uses that to create the appropriate connections and indexes.
     pub fn from(options: &Options) -> Result<Self, RuntimeError> {
-        match options.platform {
-            Platform::macOS => {
-                let messages_path = options.get_db_path();
-
-                let contacts_index =
-                    Self::get_contacts_index(options.contacts_path.as_deref()).unwrap_or_default();
-
-                Ok(Self {
-                    messages_connection: Some(get_connection(&messages_path)?),
-                    contacts_index,
-                    backup: None,
-                    temp_messages_db: None,
-                })
-            }
+        // Resolve the per-platform inputs first; the connection is opened and
+        // probed once below, so the messages path for an encrypted backup must
+        // point at the decrypted temporary file.
+        let (messages_path, contacts_index, backup, temp_messages_db) = match options.platform {
+            Platform::macOS => (
+                options.get_db_path(),
+                Self::get_contacts_index(options.contacts_path.as_deref()).unwrap_or_default(),
+                None,
+                None,
+            ),
             Platform::iOS => match decrypt_backup(options)? {
                 Some(backup) => {
                     let messages_db = TempDatabase(get_decrypted_message_database(&backup)?);
@@ -97,29 +98,33 @@ impl DataSource {
                         );
                     }
 
-                    let messages_connection = get_connection(messages_db.path())?;
-                    Ok(Self {
-                        messages_connection: Some(messages_connection),
+                    (
+                        messages_db.path().to_path_buf(),
                         contacts_index,
-                        backup: Some(backup),
-                        temp_messages_db: Some(messages_db),
-                    })
+                        Some(backup),
+                        Some(messages_db),
+                    )
                 }
-                None => {
-                    let messages_path = options.get_db_path();
-                    let contacts_index =
-                        Self::get_contacts_index(Some(&options.db_path.join(DEFAULT_PATH_IOS)))
-                            .unwrap_or_default();
-
-                    Ok(Self {
-                        messages_connection: Some(get_connection(&messages_path)?),
-                        contacts_index,
-                        backup: None,
-                        temp_messages_db: None,
-                    })
-                }
+                None => (
+                    options.get_db_path(),
+                    Self::get_contacts_index(Some(&options.db_path.join(DEFAULT_PATH_IOS)))
+                        .unwrap_or_default(),
+                    None,
+                    None,
+                ),
             },
-        }
+        };
+
+        let messages_connection = get_connection(&messages_path)?;
+        let capabilities = Capabilities::determine(&messages_connection)?;
+
+        Ok(Self {
+            messages_connection: Some(messages_connection),
+            capabilities,
+            contacts_index,
+            backup,
+            temp_messages_db,
+        })
     }
 
     /// Build a contacts index, logging a warning on failure.
