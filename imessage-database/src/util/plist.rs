@@ -28,6 +28,8 @@ use crate::error::plist::PlistParseError;
 
 /// Maximum depth of UID-reference resolution before bailing out.
 const MAX_UID_DEPTH: usize = 256;
+/// The object-table value NSKeyedArchiver uses for an unset field.
+const NULL_PLACEHOLDER: &str = "$null";
 
 /// Deserialize an `NSKeyedArchiver` property list by resolving UID references.
 ///
@@ -74,19 +76,28 @@ pub fn parse_ns_keyed_archiver(plist: &Value) -> Result<Value, PlistParseError> 
     // Index of root object
     let root = extract_uid_key(extract_dictionary(body, "$top")?, "root")?;
 
-    follow_uid(objects, root, None, None, 0)
+    // `encode(nil, forKey: root)` emits `$top.root -> UID 0`: an archive with
+    // no object in it.
+    follow_uid(objects, root, None, None, 0)?.ok_or(PlistParseError::NoPayload)
 }
 
 /// Resolve one archived object and any UID references it contains.
+///
+/// `None` is a reference to the archiver's null placeholder. Nested nulls are
+/// omitted from their containing dictionary or array; a null root is
+/// [`PlistParseError::NoPayload`] in [`parse_ns_keyed_archiver`].
 fn follow_uid<'a>(
     objects: &'a [Value],
     root: usize,
     parent: Option<&'a Value>,
     item: Option<&'a Value>,
     depth: usize,
-) -> Result<Value, PlistParseError> {
+) -> Result<Option<Value>, PlistParseError> {
     if depth >= MAX_UID_DEPTH {
         return Err(PlistParseError::RecursionLimit);
+    }
+    if item.is_none() && is_null_placeholder(objects, root) {
+        return Ok(None);
     }
     let item = match item {
         Some(item) => item,
@@ -99,29 +110,25 @@ fn follow_uid<'a>(
         Value::Array(arr) => {
             let mut array = vec![];
             for item in arr {
-                if let Some(idx) = item.as_uid() {
-                    array.push(follow_uid(
-                        objects,
-                        uid_to_index(idx)?,
-                        parent,
-                        None,
-                        depth + 1,
-                    )?);
+                if let Some(idx) = item.as_uid()
+                    && let Some(value) =
+                        follow_uid(objects, uid_to_index(idx)?, parent, None, depth + 1)?
+                {
+                    array.push(value);
                 }
             }
-            Ok(plist::Value::Array(array))
+            Ok(Some(plist::Value::Array(array)))
         }
         Value::Dictionary(dict) => {
             let mut dictionary = Dictionary::new();
             // Handle where type is a Dictionary that points to another single value
             if let Some(relative) = dict.get("NS.relative") {
                 if let Some(idx) = relative.as_uid()
-                    && let Some(p) = &parent
+                    && let Some(p) = parent
+                    && let Some(value) =
+                        follow_uid(objects, uid_to_index(idx)?, Some(p), None, depth + 1)?
                 {
-                    dictionary.insert(
-                        value_to_key_string(p),
-                        follow_uid(objects, uid_to_index(idx)?, Some(p), None, depth + 1)?,
-                    );
+                    dictionary.insert(value_to_key_string(p), value);
                 }
             }
             // Handle the NSDictionary and NSMutableDictionary types
@@ -140,8 +147,14 @@ fn follow_uid<'a>(
                 for idx in 0..keys.len() {
                     let key_index = extract_uid_idx(keys, idx)?;
                     let value_index = extract_uid_idx(values, idx)?;
-                    let key = follow_uid(objects, key_index, None, None, depth + 1)?;
-                    let value = follow_uid(objects, value_index, Some(&key), None, depth + 1)?;
+                    let Some(key) = follow_uid(objects, key_index, None, None, depth + 1)? else {
+                        continue;
+                    };
+                    let Some(value) =
+                        follow_uid(objects, value_index, Some(&key), None, depth + 1)?
+                    else {
+                        continue;
+                    };
 
                     dictionary.insert(value_to_key_string(&key), value);
                 }
@@ -156,31 +169,40 @@ fn follow_uid<'a>(
                     // If the value is a pointer, follow it
                     if let Some(idx) = val.as_uid() {
                         let key_value = Value::String(key.clone());
-                        dictionary.insert(
-                            key.clone(),
-                            follow_uid(
-                                objects,
-                                uid_to_index(idx)?,
-                                Some(&key_value),
-                                None,
-                                depth + 1,
-                            )?,
-                        );
+                        if let Some(value) = follow_uid(
+                            objects,
+                            uid_to_index(idx)?,
+                            Some(&key_value),
+                            None,
+                            depth + 1,
+                        )? {
+                            dictionary.insert(key.clone(), value);
+                        }
                     }
                     // If the value is not a pointer, try and follow the data itself
-                    else if let Some(p) = parent {
-                        dictionary.insert(
-                            value_to_key_string(p),
-                            follow_uid(objects, root, Some(p), Some(val), depth + 1)?,
-                        );
+                    else if let Some(p) = parent
+                        && let Some(value) =
+                            follow_uid(objects, root, Some(p), Some(val), depth + 1)?
+                    {
+                        dictionary.insert(value_to_key_string(p), value);
                     }
                 }
             }
-            Ok(plist::Value::Dictionary(dictionary))
+            Ok(Some(plist::Value::Dictionary(dictionary)))
         }
         Value::Uid(uid) => follow_uid(objects, uid_to_index(uid)?, None, None, depth + 1),
-        _ => Ok(item.to_owned()),
+        _ => Ok(Some(item.to_owned())),
     }
+}
+
+/// Identify the archiver's null object without conflating it with a literal
+/// string whose contents happen to be `"$null"`.
+fn is_null_placeholder(objects: &[Value], index: usize) -> bool {
+    index == 0
+        && objects
+            .first()
+            .and_then(Value::as_string)
+            .is_some_and(|value| value == NULL_PLACEHOLDER)
 }
 
 /// Convert a plist value into a dictionary key.
@@ -399,6 +421,87 @@ mod tests {
         assert_eq!(
             parse_ns_keyed_archiver(&archive).unwrap(),
             Value::String("hello".to_string())
+        );
+    }
+
+    #[test]
+    fn null_root_is_no_payload() {
+        // `NSKeyedArchiver.encode(nil, forKey: NSKeyedArchiveRootObjectKey)`
+        // emits exactly this: `$objects == ["$null"]`, `$top.root -> UID 0`.
+        let archive = dict(vec![
+            (
+                "$objects",
+                Value::Array(vec![Value::String(NULL_PLACEHOLDER.to_string())]),
+            ),
+            ("$top", dict(vec![("root", Value::Uid(Uid::new(0)))])),
+        ]);
+
+        assert!(matches!(
+            parse_ns_keyed_archiver(&archive),
+            Err(PlistParseError::NoPayload)
+        ));
+    }
+
+    #[test]
+    fn omits_null_values_from_normal_dictionaries() {
+        // `$objects[3]` is a bare "$null" string at a non-zero index. Foundation
+        // never emits this shape (a literal "$null" NSString is archived as
+        // `{$class: NSString, NS.string: "$null"}`); it exists to prove the
+        // placeholder is identified by index, not by string contents.
+        let archive = dict(vec![
+            (
+                "$objects",
+                Value::Array(vec![
+                    Value::String(NULL_PLACEHOLDER.to_string()),
+                    dict(vec![
+                        ("missing", Value::Uid(Uid::new(0))),
+                        ("present", Value::Uid(Uid::new(2))),
+                        ("literal", Value::Uid(Uid::new(3))),
+                    ]),
+                    Value::String("kept".to_string()),
+                    Value::String(NULL_PLACEHOLDER.to_string()),
+                ]),
+            ),
+            ("$top", dict(vec![("root", Value::Uid(Uid::new(1)))])),
+        ]);
+
+        assert_eq!(
+            parse_ns_keyed_archiver(&archive).unwrap(),
+            dict(vec![
+                ("present", Value::String("kept".to_string())),
+                ("literal", Value::String(NULL_PLACEHOLDER.to_string())),
+            ])
+        );
+    }
+
+    #[test]
+    fn omits_null_values_from_ns_dictionary_pairs() {
+        let archive = dict(vec![
+            (
+                "$objects",
+                Value::Array(vec![
+                    Value::String(NULL_PLACEHOLDER.to_string()),
+                    dict(vec![
+                        (
+                            "NS.keys",
+                            Value::Array(vec![Value::Uid(Uid::new(2)), Value::Uid(Uid::new(3))]),
+                        ),
+                        (
+                            "NS.objects",
+                            Value::Array(vec![Value::Uid(Uid::new(4)), Value::Uid(Uid::new(0))]),
+                        ),
+                    ]),
+                    Value::String("present".to_string()),
+                    Value::String("missing".to_string()),
+                    Value::String("kept".to_string()),
+                ]),
+            ),
+            ("$top", dict(vec![("root", Value::Uid(Uid::new(1)))])),
+        ]);
+
+        assert_eq!(
+            parse_ns_keyed_archiver(&archive).unwrap(),
+            dict(vec![("present", Value::String("kept".to_string()))])
         );
     }
 
