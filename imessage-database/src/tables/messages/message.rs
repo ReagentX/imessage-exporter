@@ -1,7 +1,7 @@
 /*!
  Message table rows, query helpers, and body parsing.
 
- # Iterating over Message Data
+ # Iterating Over Message Data
 
  Use [`Message::stream()`] to iterate over the default message query.
 
@@ -38,6 +38,45 @@
  }).unwrap();
  ```
 
+ # Iterating Over Filtered Message Data
+
+ Use [`Message::stream_rows()`] to iterate over the default message query with filters.
+ Use a [`QueryContext`] to specify filters and constraints for the message query.
+
+ ## Example
+ ```no_run
+ use imessage_database::{
+     tables::{
+         capabilities::Capabilities,
+         messages::Message,
+         table::{get_connection, Table},
+     },
+     util::{dirs::default_db_path, query_context::QueryContext},
+ };
+
+ // Get the default database path and connect to it
+ let db_path = default_db_path();
+ let conn = get_connection(&db_path).unwrap();
+ let capabilities = Capabilities::determine(&conn).unwrap();
+ let mut query_context = QueryContext::default();
+
+ // Customize the query context as needed
+ // For example, to filter messages by date:
+ query_context.set_start("2023-01-01").unwrap();
+ query_context.set_end("2023-12-31").unwrap();
+
+ // Prepare the statement for streaming rows
+ let mut statement = Message::stream_rows(&conn, &capabilities, &query_context).unwrap();
+
+ // Iterate over the streamed rows and handle each message result
+ for message_result in Message::rows(&mut statement, []).unwrap() {
+     match message_result {
+         Ok(message) => println!("Message: {:#?}", message),
+         Err(e) => eprintln!("Error: {:?}", e),
+     }
+ }
+ ```
+
  # Making Custom Message Queries
 
  [`Message`] includes a few fields that are derived by the default query and
@@ -56,6 +95,17 @@
  default. Thus,
  [`Message::filter_action`] and [`Message::filter_sub_action`] read as `None`
  against schemas without those columns.
+
+ Body parsing uses optional `attributedBody`, `message_summary_info`, and
+ `has_payload_data` result columns. The payload flag is `payload_data IS NOT
+ NULL`; custom `m.*` projections can supply raw `payload_data` instead. Missing
+ parser inputs are treated as absent, so a projection containing only `text`
+ still produces plain-text body components. Parsing failures preserve the row's
+ metadata and leave its body components empty.
+
+ Built-in queries preserve the storage bytes of text-valued parser inputs in
+ UTF-16 databases. Custom queries must cast such inputs to `BLOB` to prevent
+ SQLite from transcoding them to UTF-8 before parsing.
 
  ## Sample Queries
 
@@ -163,8 +213,8 @@ use crate::{
             query_parts::{from_clause, message_query, prepare_message_query},
         },
         table::{
-            ATTRIBUTED_BODY, CHAT_MESSAGE_JOIN, Cacheable, MESSAGE, MESSAGE_PAYLOAD,
-            MESSAGE_SUMMARY_INFO, RECENTLY_DELETED, Table, flatten_row,
+            CHAT_MESSAGE_JOIN, Cacheable, MESSAGE, MESSAGE_PAYLOAD, MESSAGE_SUMMARY_INFO,
+            RECENTLY_DELETED, Table, flatten_row,
         },
     },
     util::{
@@ -175,7 +225,7 @@ use crate::{
     },
 };
 
-/// Row from the `message` table, plus body/edit metadata populated by [`parse_body`](Self::parse_body).
+/// Row from the `message` table, with body and edit metadata parsed during row decoding.
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct Message {
@@ -183,7 +233,7 @@ pub struct Message {
     pub rowid: i32,
     /// Message GUID.
     pub guid: String,
-    /// Plain body text. [`parse_body`](Self::parse_body) may populate this from `attributedBody`.
+    /// Plain body text, decoded from `attributedBody` when available.
     pub text: Option<String>,
     /// Raw service name.
     pub service: Option<String>,
@@ -249,35 +299,18 @@ pub struct Message {
     pub edited_parts: Option<EditedMessage>,
 }
 
-/// Body data returned by [`Message::parse_body`].
-///
-/// Use [`Message::apply_body()`] to apply the parsed body back to the message:
-///
-/// ```no_run
-/// # use imessage_database::tables::{
-/// #     capabilities::Capabilities,
-/// #     messages::Message,
-/// #     table::get_connection,
-/// # };
-/// # use imessage_database::util::dirs::default_db_path;
-/// # let conn = get_connection(&default_db_path()).unwrap();
-/// # let capabilities = Capabilities::determine(&conn).unwrap();
-/// # let mut message = Message::from_guid("example", &conn, &capabilities).unwrap();
-/// if let Ok(body) = message.parse_body(&conn) {
-///     message.apply_body(body);
-/// }
-/// ```
+/// Owned body data parsed from borrowed row inputs.
 #[derive(Debug)]
 #[must_use]
-pub struct ParsedBody {
+pub(super) struct ParsedBody {
     /// Plain body text.
-    pub text: Option<String>,
+    text: Option<String>,
     /// Parsed body components.
-    pub components: Vec<BubbleComponent>,
+    components: Vec<BubbleComponent>,
     /// Parsed edit/unsent metadata.
-    pub edited_parts: Option<EditedMessage>,
+    edited_parts: Option<EditedMessage>,
     /// Resolved balloon bundle ID.
-    pub balloon_bundle_id: Option<String>,
+    balloon_bundle_id: Option<String>,
 }
 
 // MARK: Table
@@ -484,34 +517,26 @@ impl Cacheable for Message {
 // MARK: Impl
 impl Message {
     // MARK: Text Gen
-    /// Parse the body of a message, deserializing it as [`typedstream`](crate::util::typedstream)
-    /// (and falling back to [`streamtyped`]) data if necessary.
+    /// Parse supplied body and edit-summary bytes without reading the database.
     ///
-    /// This method performs pure parsing without mutating the message. Use [`Self::apply_body()`]
-    /// to apply the result back to the message.
+    /// `None` represents an absent or unreadable input. `has_payload` is the
+    /// non-nullness of `payload_data`, including non-blob values. Typedstream
+    /// parsing falls back to the row's plain text, then the legacy format parser.
+    /// Edit-summary bytes are parsed only when [`Self::is_edited`] is true.
     ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use imessage_database::tables::{
-    /// #     capabilities::Capabilities,
-    /// #     messages::Message,
-    /// #     table::get_connection,
-    /// # };
-    /// # use imessage_database::util::dirs::default_db_path;
-    /// # let conn = get_connection(&default_db_path()).unwrap();
-    /// # let capabilities = Capabilities::determine(&conn).unwrap();
-    /// # let mut message = Message::from_guid("example", &conn, &capabilities).unwrap();
-    /// if let Ok(body) = message.parse_body(&conn) {
-    ///     message.apply_body(body);
-    /// }
-    /// ```
-    pub fn parse_body(&self, db: &Connection) -> Result<ParsedBody, MessageError> {
-        // Parse the edited message data
+    /// This does not mutate the message. Row decoders apply successful results
+    /// with [`Self::apply_body`].
+    pub(super) fn parse_body(
+        &self,
+        attributed_body: Option<&[u8]>,
+        message_summary_info: Option<&[u8]>,
+        has_payload: bool,
+    ) -> Result<ParsedBody, MessageError> {
         let edited_parts = self
             .is_edited()
-            .then(|| self.message_summary_info(db))
+            .then_some(message_summary_info)
             .flatten()
+            .and_then(|bytes| Value::from_reader(Cursor::new(bytes)).ok())
             .as_ref()
             .and_then(|payload| EditedMessage::from_map(payload).ok());
 
@@ -520,10 +545,9 @@ impl Message {
         let mut components = vec![];
         let mut balloon_bundle_id = None;
 
-        // Grab the body data from the table
-        if let Some(body) = self.attributed_body(db) {
+        if let Some(body) = attributed_body {
             // Attempt to deserialize the typedstream data
-            let mut typedstream = TypedStreamDeserializer::new(&body);
+            let mut typedstream = TypedStreamDeserializer::new(body);
             match parse_body_typedstream(typedstream.iter_root().ok(), edited_parts.as_ref()) {
                 Some(parsed) => {
                     text = parsed.text;
@@ -543,9 +567,7 @@ impl Message {
                     // App payloads render as a single app component.
                     if self.balloon_bundle_id.is_some() {
                         components = vec![BubbleComponent::App];
-                    } else if is_single_url
-                        && self.has_blob(db, MESSAGE, MESSAGE_PAYLOAD, self.rowid.into())
-                    {
+                    } else if is_single_url && has_payload {
                         // URL previews may omit `balloon_bundle_id` while still carrying
                         // preview payload data.
                         balloon_bundle_id =
@@ -563,7 +585,7 @@ impl Message {
 
             // The legacy parser can still recover text from older attributed bodies.
             if text.is_none() {
-                text = Some(streamtyped::parse(body)?);
+                text = Some(streamtyped::parse(body.to_vec())?);
             }
         }
 
@@ -593,33 +615,11 @@ impl Message {
 
     /// Apply a [`ParsedBody`] to this message, setting its text, components,
     /// edited parts, and balloon bundle ID.
-    pub fn apply_body(&mut self, body: ParsedBody) {
+    pub(super) fn apply_body(&mut self, body: ParsedBody) {
         self.text = body.text;
         self.components = body.components;
         self.edited_parts = body.edited_parts;
         self.balloon_bundle_id = body.balloon_bundle_id;
-    }
-
-    /// Parse text with the legacy parser only.
-    ///
-    /// This ignores typedstream attributes and does not preserve every modern message type.
-    pub fn generate_text_legacy<'a>(
-        &'a mut self,
-        db: &'a Connection,
-    ) -> Result<&'a str, MessageError> {
-        // If the text is missing, try and query for it
-        if self.text.is_none()
-            && let Some(body) = self.attributed_body(db)
-        {
-            self.text = Some(streamtyped::parse(body)?);
-        }
-
-        // Fallback component parser as well
-        if self.components.is_empty() {
-            self.components = parse_body_legacy(&self.text);
-        }
-
-        self.text.as_deref().ok_or(MessageError::NoText)
     }
 
     // MARK: Dates
@@ -1339,19 +1339,6 @@ impl Message {
         Value::from_reader(Cursor::new(buf)).ok()
     }
 
-    /// Get a message's [typedstream](crate::util::typedstream) from the [`ATTRIBUTED_BODY`] BLOB column
-    ///
-    /// Calling this reads a `BLOB` from the database.
-    ///
-    /// This column contains the message's body text with any other attributes.
-    pub fn attributed_body(&self, db: &Connection) -> Option<Vec<u8>> {
-        let mut body = vec![];
-        self.get_blob(db, MESSAGE, ATTRIBUTED_BODY, self.rowid.into())?
-            .read_to_end(&mut body)
-            .ok();
-        Some(body)
-    }
-
     // MARK: Expressive
     /// Parse the expressive send effect.
     #[must_use]
@@ -1401,6 +1388,10 @@ impl Message {
 
     /// Query a single message by [`GUID`](Self::guid).
     ///
+    /// The returned message includes parsed [`components`](Self::components)
+    /// and [`edited_parts`](Self::edited_parts) when available. Body parsing
+    /// failures preserve the row's metadata.
+    ///
     /// # Example
     /// ```no_run
     /// use imessage_database::{
@@ -1416,11 +1407,10 @@ impl Message {
     /// let conn = get_connection(&db_path).unwrap();
     /// let capabilities = Capabilities::determine(&conn).unwrap();
     ///
-    /// if let Ok(mut message) = Message::from_guid("example-guid", &conn, &capabilities) {
-    ///     if let Ok(body) = message.parse_body(&conn) {
-    ///         message.apply_body(body);
-    ///     }
-    ///     println!("{:#?}", message)
+    /// if let Ok(message) = Message::from_guid("example-guid", &conn, &capabilities) {
+    ///     println!("Text: {:?}", message.text);
+    ///     println!("Body components: {:#?}", message.components);
+    ///     println!("Edit history: {:#?}", message.edited_parts);
     /// }
     /// ```
     pub fn from_guid(
