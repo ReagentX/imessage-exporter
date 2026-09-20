@@ -125,23 +125,49 @@ mod tests {
     }
 
     #[test]
-    fn rows_preserve_edits_without_remaining_text() {
-        let db = body_db();
-        for (idx, fixture) in ["EditedAndUnsent", "Deleted"].into_iter().enumerate() {
-            let id = idx as i32 + 1;
-            insert_body(&db, id, Value::Null, None);
+    fn rows_preserve_edits_with_missing_or_malformed_bodies() {
+        for (fixture, fully_unsent) in [("EditedAndUnsent", false), ("Deleted", true)] {
+            let db = body_db();
             let summary = fs::read(format!("test_data/edited_message/{fixture}.plist")).unwrap();
-            db.execute(
-                "UPDATE message SET date_edited = 1, message_summary_info = ?1 WHERE rowid = ?2",
-                rusqlite::params![summary, id],
-            )
-            .unwrap();
+            for (id, body, text) in [
+                (1, Value::Null, None),
+                (2, Value::Blob(vec![0, 1, 2]), None),
+                (3, Value::Blob(vec![0, 1, 2]), Some("plain text fallback")),
+            ] {
+                insert_body(&db, id, body, text);
+                db.execute(
+                    "UPDATE message SET date_edited = 1, message_summary_info = ?1 WHERE rowid = ?2",
+                    rusqlite::params![summary, id],
+                )
+                .unwrap();
+            }
+            let mut rows = messages(&db);
+            let mut statement = db
+                .prepare("SELECT m.*, 0 as num_attachments, 0 as num_replies FROM message m")
+                .unwrap();
+            rows.extend(
+                statement
+                    .query_map([], Message::from_row)
+                    .unwrap()
+                    .map(Result::unwrap),
+            );
+            assert_eq!(rows.len(), 6);
+            for message in rows {
+                assert_eq!(
+                    message.text.as_deref(),
+                    (message.rowid == 3).then_some("plain text fallback")
+                );
+                assert_eq!(
+                    message.edited_parts.as_ref().unwrap().parts.len(),
+                    if fully_unsent { 1 } else { 4 }
+                );
+                assert_eq!(message.is_fully_unsent(), fully_unsent);
+                assert_eq!(message.is_part_edited(2), !fully_unsent);
+                if message.rowid != 1 {
+                    assert_eq!(message.components, [BubbleComponent::Retracted]);
+                }
+            }
         }
-        let rows = messages(&db);
-        assert!(rows[0].text.is_none());
-        assert!(rows[0].edited_parts.is_some());
-        assert!(rows[1].text.is_none());
-        assert!(rows[1].is_fully_unsent());
     }
 
     #[test]
