@@ -100,8 +100,8 @@
  `has_payload_data` result columns. The payload flag is `payload_data IS NOT
  NULL`; custom `m.*` projections can supply raw `payload_data` instead. Missing
  parser inputs are treated as absent, so a projection containing only `text`
- still produces plain-text body components. Parsing failures preserve the row's
- metadata and leave its body components empty.
+ still produces plain-text body components. Text recovery failures preserve
+ the row's metadata and any recovered body components or edit metadata.
 
  Built-in queries preserve the storage bytes of text-valued parser inputs in
  UTF-16 databases. Custom queries must cast such inputs to `BLOB` to prevent
@@ -297,20 +297,6 @@ pub struct Message {
     pub components: Vec<BubbleComponent>,
     /// Parsed edit/unsent metadata from `message_summary_info`.
     pub edited_parts: Option<EditedMessage>,
-}
-
-/// Owned body data parsed from borrowed row inputs.
-#[derive(Debug)]
-#[must_use]
-pub(super) struct ParsedBody {
-    /// Plain body text.
-    text: Option<String>,
-    /// Parsed body components.
-    components: Vec<BubbleComponent>,
-    /// Parsed edit/unsent metadata.
-    edited_parts: Option<EditedMessage>,
-    /// Resolved balloon bundle ID.
-    balloon_bundle_id: Option<String>,
 }
 
 // MARK: Table
@@ -517,21 +503,20 @@ impl Cacheable for Message {
 // MARK: Impl
 impl Message {
     // MARK: Text Gen
-    /// Parse supplied body and edit-summary bytes without reading the database.
+    /// Populate body fields from supplied bytes without reading the database.
     ///
     /// `None` represents an absent or unreadable input. `has_payload` is the
-    /// non-nullness of `payload_data`, including non-blob values. Typedstream
-    /// parsing falls back to the row's plain text, then the legacy format parser.
+    /// non-nullness of `payload_data`, including non-blob values.
     /// Edit-summary bytes are parsed only when [`Self::is_edited`] is true.
     ///
-    /// This does not mutate the message. Row decoders apply successful results
-    /// with [`Self::apply_body`].
+    /// Parsing is best effort: text recovery failures preserve parsed body
+    /// components and edit metadata.
     pub(super) fn parse_body(
-        &self,
+        &mut self,
         attributed_body: Option<&[u8]>,
         message_summary_info: Option<&[u8]>,
         has_payload: bool,
-    ) -> Result<ParsedBody, MessageError> {
+    ) {
         let edited_parts = self
             .is_edited()
             .then_some(message_summary_info)
@@ -583,9 +568,9 @@ impl Message {
                 }
             }
 
-            // The legacy parser can still recover text from older attributed bodies.
+            // A failed legacy parse must not discard valid components or edit metadata.
             if text.is_none() {
-                text = Some(streamtyped::parse(body.to_vec())?);
+                text = streamtyped::parse(body.to_vec()).ok();
             }
         }
 
@@ -600,26 +585,10 @@ impl Message {
             components = parse_body_legacy(&text);
         }
 
-        // Fully unsent messages can have edit metadata without remaining text.
-        if text.is_some() || !components.is_empty() || edited_parts.is_some() {
-            Ok(ParsedBody {
-                text,
-                components,
-                edited_parts,
-                balloon_bundle_id,
-            })
-        } else {
-            Err(MessageError::NoText)
-        }
-    }
-
-    /// Apply a [`ParsedBody`] to this message, setting its text, components,
-    /// edited parts, and balloon bundle ID.
-    pub(super) fn apply_body(&mut self, body: ParsedBody) {
-        self.text = body.text;
-        self.components = body.components;
-        self.edited_parts = body.edited_parts;
-        self.balloon_bundle_id = body.balloon_bundle_id;
+        self.text = text;
+        self.components = components;
+        self.edited_parts = edited_parts;
+        self.balloon_bundle_id = balloon_bundle_id;
     }
 
     // MARK: Dates

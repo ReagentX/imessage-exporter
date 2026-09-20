@@ -346,13 +346,11 @@ impl Message {
             components: vec![],
             edited_parts: None,
         };
-        if let Ok(body) = message.parse_body(
+        message.parse_body(
             bytes(row, columns.attributed_body),
             bytes(row, columns.message_summary_info),
             has_payload(row, columns.has_payload_data, columns.payload_data),
-        ) {
-            message.apply_body(body);
-        }
+        );
         Ok(message)
     }
 
@@ -395,13 +393,11 @@ impl Message {
             edited_parts: None,
         };
         let column = |name| row.as_ref().column_index(name).ok();
-        if let Ok(body) = message.parse_body(
+        message.parse_body(
             bytes(row, column("attributedBody")),
             bytes(row, column("message_summary_info")),
             has_payload(row, column("has_payload_data"), column("payload_data")),
-        ) {
-            message.apply_body(body);
-        }
+        );
         Ok(message)
     }
 }
