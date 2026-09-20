@@ -1,5 +1,5 @@
 /*!
- Message body models reconstructed from [`message.attributed_body`](crate::tables::messages::message::Message::attributed_body).
+ Message body models reconstructed from `attributedBody` bytes during row decoding.
 */
 
 pub use crate::tables::messages::models::{
