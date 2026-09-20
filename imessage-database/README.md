@@ -29,14 +29,10 @@ fn iter_messages() -> Result<(), TableError> {
     // Iterate over a stream of messages
     Message::stream(&db, |message_result| {
         match message_result {
-            Ok(mut message) => {
-                // Deserialize the message body
-                if let Ok(body) = message.parse_body(&db) {
-                    message.apply_body(body);
-                }
-
-                // Emit debug info for each message
-                println!("Message: {:#?}", message)
+            Ok(message) => {
+                println!("Text: {:?}", message.text);
+                println!("Body components: {:#?}", message.components);
+                println!("Edit history: {:#?}", message.edited_parts);
             },
             Err(e) => eprintln!("Error: {:?}", e),
         };
