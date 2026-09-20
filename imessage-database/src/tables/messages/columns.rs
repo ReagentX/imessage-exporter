@@ -1,7 +1,7 @@
 /*!
  Column layout resolution and row decoding for the `message` table.
 
- [`Message`] reads 32 columns whose ordinals differ per schema: the composed
+ [`Message`] reads 36 columns whose ordinals differ per schema: the composed
  query projects the recognized columns contiguously, while custom queries
  (such as `m.*` projections) may append derived columns after every `message`
  column. Decoding each field by name repeats a scan of the result set for
@@ -10,7 +10,10 @@
  fallback for layouts it rejects.
 */
 
-use rusqlite::{Result, Row, Statement, types::FromSql};
+use rusqlite::{
+    Result, Row, Statement,
+    types::{FromSql, ValueRef},
+};
 
 use crate::tables::messages::Message;
 
@@ -20,7 +23,7 @@ use crate::tables::messages::Message;
 /// [`Capabilities`](crate::tables::capabilities::Capabilities) probes these
 /// names against the live schema; query composition projects exactly the
 /// subset that exists, qualified with `m.`.
-pub(crate) const MESSAGE_COLUMNS: [&str; 26] = [
+pub(crate) const MESSAGE_COLUMNS: [&str; 29] = [
     "rowid",
     "guid",
     "text",
@@ -47,6 +50,9 @@ pub(crate) const MESSAGE_COLUMNS: [&str; 26] = [
     "thread_originator_part",
     "date_edited",
     "associated_message_emoji",
+    "attributedbody",
+    "message_summary_info",
+    "payload_data",
 ];
 
 /// Size of the stack buffer used to case-fold column names. The two longest
@@ -102,13 +108,17 @@ pub(super) struct MessageColumns {
     deleted_from: Option<usize>,
     filter_action: Option<usize>,
     filter_sub_action: Option<usize>,
+    attributed_body: Option<usize>,
+    message_summary_info: Option<usize>,
+    has_payload_data: Option<usize>,
+    payload_data: Option<usize>,
 }
 
 impl MessageColumns {
     /// Number of mapped fields. Tests compare this with `slots`; resolution
     /// scans the complete result set independently.
     #[cfg(test)]
-    const FIELDS: usize = 32;
+    const FIELDS: usize = 36;
 
     /// Map every recognized column name to its ordinal, or return `None` when a
     /// required column is absent.
@@ -153,6 +163,10 @@ impl MessageColumns {
         let mut deleted_from = None;
         let mut filter_action = None;
         let mut filter_sub_action = None;
+        let mut attributed_body = None;
+        let mut message_summary_info = None;
+        let mut has_payload_data = None;
+        let mut payload_data = None;
 
         for idx in 0..stmt.column_count() {
             let Ok(name) = stmt.column_name(idx) else {
@@ -203,6 +217,10 @@ impl MessageColumns {
                 b"deleted_from" => &mut deleted_from,
                 b"filter_action" => &mut filter_action,
                 b"filter_sub_action" => &mut filter_sub_action,
+                b"attributedbody" => &mut attributed_body,
+                b"message_summary_info" => &mut message_summary_info,
+                b"has_payload_data" => &mut has_payload_data,
+                b"payload_data" => &mut payload_data,
                 _ => continue,
             };
 
@@ -245,6 +263,10 @@ impl MessageColumns {
             deleted_from,
             filter_action,
             filter_sub_action,
+            attributed_body,
+            message_summary_info,
+            has_payload_data,
+            payload_data,
         })
     }
 }
@@ -262,6 +284,25 @@ fn defaulted<T: FromSql + Default>(row: &Row, idx: Option<usize>) -> T {
     idx.map_or_else(T::default, |idx| row.get(idx).unwrap_or_default())
 }
 
+/// Borrow the input types accepted by SQLite's incremental blob reader.
+fn bytes<'row>(row: &'row Row<'_>, idx: Option<usize>) -> Option<&'row [u8]> {
+    match row.get_ref(idx?).ok()? {
+        ValueRef::Blob(bytes) | ValueRef::Text(bytes) => Some(bytes),
+        _ => None,
+    }
+}
+
+/// Custom `m.*` projections can provide the raw payload instead of its flag.
+fn has_payload(row: &Row<'_>, flag: Option<usize>, payload: Option<usize>) -> bool {
+    if let Some(idx) = flag {
+        row.get(idx).unwrap_or(false)
+    } else {
+        payload
+            .and_then(|idx| row.get_ref(idx).ok())
+            .is_some_and(|value| !matches!(value, ValueRef::Null))
+    }
+}
+
 // MARK: Decode
 impl Message {
     /// Deserialize a [`Message`] through a resolved column layout.
@@ -269,7 +310,7 @@ impl Message {
     /// Required reads and optional defaults match
     /// [`from_row_named`](Self::from_row_named).
     pub(super) fn from_row_mapped(row: &Row, columns: &MessageColumns) -> Result<Message> {
-        Ok(Message {
+        let mut message = Message {
             rowid: row.get(columns.rowid)?,
             guid: row.get(columns.guid)?,
             text: nullable(row, columns.text),
@@ -304,12 +345,18 @@ impl Message {
             filter_sub_action: nullable(row, columns.filter_sub_action),
             components: vec![],
             edited_parts: None,
-        })
+        };
+        message.parse_body(
+            bytes(row, columns.attributed_body),
+            bytes(row, columns.message_summary_info),
+            has_payload(row, columns.has_payload_data, columns.payload_data),
+        );
+        Ok(message)
     }
 
     /// Build a [`Message`] from a row using named columns.
     pub(super) fn from_row_named(row: &Row) -> Result<Message> {
-        Ok(Message {
+        let mut message = Message {
             rowid: row.get("rowid")?,
             guid: row.get("guid")?,
             text: row.get("text").unwrap_or(None),
@@ -344,7 +391,14 @@ impl Message {
             filter_sub_action: row.get("filter_sub_action").unwrap_or(None),
             components: vec![],
             edited_parts: None,
-        })
+        };
+        let column = |name| row.as_ref().column_index(name).ok();
+        message.parse_body(
+            bytes(row, column("attributedBody")),
+            bytes(row, column("message_summary_info")),
+            has_payload(row, column("has_payload_data"), column("payload_data")),
+        );
+        Ok(message)
     }
 }
 
@@ -476,6 +530,10 @@ mod tests {
             ("thread_originator_part", columns.thread_originator_part),
             ("date_edited", columns.date_edited),
             ("associated_message_emoji", columns.associated_message_emoji),
+            ("attributedBody", columns.attributed_body),
+            ("message_summary_info", columns.message_summary_info),
+            ("has_payload_data", columns.has_payload_data),
+            ("payload_data", columns.payload_data),
             ("chat_id", columns.chat_id),
             ("num_attachments", Some(columns.num_attachments)),
             ("deleted_from", columns.deleted_from),
@@ -500,6 +558,8 @@ mod tests {
     }
 
     fn assert_same_message(mapped: &Message, named: &Message) {
+        assert_eq!(mapped.components, named.components, "components");
+        assert_eq!(mapped.edited_parts, named.edited_parts, "edited_parts");
         assert_eq!(mapped.rowid, named.rowid, "rowid");
         assert_eq!(mapped.guid, named.guid, "guid");
         assert_eq!(mapped.text, named.text, "text");
@@ -648,8 +708,12 @@ mod tests {
         // Exact count catches drift between the composed projection and the
         // mapped fields. Ordinal equality constrains the composer's column
         // order, not deserialization.
-        assert_eq!(stmt.column_count(), slots(&columns).len());
-        for (idx, (name, resolved)) in slots(&columns).into_iter().enumerate() {
+        let projected: Vec<_> = slots(&columns)
+            .into_iter()
+            .filter(|(_, ordinal)| ordinal.is_some())
+            .collect();
+        assert_eq!(stmt.column_count(), projected.len());
+        for (idx, (name, resolved)) in projected.into_iter().enumerate() {
             assert_eq!(resolved, Some(idx), "`{name}` is not at ordinal {idx}");
         }
     }

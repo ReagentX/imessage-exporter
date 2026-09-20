@@ -2,10 +2,7 @@ use imessage_database::tables::messages::Message;
 
 use crate::{
     app::error::RuntimeError,
-    exporters::{
-        formatter::{MessageFormatter, PartBodyBuilder, RenderContext},
-        shared::driver::apply_body,
-    },
+    exporters::formatter::{MessageFormatter, PartBodyBuilder, RenderContext},
 };
 
 /// One reply, as fed to the format's `replies` template. `body` is already a
@@ -74,8 +71,7 @@ where
     };
 
     let mut rendered = Vec::new();
-    for reply in replies.iter_mut() {
-        apply_body(reply, formatter.config().data_source.db());
+    for reply in replies.iter() {
         if !reply.is_tapback() {
             let mut buf = String::with_capacity(buffer_capacity);
             formatter.format_message_into(reply, RenderContext::Reply, &mut buf)?;

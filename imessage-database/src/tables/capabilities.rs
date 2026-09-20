@@ -32,6 +32,8 @@ pub struct Capabilities {
     /// Recognized `attachment` columns this schema declares, in canonical
     /// ([`ATTACHMENT_COLUMNS`]) order.
     attachment_columns: Vec<&'static str>,
+    /// Text values need a blob cast to preserve their UTF-16 storage bytes.
+    pub(crate) utf16_text: bool,
     /// Both `filter_action` and `filter_sub_action` exist on `message`.
     ///
     /// The pair is one feature: queries project either both real columns or
@@ -65,6 +67,9 @@ impl Capabilities {
                 .into_iter()
                 .filter(|column| attachment_names.contains(*column))
                 .collect(),
+            utf16_text: db
+                .query_row("PRAGMA encoding", [], |row| row.get::<_, String>(0))?
+                .starts_with("UTF-16"),
             filter_actions: message_names.contains("filter_action")
                 && message_names.contains("filter_sub_action"),
             recoverable_messages: table_exists(db, RECENTLY_DELETED)?,
