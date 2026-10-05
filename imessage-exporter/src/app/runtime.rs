@@ -3,6 +3,7 @@
 */
 
 use std::{
+    borrow::Cow,
     cmp::min,
     collections::{BTreeSet, HashMap, HashSet},
     fs::create_dir_all,
@@ -215,9 +216,13 @@ impl Config {
         let mut out_s = String::with_capacity(max_len);
         for participant_id in participants {
             let participant_details = match self.resolve_participant(*participant_id) {
-                Some(name) => name.details.as_str(),
-                None => UNKNOWN,
+                Some(name) if self.options.contact_filenames && !name.full.is_empty() => {
+                    Cow::Owned(format!("{} - {}", name.full, name.details))
+                }
+                Some(name) => Cow::Borrowed(name.details.as_str()),
+                None => Cow::Borrowed(UNKNOWN),
             };
+            let participant_details = participant_details.as_ref();
 
             let separator = if out_s.is_empty() { "" } else { ", " };
             if participant_details.len() + separator.len() + out_s.len() <= max_len {
@@ -1047,6 +1052,113 @@ mod filename_tests {
         for c in filename.chars() {
             assert!(c == '你');
         }
+    }
+
+    fn fake_contact(full: &str, details: &str) -> Name {
+        let mut name = Name::fake_name(details);
+        name.full = full.to_string();
+        name
+    }
+
+    #[test]
+    fn can_get_filename_contact_filenames() {
+        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        options.contact_filenames = true;
+        let mut app = Config::fake_app(options);
+
+        app.participants
+            .insert(10, fake_contact("Jane Doe", "+15558675309"));
+        app.participants
+            .insert(11, fake_contact("John Doe", "john@example.com"));
+        app.real_participants.insert(10, 10);
+        app.real_participants.insert(11, 11);
+
+        let mut people = BTreeSet::new();
+        people.insert(10);
+        people.insert(11);
+
+        let filename = app.filename_from_participants(&people);
+        assert_eq!(
+            filename,
+            "Jane Doe - +15558675309, John Doe - john@example.com"
+        );
+    }
+
+    #[test]
+    fn can_get_filename_contact_filenames_unresolved() {
+        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        options.contact_filenames = true;
+        let mut app = Config::fake_app(options);
+
+        // Handles without a contact name keep only their details
+        app.participants.insert(10, Name::fake_name("+15558675309"));
+        app.real_participants.insert(10, 10);
+
+        let mut people = BTreeSet::new();
+        people.insert(10);
+
+        let filename = app.filename_from_participants(&people);
+        assert_eq!(filename, "+15558675309");
+    }
+
+    #[test]
+    fn can_get_filename_contact_filenames_disabled() {
+        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let mut app = Config::fake_app(options);
+
+        app.participants
+            .insert(10, fake_contact("Jane Doe", "+15558675309"));
+        app.real_participants.insert(10, 10);
+
+        let mut people = BTreeSet::new();
+        people.insert(10);
+
+        let filename = app.filename_from_participants(&people);
+        assert_eq!(filename, "+15558675309");
+    }
+
+    #[test]
+    fn can_get_filename_contact_filenames_same_name_unique() {
+        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        options.contact_filenames = true;
+        let mut app = Config::fake_app(options);
+
+        app.participants
+            .insert(10, fake_contact("Jane Doe", "+15558675309"));
+        app.participants
+            .insert(11, fake_contact("Jane Doe", "+15551234567"));
+        app.real_participants.insert(10, 10);
+        app.real_participants.insert(11, 11);
+
+        let first = app.filename_from_participants(&BTreeSet::from([10]));
+        let second = app.filename_from_participants(&BTreeSet::from([11]));
+        assert_eq!(first, "Jane Doe - +15558675309");
+        assert_eq!(second, "Jane Doe - +15551234567");
+    }
+
+    #[test]
+    fn can_get_filename_contact_filenames_long_multiple() {
+        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        options.contact_filenames = true;
+        let mut app = Config::fake_app(options);
+        app.options.export_path = PathBuf::from("/tmp");
+
+        let mut people = BTreeSet::new();
+        for id in 10..20 {
+            app.participants.insert(
+                id,
+                fake_contact(
+                    &format!("Person With An Extremely Long Name {id}"),
+                    &format!("+155586753{id}"),
+                ),
+            );
+            app.real_participants.insert(id, id);
+            people.insert(id);
+        }
+
+        let filename = app.filename_from_participants(&people);
+        assert!(filename.len() <= MAX_LENGTH);
+        assert!(filename.ends_with("others"));
     }
 }
 

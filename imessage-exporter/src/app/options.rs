@@ -44,6 +44,7 @@ pub const OPTION_CLEARTEXT_PASSWORD: &str = "cleartext-password";
 pub const OPTION_CUSTOM_CONTACTS_DB_PATH: &str = "contacts-path";
 pub const OPTION_NO_PROGRESS: &str = "no-progress";
 pub const OPTION_USE_MESSAGE_TIMES: &str = "use-message-times";
+pub const OPTION_CONTACT_FILENAMES: &str = "contact-filenames";
 
 // Other CLI Text
 pub const SUPPORTED_FILE_TYPES: &str = "txt, html";
@@ -92,6 +93,8 @@ pub struct Options {
     pub show_progress: bool,
     /// Whether to stamp transcript and attachment files with message dates.
     pub use_message_times: bool,
+    /// Whether to include resolved contact names in conversation filenames.
+    pub contact_filenames: bool,
 }
 
 // Redact the cleartext backup password from debug output.
@@ -119,6 +122,7 @@ impl std::fmt::Debug for Options {
             .field("contacts_path", &self.contacts_path)
             .field("show_progress", &self.show_progress)
             .field("use_message_times", &self.use_message_times)
+            .field("contact_filenames", &self.contact_filenames)
             .finish()
     }
 }
@@ -144,6 +148,7 @@ impl Options {
         let contacts_path: Option<&String> = args.get_one(OPTION_CUSTOM_CONTACTS_DB_PATH);
         let show_progress = !args.get_flag(OPTION_NO_PROGRESS);
         let use_message_times = args.get_flag(OPTION_USE_MESSAGE_TIMES);
+        let contact_filenames = args.get_flag(OPTION_CONTACT_FILENAMES);
 
         // Build the export type
         let export_type: Option<ExportType> = match export_file_type {
@@ -168,6 +173,7 @@ impl Options {
                 (conversation_filter.is_some(), OPTION_CONVERSATION_FILTER),
                 (!show_progress, OPTION_NO_PROGRESS),
                 (use_message_times, OPTION_USE_MESSAGE_TIMES),
+                (contact_filenames, OPTION_CONTACT_FILENAMES),
             ];
             for (set, opt) in format_deps {
                 if set {
@@ -198,6 +204,7 @@ impl Options {
             (conversation_filter.is_some(), OPTION_CONVERSATION_FILTER),
             (!show_progress, OPTION_NO_PROGRESS),
             (use_message_times, OPTION_USE_MESSAGE_TIMES),
+            (contact_filenames, OPTION_CONTACT_FILENAMES),
         ];
         for (set, opt) in diag_conflicts {
             if diagnostic && set {
@@ -317,6 +324,7 @@ impl Options {
             contacts_path: contacts_path.cloned().map(PathBuf::from),
             show_progress,
             use_message_times,
+            contact_filenames,
         })
     }
 
@@ -528,6 +536,13 @@ fn get_command() -> Command {
                 .action(ArgAction::SetTrue)
                 .display_order(17),
         )
+        .arg(
+            Arg::new(OPTION_CONTACT_FILENAMES)
+                .long(OPTION_CONTACT_FILENAMES)
+                .help("Include resolved contact names in conversation filenames\nFor example, `Jane Doe - +15558675309` instead of `+15558675309`\nHandles without a matching contact keep only their phone number or email\nConversations with a group name set are not affected\n")
+                .action(ArgAction::SetTrue)
+                .display_order(18),
+        )
 }
 
 #[cfg(test)]
@@ -559,6 +574,7 @@ impl Options {
             // bars over test output.
             show_progress: false,
             use_message_times: false,
+            contact_filenames: false,
         }
     }
 }
@@ -608,6 +624,7 @@ mod arg_tests {
             contacts_path: None,
             show_progress: true,
             use_message_times: false,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -685,6 +702,7 @@ mod arg_tests {
             contacts_path: None,
             show_progress: true,
             use_message_times: false,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -717,6 +735,7 @@ mod arg_tests {
             contacts_path: None,
             show_progress: true,
             use_message_times: false,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -792,6 +811,7 @@ mod arg_tests {
             contacts_path: None,
             show_progress: true,
             use_message_times: false,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -832,6 +852,7 @@ mod arg_tests {
             contacts_path: None,
             show_progress: true,
             use_message_times: false,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -886,6 +907,7 @@ mod arg_tests {
             contacts_path: None,
             show_progress: true,
             use_message_times: false,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -918,6 +940,7 @@ mod arg_tests {
             contacts_path: None,
             show_progress: true,
             use_message_times: false,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -951,6 +974,7 @@ mod arg_tests {
             contacts_path: None,
             show_progress: true,
             use_message_times: false,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -983,6 +1007,7 @@ mod arg_tests {
             contacts_path: None,
             show_progress: true,
             use_message_times: false,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -1015,6 +1040,7 @@ mod arg_tests {
             contacts_path: None,
             show_progress: true,
             use_message_times: false,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -1086,6 +1112,7 @@ mod arg_tests {
             contacts_path: None,
             show_progress: true,
             use_message_times: false,
+            contact_filenames: false,
         };
 
         assert_eq!(actual, expected);
@@ -1182,6 +1209,43 @@ mod arg_tests {
         let args =
             get_command().get_matches_from(["imessage-exporter", "-d", "--use-message-times"]);
         // `--use-message-times` requires `--format`, which diagnostics forbids.
+        assert!(Options::from_args(&args).is_err());
+    }
+
+    #[test]
+    fn can_build_option_contact_filenames() {
+        let args = get_command().get_matches_from([
+            "imessage-exporter",
+            "-f",
+            "txt",
+            "--contact-filenames",
+        ]);
+        let actual = Options::from_args(&args).unwrap();
+        assert!(actual.contact_filenames);
+    }
+
+    #[test]
+    fn contact_filenames_defaults_to_false() {
+        let args = get_command().get_matches_from(["imessage-exporter", "-f", "txt"]);
+        let actual = Options::from_args(&args).unwrap();
+        assert!(!actual.contact_filenames);
+    }
+
+    #[test]
+    fn cant_build_option_contact_filenames_no_export_type() {
+        let args = get_command().get_matches_from(["imessage-exporter", "--contact-filenames"]);
+        let error = Options::from_args(&args).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Invalid options!\nOption --contact-filenames is enabled, which requires --format"
+        );
+    }
+
+    #[test]
+    fn cant_build_option_diagnostic_flag_with_contact_filenames() {
+        let args =
+            get_command().get_matches_from(["imessage-exporter", "-d", "--contact-filenames"]);
+        // `--contact-filenames` requires `--format`, which diagnostics forbids.
         assert!(Options::from_args(&args).is_err());
     }
 }

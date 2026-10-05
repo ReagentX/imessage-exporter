@@ -136,6 +136,12 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         Also set each new attachment file's creation time to its message date
         Creation time is set only on macOS and Windows
 
+--contact-filenames
+        Include resolved contact names in conversation filenames
+        For example, `Jane Doe - +15558675309` instead of `+15558675309`
+        Handles without a matching contact keep only their phone number or email
+        Conversations with a group name set are not affected
+
 -h, --help
         Print help
 -V, --version
@@ -225,6 +231,8 @@ imessage-exporter -f html -t "@"
 ### Contacts
 
 `imessage-exporter` will automatically attempt to resolve handle details (email addresses and phone numbers) against contacts found either in the provided iOS backup or on the local macOS Address Book. Users can optionally pass in a path to an Address Book database, but this should generally not be necessary.
+
+By default, conversation filenames use each participant's phone number or email address, so contacts that share a name never produce the same filename. `--contact-filenames` prefixes each handle with the resolved contact name instead (for example, `Jane Doe - +15558675309`), which keeps filenames unique while making them easier to browse.
 
 ### Message-derived file timestamps
 
