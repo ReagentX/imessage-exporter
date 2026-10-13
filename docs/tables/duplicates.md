@@ -8,7 +8,7 @@ Both handles (participants) and chats (threads) can become duplicated, where han
 
 ### Duplicate Handles
 
-We store one `(id, service)` pair per `handle` row, so one person may have several rows. For example, if you register a phone number with iMessage, SMS, and RCS, we store three rows with the same `id`. We also store a phone number and an iCloud email address in separate rows with different IDs. You cannot use the `handle` table alone to connect these addresses to your Contacts cards. At read time, Messages.app checks `person_centric_id`, then the Contacts card associated with the address, then the raw `id` to resolve the person. We use the first and last checks; see below for the Contacts step.
+We store one `(id, service)` pair per `handle` row, so one person may have several rows. For example, if you register a phone number with iMessage, SMS, and RCS, we store three rows with the same `id`. We also store a phone number and an iCloud email address in separate rows with different IDs. You cannot use the `handle` table alone to connect these addresses to your Contacts cards. At read time, Messages.app checks `person_centric_id`, then the Contacts card associated with the address, then the raw `id` to resolve the person. We make the same three checks.
 
 The iMessage server attached `Person Centric ID` as a merge ID to incoming messages and used to provide it for nearly every contact. The server stopped issuing it for new senders years ago; today, the field appears only on the oldest handles in current databases. We still trust a present ID because it is reliable, but we cannot rely on it to cover current contacts.
 
@@ -65,7 +65,9 @@ We need one identifier for every row that belongs to the same person, including 
 1. Matching `id` values, byte for byte, as with handles `2` and `3`. Messages already lowercases email addresses and canonicalizes phone numbers before storing them, so we do not need to normalize these values again. If we match phone numbers by digits alone, we could merge a short code with a full number that happens to share its suffix.
 2. Matching `Person Centric ID` values, as with handles `1` and `2`.
 
-We can also add evidence from outside the database, such as a match from the Contacts app.
+We add a third kind of evidence from the Contacts database:
+
+3. Addresses that appear on one Contacts card. We treat cards linked through `PersonLink` on iOS or `ZLINKID` on macOS as one card. We skip the "me" card, and we add no edge for an address that appears on two different cards, since we cannot tell which person it belongs to.
 
 Because group membership is transitive, we can group handle `3` with `A` through handle `2`, even though `3` has no `Person Centric ID`. We assign sequential IDs by each group's smallest `Handle ID` to keep the map stable across runs while the table remains unchanged. For these rows, assign the following group IDs:
 
@@ -79,6 +81,8 @@ Because group membership is transitive, we can group handle `3` with `A` through
 ```
 
 Use the map to resolve each `Handle ID` to its person group. We omit row `0` (you in group chats) from the sample. In practice, assign group `0` to row `0`, then add one to every group ID shown above.
+
+We read the Contacts database on every run and never cache its identities. When you merge two cards in Contacts, the app deletes one of them, so an identity we compute on one run may not exist on the next.
 
 ### Chats Solution
 

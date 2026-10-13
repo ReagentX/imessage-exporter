@@ -136,6 +136,14 @@ The total size of the database file on the disk.
 
 We group `handle` rows that belong to one person (see [the duplicate problem](tables/duplicates.md)), then report how many participant groups match a contact name and the match percentage. This total counts one participant per group, so it is smaller than the raw handle count.
 
+### Handles merged by Contacts
+
+The number of participant groups we eliminate with the Contacts database: handles with different addresses that the Messages database cannot relate, but that appear on one Contacts card. We show this line only when at least one group merged. The Messages-only counts in the handle section above do not include these.
+
+### Chats merged by Contacts
+
+The number of chats we eliminate because, once we group their participants by Contacts card, they have the same participants as another chat. We show this line with the one above.
+
 ### Schema capabilities
 
 `imessage-database` probes the database schema once and builds its queries from what the schema actually supports, so databases missing optional features still read correctly. This section shows which optional features the reader detected.

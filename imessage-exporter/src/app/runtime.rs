@@ -291,7 +291,11 @@ impl Config {
         // groups, not by raw handle rows.
         eprintln!("  [2/5] Caching participants...");
         let participants = Handle::cache(data_source.db())?;
-        let real_participants = HandleGroups::from_db(data_source.db())?.finalize();
+        let mut handle_groups = HandleGroups::from_db(data_source.db())?;
+        data_source
+            .contacts_index
+            .link_handles(&participants, &mut handle_groups);
+        let real_participants = handle_groups.finalize();
         let participants_map = data_source
             .contacts_index
             .build_participants_map(&participants, &real_participants);
@@ -582,6 +586,21 @@ impl Config {
             total_resolved,
             self.participants.len(),
         );
+
+        // Regroup without the contact edges to count the merges Contacts added.
+        let db_only_groups = HandleGroups::from_db(self.data_source.db())?.finalize();
+        let db_only_participants = HashSet::<&i32>::from_iter(db_only_groups.values()).len();
+        let contact_merged_handles = db_only_participants.saturating_sub(self.participants.len());
+        if contact_merged_handles > 0 {
+            println!("    Handles merged by Contacts: {contact_merged_handles}");
+            let chat_lookup = ChatToHandle::get_chat_lookup_map(self.data_source.db())?;
+            let db_only_chats =
+                ChatToHandle::dedupe(&self.chatroom_participants, &chat_lookup, &db_only_groups)?;
+            let contact_merged_chats = HashSet::<&i32>::from_iter(db_only_chats.values())
+                .len()
+                .saturating_sub(HashSet::<&i32>::from_iter(self.real_chatrooms.values()).len());
+            println!("    Chats merged by Contacts: {contact_merged_chats}");
+        }
 
         println!("    Schema capabilities:");
         let capabilities = &self.data_source.capabilities;

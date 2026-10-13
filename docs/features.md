@@ -142,7 +142,7 @@ This tool targets the current latest public release for Messages.app. It may wor
 - Duplicated group chats
   - Handles (participants) and chats (threads) can become duplicated
   - On startup:
-    - We group handles that belong to the same person: the same address on several services, and addresses that share a `person_centric_id`
+    - We group handles that belong to the same person: the same address on several services, addresses that share a `person_centric_id`, and addresses that appear on one Contacts card
     - We combine chatrooms whose participants are the same people, comparing handle groups instead of handle rows
     - We combine split chatrooms with the same conversation mapping in `chat_lookup`
   - See [the duplicate problem](tables/duplicates.md) for the mechanism

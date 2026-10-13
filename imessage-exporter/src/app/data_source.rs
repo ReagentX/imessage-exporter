@@ -79,24 +79,30 @@ impl DataSource {
             Platform::iOS => match decrypt_backup(options)? {
                 Some(backup) => {
                     let messages_db = TempDatabase(get_decrypted_message_database(&backup)?);
-                    let contacts_path = get_decrypted_contacts_database(&backup)?;
+
+                    // Use a user-supplied Contacts database instead of decrypting the backup's
+                    // copy.
+                    let contacts_index = match options.contacts_path.as_deref() {
+                        Some(custom) => Self::get_contacts_index(Some(custom)),
+                        None => {
+                            let contacts_path = get_decrypted_contacts_database(&backup)?;
+                            let index = Self::get_contacts_index(Some(&contacts_path));
+                            if let Err(e) = remove_file(&contacts_path) {
+                                eprintln!(
+                                    "warning: failed to remove temporary contacts database at {}: {e}",
+                                    contacts_path.display()
+                                );
+                            }
+                            index
+                        }
+                    }
+                    .unwrap_or_default();
 
                     eprintln!(
                         "Decrypted iOS backup: {} (version {})\n",
                         backup.lockdown().device_name,
                         backup.lockdown().product_version,
                     );
-
-                    let contacts_index =
-                        Self::get_contacts_index(Some(&contacts_path)).unwrap_or_default();
-
-                    // Clean up decrypted contacts database file
-                    if let Err(e) = remove_file(&contacts_path) {
-                        eprintln!(
-                            "warning: failed to remove temporary contacts database at {}: {e}",
-                            contacts_path.display()
-                        );
-                    }
 
                     (
                         messages_db.path().to_path_buf(),
@@ -105,13 +111,18 @@ impl DataSource {
                         Some(messages_db),
                     )
                 }
-                None => (
-                    options.get_db_path(),
-                    Self::get_contacts_index(Some(&options.db_path.join(DEFAULT_PATH_IOS)))
-                        .unwrap_or_default(),
-                    None,
-                    None,
-                ),
+                None => {
+                    let contacts_path = options
+                        .contacts_path
+                        .clone()
+                        .unwrap_or_else(|| options.db_path.join(DEFAULT_PATH_IOS));
+                    (
+                        options.get_db_path(),
+                        Self::get_contacts_index(Some(&contacts_path)).unwrap_or_default(),
+                        None,
+                        None,
+                    )
+                }
             },
         };
 

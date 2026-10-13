@@ -278,14 +278,6 @@ impl Options {
             }
         }
 
-        // Custom contacts paths do not affect encrypted iOS backup extraction.
-        if contacts_path.is_some() && platform == Platform::iOS {
-            eprintln!(
-                "Option --{OPTION_CUSTOM_CONTACTS_DB_PATH} is enabled, but the platform is {}, so the path will have no effect!",
-                Platform::iOS
-            );
-        }
-
         // Determine the attachment manager mode
         let attachment_manager_mode = match attachment_manager_type {
             Some(manager) => {
@@ -510,7 +502,7 @@ fn get_command() -> Command {
             Arg::new(OPTION_CUSTOM_CONTACTS_DB_PATH)
                 .short('n')
                 .long(OPTION_CUSTOM_CONTACTS_DB_PATH)
-                .help("Optional custom path for a macOS or iOS contacts database file\nThis should be resolved automatically, but can be manually provided\nHandles from the messages table will be mapped to names in the provided database\nGenerally, one of `AddressBook-v22.abcddb` or `AddressBook.sqlitedb`\n")
+                .help("Optional custom path for a macOS or iOS contacts database file\nThis should be resolved automatically, but can be manually provided\nHandles from the messages table will be mapped to names in the provided database\nGenerally, one of `AddressBook-v22.abcddb` or `AddressBook.sqlitedb`\nFor an iOS backup, pass this option to use a custom Contacts database instead of the copy in the backup\n")
                 .display_order(15)
                 .value_name("path"),
         )
