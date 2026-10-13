@@ -149,8 +149,9 @@ impl Cacheable for Chat {
     type V = Chat;
     /// Cache chat rows by row ID.
     ///
-    /// Chat row IDs can represent duplicate conversations; deduplication happens
-    /// after participant handles are loaded.
+    /// One conversation may have several chat row IDs. Call
+    /// [`crate::tables::chat_handle::ChatToHandle::dedupe`] after caching the
+    /// participant sets and handle groups.
     ///
     /// # Example:
     ///

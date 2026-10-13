@@ -1,13 +1,15 @@
 /*!
- Union-find data structure used while deduplicating chat IDs.
+ Shared disjoint-set implementation for handle and chat row IDs.
 */
 
 use std::collections::BTreeMap;
 
-/// Disjoint set data structure for computing equivalence classes of chat IDs.
+/// Use this structure to compute equivalence classes of row IDs.
 ///
-/// Used by [`crate::tables::chat_handle::ChatToHandle::dedupe`] to merge chats
-/// that are related by shared participants or `chat_lookup`.
+/// Use [`crate::tables::handle::HandleGroups`] to group handles by person. Use
+/// [`crate::tables::chat_handle::ChatToHandle::dedupe`] to group chats by
+/// participant set or `chat_lookup` links.
+#[derive(Debug)]
 pub struct UnionFind {
     parent: BTreeMap<i32, i32>,
     rank: BTreeMap<i32, u32>,
