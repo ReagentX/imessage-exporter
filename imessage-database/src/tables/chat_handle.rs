@@ -7,9 +7,10 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use crate::{
     error::table::TableError,
     tables::{
-        diagnostic::ChatHandleDiagnostic,
+        chat::Chat,
+        diagnostic::{ChatHandleDiagnostic, column_exists},
         handle::HandleGroups,
-        table::{CHAT_HANDLE_JOIN, CHAT_MESSAGE_JOIN, Cacheable, Table},
+        table::{CHAT_HANDLE_JOIN, CHAT_MESSAGE_JOIN, Cacheable, MESSAGE, Table},
     },
     util::union_find::UnionFind,
 };
@@ -134,7 +135,9 @@ impl ChatToHandle {
         let handle_groups = HandleGroups::from_db(db)?.finalize();
 
         // Deduplicate chatroom participants
-        let real_chatrooms = ChatToHandle::dedupe(&all_chats, &chat_handle_lookup, &handle_groups)?;
+        let chats = Chat::cache(db)?;
+        let real_chatrooms =
+            ChatToHandle::dedupe(&all_chats, &chat_handle_lookup, &handle_groups, &chats)?;
 
         // Calculate total duplicated chats
         let total_duplicated =
@@ -221,15 +224,21 @@ ORDER BY chat;
 
     /// Assign stable deduplicated IDs to chats.
     ///
-    /// Chats merge when they have the same participant set or are linked by
-    /// `chat_lookup`. Compare participants by handle group, not row ID. Treat
-    /// chats as one conversation when their group sets match.
+    /// Use handle groups rather than handle row IDs to compare participants.
+    /// Merge chats connected by `chat_lookup` links, even when their names
+    /// differ. When two rows have the same participant groups:
+    ///
+    /// - Merge named rows only when their display names also match.
+    /// - Attach unnamed rows to the lowest-row-ID named row with the same
+    ///   participant groups.
+    /// - If no named row has those participants, merge the unnamed rows.
     ///
     /// - `duplicated_data`: raw participant handle IDs keyed by chat row ID
     /// - `chat_lookup_map`: canonical chat ID keyed by each related chat ID,
     ///   from [`ChatToHandle::get_chat_lookup_map`]
     /// - `handle_groups`: group ID keyed by each handle row ID, from [`HandleGroups::finalize`];
     ///   an unmapped handle keeps its own identity
+    /// - `chats`: chat rows keyed by row ID; treat a missing row as unnamed
     ///
     /// Assuming no new chat-handle relationships have been written to the database, deduplicated data is deterministic across runs.
     ///
@@ -240,6 +249,7 @@ ORDER BY chat;
     ///
     /// use imessage_database::util::dirs::default_db_path;
     /// use imessage_database::tables::table::{Cacheable, get_connection};
+    /// use imessage_database::tables::chat::Chat;
     /// use imessage_database::tables::chat_handle::ChatToHandle;
     /// use imessage_database::tables::handle::HandleGroups;
     ///
@@ -247,12 +257,14 @@ ORDER BY chat;
     /// let conn = get_connection(&db_path).unwrap();
     /// let chatrooms = ChatToHandle::cache(&conn).unwrap();
     /// let handle_groups = HandleGroups::from_db(&conn).unwrap().finalize();
-    /// let deduped_chatrooms = ChatToHandle::dedupe(&chatrooms, &HashMap::new(), &handle_groups);
+    /// let chats = Chat::cache(&conn).unwrap();
+    /// let deduped_chatrooms = ChatToHandle::dedupe(&chatrooms, &HashMap::new(), &handle_groups, &chats);
     /// ```
     pub fn dedupe(
         duplicated_data: &HashMap<i32, BTreeSet<i32>>,
         chat_lookup_map: &HashMap<i32, i32>,
         handle_groups: &HashMap<i32, i32>,
+        chats: &HashMap<i32, Chat>,
     ) -> Result<HashMap<i32, i32>, TableError> {
         let mut uf = UnionFind::new();
 
@@ -277,19 +289,44 @@ ORDER BY chat;
         let mut sorted_chats: Vec<(&i32, &BTreeSet<i32>)> = duplicated_data.iter().collect();
         sorted_chats.sort_by_key(|(id, _)| *id);
 
-        let mut participants_to_chat: HashMap<BTreeSet<Participant>, i32> = HashMap::new();
-        for (chat_id, participants) in &sorted_chats {
-            let key: BTreeSet<Participant> = participants
-                .iter()
-                .map(|handle_id| match handle_groups.get(handle_id) {
-                    Some(group) => Participant::Group(*group),
-                    None => Participant::Handle(*handle_id),
-                })
-                .collect();
-            if let Some(&first_chat) = participants_to_chat.get(&key) {
-                uf.union(**chat_id, first_chat);
-            } else {
-                participants_to_chat.insert(key, **chat_id);
+        let keyed: Vec<(i32, BTreeSet<Participant>, Option<&str>)> = sorted_chats
+            .iter()
+            .map(|(chat_id, participants)| {
+                let key = participants
+                    .iter()
+                    .map(|handle_id| match handle_groups.get(handle_id) {
+                        Some(group) => Participant::Group(*group),
+                        None => Participant::Handle(*handle_id),
+                    })
+                    .collect();
+                let name = chats.get(chat_id).and_then(Chat::display_name);
+                (**chat_id, key, name)
+            })
+            .collect();
+
+        // Merge rows that share participants and a name. Then attach unnamed
+        // rows to the lowest-ID named row with the same participants.
+        let mut first_named: HashMap<(&BTreeSet<Participant>, &str), i32> = HashMap::new();
+        let mut anchor: HashMap<&BTreeSet<Participant>, i32> = HashMap::new();
+        for (chat_id, key, name) in &keyed {
+            let Some(name) = name else { continue };
+            match first_named.get(&(key, *name)) {
+                Some(first_chat) => uf.union(*chat_id, *first_chat),
+                None => {
+                    first_named.insert((key, name), *chat_id);
+                }
+            }
+            anchor.entry(key).or_insert(*chat_id);
+        }
+        for (chat_id, key, name) in &keyed {
+            if name.is_some() {
+                continue;
+            }
+            match anchor.get(key) {
+                Some(first_chat) => uf.union(*chat_id, *first_chat),
+                None => {
+                    anchor.insert(key, *chat_id);
+                }
             }
         }
 
@@ -313,6 +350,108 @@ ORDER BY chat;
     }
 }
 
+// MARK: Representatives
+impl ChatToHandle {
+    /// Return the latest message date for each chat row ID.
+    ///
+    /// We query `chat_message_join.message_date` when that column exists.
+    /// Otherwise, we join `chat_message_join` to `message` and read
+    /// `message.date`. This fallback is slower, but we can use it with every
+    /// supported schema. We omit chats without messages from the result.
+    ///
+    /// # Example:
+    ///
+    /// ```no_run
+    /// use imessage_database::util::dirs::default_db_path;
+    /// use imessage_database::tables::table::get_connection;
+    /// use imessage_database::tables::chat_handle::ChatToHandle;
+    ///
+    /// let db_path = default_db_path();
+    /// let conn = get_connection(&db_path).unwrap();
+    /// let last_activity = ChatToHandle::get_last_activity(&conn);
+    /// ```
+    pub fn get_last_activity(db: &Connection) -> Result<HashMap<i32, i64>, TableError> {
+        let query = if column_exists(db, CHAT_MESSAGE_JOIN, "message_date")? {
+            format!("SELECT chat_id, MAX(message_date) FROM {CHAT_MESSAGE_JOIN} GROUP BY chat_id")
+        } else {
+            format!(
+                "SELECT j.chat_id, MAX(m.date) FROM {CHAT_MESSAGE_JOIN} j JOIN {MESSAGE} m ON m.ROWID = j.message_id GROUP BY j.chat_id"
+            )
+        };
+
+        let mut statement = db.prepare(&query)?;
+        let rows = statement.query_map([], |row| {
+            Ok((row.get::<_, i32>(0)?, row.get::<_, Option<i64>>(1)?))
+        })?;
+
+        let mut last_activity = HashMap::new();
+        for row in rows {
+            let (chat_id, date) = row?;
+            if let Some(date) = date {
+                last_activity.insert(chat_id, date);
+            }
+        }
+        Ok(last_activity)
+    }
+
+    /// Choose one chat row to represent each deduplicated conversation.
+    ///
+    /// Rows in a group may have different `display_name` values. Choose the
+    /// most recently active row if it has a name; otherwise choose the named
+    /// row with the lowest ID. If no row has a name, choose the most recently
+    /// active row. When you view a message in Messages.app, you see the name
+    /// stored on its chat row.
+    ///
+    /// - `deduplicated_chats`: map from each chat row ID to its deduplicated ID, from [`ChatToHandle::dedupe`]
+    /// - `chats`: chat rows keyed by row ID; treat a missing row as unnamed
+    /// - `last_activity`: map from each chat row ID to its latest message date, from [`ChatToHandle::get_last_activity`]
+    /// - Returns: representative chat row ID for each input chat row ID
+    pub fn representatives(
+        deduplicated_chats: &HashMap<i32, i32>,
+        chats: &HashMap<i32, Chat>,
+        last_activity: &HashMap<i32, i64>,
+    ) -> HashMap<i32, i32> {
+        let mut members: HashMap<i32, Vec<i32>> = HashMap::new();
+        for (chat_id, dedup_id) in deduplicated_chats {
+            members.entry(*dedup_id).or_default().push(*chat_id);
+        }
+
+        let is_named = |chat_id: &i32| chats.get(chat_id).and_then(Chat::display_name).is_some();
+
+        let mut representatives = HashMap::with_capacity(deduplicated_chats.len());
+        for rows in members.into_values() {
+            // Choose the row with the latest activity. Break ties by row ID
+            // to keep the choice stable across runs.
+            let most_active = rows
+                .iter()
+                .copied()
+                .max_by_key(|chat_id| {
+                    (
+                        last_activity.get(chat_id).copied().unwrap_or(i64::MIN),
+                        std::cmp::Reverse(*chat_id),
+                    )
+                })
+                .expect("a deduplicated group has at least one row");
+
+            let representative = if is_named(&most_active) {
+                most_active
+            } else {
+                rows.iter()
+                    .copied()
+                    .filter(is_named)
+                    .min()
+                    .unwrap_or(most_active)
+            };
+
+            for chat_id in rows {
+                representatives.insert(chat_id, representative);
+            }
+        }
+
+        representatives
+    }
+}
+
 // MARK: Tests
 #[cfg(test)]
 mod tests {
@@ -329,7 +468,8 @@ mod tests {
         input.insert(5, BTreeSet::from([2])); // 1
         input.insert(6, BTreeSet::from([3])); // 2
 
-        let output = ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new());
+        let output =
+            ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &HashMap::new());
         let expected_deduped_ids: HashSet<i32> = output.unwrap().values().copied().collect();
         assert_eq!(expected_deduped_ids.len(), 3);
     }
@@ -344,7 +484,8 @@ mod tests {
         input.insert(5, BTreeSet::from([2, 3])); // 2
         input.insert(6, BTreeSet::from([3])); // 3
 
-        let output = ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new());
+        let output =
+            ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &HashMap::new());
         let expected_deduped_ids: HashSet<i32> = output.unwrap().values().copied().collect();
         assert_eq!(expected_deduped_ids.len(), 4);
     }
@@ -376,18 +517,21 @@ mod tests {
         input_3.insert(5, BTreeSet::from([2]));
         input_3.insert(6, BTreeSet::from([3]));
 
-        let mut output_1 = ChatToHandle::dedupe(&input_1, &HashMap::new(), &HashMap::new())
-            .unwrap()
-            .into_iter()
-            .collect::<Vec<(i32, i32)>>();
-        let mut output_2 = ChatToHandle::dedupe(&input_2, &HashMap::new(), &HashMap::new())
-            .unwrap()
-            .into_iter()
-            .collect::<Vec<(i32, i32)>>();
-        let mut output_3 = ChatToHandle::dedupe(&input_3, &HashMap::new(), &HashMap::new())
-            .unwrap()
-            .into_iter()
-            .collect::<Vec<(i32, i32)>>();
+        let mut output_1 =
+            ChatToHandle::dedupe(&input_1, &HashMap::new(), &HashMap::new(), &HashMap::new())
+                .unwrap()
+                .into_iter()
+                .collect::<Vec<(i32, i32)>>();
+        let mut output_2 =
+            ChatToHandle::dedupe(&input_2, &HashMap::new(), &HashMap::new(), &HashMap::new())
+                .unwrap()
+                .into_iter()
+                .collect::<Vec<(i32, i32)>>();
+        let mut output_3 =
+            ChatToHandle::dedupe(&input_3, &HashMap::new(), &HashMap::new(), &HashMap::new())
+                .unwrap()
+                .into_iter()
+                .collect::<Vec<(i32, i32)>>();
 
         output_1.sort_unstable();
         output_2.sort_unstable();
@@ -419,18 +563,33 @@ mod tests {
             lookup
         }
 
-        let mut output_1 = ChatToHandle::dedupe(&build_input(), &build_lookup(), &HashMap::new())
-            .unwrap()
-            .into_iter()
-            .collect::<Vec<(i32, i32)>>();
-        let mut output_2 = ChatToHandle::dedupe(&build_input(), &build_lookup(), &HashMap::new())
-            .unwrap()
-            .into_iter()
-            .collect::<Vec<(i32, i32)>>();
-        let mut output_3 = ChatToHandle::dedupe(&build_input(), &build_lookup(), &HashMap::new())
-            .unwrap()
-            .into_iter()
-            .collect::<Vec<(i32, i32)>>();
+        let mut output_1 = ChatToHandle::dedupe(
+            &build_input(),
+            &build_lookup(),
+            &HashMap::new(),
+            &HashMap::new(),
+        )
+        .unwrap()
+        .into_iter()
+        .collect::<Vec<(i32, i32)>>();
+        let mut output_2 = ChatToHandle::dedupe(
+            &build_input(),
+            &build_lookup(),
+            &HashMap::new(),
+            &HashMap::new(),
+        )
+        .unwrap()
+        .into_iter()
+        .collect::<Vec<(i32, i32)>>();
+        let mut output_3 = ChatToHandle::dedupe(
+            &build_input(),
+            &build_lookup(),
+            &HashMap::new(),
+            &HashMap::new(),
+        )
+        .unwrap()
+        .into_iter()
+        .collect::<Vec<(i32, i32)>>();
 
         output_1.sort_unstable();
         output_2.sort_unstable();
@@ -454,7 +613,9 @@ mod tests {
         chat_lookup_map.insert(2, 5);
         chat_lookup_map.insert(4, 0);
 
-        let output = ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new()).unwrap();
+        let output =
+            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
+                .unwrap();
 
         // Chats 0,1,5 share participants {1}, and chat 2 maps to 5 via lookup,
         // and chat 4 maps to 0 via lookup. All are the same conversation
@@ -476,7 +637,9 @@ mod tests {
         chat_lookup_map.insert(1, 0);
         chat_lookup_map.insert(2, 0);
 
-        let output = ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new()).unwrap();
+        let output =
+            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
+                .unwrap();
 
         // Chats 0,1,2 all map to 0, so same deduplicated ID
         assert_eq!(output.get(&0), output.get(&1));
@@ -498,7 +661,9 @@ mod tests {
         chat_lookup_map.insert(1, 0);
         chat_lookup_map.insert(3, 0);
 
-        let output = ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new()).unwrap();
+        let output =
+            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
+                .unwrap();
 
         // Chats 0,1,3 map to 0, same ID
         assert_eq!(output.get(&0), output.get(&1));
@@ -524,7 +689,9 @@ mod tests {
         chat_lookup_map.insert(10, 20);
         chat_lookup_map.insert(20, 20);
 
-        let output = ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new()).unwrap();
+        let output =
+            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
+                .unwrap();
 
         // Both chats represent the same conversation, so they must share a deduplicated ID
         assert_eq!(
@@ -546,13 +713,15 @@ mod tests {
         let mut lookup_a: HashMap<i32, i32> = HashMap::new();
         lookup_a.insert(0, 0);
         lookup_a.insert(5, 0);
-        let output_a = ChatToHandle::dedupe(&input, &lookup_a, &HashMap::new()).unwrap();
+        let output_a =
+            ChatToHandle::dedupe(&input, &lookup_a, &HashMap::new(), &HashMap::new()).unwrap();
 
         // Case B: canonical is the higher ID (5), which matches real SQL MAX(root) behavior
         let mut lookup_b: HashMap<i32, i32> = HashMap::new();
         lookup_b.insert(0, 5);
         lookup_b.insert(5, 5);
-        let output_b = ChatToHandle::dedupe(&input, &lookup_b, &HashMap::new()).unwrap();
+        let output_b =
+            ChatToHandle::dedupe(&input, &lookup_b, &HashMap::new(), &HashMap::new()).unwrap();
 
         // Both cases link the same two chats; the merge result must be the same
         assert_eq!(
@@ -582,7 +751,9 @@ mod tests {
         chat_lookup_map.insert(2, 5);
         chat_lookup_map.insert(5, 5);
 
-        let output = ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new()).unwrap();
+        let output =
+            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
+                .unwrap();
 
         // Chats 0 and 5 merge by participants
         assert_eq!(output.get(&0), output.get(&5));
@@ -609,7 +780,9 @@ mod tests {
         chat_lookup_map.insert(200, 300);
         chat_lookup_map.insert(300, 300);
 
-        let output = ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new()).unwrap();
+        let output =
+            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
+                .unwrap();
 
         let unique_ids: HashSet<i32> = output.values().copied().collect();
         assert_eq!(
@@ -632,7 +805,9 @@ mod tests {
         chat_lookup_map.insert(10, 99);
         chat_lookup_map.insert(20, 99);
 
-        let output = ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new()).unwrap();
+        let output =
+            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
+                .unwrap();
 
         // Keep both chats in one group even though their canonical chat is absent.
         assert_eq!(
@@ -656,7 +831,8 @@ mod tests {
 
         let groups: HashMap<i32, i32> = HashMap::from([(1, 0), (2, 0), (3, 1)]);
 
-        let output = ChatToHandle::dedupe(&input, &HashMap::new(), &groups).unwrap();
+        let output =
+            ChatToHandle::dedupe(&input, &HashMap::new(), &groups, &HashMap::new()).unwrap();
 
         assert_eq!(output.get(&10), output.get(&20));
         assert_eq!(
@@ -674,7 +850,8 @@ mod tests {
 
         let groups: HashMap<i32, i32> = HashMap::from([(1, 0), (2, 5), (3, 1)]);
 
-        let output = ChatToHandle::dedupe(&input, &HashMap::new(), &groups).unwrap();
+        let output =
+            ChatToHandle::dedupe(&input, &HashMap::new(), &groups, &HashMap::new()).unwrap();
 
         assert_ne!(output.get(&10), output.get(&20));
     }
@@ -690,7 +867,8 @@ mod tests {
 
         let groups: HashMap<i32, i32> = HashMap::from([(1, 7)]);
 
-        let output = ChatToHandle::dedupe(&input, &HashMap::new(), &groups).unwrap();
+        let output =
+            ChatToHandle::dedupe(&input, &HashMap::new(), &groups, &HashMap::new()).unwrap();
 
         assert_ne!(output.get(&10), output.get(&20));
     }
@@ -707,9 +885,200 @@ mod tests {
         let groups: HashMap<i32, i32> = HashMap::from([(1, 0), (2, 0), (9, 4)]);
         let lookup: HashMap<i32, i32> = HashMap::from([(30, 20), (20, 20)]);
 
-        let output = ChatToHandle::dedupe(&input, &lookup, &groups).unwrap();
+        let output = ChatToHandle::dedupe(&input, &lookup, &groups, &HashMap::new()).unwrap();
 
         let unique: HashSet<i32> = output.values().copied().collect();
         assert_eq!(unique.len(), 1);
+    }
+
+    // MARK: Representatives
+    fn chat(rowid: i32, name: Option<&str>) -> crate::tables::chat::Chat {
+        crate::tables::chat::Chat {
+            rowid,
+            chat_identifier: String::new(),
+            service_name: None,
+            display_name: name.map(str::to_string),
+            is_filtered: None,
+            is_blackholed: None,
+            is_pending_review: None,
+        }
+    }
+
+    #[test]
+    fn representative_is_the_most_active_named_row() {
+        let dedup: HashMap<i32, i32> = HashMap::from([(10, 0), (20, 0), (30, 1)]);
+        let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
+            (10, chat(10, Some("Old Name"))),
+            (20, chat(20, Some("New Name"))),
+            (30, chat(30, None)),
+        ]);
+        let activity: HashMap<i32, i64> = HashMap::from([(10, 100), (20, 200)]);
+
+        let reps = ChatToHandle::representatives(&dedup, &chats, &activity);
+
+        assert_eq!(reps[&10], 20);
+        assert_eq!(reps[&20], 20);
+        assert_eq!(reps[&30], 30);
+    }
+
+    #[test]
+    fn unnamed_active_row_defers_to_a_named_sibling() {
+        // Use the older named row because the newest row has no group name.
+        let dedup: HashMap<i32, i32> = HashMap::from([(10, 0), (20, 0), (25, 0)]);
+        let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
+            (10, chat(10, Some("Sardegnas"))),
+            (20, chat(20, Some(""))),
+            (25, chat(25, None)),
+        ]);
+        let activity: HashMap<i32, i64> = HashMap::from([(10, 100), (20, 300), (25, 200)]);
+
+        let reps = ChatToHandle::representatives(&dedup, &chats, &activity);
+
+        assert_eq!(reps[&10], 10);
+        assert_eq!(reps[&20], 10);
+        assert_eq!(reps[&25], 10);
+    }
+
+    #[test]
+    fn unnamed_group_uses_its_most_active_row_with_lowest_id_tiebreak() {
+        let dedup: HashMap<i32, i32> = HashMap::from([(10, 0), (20, 0), (30, 0)]);
+        let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
+            (10, chat(10, None)),
+            (20, chat(20, None)),
+            (30, chat(30, None)),
+        ]);
+        let activity: HashMap<i32, i64> = HashMap::from([(20, 500), (30, 500)]);
+
+        let reps = ChatToHandle::representatives(&dedup, &chats, &activity);
+
+        assert_eq!(reps[&10], 20);
+        assert_eq!(reps[&20], 20);
+        assert_eq!(reps[&30], 20);
+    }
+
+    #[test]
+    fn rows_without_activity_still_get_a_representative() {
+        let dedup: HashMap<i32, i32> = HashMap::from([(7, 0)]);
+        let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([(7, chat(7, None))]);
+
+        let reps = ChatToHandle::representatives(&dedup, &chats, &HashMap::new());
+
+        assert_eq!(reps[&7], 7);
+    }
+
+    #[test]
+    fn last_activity_reads_message_date_when_present() {
+        let db = rusqlite::Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER, message_date INTEGER DEFAULT 0);
+             INSERT INTO chat_message_join VALUES (1, 1, 10), (1, 2, 30), (2, 3, 20);",
+        )
+        .unwrap();
+
+        let activity = ChatToHandle::get_last_activity(&db).unwrap();
+
+        assert_eq!(activity[&1], 30);
+        assert_eq!(activity[&2], 20);
+    }
+
+    #[test]
+    fn last_activity_falls_back_to_message_table() {
+        let db = rusqlite::Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER);
+             CREATE TABLE message (ROWID INTEGER PRIMARY KEY, date INTEGER);
+             INSERT INTO message VALUES (1, 10), (2, 30), (3, 20);
+             INSERT INTO chat_message_join VALUES (1, 1), (1, 2), (2, 3);",
+        )
+        .unwrap();
+
+        let activity = ChatToHandle::get_last_activity(&db).unwrap();
+
+        assert_eq!(activity[&1], 30);
+        assert_eq!(activity[&2], 20);
+    }
+
+    // MARK: Display names
+    #[test]
+    fn same_people_with_different_names_are_different_groups() {
+        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
+        input.insert(10, BTreeSet::from([1, 2]));
+        input.insert(20, BTreeSet::from([1, 2]));
+        let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
+            (10, chat(10, Some("Sunday Call"))),
+            (20, chat(20, Some("Da Boys"))),
+        ]);
+
+        let output =
+            ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &chats).unwrap();
+
+        assert_ne!(output.get(&10), output.get(&20));
+    }
+
+    #[test]
+    fn same_people_with_the_same_name_merge() {
+        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
+        input.insert(10, BTreeSet::from([1, 2]));
+        input.insert(20, BTreeSet::from([1, 2]));
+        let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
+            (10, chat(10, Some("Family"))),
+            (20, chat(20, Some("Family"))),
+        ]);
+
+        let output =
+            ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &chats).unwrap();
+
+        assert_eq!(output.get(&10), output.get(&20));
+    }
+
+    #[test]
+    fn unnamed_row_joins_the_first_named_row_with_its_people() {
+        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
+        input.insert(10, BTreeSet::from([1, 2]));
+        input.insert(20, BTreeSet::from([1, 2]));
+        input.insert(30, BTreeSet::from([1, 2]));
+        input.insert(40, BTreeSet::from([1, 2]));
+        let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
+            (10, chat(10, Some("Sunday Call"))),
+            (20, chat(20, Some("Da Boys"))),
+            (30, chat(30, None)),
+            (40, chat(40, Some(""))),
+        ]);
+
+        let output =
+            ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &chats).unwrap();
+
+        assert_eq!(output.get(&30), output.get(&10));
+        assert_eq!(output.get(&40), output.get(&10));
+        assert_ne!(output.get(&30), output.get(&20));
+    }
+
+    #[test]
+    fn unnamed_rows_merge_with_each_other_when_nothing_is_named() {
+        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
+        input.insert(10, BTreeSet::from([1, 2]));
+        input.insert(20, BTreeSet::from([1, 2]));
+        let chats: HashMap<i32, crate::tables::chat::Chat> =
+            HashMap::from([(10, chat(10, None)), (20, chat(20, None))]);
+
+        let output =
+            ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &chats).unwrap();
+
+        assert_eq!(output.get(&10), output.get(&20));
+    }
+
+    #[test]
+    fn chat_lookup_still_joins_differently_named_rows() {
+        // Honor Apple's `chat_lookup` link even when display names differ.
+        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
+        input.insert(10, BTreeSet::from([1]));
+        input.insert(20, BTreeSet::from([2]));
+        let chats: HashMap<i32, crate::tables::chat::Chat> =
+            HashMap::from([(10, chat(10, Some("A"))), (20, chat(20, Some("B")))]);
+        let lookup: HashMap<i32, i32> = HashMap::from([(10, 20), (20, 20)]);
+
+        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats).unwrap();
+
+        assert_eq!(output.get(&10), output.get(&20));
     }
 }

@@ -49,6 +49,11 @@ pub struct Config {
     pub chatrooms: HashMap<i32, Chat>,
     /// Deduplicated chat IDs keyed by chat row ID.
     pub real_chatrooms: HashMap<i32, i32>,
+    /// Representative chat row IDs keyed by chat row ID.
+    ///
+    /// Names can differ among rows in one deduplicated conversation. Use one
+    /// representative row to build each conversation's filename.
+    pub chat_representatives: HashMap<i32, i32>,
     /// Participant handle IDs keyed by chat row ID.
     pub chatroom_participants: HashMap<i32, BTreeSet<i32>>,
     /// Contact names keyed by deduplicated participant ID.
@@ -163,6 +168,14 @@ impl Config {
     /// If it does not, use participant names. Failing that, use the chat
     /// identifier.
     pub fn filename(&self, chatroom: &Chat) -> String {
+        // Use the same representative row for every filename in a merged
+        // conversation, even when the current row has no display name.
+        let chatroom = self
+            .chat_representatives
+            .get(&chatroom.rowid)
+            .and_then(|representative| self.chatrooms.get(representative))
+            .unwrap_or(chatroom);
+
         // Account for the export path so the full output path stays under the limit.
         let export_path_len = self.options.export_path.as_os_str().len();
         let max_len = MAX_LENGTH.saturating_sub(export_path_len + 1);
@@ -307,7 +320,11 @@ impl Config {
             &chatroom_participants,
             &chat_handle_lookup,
             &real_participants,
+            &chatrooms,
         )?;
+        let last_activity = ChatToHandle::get_last_activity(data_source.db())?;
+        let chat_representatives =
+            ChatToHandle::representatives(&real_chatrooms, &chatrooms, &last_activity);
 
         eprintln!("  [4/5] Caching tapbacks...");
         let tapbacks = Message::cache(data_source.db())?;
@@ -320,6 +337,7 @@ impl Config {
         Ok(Config {
             chatrooms,
             real_chatrooms,
+            chat_representatives,
             chatroom_participants,
             real_participants,
             participants: participants_map,
@@ -594,8 +612,12 @@ impl Config {
         if contact_merged_handles > 0 {
             println!("    Handles merged by Contacts: {contact_merged_handles}");
             let chat_lookup = ChatToHandle::get_chat_lookup_map(self.data_source.db())?;
-            let db_only_chats =
-                ChatToHandle::dedupe(&self.chatroom_participants, &chat_lookup, &db_only_groups)?;
+            let db_only_chats = ChatToHandle::dedupe(
+                &self.chatroom_participants,
+                &chat_lookup,
+                &db_only_groups,
+                &self.chatrooms,
+            )?;
             let contact_merged_chats = HashSet::<&i32>::from_iter(db_only_chats.values())
                 .len()
                 .saturating_sub(HashSet::<&i32>::from_iter(self.real_chatrooms.values()).len());
@@ -730,6 +752,7 @@ impl Config {
         Config {
             chatrooms: HashMap::new(),
             real_chatrooms: HashMap::new(),
+            chat_representatives: HashMap::new(),
             chatroom_participants: HashMap::new(),
             participants: HashMap::new(),
             real_participants: HashMap::new(),
@@ -941,6 +964,7 @@ mod filename_tests {
             &app.chatroom_participants,
             &HashMap::new(),
             &app.real_participants,
+            &app.chatrooms,
         )
         .unwrap();
 
@@ -1019,6 +1043,95 @@ mod filename_tests {
             );
             assert!(!filename.contains(",,"), "{filename}");
         }
+    }
+
+    #[test]
+    fn named_and_unnamed_rows_of_one_conversation_share_a_filename() {
+        use imessage_database::tables::chat_handle::ChatToHandle;
+        use std::collections::HashMap;
+
+        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let mut app = Config::fake_app(options);
+
+        app.participants.insert(0, Name::fake_name("Person A"));
+        app.participants.insert(1, Name::fake_name("Person B"));
+        app.real_participants.insert(10, 0);
+        app.real_participants.insert(11, 0);
+        app.real_participants.insert(12, 1);
+        app.chatroom_participants
+            .insert(100, BTreeSet::from([10, 12]));
+        app.chatroom_participants
+            .insert(200, BTreeSet::from([11, 12]));
+        app.real_chatrooms = ChatToHandle::dedupe(
+            &app.chatroom_participants,
+            &HashMap::new(),
+            &app.real_participants,
+            &app.chatrooms,
+        )
+        .unwrap();
+
+        let make = |rowid: i32, name: Option<&str>| {
+            let mut chat = fake_chat();
+            chat.rowid = rowid;
+            chat.display_name = name.map(str::to_string);
+            chat
+        };
+        let named = make(100, Some("Sardegnas"));
+        let unnamed = make(200, None);
+        app.chatrooms.insert(100, make(100, Some("Sardegnas")));
+        app.chatrooms.insert(200, make(200, None));
+        // The unnamed row has the latest activity.
+        app.chat_representatives = ChatToHandle::representatives(
+            &app.real_chatrooms,
+            &app.chatrooms,
+            &HashMap::from([(100, 10), (200, 20)]),
+        );
+
+        assert_eq!(app.filename(&named), app.filename(&unnamed));
+        assert!(app.filename(&unnamed).starts_with("Sardegnas - "));
+    }
+
+    #[test]
+    fn differently_named_rows_use_the_most_recently_active_name() {
+        use imessage_database::tables::chat_handle::ChatToHandle;
+        use std::collections::HashMap;
+
+        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let mut app = Config::fake_app(options);
+
+        app.real_chatrooms = HashMap::from([(100, 0), (200, 0)]);
+        let make = |rowid: i32, name: &str| {
+            let mut chat = fake_chat();
+            chat.rowid = rowid;
+            chat.display_name = Some(name.to_string());
+            chat
+        };
+        let old = make(100, "Old Name");
+        let new = make(200, "New Name");
+        app.chatrooms.insert(100, make(100, "Old Name"));
+        app.chatrooms.insert(200, make(200, "New Name"));
+        app.chat_representatives = ChatToHandle::representatives(
+            &app.real_chatrooms,
+            &app.chatrooms,
+            &HashMap::from([(100, 50), (200, 10)]),
+        );
+
+        // Row 100 has the latest activity; use its name for both rows.
+        assert!(app.filename(&old).starts_with("Old Name - "));
+        assert_eq!(app.filename(&old), app.filename(&new));
+    }
+
+    #[test]
+    fn filename_without_representatives_names_the_row_itself() {
+        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let mut app = Config::fake_app(options);
+        let mut named = fake_chat();
+        named.rowid = 100;
+        named.display_name = Some("Solo".to_string());
+
+        assert!(app.filename(&named).starts_with("Solo - "));
+        app.real_chatrooms.insert(100, 7);
+        assert!(app.filename(&named).starts_with("Solo - 7"));
     }
 
     #[test]
