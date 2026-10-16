@@ -315,7 +315,7 @@ impl ContactsIndex {
     /// null, but older databases may set it.
     fn add_macos(&mut self, conn: &Connection) -> Result<()> {
         let mut records = Records::default();
-        let mut by_link: HashMap<i64, RecordId> = HashMap::new();
+        let mut by_link: HashMap<String, RecordId> = HashMap::new();
 
         // Read the contact entity's `Z_ENT` from the model's own table because Core Data assigns
         // entity numbers per model version.
@@ -329,7 +329,9 @@ impl ContactsIndex {
         let mut rows = stmt.query(entities)?;
         while let Some(row) = rows.next()? {
             let pk: i64 = row.get(0)?;
-            let link: Option<i64> = row.get(1)?;
+            let link = row
+                .get::<_, Option<String>>(1)?
+                .filter(|link| !link.is_empty());
             let name = Name::from_opt(row.get(2)?, row.get(3)?);
             let id = match link {
                 Some(link) => *by_link.entry(link).or_insert_with(|| self.alloc()),
@@ -1115,7 +1117,7 @@ mod tests {
             "CREATE TABLE ZABCDRECORD (
                 Z_PK INTEGER PRIMARY KEY,
                 Z_ENT INTEGER,
-                ZLINKID INTEGER,
+                ZLINKID VARCHAR,
                 ZCONTAINERWHERECONTACTISME INTEGER,
                 ZFIRSTNAME VARCHAR,
                 ZLASTNAME VARCHAR
@@ -1132,7 +1134,7 @@ mod tests {
         conn: &Connection,
         pk: i64,
         ent: i64,
-        link: Option<i64>,
+        link: Option<&str>,
         me: bool,
         first: Option<&str>,
         last: Option<&str>,
@@ -1271,8 +1273,16 @@ mod tests {
     #[test]
     fn test_macos_zlinkid_pair_shares_identity() {
         let conn = macos_db();
-        macos_record(&conn, 1, 22, Some(7), false, Some("Ada"), None);
-        macos_record(&conn, 2, 22, Some(7), false, Some("Ada"), Some("Lovelace"));
+        macos_record(&conn, 1, 22, Some("link-1"), false, Some("Ada"), None);
+        macos_record(
+            &conn,
+            2,
+            22,
+            Some("link-1"),
+            false,
+            Some("Ada"),
+            Some("Lovelace"),
+        );
         macos_record(&conn, 3, 22, None, false, Some("Grace"), None);
         macos_phone(&conn, 1, "+15551234567");
         macos_email(&conn, 2, "ada@example.com");
@@ -1293,11 +1303,44 @@ mod tests {
     }
 
     #[test]
+    fn test_macos_empty_zlinkid_is_not_a_link() {
+        let conn = macos_db();
+        macos_record(&conn, 1, 22, Some(""), false, Some("Ada"), None);
+        macos_record(&conn, 2, 22, Some(""), false, Some("Grace"), None);
+        macos_phone(&conn, 1, "+15551234567");
+        macos_phone(&conn, 2, "+15559876543");
+
+        let mut index = ContactsIndex::default();
+        index.add_macos(&conn).unwrap();
+
+        assert_ne!(
+            index.identity("+15551234567"),
+            index.identity("+15559876543")
+        );
+    }
+
+    #[test]
     fn test_macos_zlinkid_tie_keeps_lowest_row_name() {
         let conn = macos_db();
         // Insert the higher row first: the tie must resolve by row, not by insertion order.
-        macos_record(&conn, 2, 22, Some(7), false, Some("Augusta"), Some("King"));
-        macos_record(&conn, 1, 22, Some(7), false, Some("Ada"), Some("Lovelace"));
+        macos_record(
+            &conn,
+            2,
+            22,
+            Some("link-1"),
+            false,
+            Some("Augusta"),
+            Some("King"),
+        );
+        macos_record(
+            &conn,
+            1,
+            22,
+            Some("link-1"),
+            false,
+            Some("Ada"),
+            Some("Lovelace"),
+        );
         macos_phone(&conn, 1, "+15551234567");
         macos_email(&conn, 2, "ada@example.com");
 
