@@ -89,7 +89,7 @@ We read the Contacts database on every run and never cache its identities. When 
 We use handle groups as per-person identifiers when comparing chats; the chats table has no such identifier. After grouping handles, we build a second union-find over the `Chat ID`s and add edges from two kinds of evidence:
 
 1. Follow `chat_lookup` links transitively and group the chats they connect.
-2. Match chats by the set of *handle groups* in their participant lists. Replace each `Handle ID` with its group ID before comparing. When participant groups match, merge named rows only when their display names also match. Attach each unnamed row to the lowest-ID named row with the same participants; if no named row matches, merge the unnamed rows together.
+2. Match chats by the set of *handle groups* in their participant lists. Replace each `Handle ID` with its group ID before comparing. When participant groups match, merge named rows only when their display names also match. Attach each unnamed row to the lowest-ID named row with the same participants, unless a `chat_lookup` link already placed it with a named row; if no named row matches, merge the unnamed rows together.
 
 For the sample rows, chats `10` and `11` both contain participant group `{0}`, while chats `12` and `13` both contain groups `{0, 1}`. We assign each resulting set a sequential unique chat ID, using the same ordering as for handle groups. During export, we use the `Chat ID` to unique chat ID map to place messages in the right conversations. We also use that unique ID to name each chat's attachment directory, keeping each transcript and its attachments together.
 

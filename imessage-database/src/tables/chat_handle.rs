@@ -318,12 +318,26 @@ ORDER BY chat;
             }
             anchor.entry(key).or_insert(*chat_id);
         }
+
+        // `chat_lookup` may already have joined an unnamed row to a named row.
+        // Attaching that row to the lowest-ID anchor as well would union the two
+        // named conversations through it, so skip rows whose component already
+        // has a named member. Record each anchor's root as the fallback grows
+        // the component, so rows linked to an attached row are skipped too.
+        let mut named_roots: HashSet<i32> = keyed
+            .iter()
+            .filter(|(_, _, name)| name.is_some())
+            .map(|(chat_id, _, _)| uf.find(*chat_id))
+            .collect();
         for (chat_id, key, name) in &keyed {
-            if name.is_some() {
+            if name.is_some() || named_roots.contains(&uf.find(*chat_id)) {
                 continue;
             }
             match anchor.get(key) {
-                Some(first_chat) => uf.union(*chat_id, *first_chat),
+                Some(first_chat) => {
+                    uf.union(*chat_id, *first_chat);
+                    named_roots.insert(uf.find(*chat_id));
+                }
                 None => {
                     anchor.insert(key, *chat_id);
                 }
@@ -1065,6 +1079,44 @@ mod tests {
             ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &chats).unwrap();
 
         assert_eq!(output.get(&10), output.get(&20));
+    }
+
+    #[test]
+    fn unnamed_row_keeps_its_chat_lookup_conversation() {
+        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
+        input.insert(10, BTreeSet::from([1, 2]));
+        input.insert(20, BTreeSet::from([1, 2]));
+        input.insert(30, BTreeSet::from([1, 2]));
+        let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
+            (10, chat(10, Some("Alpha"))),
+            (20, chat(20, Some("Beta"))),
+            (30, chat(30, None)),
+        ]);
+        let lookup: HashMap<i32, i32> = HashMap::from([(30, 20)]);
+
+        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats).unwrap();
+
+        assert_eq!(output.get(&30), output.get(&20));
+        assert_ne!(output.get(&10), output.get(&20));
+    }
+
+    #[test]
+    fn unnamed_row_linked_to_an_unnamed_row_still_joins_a_named_row() {
+        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
+        input.insert(10, BTreeSet::from([1, 2]));
+        input.insert(30, BTreeSet::from([1, 2]));
+        input.insert(40, BTreeSet::from([1, 2, 3]));
+        let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
+            (10, chat(10, Some("Alpha"))),
+            (30, chat(30, None)),
+            (40, chat(40, None)),
+        ]);
+        let lookup: HashMap<i32, i32> = HashMap::from([(40, 30)]);
+
+        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats).unwrap();
+
+        assert_eq!(output.get(&30), output.get(&10));
+        assert_eq!(output.get(&40), output.get(&10));
     }
 
     #[test]
