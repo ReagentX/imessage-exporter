@@ -180,7 +180,8 @@ struct Candidate {
 
 impl Records {
     /// Register `row` under `id`. Keep the link's preferred name when present; otherwise keep the
-    /// more complete name and retain the first name on ties.
+    /// more complete name and retain the first name on ties. Callers add rows in ascending row
+    /// order, so a tie resolves to the lowest row.
     fn add(&mut self, row: i64, id: RecordId, name: Option<Name>, preferred: bool) {
         self.by_row.insert(row, id);
         let candidate = self.names.entry(id).or_default();
@@ -322,7 +323,8 @@ impl ContactsIndex {
         let mut stmt = conn.prepare(
             "SELECT Z_PK, ZLINKID, ZFIRSTNAME, ZLASTNAME
              FROM ZABCDRECORD
-             WHERE Z_ENT IN (?1, ?2) AND ZCONTAINERWHERECONTACTISME IS NULL",
+             WHERE Z_ENT IN (?1, ?2) AND ZCONTAINERWHERECONTACTISME IS NULL
+             ORDER BY Z_PK",
         )?;
         let mut rows = stmt.query(entities)?;
         while let Some(row) = rows.next()? {
@@ -394,7 +396,8 @@ impl ContactsIndex {
 
         let mut records = Records::default();
         let mut by_link: HashMap<i64, RecordId> = HashMap::new();
-        let mut stmt = conn.prepare("SELECT ROWID, First, Last, PersonLink FROM ABPerson")?;
+        let mut stmt =
+            conn.prepare("SELECT ROWID, First, Last, PersonLink FROM ABPerson ORDER BY ROWID")?;
         let mut rows = stmt.query([])?;
         while let Some(row) = rows.next()? {
             let row_id: i64 = row.get(0)?;
@@ -1290,6 +1293,28 @@ mod tests {
     }
 
     #[test]
+    fn test_macos_zlinkid_tie_keeps_lowest_row_name() {
+        let conn = macos_db();
+        // Insert the higher row first: the tie must resolve by row, not by insertion order.
+        macos_record(&conn, 2, 22, Some(7), false, Some("Augusta"), Some("King"));
+        macos_record(&conn, 1, 22, Some(7), false, Some("Ada"), Some("Lovelace"));
+        macos_phone(&conn, 1, "+15551234567");
+        macos_email(&conn, 2, "ada@example.com");
+
+        let mut index = ContactsIndex::default();
+        index.add_macos(&conn).unwrap();
+
+        assert_eq!(
+            full(&index, "+15551234567").as_deref(),
+            Some("Ada Lovelace")
+        );
+        assert_eq!(
+            full(&index, "ada@example.com").as_deref(),
+            Some("Ada Lovelace")
+        );
+    }
+
+    #[test]
     fn test_macos_me_card_contributes_no_keys() {
         let conn = macos_db();
         macos_record(&conn, 1, 22, None, true, Some("Me"), Some("Myself"));
@@ -1394,6 +1419,28 @@ mod tests {
 
         assert_eq!(
             full(&index, "+15551234567").as_deref(),
+            Some("Ada Lovelace")
+        );
+    }
+
+    #[test]
+    fn test_ios_person_link_tie_keeps_lowest_row_name() {
+        let conn = ios_db();
+        // No `ABPersonLink` row, so no preferred member; both names score the same.
+        ios_person(&conn, 2, Some("Augusta"), Some("King"), 5);
+        ios_person(&conn, 1, Some("Ada"), Some("Lovelace"), 5);
+        ios_value(&conn, 1, IOS_PROPERTY_PHONE, "+15551234567");
+        ios_value(&conn, 2, IOS_PROPERTY_EMAIL, "ada@example.com");
+
+        let mut index = ContactsIndex::default();
+        index.add_ios(&conn).unwrap();
+
+        assert_eq!(
+            full(&index, "+15551234567").as_deref(),
+            Some("Ada Lovelace")
+        );
+        assert_eq!(
+            full(&index, "ada@example.com").as_deref(),
             Some("Ada Lovelace")
         );
     }
