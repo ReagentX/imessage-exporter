@@ -230,7 +230,7 @@ impl Handle {
         let query = concat!(
             "SELECT COUNT(DISTINCT person_centric_id) ",
             "FROM handle ",
-            "WHERE person_centric_id NOT NULL"
+            "WHERE person_centric_id NOT NULL AND person_centric_id != ''"
         );
 
         let person_centric_ids = if column_exists(db, HANDLE, "person_centric_id")? {
@@ -475,5 +475,19 @@ mod tests {
         // {1,2,3}, {4,5}, {6}
         assert_eq!(diagnostic.multi_handle_groups, 2);
         assert_eq!(diagnostic.merged_handles, 3);
+    }
+
+    #[test]
+    fn diagnostic_ignores_empty_person_centric_ids() {
+        let db = db_with(&[
+            (1, "a@example.com", "iMessage", Some("")),
+            (2, "b@example.com", "iMessage", Some("")),
+        ]);
+
+        let diagnostic = Handle::run_diagnostic(&db).unwrap();
+
+        assert_eq!(diagnostic.person_centric_ids, Some(0));
+        assert_eq!(diagnostic.multi_handle_groups, 0);
+        assert_eq!(diagnostic.merged_handles, 0);
     }
 }
