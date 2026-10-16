@@ -631,7 +631,8 @@ impl Config {
             self.run_diagnostic()?;
         } else if let Some(export_type) = &self.options.export_type {
             if let Some(filters) = &self.options.conversation_filter
-                && !self.options.query_context.has_filters()
+                && self.options.query_context.selected_chat_ids.is_none()
+                && self.options.query_context.selected_handle_ids.is_none()
             {
                 return Err(RuntimeError::InvalidOptions(format!(
                     "Selected filter `{filters}` does not match any participants!"
@@ -1511,7 +1512,7 @@ mod chat_filter_tests {
 
     use crate::{
         Config, Options,
-        app::{contacts::Name, export_type::ExportType},
+        app::{contacts::Name, error::RuntimeError, export_type::ExportType},
     };
 
     #[test]
@@ -1638,5 +1639,53 @@ mod chat_filter_tests {
             app.options.query_context.selected_chat_ids,
             Some(BTreeSet::from([4, 6]))
         );
+    }
+
+    #[test]
+    fn filter_matches_any_address_of_a_merged_participant() {
+        let mut options = Options::fake_options(ExportType::Html);
+        options.conversation_filter = Some(String::from("alice@example.com"));
+
+        let mut app = Config::fake_app(options);
+
+        // One person: phone handle 10 carries the display address, email handle 11 does not.
+        let mut alice = Name::fake_name("+15551234567");
+        alice.handle_ids.extend([10, 11]);
+        alice
+            .addresses
+            .extend(["+15551234567".to_string(), "alice@example.com".to_string()]);
+        app.participants.insert(10, alice);
+
+        let mut bob = Name::fake_name("+15559876543");
+        bob.handle_ids.insert(12);
+        bob.addresses.insert("+15559876543".to_string());
+        app.participants.insert(12, bob);
+
+        app.chatroom_participants.insert(1, BTreeSet::from([10]));
+        app.chatroom_participants.insert(2, BTreeSet::from([11]));
+        app.chatroom_participants.insert(3, BTreeSet::from([12]));
+
+        app.resolve_filtered_handles();
+
+        assert_eq!(
+            app.options.query_context.selected_handle_ids,
+            Some(BTreeSet::from([10, 11]))
+        );
+        assert_eq!(
+            app.options.query_context.selected_chat_ids,
+            Some(BTreeSet::from([1, 2]))
+        );
+    }
+
+    #[test]
+    fn unmatched_filter_errors_even_with_a_date_filter() {
+        let mut options = Options::fake_options(ExportType::Html);
+        options.conversation_filter = Some(String::from("nobody@example.com"));
+        options.query_context.set_start("2020-01-01").unwrap();
+
+        let mut app = Config::fake_app(options);
+        app.resolve_filtered_handles();
+
+        assert!(matches!(app.start(), Err(RuntimeError::InvalidOptions(_))));
     }
 }

@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -25,10 +25,12 @@ pub struct Name {
     pub last: String,
     /// Full name.
     pub full: String,
-    /// Combined handle details from the Messages database.
+    /// Handle address used for display and filenames.
     pub details: String,
     /// Original handle IDs that map to this name.
     pub handle_ids: HashSet<i32>,
+    /// The `handle.id` value of each of those handles: a phone number, an email, or a short code.
+    pub addresses: BTreeSet<String>,
 }
 
 impl Name {
@@ -57,6 +59,7 @@ impl Name {
             full,
             details: String::new(),
             handle_ids: HashSet::new(),
+            addresses: BTreeSet::new(),
         })
     }
 
@@ -65,12 +68,13 @@ impl Name {
         u8::from(!self.first.is_empty()) + u8::from(!self.last.is_empty())
     }
 
-    /// `true` when any display field contains the provided string.
+    /// `true` when any name field or any address contains the provided string.
     pub fn contains(&self, s: &str) -> bool {
         self.first.contains(s)
             || self.last.contains(s)
             || self.full.contains(s)
             || self.details.contains(s)
+            || self.addresses.iter().any(|address| address.contains(s))
     }
 
     /// Return the full name, falling back to handle details.
@@ -84,11 +88,13 @@ impl Name {
 
     /// Build a name that only carries the details string.
     pub fn from_details<D: Into<String>>(details: D) -> Self {
+        let details = details.into();
         Name {
             first: String::new(),
             last: String::new(),
             full: String::new(),
-            details: details.into(),
+            addresses: BTreeSet::from([details.clone()]),
+            details,
             handle_ids: HashSet::new(),
         }
     }
@@ -104,6 +110,7 @@ impl Name {
             full: String::new(),
             details: name.to_string(),
             handle_ids: HashSet::new(),
+            addresses: BTreeSet::new(),
         }
     }
 }
@@ -269,6 +276,7 @@ impl ContactsIndex {
                 .entry(deduped_id)
                 .and_modify(|name| {
                     name.handle_ids.insert(handle_id);
+                    name.addresses.insert(details.clone());
                 })
                 .or_insert_with(|| {
                     let mut name = self
@@ -278,6 +286,7 @@ impl ContactsIndex {
                     // Keep the original details string for display/fallback
                     name.details = details.clone();
                     name.handle_ids.insert(handle_id);
+                    name.addresses.insert(details.clone());
                     name
                 });
         }
@@ -800,5 +809,32 @@ mod tests {
         // Looking up two separate phone numbers should NOT match the concatenated one
         let result = index.lookup("+15551234567 +15559876543");
         assert_eq!(result, Some(correct_contact.clone()));
+    }
+
+    #[test]
+    fn test_participants_map_keeps_every_address_in_a_group() {
+        let index = ContactsIndex::default();
+        let participants = HashMap::from([
+            (1, "+15551234567".to_string()),
+            (2, "alice@example.com".to_string()),
+            (3, "+15559876543".to_string()),
+        ]);
+        let deduped = HashMap::from([(1, 0), (2, 0), (3, 1)]);
+
+        let map = index.build_participants_map(&participants, &deduped);
+
+        let merged = &map[&0];
+        assert_eq!(merged.handle_ids, HashSet::from([1, 2]));
+        assert_eq!(
+            merged.addresses,
+            BTreeSet::from(["+15551234567".to_string(), "alice@example.com".to_string()])
+        );
+        assert!(merged.contains("alice@example.com"));
+        assert!(merged.contains("+15551234567"));
+        assert!(!merged.contains("+15559876543"));
+        assert_eq!(
+            map[&1].addresses,
+            BTreeSet::from(["+15559876543".to_string()])
+        );
     }
 }
