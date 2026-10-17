@@ -322,12 +322,17 @@ ORDER BY chat;
         // `chat_lookup` may already have joined an unnamed row to a named row.
         // Attaching that row to the lowest-ID anchor as well would union the two
         // named conversations through it, so skip rows whose component already
-        // has a named member. Record each anchor's root as the fallback grows
-        // the component, so rows linked to an attached row are skipped too.
+        // has a named member. A lookup canonical can be named without having
+        // handle rows, so look for names beyond `keyed`. When the fallback
+        // attaches a row to a named anchor, record the merged root so rows
+        // linked to that row are skipped too; an unnamed anchor adds nothing.
+        let named = |chat_id: &i32| chats.get(chat_id).and_then(Chat::display_name).is_some();
         let mut named_roots: HashSet<i32> = keyed
             .iter()
-            .filter(|(_, _, name)| name.is_some())
-            .map(|(chat_id, _, _)| uf.find(*chat_id))
+            .map(|(chat_id, _, _)| chat_id)
+            .chain(chat_lookup_map.values())
+            .filter(|chat_id| named(chat_id))
+            .map(|chat_id| uf.find(*chat_id))
             .collect();
         for (chat_id, key, name) in &keyed {
             if name.is_some() || named_roots.contains(&uf.find(*chat_id)) {
@@ -335,8 +340,11 @@ ORDER BY chat;
             }
             match anchor.get(key) {
                 Some(first_chat) => {
+                    let anchor_named = named_roots.contains(&uf.find(*first_chat));
                     uf.union(*chat_id, *first_chat);
-                    named_roots.insert(uf.find(*chat_id));
+                    if anchor_named {
+                        named_roots.insert(uf.find(*chat_id));
+                    }
                 }
                 None => {
                     anchor.insert(key, *chat_id);
@@ -1117,6 +1125,45 @@ mod tests {
 
         assert_eq!(output.get(&30), output.get(&10));
         assert_eq!(output.get(&40), output.get(&10));
+    }
+
+    #[test]
+    fn unnamed_anchor_does_not_block_later_unnamed_merges() {
+        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
+        input.insert(10, BTreeSet::from([1]));
+        input.insert(20, BTreeSet::from([1]));
+        input.insert(30, BTreeSet::from([2]));
+        input.insert(40, BTreeSet::from([2]));
+        let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
+            (10, chat(10, None)),
+            (20, chat(20, None)),
+            (30, chat(30, None)),
+            (40, chat(40, None)),
+        ]);
+        let lookup: HashMap<i32, i32> = HashMap::from([(20, 30)]);
+
+        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats).unwrap();
+
+        assert_eq!(output.get(&10), output.get(&20));
+        assert_eq!(output.get(&20), output.get(&30));
+        assert_eq!(output.get(&30), output.get(&40));
+    }
+
+    #[test]
+    fn named_lookup_canonical_without_handle_rows_still_counts_as_named() {
+        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
+        input.insert(10, BTreeSet::from([1, 2]));
+        input.insert(20, BTreeSet::from([1, 2]));
+        let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
+            (10, chat(10, Some("Alpha"))),
+            (20, chat(20, None)),
+            (99, chat(99, Some("Beta"))),
+        ]);
+        let lookup: HashMap<i32, i32> = HashMap::from([(20, 99)]);
+
+        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats).unwrap();
+
+        assert_ne!(output.get(&10), output.get(&20));
     }
 
     #[test]
