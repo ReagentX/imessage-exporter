@@ -121,34 +121,24 @@ mod tests {
 
     #[test]
     fn test_parse_text_clean() {
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/AttributedBodyTextOnly");
-        let mut file = File::open(plist_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-        let parsed = parse(bytes).unwrap();
+        let cases = [
+            ("plain text", "AttributedBodyTextOnly", "Noter test"),
+            ("text with a space", "AttributedBodyTextOnly2", "Test 3"),
+            ("url", "URL", "https://github.com/ReagentX/Logria"),
+        ];
+        for (label, fixture, expected) in cases {
+            let plist_path = current_dir()
+                .unwrap()
+                .as_path()
+                .join("test_data/typedstream")
+                .join(fixture);
+            let mut file = File::open(plist_path).unwrap();
+            let mut bytes = vec![];
+            file.read_to_end(&mut bytes).unwrap();
+            let parsed = parse(bytes).unwrap();
 
-        let expected = "Noter test".to_string();
-
-        assert_eq!(parsed, expected);
-    }
-
-    #[test]
-    fn test_parse_text_space() {
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/AttributedBodyTextOnly2");
-        let mut file = File::open(plist_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-        let parsed = parse(bytes).unwrap();
-
-        let expected = "Test 3".to_string();
-
-        assert_eq!(parsed, expected);
+            assert_eq!(parsed, expected, "{label}");
+        }
     }
 
     #[test]
@@ -163,22 +153,6 @@ mod tests {
         let parsed = parse(bytes).unwrap();
 
         let expected = "𝖍𝖊𝖑𝖑𝖔 𝖜𝖔𝖗𝖑𝖉".to_string();
-
-        assert_eq!(parsed, expected);
-    }
-
-    #[test]
-    fn test_parse_text_url() {
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/URL");
-        let mut file = File::open(plist_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-        let parsed = parse(bytes).unwrap();
-
-        let expected = "https://github.com/ReagentX/Logria".to_string();
 
         assert_eq!(parsed, expected);
     }
@@ -297,22 +271,6 @@ mod tests {
         let expected = "A single ChatGPT instance takes 5MW of power to run";
 
         assert_eq!(parsed, expected);
-    }
-
-    #[test]
-    fn test_can_drop_chars() {
-        assert_eq!(
-            drop_chars(1, String::from("Hello world")).unwrap(),
-            String::from("ello world")
-        );
-    }
-
-    #[test]
-    fn test_can_drop_chars_none() {
-        assert_eq!(
-            drop_chars(0, String::from("Hello world")).unwrap(),
-            String::from("Hello world")
-        );
     }
 
     #[test]

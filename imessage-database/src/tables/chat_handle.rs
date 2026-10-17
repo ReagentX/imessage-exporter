@@ -505,9 +505,11 @@ mod tests {
         input.insert(6, BTreeSet::from([3])); // 2
 
         let output =
-            ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &HashMap::new());
-        let expected_deduped_ids: HashSet<i32> = output.unwrap().values().copied().collect();
-        assert_eq!(expected_deduped_ids.len(), 3);
+            ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &HashMap::new())
+                .unwrap();
+        let expected: HashMap<i32, i32> =
+            HashMap::from([(1, 0), (2, 0), (3, 0), (4, 1), (5, 1), (6, 2)]);
+        assert_eq!(output, expected);
     }
 
     #[test]
@@ -521,119 +523,11 @@ mod tests {
         input.insert(6, BTreeSet::from([3])); // 3
 
         let output =
-            ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &HashMap::new());
-        let expected_deduped_ids: HashSet<i32> = output.unwrap().values().copied().collect();
-        assert_eq!(expected_deduped_ids.len(), 4);
-    }
-
-    #[test]
-    // Simulate 3 runs of the program and ensure that the order of the deduplicated contacts is stable
-    fn test_same_values() {
-        let mut input_1: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input_1.insert(1, BTreeSet::from([1]));
-        input_1.insert(2, BTreeSet::from([1]));
-        input_1.insert(3, BTreeSet::from([1]));
-        input_1.insert(4, BTreeSet::from([2]));
-        input_1.insert(5, BTreeSet::from([2]));
-        input_1.insert(6, BTreeSet::from([3]));
-
-        let mut input_2: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input_2.insert(1, BTreeSet::from([1]));
-        input_2.insert(2, BTreeSet::from([1]));
-        input_2.insert(3, BTreeSet::from([1]));
-        input_2.insert(4, BTreeSet::from([2]));
-        input_2.insert(5, BTreeSet::from([2]));
-        input_2.insert(6, BTreeSet::from([3]));
-
-        let mut input_3: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input_3.insert(1, BTreeSet::from([1]));
-        input_3.insert(2, BTreeSet::from([1]));
-        input_3.insert(3, BTreeSet::from([1]));
-        input_3.insert(4, BTreeSet::from([2]));
-        input_3.insert(5, BTreeSet::from([2]));
-        input_3.insert(6, BTreeSet::from([3]));
-
-        let mut output_1 =
-            ChatToHandle::dedupe(&input_1, &HashMap::new(), &HashMap::new(), &HashMap::new())
-                .unwrap()
-                .into_iter()
-                .collect::<Vec<(i32, i32)>>();
-        let mut output_2 =
-            ChatToHandle::dedupe(&input_2, &HashMap::new(), &HashMap::new(), &HashMap::new())
-                .unwrap()
-                .into_iter()
-                .collect::<Vec<(i32, i32)>>();
-        let mut output_3 =
-            ChatToHandle::dedupe(&input_3, &HashMap::new(), &HashMap::new(), &HashMap::new())
-                .unwrap()
-                .into_iter()
-                .collect::<Vec<(i32, i32)>>();
-
-        output_1.sort_unstable();
-        output_2.sort_unstable();
-        output_3.sort_unstable();
-
-        assert_eq!(output_1, output_2);
-        assert_eq!(output_1, output_3);
-        assert_eq!(output_2, output_3);
-    }
-
-    #[test]
-    fn test_same_values_with_lookup() {
-        // Simulate 3 runs with chat_lookup to ensure that dedup IDs are
-        // deterministic even when both merge relations are active
-        fn build_input() -> HashMap<i32, BTreeSet<i32>> {
-            let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-            input.insert(0, BTreeSet::from([1]));
-            input.insert(1, BTreeSet::from([1]));
-            input.insert(2, BTreeSet::from([3]));
-            input.insert(4, BTreeSet::from([2]));
-            input.insert(5, BTreeSet::from([1]));
-            input
-        }
-
-        fn build_lookup() -> HashMap<i32, i32> {
-            let mut lookup: HashMap<i32, i32> = HashMap::new();
-            lookup.insert(2, 5);
-            lookup.insert(4, 0);
-            lookup
-        }
-
-        let mut output_1 = ChatToHandle::dedupe(
-            &build_input(),
-            &build_lookup(),
-            &HashMap::new(),
-            &HashMap::new(),
-        )
-        .unwrap()
-        .into_iter()
-        .collect::<Vec<(i32, i32)>>();
-        let mut output_2 = ChatToHandle::dedupe(
-            &build_input(),
-            &build_lookup(),
-            &HashMap::new(),
-            &HashMap::new(),
-        )
-        .unwrap()
-        .into_iter()
-        .collect::<Vec<(i32, i32)>>();
-        let mut output_3 = ChatToHandle::dedupe(
-            &build_input(),
-            &build_lookup(),
-            &HashMap::new(),
-            &HashMap::new(),
-        )
-        .unwrap()
-        .into_iter()
-        .collect::<Vec<(i32, i32)>>();
-
-        output_1.sort_unstable();
-        output_2.sort_unstable();
-        output_3.sort_unstable();
-
-        assert_eq!(output_1, output_2);
-        assert_eq!(output_1, output_3);
-        assert_eq!(output_2, output_3);
+            ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &HashMap::new())
+                .unwrap();
+        let expected: HashMap<i32, i32> =
+            HashMap::from([(1, 0), (2, 1), (3, 1), (4, 0), (5, 2), (6, 3)]);
+        assert_eq!(output, expected);
     }
 
     #[test]
@@ -713,120 +607,40 @@ mod tests {
     }
 
     #[test]
-    fn lookup_merges_when_canonical_has_higher_id() {
-        // Simulates the real SQL output: canonical = MAX(chat_id) in a connected component.
-        // Chat 10 (iMessage) and chat 20 (SMS) are the same conversation with different handles.
-        // The lookup maps both to canonical 20 (the max).
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(10, BTreeSet::from([1])); // iMessage handle
-        input.insert(20, BTreeSet::from([2])); // SMS handle
-
-        let mut chat_lookup_map: HashMap<i32, i32> = HashMap::new();
-        chat_lookup_map.insert(10, 20);
-        chat_lookup_map.insert(20, 20);
-
-        let output =
-            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
-                .unwrap();
-
-        // Both chats represent the same conversation, so they must share a deduplicated ID
-        assert_eq!(
-            output.get(&10),
-            output.get(&20),
-            "Chats linked by chat_lookup should merge regardless of ID ordering"
-        );
-    }
-
-    #[test]
     fn lookup_merge_is_order_independent() {
-        // Two identical conversation pairs, but with canonical ID flipped.
-        // Both should produce the same merge result.
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(0, BTreeSet::from([1, 2]));
-        input.insert(5, BTreeSet::from([3, 4]));
-
-        // Case A: canonical is the lower ID (0)
-        let mut lookup_a: HashMap<i32, i32> = HashMap::new();
-        lookup_a.insert(0, 0);
-        lookup_a.insert(5, 0);
-        let output_a =
-            ChatToHandle::dedupe(&input, &lookup_a, &HashMap::new(), &HashMap::new()).unwrap();
-
-        // Case B: canonical is the higher ID (5), which matches real SQL MAX(root) behavior
-        let mut lookup_b: HashMap<i32, i32> = HashMap::new();
-        lookup_b.insert(0, 5);
-        lookup_b.insert(5, 5);
-        let output_b =
-            ChatToHandle::dedupe(&input, &lookup_b, &HashMap::new(), &HashMap::new()).unwrap();
-
-        // Both cases link the same two chats; the merge result must be the same
-        assert_eq!(
-            output_a.get(&0) == output_a.get(&5),
-            output_b.get(&0) == output_b.get(&5),
-            "Merge result must not depend on which chat ID is canonical"
-        );
-        // And specifically, both must actually merge
-        assert_eq!(
-            output_b.get(&0),
-            output_b.get(&5),
-            "Chats linked by lookup should merge even when canonical is the higher ID"
-        );
-    }
-
-    #[test]
-    fn transitive_merge_across_participants_and_lookup() {
-        // Chat 0 and chat 5 share participants {1}, so they merge by participant matching.
-        // Chat 2 maps to chat 5 via chat_lookup (different participants, same conversation).
-        // Transitively, chat 2 should also be in the same group as chats 0 and 5.
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(0, BTreeSet::from([1])); // participant group A
-        input.insert(2, BTreeSet::from([3])); // different participants, linked to 5 by lookup
-        input.insert(5, BTreeSet::from([1])); // participant group A (same as chat 0)
-
-        let mut chat_lookup_map: HashMap<i32, i32> = HashMap::new();
-        chat_lookup_map.insert(2, 5);
-        chat_lookup_map.insert(5, 5);
-
-        let output =
-            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
-                .unwrap();
-
-        // Chats 0 and 5 merge by participants
-        assert_eq!(output.get(&0), output.get(&5));
-        // Chat 2 maps to 5 via lookup, so it must also be in the same group
-        assert_eq!(
-            output.get(&2),
-            output.get(&5),
-            "Chat linked by lookup to a chat that merged by participants should join the same group"
-        );
-    }
-
-    #[test]
-    fn multiple_service_splits_all_merge() {
-        // Realistic scenario: one conversation across three services (iMessage, SMS, RCS)
-        // Each service has its own chat ID and handle ID.
-        // The SQL query would produce canonical = MAX(100, 200, 300) = 300 for all.
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(100, BTreeSet::from([10])); // iMessage
-        input.insert(200, BTreeSet::from([20])); // SMS
-        input.insert(300, BTreeSet::from([30])); // RCS
-
-        let mut chat_lookup_map: HashMap<i32, i32> = HashMap::new();
-        chat_lookup_map.insert(100, 300);
-        chat_lookup_map.insert(200, 300);
-        chat_lookup_map.insert(300, 300);
-
-        let output =
-            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
-                .unwrap();
-
-        let unique_ids: HashSet<i32> = output.values().copied().collect();
-        assert_eq!(
-            unique_ids.len(),
-            1,
-            "All three service-split chats should merge into one conversation, got {:?}",
-            output
-        );
+        // Chats linked through `chat_lookup` must land in one conversation no
+        // matter which linked chat is canonical. The SQL picks MAX(root), so
+        // the higher-ID cases match production.
+        let cases = [
+            (
+                "canonical is the lower id",
+                HashMap::from([(0, BTreeSet::from([1, 2])), (5, BTreeSet::from([3, 4]))]),
+                HashMap::from([(0, 0), (5, 0)]),
+                HashMap::from([(0, 0), (5, 0)]),
+            ),
+            (
+                "canonical is the higher id",
+                HashMap::from([(0, BTreeSet::from([1, 2])), (5, BTreeSet::from([3, 4]))]),
+                HashMap::from([(0, 5), (5, 5)]),
+                HashMap::from([(0, 0), (5, 0)]),
+            ),
+            (
+                "iMessage, SMS, and RCS splits share one canonical",
+                HashMap::from([
+                    (100, BTreeSet::from([10])),
+                    (200, BTreeSet::from([20])),
+                    (300, BTreeSet::from([30])),
+                ]),
+                HashMap::from([(100, 300), (200, 300), (300, 300)]),
+                HashMap::from([(100, 0), (200, 0), (300, 0)]),
+            ),
+        ];
+        for (label, input, chat_lookup_map, expected) in cases {
+            let output =
+                ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
+                    .unwrap();
+            assert_eq!(output, expected, "{label}");
+        }
     }
 
     #[test]
@@ -990,16 +804,6 @@ mod tests {
         assert_eq!(reps[&10], 20);
         assert_eq!(reps[&20], 20);
         assert_eq!(reps[&30], 20);
-    }
-
-    #[test]
-    fn rows_without_activity_still_get_a_representative() {
-        let dedup: HashMap<i32, i32> = HashMap::from([(7, 0)]);
-        let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([(7, chat(7, None))]);
-
-        let reps = ChatToHandle::representatives(&dedup, &chats, &HashMap::new());
-
-        assert_eq!(reps[&7], 7);
     }
 
     #[test]

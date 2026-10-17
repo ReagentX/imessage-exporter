@@ -130,13 +130,36 @@ mod filename_sanitization_tests {
     }
 
     #[test]
-    fn doesnt_sanitize_none() {
-        assert_eq!(sanitize_filename("a_b_c_d"), "a_b_c_d");
-    }
+    fn sanitizes_by_character_class() {
+        let cases = [
+            // Control characters replaced
+            ("tab", "tab\there", "tab_here"),
+            ("newline", "new\nline", "new_line"),
+            ("carriage return", "return\r", "return_"),
+            ("ascii controls", "ascii\x01\x1F", "ascii__"),
+            // Non-ASCII passed through
+            ("chinese", "你好/世界", "你好_世界"),
+            ("accented letters", "café/niño", "café_niño"),
+            ("cyrillic", "привет/мир", "привет_мир"),
+            // Trailing dots and spaces stripped
+            ("trailing space", "trailing space ", "trailing space"),
+            ("trailing dot", "trailing dot.", "trailing dot"),
+            ("mixed trailing dots and spaces", "mixed. . .", "mixed"),
+            ("multiple trailing dots", "dots...", "dots"),
+            ("multiple trailing spaces", "spaces   ", "spaces"),
+            // Allowed characters untouched
+            ("underscores", "a_b_c_d", "a_b_c_d"),
+            ("dot and hyphen", "file.name-version", "file.name-version"),
+            (
+                "internal dots and spaces",
+                "file.name with spaces.txt",
+                "file.name with spaces.txt",
+            ),
+        ];
 
-    #[test]
-    fn can_sanitize_one() {
-        assert_eq!(sanitize_filename("ab/cd"), "ab_cd");
+        for (label, input, expected) in cases {
+            assert_eq!(sanitize_filename(input), expected, "{label}");
+        }
     }
 
     #[test]
@@ -153,38 +176,8 @@ mod filename_sanitization_tests {
     }
 
     #[test]
-    fn handles_cyrillic() {
-        assert_eq!(sanitize_filename("привет/мир"), "привет_мир");
-    }
-
-    #[test]
     fn handles_leading_space() {
         assert_eq!(sanitize_filename(" leading space"), " leading space");
-    }
-
-    #[test]
-    fn strips_trailing_space() {
-        assert_eq!(sanitize_filename("trailing space "), "trailing space");
-    }
-
-    #[test]
-    fn strips_trailing_dot() {
-        assert_eq!(sanitize_filename("trailing dot."), "trailing dot");
-    }
-
-    #[test]
-    fn strips_multiple_trailing_dots_and_spaces() {
-        assert_eq!(sanitize_filename("mixed. . ."), "mixed");
-        assert_eq!(sanitize_filename("dots..."), "dots");
-        assert_eq!(sanitize_filename("spaces   "), "spaces");
-    }
-
-    #[test]
-    fn preserves_internal_dots_and_spaces() {
-        assert_eq!(
-            sanitize_filename("file.name with spaces.txt"),
-            "file.name with spaces.txt"
-        );
     }
 
     #[test]
@@ -194,38 +187,8 @@ mod filename_sanitization_tests {
     }
 
     #[test]
-    fn handles_tab_char() {
-        assert_eq!(sanitize_filename("tab\there"), "tab_here");
-    }
-
-    #[test]
-    fn handles_newline() {
-        assert_eq!(sanitize_filename("new\nline"), "new_line");
-    }
-
-    #[test]
-    fn handles_carriage_return() {
-        assert_eq!(sanitize_filename("return\r"), "return_");
-    }
-
-    #[test]
-    fn handles_ascii_controls() {
-        assert_eq!(sanitize_filename("ascii\x01\x1F"), "ascii__");
-    }
-
-    #[test]
     fn handles_empty_string() {
         assert_eq!(sanitize_filename(""), "");
-    }
-
-    #[test]
-    fn leaves_allowed_chars_unchanged() {
-        assert_eq!(sanitize_filename("file.name-version"), "file.name-version");
-    }
-
-    #[test]
-    fn handles_accented_letters() {
-        assert_eq!(sanitize_filename("café/niño"), "café_niño");
     }
 
     #[test]
@@ -236,11 +199,6 @@ mod filename_sanitization_tests {
     #[test]
     fn handles_mixed_control_and_disallowed() {
         assert_eq!(sanitize_filename("*\t?\r"), "____");
-    }
-
-    #[test]
-    fn handles_chinese() {
-        assert_eq!(sanitize_filename("你好/世界"), "你好_世界");
     }
 
     #[test]
@@ -309,11 +267,6 @@ mod filename_sanitization_tests {
         // a reserved name and so is not prefixed.
         assert_eq!(sanitize_filename("CON*"), "CON_");
         assert_eq!(sanitize_filename("CON\x00"), "CON_");
-    }
-
-    #[test]
-    fn reserved_name_with_no_bad_chars_is_prefixed() {
-        assert_eq!(sanitize_filename("AUX"), "_AUX");
     }
 
     #[test]

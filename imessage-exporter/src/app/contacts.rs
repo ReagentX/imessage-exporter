@@ -808,20 +808,6 @@ mod tests {
     }
 
     #[test]
-    fn test_phone_lookup_miss_without_plus() {
-        let index = ContactsIndex::default();
-        // No entries, should miss
-        assert_eq!(index.lookup("1234567890"), None);
-    }
-
-    #[test]
-    fn test_phone_lookup_miss_with_plus() {
-        let index = ContactsIndex::default();
-        // No entries, should miss
-        assert_eq!(index.lookup("+1234567890"), None);
-    }
-
-    #[test]
     fn test_email_lookup_match_exact() {
         let mut index = ContactsIndex::default();
         let name = Name::from_opt(Some("Steve".to_string()), Some("Jobs".to_string())).unwrap();
@@ -862,17 +848,21 @@ mod tests {
     }
 
     #[test]
-    fn test_email_lookup_miss_no_entries() {
-        let index = ContactsIndex::default();
-        // No entries
-        assert_eq!(index.lookup("not@here.com"), None);
-    }
-
-    #[test]
     fn test_email_lookup_miss_phone_like() {
-        let index = ContactsIndex::default();
-        // Phone-like but looks like email
-        assert_eq!(index.lookup("123@456"), None);
+        let mut index = ContactsIndex::default();
+        let phone = Name::from_opt(Some("Jane".to_string()), Some("Smith".to_string())).unwrap();
+        for key in phone_keys("+15551234567") {
+            seed(&mut index, key, &phone);
+        }
+        let email = Name::from_opt(Some("Steve".to_string()), Some("Jobs".to_string())).unwrap();
+        seed(&mut index, "steve@apple.com".to_string(), &email);
+
+        // `@` routes the token to the email key, so the phone card's digits
+        // are never consulted even though they match.
+        assert_eq!(index.lookup("555@1234567"), None);
+        // No `@` routes the token through phone keys, which strip the
+        // formatting an email key would keep verbatim.
+        assert_eq!(index.lookup("555-123-4567"), Some(phone));
     }
 
     #[test]

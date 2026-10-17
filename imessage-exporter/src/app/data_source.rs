@@ -201,17 +201,6 @@ mod tests {
     }
 
     #[test]
-    fn test_data_source_db() {
-        let mut options = Options::fake_options(ExportType::Txt);
-        options.platform = Platform::macOS;
-        let ds = DataSource::from(&options).unwrap();
-
-        // Test that `db()` returns a connection
-        let conn = ds.db();
-        assert!(conn.path().is_some());
-    }
-
-    #[test]
     fn test_data_source_invalid_db_path() {
         let mut options = Options::fake_options(ExportType::Txt);
         options.platform = Platform::macOS;

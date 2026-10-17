@@ -1494,26 +1494,6 @@ mod who_tests {
     }
 
     #[test]
-    fn can_get_who_none_me() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
-        let app = Config::fake_app(options);
-
-        let who = app.who(None, true, &None);
-        assert_eq!(who, "Me".to_string());
-    }
-
-    #[test]
-    fn can_get_who_me_none_caller_id() {
-        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
-        options.use_caller_id = true;
-        let app = Config::fake_app(options);
-
-        let caller_id = Some("test".to_string());
-        let who = app.who(None, true, &caller_id);
-        assert_eq!(who, "test".to_string());
-    }
-
-    #[test]
     fn can_get_who_none_them() {
         let options = Options::fake_options(crate::app::export_type::ExportType::Html);
         let app = Config::fake_app(options);

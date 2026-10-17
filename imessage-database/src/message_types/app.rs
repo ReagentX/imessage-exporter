@@ -371,124 +371,89 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_business_query_string() {
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/app_message/Business.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = parse_ns_keyed_archiver(&plist).unwrap();
+    fn test_parse_check_in() {
+        // Every Check In fixture carries the same url; only the caption differs.
+        let cases = [
+            (
+                "timer started",
+                "CheckinTimer.plist",
+                "Check In: Timer Started",
+            ),
+            (
+                "late",
+                "CheckinLate.plist",
+                "Check In: Has not checked in when expected, location shared",
+            ),
+            (
+                "location",
+                "CheckinLocation.plist",
+                "Check In: Fake Location",
+            ),
+        ];
+        for (label, fixture, caption) in cases {
+            let plist_path = current_dir()
+                .unwrap()
+                .as_path()
+                .join("test_data/app_message")
+                .join(fixture);
+            let plist_data = File::open(plist_path).unwrap();
+            let plist = Value::from_reader(plist_data).unwrap();
+            let parsed = parse_ns_keyed_archiver(&plist).unwrap();
 
-        let balloon = AppMessage::from_map(&parsed).unwrap();
-        let mut expected = HashMap::new();
-        expected.insert("receivedMessage", "33c309ab520bc2c76e99c493157ed578");
-        expected.insert("replyMessage", "6a991da615f2e75d4aa0de334e529024");
+            let balloon = AppMessage::from_map(&parsed).unwrap();
 
-        assert_eq!(balloon.parse_query_string(), expected);
+            let expected = AppMessage {
+                image: None,
+                url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+                title: None,
+                subtitle: None,
+                caption: Some(caption),
+                subcaption: None,
+                trailing_caption: None,
+                trailing_subcaption: None,
+                app_name: Some("Check In"),
+                ldtext: Some(caption),
+            };
+
+            assert_eq!(balloon, expected, "{label}");
+        }
     }
 
     #[test]
-    fn test_parse_check_in_timer() {
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/app_message/CheckinTimer.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = parse_ns_keyed_archiver(&plist).unwrap();
+    fn test_parse_query_string() {
+        let cases = [
+            (
+                "business",
+                "Business.plist",
+                HashMap::from([
+                    ("receivedMessage", "33c309ab520bc2c76e99c493157ed578"),
+                    ("replyMessage", "6a991da615f2e75d4aa0de334e529024"),
+                ]),
+            ),
+            (
+                "check in",
+                "CheckinTimer.plist",
+                HashMap::from([
+                    ("messageType", "1"),
+                    ("interfaceVersion", "1"),
+                    ("sendDate", "1697316869.688709"),
+                ]),
+            ),
+        ];
+        for (label, fixture, expected) in cases {
+            let plist_path = current_dir()
+                .unwrap()
+                .as_path()
+                .join("test_data/app_message")
+                .join(fixture);
+            let plist_data = File::open(plist_path).unwrap();
+            let plist = Value::from_reader(plist_data).unwrap();
+            let parsed = parse_ns_keyed_archiver(&plist).unwrap();
 
-        let balloon = AppMessage::from_map(&parsed).unwrap();
+            let balloon = AppMessage::from_map(&parsed).unwrap();
 
-        let expected = AppMessage {
-            image: None,
-            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
-            title: None,
-            subtitle: None,
-            caption: Some("Check In: Timer Started"),
-            subcaption: None,
-            trailing_caption: None,
-            trailing_subcaption: None,
-            app_name: Some("Check In"),
-            ldtext: Some("Check In: Timer Started"),
-        };
-
-        assert_eq!(balloon, expected);
-    }
-
-    #[test]
-    fn test_parse_check_in_timer_late() {
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/app_message/CheckinLate.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = parse_ns_keyed_archiver(&plist).unwrap();
-
-        let balloon = AppMessage::from_map(&parsed).unwrap();
-
-        let expected = AppMessage {
-            image: None,
-            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
-            title: None,
-            subtitle: None,
-            caption: Some("Check In: Has not checked in when expected, location shared"),
-            subcaption: None,
-            trailing_caption: None,
-            trailing_subcaption: None,
-            app_name: Some("Check In"),
-            ldtext: Some("Check In: Has not checked in when expected, location shared"),
-        };
-
-        assert_eq!(balloon, expected);
-    }
-
-    #[test]
-    fn test_parse_check_in_location() {
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/app_message/CheckinLocation.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = parse_ns_keyed_archiver(&plist).unwrap();
-
-        let balloon = AppMessage::from_map(&parsed).unwrap();
-
-        let expected = AppMessage {
-            image: None,
-            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
-            title: None,
-            subtitle: None,
-            caption: Some("Check In: Fake Location"),
-            subcaption: None,
-            trailing_caption: None,
-            trailing_subcaption: None,
-            app_name: Some("Check In"),
-            ldtext: Some("Check In: Fake Location"),
-        };
-
-        assert_eq!(balloon, expected);
-    }
-
-    #[test]
-    fn test_parse_check_in_query_string() {
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/app_message/CheckinTimer.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = parse_ns_keyed_archiver(&plist).unwrap();
-
-        let balloon = AppMessage::from_map(&parsed).unwrap();
-        let mut expected = HashMap::new();
-        expected.insert("messageType", "1");
-        expected.insert("interfaceVersion", "1");
-        expected.insert("sendDate", "1697316869.688709");
-
-        assert_eq!(balloon.parse_query_string(), expected);
+            assert_eq!(balloon.parse_query_string(), expected, "{label}");
+        }
     }
 
     #[test]

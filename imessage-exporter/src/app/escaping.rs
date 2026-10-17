@@ -77,33 +77,19 @@ mod tests {
     }
 
     #[test]
-    fn escapes_gt() {
-        assert_eq!(escape(">"), "&gt;");
-    }
+    fn escapes_each_ascii_target() {
+        let cases = [
+            ("gt", ">", "&gt;"),
+            ("lt", "<", "&lt;"),
+            ("double quote", "\"", "&quot;"),
+            ("apostrophe", "'", "&apos;"),
+            ("grave", "`", "&grave;"),
+            ("ampersand", "&", "&amp;"),
+        ];
 
-    #[test]
-    fn escapes_lt() {
-        assert_eq!(escape("<"), "&lt;");
-    }
-
-    #[test]
-    fn escapes_double_quote() {
-        assert_eq!(escape("\""), "&quot;");
-    }
-
-    #[test]
-    fn escapes_apostrophe() {
-        assert_eq!(escape("'"), "&apos;");
-    }
-
-    #[test]
-    fn escapes_grave() {
-        assert_eq!(escape("`"), "&grave;");
-    }
-
-    #[test]
-    fn escapes_ampersand() {
-        assert_eq!(escape("&"), "&amp;");
+        for (label, input, expected) in cases {
+            assert_eq!(escape(input), expected, "{label}");
+        }
     }
 
     #[test]

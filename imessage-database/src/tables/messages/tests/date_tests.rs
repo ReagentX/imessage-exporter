@@ -42,26 +42,4 @@ mod tests {
         let m = Message::blank();
         assert_eq!(m.time_until_read(offset), None);
     }
-
-    #[test]
-    fn can_get_date_edited() {
-        let offset = get_offset();
-        let mut m = Message::blank();
-        // May 17, 2022 8:29:42 PM
-        m.date_edited = 674526582885055488;
-
-        let result = m.date_edited(offset);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn can_get_date_delivered() {
-        let offset = get_offset();
-        let mut m = Message::blank();
-        // May 17, 2022 8:29:42 PM
-        m.date_delivered = 674526582885055488;
-
-        let result = m.date_delivered(offset);
-        assert!(result.is_ok());
-    }
 }

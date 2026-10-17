@@ -166,77 +166,88 @@ mod tests {
 
     use plist::Value;
 
-    use crate::message_types::polls::Poll;
+    use crate::message_types::polls::{Poll, PollVote};
+
+    /// Option identifiers from `PollCreate.plist`, in display order.
+    const OPTION_1: &str = "630CD0F8-9502-40D4-B2E1-C53E02FD435E";
+    const OPTION_2: &str = "58B59D74-EF73-4BA7-AA8E-5A30FBAF3F44";
+    const OPTION_3: &str = "D493DDC8-6EE2-408F-888C-3986838A1FBB";
+    const OPTION_4: &str = "541DCA6D-686A-4FEB-9092-00BA4A45E2A4";
+
+    fn archive(filename: &str) -> Value {
+        let path = current_dir()
+            .unwrap()
+            .join("test_data/app_message")
+            .join(filename);
+        Value::from_reader(File::open(path).unwrap()).unwrap()
+    }
+
+    fn vote(voter: &str, option_id: &str) -> PollVote {
+        PollVote {
+            voter: voter.to_string(),
+            option_id: option_id.to_string(),
+        }
+    }
 
     #[test]
     fn test_parse_poll_creation() {
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/app_message/PollCreate.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
-        println!("{:#?}", plist);
+        let poll = Poll::from_payload(&archive("PollCreate.plist")).unwrap();
 
-        let poll = Poll::from_payload(&plist).unwrap();
-
-        println!("{:#?}", poll);
-        assert_eq!(poll.options.len(), 4);
+        assert_eq!(poll.order, vec![OPTION_1, OPTION_2, OPTION_3, OPTION_4]);
+        let options: Vec<(&str, &str)> = poll
+            .order
+            .iter()
+            .map(|id| {
+                (
+                    poll.options[id].text.as_str(),
+                    poll.options[id].creator.as_str(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            options,
+            vec![
+                ("Option 1", "steven@applenet.com"),
+                ("Option 2", "steven@applenet.com"),
+                ("Option 3", "steven@applenet.com"),
+                ("Option 4", "+12223334444"),
+            ]
+        );
+        assert!(poll.options.values().all(|option| option.votes.is_empty()));
     }
 
     #[test]
     fn test_parse_poll_votes() {
-        // Parse the poll first
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/app_message/PollCreate.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
+        let mut poll = Poll::from_payload(&archive("PollCreate.plist")).unwrap();
+        poll.count_votes(&archive("PollVote.plist")).unwrap();
+        poll.count_votes(&archive("PollVote2.plist")).unwrap();
 
-        let mut poll = Poll::from_payload(&plist).unwrap();
-
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/app_message/PollVote.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
-
-        poll.count_votes(&plist).unwrap();
-
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/app_message/PollVote2.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
-
-        poll.count_votes(&plist).unwrap();
-
-        println!("{:#?}", poll);
+        // Votes accumulate across payloads in arrival order.
+        assert_eq!(
+            poll.options[OPTION_1].votes,
+            vec![vote("steven@applenet.com", OPTION_1)]
+        );
+        assert_eq!(
+            poll.options[OPTION_2].votes,
+            vec![
+                vote("+12223334444", OPTION_2),
+                vote("steven@applenet.com", OPTION_2),
+            ]
+        );
+        assert!(poll.options[OPTION_3].votes.is_empty());
+        assert!(poll.options[OPTION_4].votes.is_empty());
     }
 
     #[test]
     fn test_parse_poll_vote_removed() {
-        // Parse the poll first
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/app_message/PollCreate.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
+        let mut poll = Poll::from_payload(&archive("PollCreate.plist")).unwrap();
+        poll.count_votes(&archive("PollRemovedVote.plist")).unwrap();
 
-        let mut poll = Poll::from_payload(&plist).unwrap();
-
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/app_message/PollRemovedVote.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
-
-        poll.count_votes(&plist).unwrap();
-        println!("{:#?}", poll);
+        // The fixture carries one vote for option
+        // 89913F11-D12C-4A06-BB4B-C26C6C4D1A1F, which `PollCreate.plist` does
+        // not define, so `count_votes` drops it. `count_votes` only appends:
+        // a removal payload cannot retract a vote already counted, though it
+        // should.
+        assert!(poll.options.values().all(|option| option.votes.is_empty()));
     }
 }

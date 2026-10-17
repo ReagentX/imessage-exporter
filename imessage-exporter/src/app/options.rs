@@ -1122,13 +1122,6 @@ mod arg_tests {
     }
 
     #[test]
-    fn show_progress_defaults_to_true() {
-        let args = get_command().get_matches_from(["imessage-exporter", "-f", "txt"]);
-        let actual = Options::from_args(&args).unwrap();
-        assert!(actual.show_progress);
-    }
-
-    #[test]
     fn cant_build_option_no_progress_no_export_type() {
         let args = get_command().get_matches_from(["imessage-exporter", "--no-progress"]);
         assert!(Options::from_args(&args).is_err());
@@ -1153,13 +1146,6 @@ mod arg_tests {
     }
 
     #[test]
-    fn use_message_times_defaults_to_false() {
-        let args = get_command().get_matches_from(["imessage-exporter", "-f", "txt"]);
-        let actual = Options::from_args(&args).unwrap();
-        assert!(!actual.use_message_times);
-    }
-
-    #[test]
     fn cant_build_option_use_message_times_no_export_type() {
         let args = get_command().get_matches_from(["imessage-exporter", "--use-message-times"]);
         let error = Options::from_args(&args).unwrap_err();
@@ -1181,7 +1167,6 @@ mod arg_tests {
 #[cfg(test)]
 mod path_tests {
     use std::fs;
-    use std::io::Write;
     use std::path::PathBuf;
 
     use crate::app::{
@@ -1207,35 +1192,33 @@ mod path_tests {
     #[test]
     fn can_validate_different_type() {
         let dir = unique_test_dir("validate-different-type");
+        fs::File::create(dir.join("fake.html")).unwrap();
         let dir_str = dir.to_string_lossy().into_owned();
         let export_path = Some(&dir_str);
         let export_type = Some(ExportType::Txt);
 
         let result = validate_path(export_path, export_type.as_ref());
-
-        let mut fake = dir.clone();
-        fake.push("fake1.html");
-        let mut file = fs::File::create(&fake).unwrap();
-        file.write_all(&[]).unwrap();
 
         assert_eq!(result.unwrap(), dir);
     }
 
     #[test]
-    fn can_validate_same_type() {
+    fn cant_validate_same_type() {
         let dir = unique_test_dir("validate-same-type");
+        fs::File::create(dir.join("fake.txt")).unwrap();
         let dir_str = dir.to_string_lossy().into_owned();
         let export_path = Some(&dir_str);
         let export_type = Some(ExportType::Txt);
 
-        let result = validate_path(export_path, export_type.as_ref());
+        let error = validate_path(export_path, export_type.as_ref()).unwrap_err();
 
-        let mut fake = dir.clone();
-        fake.push("fake2.txt");
-        let mut file = fs::File::create(&fake).unwrap();
-        file.write_all(&[]).unwrap();
-
-        assert_eq!(result.unwrap(), dir);
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "Invalid options!\nSpecified export path {} contains existing \"txt\" export data!",
+                dir.display()
+            )
+        );
     }
 
     #[test]

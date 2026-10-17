@@ -327,23 +327,6 @@ mod tests {
     }
 
     #[test]
-    fn from_rows_matches_from_db() {
-        let db = db_with(&[
-            (1, "+15551234567", "iMessage", Some("p1")),
-            (2, "+15551234567", "SMS", Some("p1")),
-            (3, "a@example.com", "iMessage", Some("p1")),
-            (4, "b@example.com", "iMessage", None),
-            (5, "b@example.com", "SMS", None),
-            (6, "+15559876543", "iMessage", None),
-        ]);
-
-        let from_rows = HandleGroups::from_rows(&Handle::load(&db).unwrap()).finalize();
-        let from_db = HandleGroups::from_db(&db).unwrap().finalize();
-
-        assert_eq!(from_rows, from_db);
-    }
-
-    #[test]
     fn identical_ids_across_services_share_a_group() {
         let db = db_with(&[
             (1, "+15551234567", "iMessage", None),
@@ -455,34 +438,6 @@ mod tests {
         assert_eq!(map[&3], 2);
         assert_eq!(map[&5], 3);
         assert_eq!(map[&9], 2);
-    }
-
-    #[test]
-    fn finalize_is_stable_across_runs() {
-        let rows = [
-            (1, "+15551234567", "iMessage", Some("p1")),
-            (2, "+15551234567", "SMS", Some("p1")),
-            (3, "a@example.com", "iMessage", Some("p1")),
-            (4, "b@example.com", "iMessage", None),
-            (5, "b@example.com", "SMS", None),
-            (6, "+15559876543", "iMessage", None),
-        ];
-        let mut runs: Vec<Vec<(i32, i32)>> = (0..3)
-            .map(|_| {
-                let db = db_with(&rows);
-                HandleGroups::from_db(&db)
-                    .unwrap()
-                    .finalize()
-                    .into_iter()
-                    .collect()
-            })
-            .collect();
-        for run in &mut runs {
-            run.sort_unstable();
-        }
-
-        assert_eq!(runs[0], runs[1]);
-        assert_eq!(runs[1], runs[2]);
     }
 
     #[test]

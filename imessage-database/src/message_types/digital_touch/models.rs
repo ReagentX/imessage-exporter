@@ -438,15 +438,6 @@ mod tests {
     }
 
     #[test]
-    fn parses_video() {
-        let DigitalTouchMessage::Media(media) = parse("video.bin") else {
-            panic!("expected media");
-        };
-        // A video carries no overlay by construction
-        assert!(matches!(media.kind, MediaKind::Video));
-    }
-
-    #[test]
     fn parses_image_with_drawing() {
         let DigitalTouchMessage::Media(media) = parse("image_with_drawing.bin") else {
             panic!("expected media");

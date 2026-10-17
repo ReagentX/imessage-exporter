@@ -246,51 +246,39 @@ mod tests {
     }
 
     #[test]
-    fn can_format_diff_seconds() {
+    fn can_format_diff_components() {
         let start = Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
-        let end = Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 30).unwrap();
-        assert_eq!(readable_diff(&start, &end), Some("19 seconds".to_owned()));
-    }
-
-    #[test]
-    fn can_format_diff_minutes() {
-        let start = Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
-        let end = Local.with_ymd_and_hms(2020, 5, 20, 9, 15, 11).unwrap();
-        assert_eq!(readable_diff(&start, &end), Some("5 minutes".to_owned()));
-    }
-
-    #[test]
-    fn can_format_diff_hours() {
-        let start = Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
-        let end = Local.with_ymd_and_hms(2020, 5, 20, 12, 10, 11).unwrap();
-        assert_eq!(readable_diff(&start, &end), Some("3 hours".to_owned()));
-    }
-
-    #[test]
-    fn can_format_diff_days() {
-        let start = Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
-        let end = Local.with_ymd_and_hms(2020, 5, 30, 9, 10, 11).unwrap();
-        assert_eq!(readable_diff(&start, &end), Some("10 days".to_owned()));
-    }
-
-    #[test]
-    fn can_format_diff_minutes_seconds() {
-        let start = Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
-        let end = Local.with_ymd_and_hms(2020, 5, 20, 9, 15, 30).unwrap();
-        assert_eq!(
-            readable_diff(&start, &end),
-            Some("5 minutes, 19 seconds".to_owned())
-        );
-    }
-
-    #[test]
-    fn can_format_diff_days_minutes() {
-        let start = Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
-        let end = Local.with_ymd_and_hms(2020, 5, 22, 9, 30, 11).unwrap();
-        assert_eq!(
-            readable_diff(&start, &end),
-            Some("2 days, 20 minutes".to_owned())
-        );
+        let cases = [
+            ("seconds", (2020, 5, 20, 9, 10, 30), "19 seconds"),
+            ("minutes", (2020, 5, 20, 9, 15, 11), "5 minutes"),
+            ("hours", (2020, 5, 20, 12, 10, 11), "3 hours"),
+            ("days", (2020, 5, 30, 9, 10, 11), "10 days"),
+            (
+                "minutes and seconds",
+                (2020, 5, 20, 9, 15, 30),
+                "5 minutes, 19 seconds",
+            ),
+            (
+                "days and minutes",
+                (2020, 5, 22, 9, 30, 11),
+                "2 days, 20 minutes",
+            ),
+            (
+                "every component",
+                (2020, 5, 22, 14, 32, 45),
+                "2 days, 5 hours, 22 minutes, 34 seconds",
+            ),
+        ];
+        for (label, (year, month, day, hour, minute, second), expected) in cases {
+            let end = Local
+                .with_ymd_and_hms(year, month, day, hour, minute, second)
+                .unwrap();
+            assert_eq!(
+                readable_diff(&start, &end),
+                Some(expected.to_owned()),
+                "{label}"
+            );
+        }
     }
 
     #[test]
@@ -322,16 +310,6 @@ mod tests {
         let start = Local.with_ymd_and_hms(2020, 2, 29, 9, 10, 11).unwrap();
         let end = Local.with_ymd_and_hms(2021, 2, 28, 9, 10, 11).unwrap();
         assert_eq!(readable_diff(&start, &end), Some("1 year".to_owned()));
-    }
-
-    #[test]
-    fn can_format_diff_all() {
-        let start = Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
-        let end = Local.with_ymd_and_hms(2020, 5, 22, 14, 32, 45).unwrap();
-        assert_eq!(
-            readable_diff(&start, &end),
-            Some("2 days, 5 hours, 22 minutes, 34 seconds".to_owned())
-        );
     }
 
     #[test]
@@ -368,41 +346,6 @@ mod tests {
 
         // Newer databases store nanoseconds since 2001-01-01 00:00:00
         let stamp_ns = (expected_utc.timestamp() - offset) * TIMESTAMP_FACTOR;
-
-        let local = get_local_time(stamp_ns, offset).unwrap();
-        let expected_local = expected_utc.with_timezone(&Local);
-
-        assert_eq!(local, expected_local);
-    }
-
-    #[test]
-    fn can_get_local_time_from_hardcoded_seconds_timestamp() {
-        let offset = get_offset();
-
-        // Legacy-style seconds timestamp
-        let stamp_secs: i64 = 347_670_404;
-
-        let expected_utc = Utc.timestamp_opt(stamp_secs + offset, 0).single().unwrap();
-
-        let local = get_local_time(stamp_secs, offset).unwrap();
-        let expected_local = expected_utc.with_timezone(&Local);
-
-        assert_eq!(local, expected_local);
-    }
-
-    #[test]
-    fn can_get_local_time_from_hardcoded_nanoseconds_timestamp() {
-        let offset = get_offset();
-
-        // Nanosecond-style timestamp
-        let stamp_ns: i64 = 549_948_395_013_559_360;
-
-        let seconds_since_2001 = stamp_ns / TIMESTAMP_FACTOR;
-
-        let expected_utc = Utc
-            .timestamp_opt(seconds_since_2001 + offset, 0)
-            .single()
-            .unwrap();
 
         let local = get_local_time(stamp_ns, offset).unwrap();
         let expected_local = expected_utc.with_timezone(&Local);

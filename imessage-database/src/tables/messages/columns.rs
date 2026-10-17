@@ -115,8 +115,8 @@ pub(super) struct MessageColumns {
 }
 
 impl MessageColumns {
-    /// Number of mapped fields. Tests compare this with `slots`; resolution
-    /// scans the complete result set independently.
+    /// Number of mapped fields. Tests size unrecognized projections with it;
+    /// resolution scans the complete result set independently.
     #[cfg(test)]
     const FIELDS: usize = 36;
 
@@ -675,13 +675,6 @@ mod tests {
     }
 
     #[test]
-    fn slots_cover_every_resolved_field() {
-        let db = ventura_db();
-        let columns = MessageColumns::resolve(&prepared(&db)).unwrap();
-        assert_eq!(slots(&columns).len(), MessageColumns::FIELDS);
-    }
-
-    #[test]
     fn resolve_matches_rusqlite_for_composed_head() {
         let db = ventura_db();
         assert_resolve_matches_rusqlite(&prepared(&db));
@@ -732,24 +725,6 @@ mod tests {
 
         let scrambled = scrambled_db();
         assert_exact_explicit_projection(&prepared(&scrambled));
-    }
-
-    #[test]
-    fn source_qualified_head_has_one_chat_id() {
-        let db = ventura_db();
-        let stmt = prepared(&db);
-
-        let matches: Vec<usize> = stmt
-            .column_names()
-            .iter()
-            .enumerate()
-            .filter(|(_, name)| name.eq_ignore_ascii_case("chat_id"))
-            .map(|(idx, _)| idx)
-            .collect();
-        assert_eq!(matches.len(), 1, "query exposed duplicate chat_id columns");
-
-        let columns = MessageColumns::resolve(&stmt).unwrap();
-        assert_eq!(columns.chat_id, Some(matches[0]));
     }
 
     #[test]

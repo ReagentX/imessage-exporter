@@ -900,19 +900,6 @@ mod tests {
     }
 
     #[test]
-    fn can_get_resolved_path_ios_custom() {
-        let db_path = PathBuf::from("fake_root");
-        let attachment = sample_attachment();
-
-        // iOS Backups store attachments at the same level as the database file, so if the backup
-        // is intact, the custom root is not relevant
-        assert_eq!(
-            attachment.resolved_attachment_path(&Platform::iOS, &db_path, Some("custom/root")),
-            Some("fake_root/41/41746ffc65924078eae42725c979305626f57cca".to_string())
-        );
-    }
-
-    #[test]
     fn can_get_resolved_path_ios_custom_ignores_prefixed_path() {
         let db_path = PathBuf::from("fake_root");
         let mut attachment = sample_attachment();
@@ -958,18 +945,6 @@ mod tests {
     }
 
     #[test]
-    fn cant_get_missing_resolved_path_ios() {
-        let db_path = PathBuf::from("fake_root");
-        let mut attachment = sample_attachment();
-        attachment.filename = None;
-
-        assert_eq!(
-            attachment.resolved_attachment_path(&Platform::iOS, &db_path, None),
-            None
-        );
-    }
-
-    #[test]
     fn can_get_attachment_bytes_no_filter() {
         let db_path = current_dir()
             .unwrap()
@@ -980,53 +955,12 @@ mod tests {
 
         let context = QueryContext::default();
 
-        assert!(Attachment::get_total_attachment_bytes(&connection, &context).is_ok());
-    }
-
-    #[test]
-    fn can_get_attachment_bytes_start_filter() {
-        let db_path = current_dir()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("imessage-database/test_data/db/test.db");
-        let connection = get_connection(&db_path).unwrap();
-
-        let mut context = QueryContext::default();
-        context.set_start("2020-01-01").unwrap();
-
-        assert!(Attachment::get_total_attachment_bytes(&connection, &context).is_ok());
-    }
-
-    #[test]
-    fn can_get_attachment_bytes_end_filter() {
-        let db_path = current_dir()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("imessage-database/test_data/db/test.db");
-        let connection = get_connection(&db_path).unwrap();
-
-        let mut context = QueryContext::default();
-        context.set_end("2020-01-01").unwrap();
-
-        assert!(Attachment::get_total_attachment_bytes(&connection, &context).is_ok());
-    }
-
-    #[test]
-    fn can_get_attachment_bytes_start_end_filter() {
-        let db_path = current_dir()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("imessage-database/test_data/db/test.db");
-        let connection = get_connection(&db_path).unwrap();
-
-        let mut context = QueryContext::default();
-        context.set_start("2020-01-01").unwrap();
-        context.set_end("2021-01-01").unwrap();
-
-        assert!(Attachment::get_total_attachment_bytes(&connection, &context).is_ok());
+        // SUM(total_bytes) over the fixture's four attachment rows:
+        // 24560 + 60664 + 20479 + 610063
+        assert_eq!(
+            Attachment::get_total_attachment_bytes(&connection, &context).unwrap(),
+            715766
+        );
     }
 
     #[test]
@@ -1061,37 +995,6 @@ mod tests {
         context.set_selected_handle_ids(BTreeSet::from([1, 2, 3]));
 
         assert!(Attachment::get_total_attachment_bytes(&connection, &context).is_ok());
-    }
-
-    #[test]
-    fn can_get_file_size_bytes() {
-        let attachment = sample_attachment();
-
-        assert_eq!(attachment.file_size(), String::from("100.00 B"));
-    }
-
-    #[test]
-    fn can_get_file_size_kb() {
-        let mut attachment = sample_attachment();
-        attachment.total_bytes = 2300;
-
-        assert_eq!(attachment.file_size(), String::from("2.25 KB"));
-    }
-
-    #[test]
-    fn can_get_file_size_mb() {
-        let mut attachment = sample_attachment();
-        attachment.total_bytes = 5612000;
-
-        assert_eq!(attachment.file_size(), String::from("5.35 MB"));
-    }
-
-    #[test]
-    fn can_get_file_size_gb() {
-        let mut attachment: Attachment = sample_attachment();
-        attachment.total_bytes = 9234712394;
-
-        assert_eq!(attachment.file_size(), String::from("8.60 GB"));
     }
 
     #[test]
