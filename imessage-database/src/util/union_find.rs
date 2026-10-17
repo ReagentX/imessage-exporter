@@ -2,7 +2,7 @@
  Shared disjoint-set implementation for handle and chat row IDs.
 */
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// Use this structure to compute equivalence classes of row IDs.
 ///
@@ -64,5 +64,30 @@ impl UnionFind {
             self.parent.insert(ry, rx);
             self.rank.insert(rx, rank_x + 1);
         }
+    }
+
+    /// `true` when `x` has been added with `make_set` or `union`.
+    pub(crate) fn contains(&self, x: i32) -> bool {
+        self.parent.contains_key(&x)
+    }
+
+    /// Every id in the structure, ascending.
+    pub(crate) fn ids(&self) -> impl Iterator<Item = i32> + '_ {
+        self.parent.keys().copied()
+    }
+
+    /// Label each id's class with a sequential number, in the order the ids are given.
+    ///
+    /// A class gets its number when its first id is visited, so passing ids in ascending order
+    /// numbers classes by their smallest member. Ids not passed receive no label.
+    pub(crate) fn label(&mut self, ids: impl IntoIterator<Item = i32>) -> HashMap<i32, i32> {
+        let mut by_root: HashMap<i32, i32> = HashMap::new();
+        let mut labels = HashMap::new();
+        for id in ids {
+            let root = self.find(id);
+            let next = by_root.len() as i32;
+            labels.insert(id, *by_root.entry(root).or_insert(next));
+        }
+        labels
     }
 }

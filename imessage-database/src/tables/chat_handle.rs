@@ -42,11 +42,16 @@ impl Table for ChatToHandle {
 /// Both kinds of ID use `i32`. Keep them in separate variants so callers cannot
 /// confuse a handle row ID with a group ID.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum Participant {
+pub enum Participant {
     /// Handle group from [`HandleGroups::finalize`].
     Group(i32),
     /// Handle row with no entry in the group map.
     Handle(i32),
+}
+
+/// `true` when the chat row has a display name.
+fn named(chats: &HashMap<i32, Chat>, chat_id: i32) -> bool {
+    chats.get(&chat_id).and_then(Chat::display_name).is_some()
 }
 
 // MARK: Cache
@@ -285,10 +290,7 @@ ORDER BY chat;
 
         // Merge chats that share the same participant set, iterating in
         // sorted order so union-by-rank picks deterministic representatives
-        let mut sorted_chats: Vec<(&i32, &BTreeSet<i32>)> = duplicated_data.iter().collect();
-        sorted_chats.sort_by_key(|(id, _)| *id);
-
-        let keyed: Vec<(i32, BTreeSet<Participant>, Option<&str>)> = sorted_chats
+        let mut keyed: Vec<(i32, BTreeSet<Participant>, Option<&str>)> = duplicated_data
             .iter()
             .map(|(chat_id, participants)| {
                 let key = participants
@@ -299,9 +301,10 @@ ORDER BY chat;
                     })
                     .collect();
                 let name = chats.get(chat_id).and_then(Chat::display_name);
-                (**chat_id, key, name)
+                (*chat_id, key, name)
             })
             .collect();
+        keyed.sort_by_key(|(id, _, _)| *id);
 
         // Merge rows that share participants and a name. Then attach unnamed
         // rows to the lowest-ID named row with the same participants.
@@ -326,7 +329,6 @@ ORDER BY chat;
         // When the fallback attaches a row to a named anchor, record the merged
         // root so rows linked to that row are skipped too; an unnamed anchor
         // adds nothing.
-        let named = |chat_id: &i32| chats.get(chat_id).and_then(Chat::display_name).is_some();
         let mut lookup_members: Vec<i32> = chat_lookup_map
             .iter()
             .flat_map(|(chat_id, canonical)| [*chat_id, *canonical])
@@ -335,10 +337,15 @@ ORDER BY chat;
         lookup_members.dedup();
         let mut named_roots: HashSet<i32> = keyed
             .iter()
-            .map(|(chat_id, _, _)| chat_id)
-            .chain(lookup_members.iter())
-            .filter(|chat_id| named(chat_id))
-            .map(|chat_id| uf.find(*chat_id))
+            .filter(|(_, _, name)| name.is_some())
+            .map(|(chat_id, _, _)| *chat_id)
+            .chain(
+                lookup_members
+                    .iter()
+                    .copied()
+                    .filter(|chat_id| named(chats, *chat_id)),
+            )
+            .map(|chat_id| uf.find(chat_id))
             .collect();
         for (chat_id, key, name) in &keyed {
             if name.is_some() || named_roots.contains(&uf.find(*chat_id)) {
@@ -360,26 +367,18 @@ ORDER BY chat;
 
         // Assign unique sequential IDs to each equivalence class in sorted
         // chat ID order.
-        let mut deduplicated_chats: HashMap<i32, i32> = HashMap::new();
-        let mut representative_to_id: HashMap<i32, i32> = HashMap::new();
-        let mut next_id = 0;
-
-        for (chat_id, _) in &sorted_chats {
-            let rep = uf.find(**chat_id);
-            let dedup_id = *representative_to_id.entry(rep).or_insert_with(|| {
-                let id = next_id;
-                next_id += 1;
-                id
-            });
-            deduplicated_chats.insert(**chat_id, dedup_id);
-        }
+        let mut deduplicated_chats = uf.label(keyed.iter().map(|(id, _, _)| *id));
 
         // Handle lookup-only named chats that are not yet in deduplicated_chats.
+        let id_by_root: HashMap<i32, i32> = keyed
+            .iter()
+            .map(|(chat_id, _, _)| (uf.find(*chat_id), deduplicated_chats[chat_id]))
+            .collect();
         for member in lookup_members {
-            if duplicated_data.contains_key(&member) || !named(&member) {
+            if duplicated_data.contains_key(&member) || !named(chats, member) {
                 continue;
             }
-            if let Some(dedup_id) = representative_to_id.get(&uf.find(member)) {
+            if let Some(dedup_id) = id_by_root.get(&uf.find(member)) {
                 deduplicated_chats.insert(member, *dedup_id);
             }
         }
@@ -454,8 +453,6 @@ impl ChatToHandle {
             members.entry(*dedup_id).or_default().push(*chat_id);
         }
 
-        let is_named = |chat_id: &i32| chats.get(chat_id).and_then(Chat::display_name).is_some();
-
         let mut representatives = HashMap::with_capacity(deduplicated_chats.len());
         for rows in members.into_values() {
             // Choose the row with the latest activity. Break ties by row ID
@@ -471,12 +468,12 @@ impl ChatToHandle {
                 })
                 .expect("a deduplicated group has at least one row");
 
-            let representative = if is_named(&most_active) {
+            let representative = if named(chats, most_active) {
                 most_active
             } else {
                 rows.iter()
                     .copied()
-                    .filter(is_named)
+                    .filter(|chat_id| named(chats, *chat_id))
                     .min()
                     .unwrap_or(most_active)
             };

@@ -3,10 +3,7 @@
 */
 
 use rusqlite::{CachedStatement, Connection, Result, Row};
-use std::collections::{
-    BTreeSet, HashMap,
-    hash_map::Entry::{Occupied, Vacant},
-};
+use std::collections::HashMap;
 
 use crate::{
     error::table::TableError,
@@ -115,9 +112,6 @@ impl Cacheable for Handle {
 #[derive(Debug)]
 pub struct HandleGroups {
     sets: UnionFind,
-    /// Store table row IDs plus `0` in sorted order for stable group assignment
-    /// across runs.
-    rowids: BTreeSet<i32>,
 }
 
 impl HandleGroups {
@@ -127,10 +121,7 @@ impl HandleGroups {
     /// for the local user.
     pub fn from_db(db: &Connection) -> Result<Self, TableError> {
         let mut sets = UnionFind::new();
-        let mut rowids = BTreeSet::new();
-
         sets.make_set(0);
-        rowids.insert(0);
 
         let mut first_by_id: HashMap<String, i32> = HashMap::new();
         let mut first_by_person: HashMap<String, i32> = HashMap::new();
@@ -139,28 +130,19 @@ impl HandleGroups {
         for handle in Handle::rows(&mut statement, [])? {
             let handle = handle?;
             sets.make_set(handle.rowid);
-            rowids.insert(handle.rowid);
 
             if !handle.id.is_empty() {
-                match first_by_id.entry(handle.id) {
-                    Occupied(first) => sets.union(handle.rowid, *first.get()),
-                    Vacant(slot) => {
-                        slot.insert(handle.rowid);
-                    }
-                }
+                let first = *first_by_id.entry(handle.id).or_insert(handle.rowid);
+                sets.union(handle.rowid, first);
             }
 
             if let Some(person) = handle.person_centric_id.filter(|p| !p.is_empty()) {
-                match first_by_person.entry(person) {
-                    Occupied(first) => sets.union(handle.rowid, *first.get()),
-                    Vacant(slot) => {
-                        slot.insert(handle.rowid);
-                    }
-                }
+                let first = *first_by_person.entry(person).or_insert(handle.rowid);
+                sets.union(handle.rowid, first);
             }
         }
 
-        Ok(Self { sets, rowids })
+        Ok(Self { sets })
     }
 
     /// Merge the groups containing two handle row IDs.
@@ -168,19 +150,9 @@ impl HandleGroups {
     /// Pass row IDs from the table. Unknown IDs have no effect, so an external
     /// source cannot create a phantom group with a stale ID.
     pub fn union(&mut self, a: i32, b: i32) {
-        if self.rowids.contains(&a) && self.rowids.contains(&b) {
+        if self.sets.contains(a) && self.sets.contains(b) {
             self.sets.union(a, b);
         }
-    }
-
-    /// Total handle rows seeded from the table, excluding row ID `0`.
-    pub fn len(&self) -> usize {
-        self.rowids.len() - 1
-    }
-
-    /// Returns `true` when the `handle` table had no rows.
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 
     /// Assign a sequential group ID to each class and return it keyed by handle row ID.
@@ -189,21 +161,8 @@ impl HandleGroups {
     /// This keeps results stable for an unchanged table, even when union-find
     /// picks a different representative.
     pub fn finalize(mut self) -> HashMap<i32, i32> {
-        let mut group_by_handle: HashMap<i32, i32> = HashMap::with_capacity(self.rowids.len());
-        let mut group_by_root: HashMap<i32, i32> = HashMap::new();
-        let mut next_id = 0;
-
-        for rowid in &self.rowids {
-            let root = self.sets.find(*rowid);
-            let group = *group_by_root.entry(root).or_insert_with(|| {
-                let id = next_id;
-                next_id += 1;
-                id
-            });
-            group_by_handle.insert(*rowid, group);
-        }
-
-        group_by_handle
+        let ids: Vec<i32> = self.sets.ids().collect();
+        self.sets.label(ids)
     }
 }
 
@@ -239,12 +198,13 @@ impl Handle {
             None
         };
 
-        let groups = HandleGroups::from_db(db)?;
-        let total_handles = groups.len();
+        // Row 0 is synthetic; it has no handle row, so exclude it from the
+        // total and from group sizes.
+        let group_by_handle = HandleGroups::from_db(db)?.finalize();
+        let total_handles = group_by_handle.len() - 1;
 
-        // Exclude synthetic row 0 from group sizes; it has no handle row.
         let mut rows_per_group: HashMap<i32, usize> = HashMap::new();
-        for (rowid, group) in groups.finalize() {
+        for (rowid, group) in group_by_handle {
             if rowid != 0 {
                 *rows_per_group.entry(group).or_insert(0) += 1;
             }
