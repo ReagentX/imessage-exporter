@@ -3,7 +3,7 @@
 */
 
 use plist::Value;
-use rusqlite::{CachedStatement, Connection, Error, Result, Row};
+use rusqlite::{Connection, Error, Result, Row};
 use sha1::{Digest, Sha1};
 
 use std::{
@@ -22,7 +22,7 @@ use crate::{
         messages::Message,
         table::{
             ATTACHMENT, ATTRIBUTION_INFO, CHAT_MESSAGE_JOIN, MESSAGE, MESSAGE_ATTACHMENT_JOIN,
-            STICKER_USER_INFO, Table,
+            STICKER_USER_INFO, Table, open_blob,
         },
     },
     util::{
@@ -194,10 +194,6 @@ impl Table for Attachment {
             emoji_description: row.get("emoji_image_short_description").unwrap_or(None),
             copied_path: None,
         })
-    }
-
-    fn get(db: &'_ Connection) -> Result<CachedStatement<'_>, TableError> {
-        Ok(db.prepare_cached(&format!("SELECT * from {ATTACHMENT}"))?)
     }
 }
 
@@ -580,15 +576,26 @@ impl Attachment {
     ///
     /// This column contains data used for sticker attachments.
     fn sticker_info(&self, db: &Connection) -> Option<Value> {
-        Value::from_reader(self.get_blob(db, ATTACHMENT, STICKER_USER_INFO, self.rowid.into())?)
-            .ok()
+        Value::from_reader(open_blob(
+            db,
+            ATTACHMENT,
+            STICKER_USER_INFO,
+            self.rowid.into(),
+        )?)
+        .ok()
     }
 
     /// Parse the [`ATTRIBUTION_INFO`] `BLOB` column as a property list.
     ///
     /// Calling this reads a `BLOB` from the database.
     fn attribution_info(&self, db: &Connection) -> Option<Value> {
-        Value::from_reader(self.get_blob(db, ATTACHMENT, ATTRIBUTION_INFO, self.rowid.into())?).ok()
+        Value::from_reader(open_blob(
+            db,
+            ATTACHMENT,
+            ATTRIBUTION_INFO,
+            self.rowid.into(),
+        )?)
+        .ok()
     }
 
     /// Parse a sticker's source from the bundle ID in [`STICKER_USER_INFO`].

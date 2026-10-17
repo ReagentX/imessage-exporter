@@ -1,46 +1,41 @@
 /*!
  Table traits, database connection helpers, and shared table constants.
 
- # Streaming API
+ # Row iteration
 
- The streaming API processes each row through a callback without collecting the
- table into a `Vec`.
+ Prepare a statement with the appropriate table type, then use [`Table::rows`]
+ to decode one row at a time. Use any statement that selects the table's columns.
 
  ```no_run
  use imessage_database::{
-    error::table::TableError,
-    tables::{
-        table::{get_connection, Table},
-        messages::Message,
-    },
-    util::dirs::default_db_path
+    tables::{handle::Handle, table::{Table, get_connection}},
+    util::dirs::default_db_path,
  };
 
  let db_path = default_db_path();
  let db = get_connection(&db_path).unwrap();
 
- Message::stream(&db, |message_result| {
-     match message_result {
-         Ok(message) => println!("Message: {:#?}", message),
+ let mut statement = Handle::get(&db).unwrap();
+ for handle_result in Handle::rows(&mut statement, []).unwrap() {
+     match handle_result {
+         Ok(handle) => println!("Handle: {}", handle.id),
          Err(e) => eprintln!("Error: {:?}", e),
      }
-    Ok::<(), TableError>(())
- }).unwrap();
+ }
  ```
-
- The callback may return any error type that implements `From<TableError>`.
 */
 
-use std::{collections::HashMap, fs::metadata, path::Path};
+use std::{fs::metadata, path::Path};
 
-use rusqlite::{
-    CachedStatement, Connection, Error, OpenFlags, Params, Result, Row, Statement, blob::Blob,
-};
+use rusqlite::{Connection, Error, OpenFlags, Params, Result, Row, Statement, blob::Blob};
 
 use crate::error::table::{TableConnectError, TableError};
 
 // MARK: Traits
-/// Database table model that can deserialize itself from SQLite rows.
+/// Deserialize a database record from a stepped SQLite row.
+///
+/// Implement [`from_row`](Self::from_row), then use [`rows`](Self::rows) and
+/// [`row`](Self::row) with any statement that selects the table's columns.
 pub trait Table: Sized {
     /// Deserialize a single row into `Self`. Returns [`rusqlite::Result`]
     /// for direct use inside `rusqlite::query_map` / `query_row`
@@ -48,23 +43,10 @@ pub trait Table: Sized {
     /// [`Table::row`].
     fn from_row(row: &Row) -> Result<Self>;
 
-    /// Prepare the table's default `SELECT *` statement.
-    fn get(db: &'_ Connection) -> Result<CachedStatement<'_>, TableError>;
-
-    /// Iterate over rows produced by `stmt`. The default implementation
-    /// deserializes each through [`from_row`](Self::from_row). Row-fetch and
-    /// row-deserialization failures are surfaced uniformly as [`TableError`].
-    /// Accepts both [`rusqlite::Statement`] and [`rusqlite::CachedStatement`]
-    /// (the latter via deref coercion).
-    ///
-    /// Use this when the caller owns a custom prepared statement (with
-    /// filters, joins, or bound parameters). For a full-table scan against
-    /// the default `SELECT *` with a callback API, see [`Table::stream`].
-    ///
-    /// Implementations may override this method to resolve column layout once
-    /// and reuse it for every row. Resolve through the first [`Row`] when the
-    /// schema may change concurrently: `sqlite3_step` may recompile the
-    /// statement after preparation.
+    /// Iterate over the results of `stmt`, deserializing each row through
+    /// [`from_row`](Self::from_row). Return [`TableError`] for both fetch and
+    /// deserialization failures. Pass either a [`rusqlite::Statement`] or a
+    /// [`rusqlite::CachedStatement`] (via deref coercion).
     fn rows<'stmt, P: Params>(
         stmt: &'stmt mut Statement<'_>,
         params: P,
@@ -80,80 +62,20 @@ pub trait Table: Sized {
     /// [`TableError::QueryError`] if the row is missing or fails to
     /// deserialize. Accepts both [`rusqlite::Statement`] and
     /// [`rusqlite::CachedStatement`] (the latter via deref coercion).
-    ///
-    /// Implementations may override this method to resolve the stepped row's
-    /// column layout instead of decoding by name.
     fn row<P: Params>(stmt: &mut Statement<'_>, params: P) -> Result<Self, TableError> {
         flatten_row(stmt.query_row(params, |row| Ok(Self::from_row(row))))
     }
+}
 
-    /// Process every row from the table's default `SELECT *` query using a
-    /// callback. Builds and discards the prepared statement internally, so
-    /// the caller never sees it.
-    ///
-    /// Use this for full-table scans where the callback style fits. For
-    /// custom statements (filters, joins, bound parameters), prepare the
-    /// statement yourself and iterate via [`Table::rows`]. See the
-    /// [`message`](crate::tables::messages::message) module docs for an
-    /// example.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use imessage_database::{
-    ///    error::table::TableError,
-    ///    tables::{
-    ///        table::{get_connection, Table},
-    ///        handle::Handle,
-    ///    },
-    ///    util::dirs::default_db_path
-    /// };
-    ///
-    /// let db_path = default_db_path();
-    /// let db = get_connection(&db_path).unwrap();
-    ///
-    /// // Stream the Handle table, processing each row with a callback
-    /// Handle::stream(&db, |handle_result| {
-    ///     match handle_result {
-    ///         Ok(handle) => println!("Handle: {}", handle.id),
-    ///         Err(e) => eprintln!("Error: {:?}", e),
-    ///     }
-    ///     Ok::<(), TableError>(())
-    /// }).unwrap();
-    /// ```
-    fn stream<F, E>(db: &Connection, callback: F) -> Result<(), E>
-    where
-        E: From<TableError>,
-        F: FnMut(Result<Self, TableError>) -> Result<(), E>,
-    {
-        stream_table_callback::<Self, F, E>(db, callback)
-    }
-
-    /// Open a `BLOB` column for the supplied `rowid`.
-    fn get_blob<'a>(
-        &self,
-        db: &'a Connection,
-        table: &str,
-        column: &str,
-        rowid: i64,
-    ) -> Option<Blob<'a>> {
-        db.blob_open(rusqlite::MAIN_DB, table, column, rowid, true)
-            .ok()
-    }
-
-    /// Return whether a `BLOB` column is non-null for the supplied `rowid`.
-    fn has_blob(&self, db: &Connection, table: &str, column: &str, rowid: i64) -> bool {
-        let sql = std::format!(
-            "SELECT ({column} IS NOT NULL) AS not_null
-         FROM {table}
-         WHERE rowid = ?1",
-        );
-
-        // This returns 1 for true, 0 for false.
-        db.query_row(&sql, [rowid], |row| row.get(0))
-            .ok()
-            .is_some_and(|v: i32| v != 0)
-    }
+/// Open a `BLOB` column for `rowid`, read-only.
+pub fn open_blob<'a>(
+    db: &'a Connection,
+    table: &str,
+    column: &str,
+    rowid: i64,
+) -> Option<Blob<'a>> {
+    db.blob_open(rusqlite::MAIN_DB, table, column, rowid, true)
+        .ok()
 }
 
 /// Flatten the doubly-nested result produced by `rusqlite::query_map` /
@@ -165,29 +87,6 @@ pub(crate) fn flatten_row<T>(item: Result<Result<T, Error>, Error>) -> Result<T,
         Ok(Ok(row)) => Ok(row),
         Err(why) | Ok(Err(why)) => Err(TableError::QueryError(why)),
     }
-}
-
-fn stream_table_callback<T, F, E>(db: &Connection, mut callback: F) -> Result<(), E>
-where
-    T: Table + Sized,
-    E: From<TableError>,
-    F: FnMut(Result<T, TableError>) -> Result<(), E>,
-{
-    let mut stmt = T::get(db).map_err(E::from)?;
-    for row_result in T::rows(&mut stmt, []).map_err(E::from)? {
-        callback(row_result)?;
-    }
-    Ok(())
-}
-
-/// Table data that can be materialized into an in-memory map.
-pub trait Cacheable {
-    /// Key type for the cache map.
-    type K;
-    /// Value type for the cache map.
-    type V;
-    /// Build the cache from the database.
-    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError>;
 }
 
 // MARK: Database
@@ -303,7 +202,7 @@ pub const ATTACHMENTS_DIR: &str = "attachments";
 
 #[cfg(test)]
 mod tests {
-    use rusqlite::{CachedStatement, Connection, Result, Row};
+    use rusqlite::{Connection, Result, Row};
 
     use crate::error::table::TableError;
 
@@ -315,62 +214,30 @@ mod tests {
         fn from_row(row: &Row) -> Result<Self> {
             Ok(Self(row.get(0)?))
         }
-
-        fn get(db: &'_ Connection) -> Result<CachedStatement<'_>, TableError> {
-            Ok(db.prepare_cached("SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3")?)
-        }
-    }
-
-    #[derive(Debug)]
-    enum StreamError {
-        Table(TableError),
-        Stop,
-    }
-
-    impl From<TableError> for StreamError {
-        fn from(err: TableError) -> Self {
-            Self::Table(err)
-        }
     }
 
     #[test]
-    fn stream_propagates_callback_errors() {
+    fn rows_decodes_every_row_in_order() {
         let db = Connection::open_in_memory().unwrap();
-        let mut seen = vec![];
+        let mut statement = db
+            .prepare("SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3")
+            .unwrap();
 
-        let result = TestRow::stream(&db, |row| {
-            let row = row.map_err(StreamError::from)?;
-            seen.push(row.0);
-            if row.0 == 2 {
-                return Err(StreamError::Stop);
-            }
-            Ok(())
-        });
+        let seen: Vec<i64> = TestRow::rows(&mut statement, [])
+            .unwrap()
+            .map(|row| row.unwrap().0)
+            .collect();
 
-        assert!(matches!(result, Err(StreamError::Stop)));
-        assert_eq!(seen, vec![1, 2]);
+        assert_eq!(seen, vec![1, 2, 3]);
     }
 
     #[test]
-    fn stream_converts_setup_errors() {
-        struct BrokenTable;
-
-        impl Table for BrokenTable {
-            fn from_row(_row: &Row) -> Result<Self> {
-                Ok(Self)
-            }
-
-            fn get(_db: &'_ Connection) -> Result<CachedStatement<'_>, TableError> {
-                Err(TableError::CannotRead(std::io::Error::other("boom")))
-            }
-        }
-
+    fn row_without_a_result_is_a_query_error() {
         let db = Connection::open_in_memory().unwrap();
-        let result = BrokenTable::stream(&db, |_| Ok::<(), StreamError>(()));
+        let mut statement = db.prepare("SELECT 1 WHERE 0").unwrap();
 
-        assert!(matches!(
-            result,
-            Err(StreamError::Table(TableError::CannotRead(_)))
-        ));
+        let result = TestRow::row(&mut statement, []);
+
+        assert!(matches!(result, Err(TableError::QueryError(_))));
     }
 }

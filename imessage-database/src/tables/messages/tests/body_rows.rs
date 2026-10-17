@@ -8,7 +8,6 @@ mod tests {
         tables::{
             capabilities::Capabilities,
             messages::{Message, models::BubbleComponent},
-            table::{Cacheable, Table},
         },
         test_support::schema_db,
         util::query_context::QueryContext,
@@ -146,8 +145,7 @@ mod tests {
                 .prepare("SELECT m.*, 0 as num_attachments, 0 as num_replies FROM message m")
                 .unwrap();
             rows.extend(
-                statement
-                    .query_map([], Message::from_row)
+                Message::rows(&mut statement, [])
                     .unwrap()
                     .map(Result::unwrap),
             );
@@ -196,8 +194,7 @@ mod tests {
             .prepare("SELECT m.*, 0 as num_attachments, 0 as num_replies FROM message m")
             .unwrap();
         rows.extend(
-            statement
-                .query_map([], Message::from_row)
+            Message::rows(&mut statement, [])
                 .unwrap()
                 .map(Result::unwrap),
         );
@@ -231,11 +228,26 @@ mod tests {
         assert!(rendered[0].text.is_some());
         assert!(!rendered[0].components.is_empty());
 
-        let cache = Message::cache(&db).unwrap();
+        let capabilities = Capabilities::determine(&db).unwrap();
+        let cache = Message::tapbacks_by_target(&db, &capabilities).unwrap();
         let cached = &cache["00000000-0000-0000-0000-000000000000"][&0];
         assert_eq!(cached.len(), 1);
         assert!(cached[0].is_tapback());
         assert!(cached[0].text.is_none());
         assert!(cached[0].components.is_empty());
+    }
+
+    #[test]
+    fn tapback_cache_is_empty_without_associated_guids() {
+        let db = schema_db(false, false, false);
+        db.execute_batch("ALTER TABLE message DROP COLUMN associated_message_guid")
+            .unwrap();
+        let capabilities = Capabilities::determine(&db).unwrap();
+        assert!(!capabilities.associated_message_guids);
+
+        // Without `associated_message_guid`, we cannot prepare the scan's
+        // WHERE clause. Check for `Ok` to verify that no query ran.
+        let cache = Message::tapbacks_by_target(&db, &capabilities).unwrap();
+        assert!(cache.is_empty());
     }
 }
