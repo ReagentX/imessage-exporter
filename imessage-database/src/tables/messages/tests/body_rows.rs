@@ -8,7 +8,7 @@ mod tests {
         tables::{
             capabilities::Capabilities,
             messages::{Message, models::BubbleComponent},
-            table::Table,
+            table::{Cacheable, Table},
         },
         test_support::schema_db,
         util::query_context::QueryContext,
@@ -210,5 +210,32 @@ mod tests {
                 assert_eq!(message.components, [BubbleComponent::App]);
             }
         }
+    }
+
+    #[test]
+    fn tapback_cache_skips_body_parsing() {
+        let db = body_db();
+        let bytes = fs::read("test_data/typedstream/AttributedBodyTextOnly").unwrap();
+        insert_body(&db, 1, Value::Blob(bytes.clone()), None);
+        db.execute(
+            "UPDATE message SET associated_message_type = 2000,
+             associated_message_guid = 'p:0/00000000-0000-0000-0000-000000000000'
+             WHERE rowid = 1",
+            [],
+        )
+        .unwrap();
+
+        // The same row parses when read through the rendering query.
+        let rendered = messages(&db);
+        assert_eq!(rendered.len(), 1);
+        assert!(rendered[0].text.is_some());
+        assert!(!rendered[0].components.is_empty());
+
+        let cache = Message::cache(&db).unwrap();
+        let cached = &cache["00000000-0000-0000-0000-000000000000"][&0];
+        assert_eq!(cached.len(), 1);
+        assert!(cached[0].is_tapback());
+        assert!(cached[0].text.is_none());
+        assert!(cached[0].components.is_empty());
     }
 }

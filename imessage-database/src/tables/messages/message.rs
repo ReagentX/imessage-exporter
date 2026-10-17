@@ -475,9 +475,12 @@ impl Cacheable for Message {
         }
 
         // The cache only maps each tapback to its target GUID and component
-        // index, so the derived features stay off: this full scan skips their
-        // correlated subqueries and the recoverable-message join.
-        let cache_capabilities = capabilities.without_derived_features();
+        // index, and tapback rendering never reads a body, so this full scan
+        // skips the derived features' correlated subqueries and join and the
+        // body inputs' blob reads and typedstream decode.
+        let cache_capabilities = capabilities
+            .without_derived_features()
+            .without_body_inputs();
         let mut statement = db.prepare_cached(&message_query(
             &cache_capabilities,
             Some("WHERE m.associated_message_guid IS NOT NULL"),
