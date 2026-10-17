@@ -844,12 +844,15 @@ impl Config {
 mod filename_tests {
     use crate::{
         Config, Options,
-        app::{contacts::Name, runtime::MAX_LENGTH},
+        app::{contacts::Name, export_type::ExportType::Html, runtime::MAX_LENGTH},
     };
 
-    use imessage_database::tables::chat::Chat;
+    use imessage_database::tables::{chat::Chat, chat_handle::ChatToHandle};
 
-    use std::{collections::BTreeSet, path::PathBuf};
+    use std::{
+        collections::{BTreeSet, HashMap},
+        path::PathBuf,
+    };
 
     pub fn fake_chat() -> Chat {
         Chat {
@@ -865,7 +868,7 @@ mod filename_tests {
 
     #[test]
     fn can_create() {
-        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let mut options = Options::fake_options(Html);
         // Disable the export
         options.export_type = None;
         let app = Config::fake_app(options);
@@ -874,7 +877,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_good() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
 
         app.participants.insert(10, Name::fake_name("Person 10"));
@@ -894,7 +897,7 @@ mod filename_tests {
 
     #[test]
     fn filename_names_a_grouped_person_once() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
 
         // Handles 10 and 11 belong to Person A (group 0); handle 12 belongs to
@@ -915,7 +918,7 @@ mod filename_tests {
 
     #[test]
     fn filename_counts_groups_when_truncating() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
         app.options.export_path = PathBuf::from("/tmp");
 
@@ -943,10 +946,7 @@ mod filename_tests {
 
     #[test]
     fn merged_chats_share_filename_and_attachment_directory() {
-        use imessage_database::tables::chat_handle::ChatToHandle;
-        use std::collections::HashMap;
-
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
 
         // Create two chat rows with the same other participant; use a different
@@ -982,7 +982,7 @@ mod filename_tests {
 
     #[test]
     fn filename_truncation_keeps_whole_names_and_counts_the_rest() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
         app.options.export_path = PathBuf::from("/tmp");
         let max_len = MAX_LENGTH - app.options.export_path.as_os_str().len() - 1;
@@ -1021,7 +1021,7 @@ mod filename_tests {
 
     #[test]
     fn filename_truncation_never_yields_a_blank_entry() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
         app.options.export_path = PathBuf::from("/tmp");
         let max_len = MAX_LENGTH - app.options.export_path.as_os_str().len() - 1;
@@ -1047,10 +1047,7 @@ mod filename_tests {
 
     #[test]
     fn named_and_unnamed_rows_of_one_conversation_share_a_filename() {
-        use imessage_database::tables::chat_handle::ChatToHandle;
-        use std::collections::HashMap;
-
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
 
         app.participants.insert(0, Name::fake_name("Person A"));
@@ -1093,10 +1090,7 @@ mod filename_tests {
 
     #[test]
     fn differently_named_rows_use_the_most_recently_active_name() {
-        use imessage_database::tables::chat_handle::ChatToHandle;
-        use std::collections::HashMap;
-
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
 
         app.real_chatrooms = HashMap::from([(100, 0), (200, 0)]);
@@ -1122,8 +1116,40 @@ mod filename_tests {
     }
 
     #[test]
+    fn lookup_only_names_keep_guarded_conversations_in_separate_files() {
+        let options = Options::fake_options(Html);
+        let mut app = Config::fake_app(options);
+
+        let make = |rowid: i32, name: Option<&str>| {
+            let mut chat = fake_chat();
+            chat.rowid = rowid;
+            chat.display_name = name.map(str::to_string);
+            chat
+        };
+        for (rowid, name) in [
+            (10, None),
+            (20, None),
+            (88, Some("Alpha")),
+            (99, Some("Beta")),
+        ] {
+            app.chatrooms.insert(rowid, make(rowid, name));
+        }
+        app.chatroom_participants.insert(10, BTreeSet::from([1]));
+        app.chatroom_participants.insert(20, BTreeSet::from([1]));
+        app.real_chatrooms = HashMap::from([(10, 0), (88, 0), (20, 1), (99, 1)]);
+        app.chat_representatives =
+            ChatToHandle::representatives(&app.real_chatrooms, &app.chatrooms, &HashMap::new());
+
+        let first = app.filename(&app.chatrooms[&10]);
+        let second = app.filename(&app.chatrooms[&20]);
+        assert!(first.starts_with("Alpha - 0"), "{first}");
+        assert!(second.starts_with("Beta - 1"), "{second}");
+        assert_ne!(first, second);
+    }
+
+    #[test]
     fn filename_without_representatives_names_the_row_itself() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
         let mut named = fake_chat();
         named.rowid = 100;
@@ -1136,7 +1162,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_long_multiple() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
         app.options.export_path = PathBuf::from("/tmp");
 
@@ -1199,7 +1225,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_single_long() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
         app.options.export_path = PathBuf::from("/tmp");
 
@@ -1217,7 +1243,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_respects_separator_length() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
 
         let export_path_len = app.options.export_path.as_os_str().len();
@@ -1244,7 +1270,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_chat_display_name_long() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
         app.options.export_path = PathBuf::from("/tmp");
 
@@ -1260,7 +1286,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_chat_display_name_normal() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let app = Config::fake_app(options);
 
         let mut chat = fake_chat();
@@ -1272,7 +1298,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_chat_display_name_short() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let app = Config::fake_app(options);
 
         let mut chat = fake_chat();
@@ -1284,7 +1310,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_chat_participants() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
 
         let chat = fake_chat();
@@ -1306,7 +1332,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_chat_no_participants() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let app = Config::fake_app(options);
 
         let chat = fake_chat();
@@ -1317,7 +1343,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_chat_display_name_truncated_emoji() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let app = Config::fake_app(options);
 
         // Boundary case: a display name exactly at the limit with a multi-byte emoji.
@@ -1335,7 +1361,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_single_long_emoji() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
 
         // Boundary case: participant names made of 4-byte emoji.
@@ -1357,7 +1383,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_multiple_long_emoji() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
 
         // Boundary case: emoji names long enough to trigger "and N others".
@@ -1379,7 +1405,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_cjk_truncation() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
 
         // CJK characters are 3 bytes each; test truncation mid-character
