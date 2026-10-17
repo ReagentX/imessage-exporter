@@ -67,7 +67,7 @@ We need one identifier for every row that belongs to the same person, including 
 
 We add a third kind of evidence from the Contacts database:
 
-3. Addresses that appear on one Contacts card. We treat cards linked through `PersonLink` on iOS or `ZLINKID` on macOS as one card. We skip the "me" card, and we add no edge for an address that appears on two different cards, since we cannot tell which person it belongs to.
+3. Addresses that appear on one Contacts card. We match phone numbers as written: a leading `+` claims a country code, a number without one may carry any, and a `+1` number also matches its bare ten digits. We treat cards linked through `PersonLink` on iOS or `ZLINKID` on macOS as one card. We skip the "me" card, and we add no edge for an address that appears on two different cards, since we cannot tell which person it belongs to.
 
 Because group membership is transitive, we can group handle `3` with `A` through handle `2`, even though `3` has no `Person Centric ID`. We assign sequential IDs by each group's smallest `Handle ID` to keep the map stable across runs while the table remains unchanged. For these rows, assign the following group IDs:
 

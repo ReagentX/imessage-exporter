@@ -473,7 +473,8 @@ impl ContactsIndex {
     /// Look up the contact record owning a handle string.
     ///
     /// Return the first existing key's identity, or `None` when no key exists or that key is
-    /// ambiguous.
+    /// ambiguous. Keys carry their country-code claim, so a handle from one country never
+    /// resolves to a card from another through shared trailing digits.
     pub fn identity(&self, id: &str) -> Option<RecordId> {
         self.resolve(id, |_| true).and_then(|e| e.identity)
     }
@@ -628,8 +629,10 @@ fn parse_email_list(raw: &str) -> Vec<String> {
 ///
 /// - If the number contains "urn:", returns an empty vector
 /// - If the number has fewer than [`MIN_PHONE_DIGITS`] digits, returns an empty vector
-/// - Returns keys with and without '+' prefix
-/// - For US numbers starting with +1 and 11 digits, also adds variants without the `+1` country code
+/// - A number with `+` yields only `+digits`
+/// - A number without `+` yields `digits` and `+digits`, since it may be either
+/// - A `+1` number with 11 digits also yields its bare last 10 digits, since US cards and
+///   handles may omit the country code
 fn phone_keys(raw: &str) -> Vec<String> {
     // Skip iMessage business accounts
     if raw.contains("urn:") {
@@ -645,16 +648,17 @@ fn phone_keys(raw: &str) -> Vec<String> {
         return vec![];
     }
 
-    let mut keys = vec![digits.clone(), format!("+{digits}")];
-
-    // US numbers may appear with or without the country code.
-    if digits.len() == 11 && raw.starts_with("+1") {
-        let last_10 = &digits[digits.len() - 10..];
-        keys.push(last_10.to_string());
-        keys.push(format!("+{last_10}"));
+    let explicit = raw.starts_with('+');
+    let mut keys = vec![format!("+{digits}")];
+    if !explicit {
+        keys.push(digits.clone());
     }
 
-    keys.dedup();
+    // US numbers may appear with or without the country code.
+    if explicit && digits.len() == 11 && digits.starts_with('1') {
+        keys.push(digits[1..].to_string());
+    }
+
     keys
 }
 
@@ -748,7 +752,7 @@ mod tests {
     }
 
     #[test]
-    fn test_phone_lookup_us_with_country_code_with_plus_without1() {
+    fn test_phone_lookup_foreign_number_does_not_match_plus1_card() {
         let mut index = ContactsIndex::default();
         let name = Name::from_opt(Some("John".to_string()), Some("Doe".to_string())).unwrap();
         // Simulate building from db with "+12345678901" (US number with +1 and 10 digits)
@@ -758,8 +762,8 @@ mod tests {
             seed(&mut index, key, &name);
         }
 
-        // Lookup with + but without 1 should match
-        assert_eq!(index.lookup("+2345678901"), Some(name.clone()));
+        // `+2345678901` claims another country code, so it does not match
+        assert_eq!(index.lookup("+2345678901"), None);
     }
 
     #[test]
@@ -913,10 +917,17 @@ mod tests {
     }
 
     #[test]
-    fn test_phone_keys_contains_digits() {
-        // Test phone_keys function
+    fn test_phone_keys_explicit_number_keeps_its_claim() {
+        // A number with `+` claims its country code, so it gets no bare key.
         let keys = phone_keys("+12345678901");
+        assert!(!keys.contains(&"12345678901".to_string()));
+    }
+
+    #[test]
+    fn test_phone_keys_bare_number_makes_both_claims() {
+        let keys = phone_keys("12345678901");
         assert!(keys.contains(&"12345678901".to_string()));
+        assert!(keys.contains(&"+12345678901".to_string()));
     }
 
     #[test]
@@ -934,10 +945,10 @@ mod tests {
     }
 
     #[test]
-    fn test_phone_keys_contains_last_10_with_plus() {
-        // Test phone_keys function
+    fn test_phone_keys_last_10_never_claims_a_country_code() {
+        // `+2345678901` is a complete number elsewhere, not a variant of this one.
         let keys = phone_keys("+12345678901");
-        assert!(keys.contains(&"+2345678901".to_string()));
+        assert!(!keys.contains(&"+2345678901".to_string()));
     }
 
     #[test]
@@ -1317,6 +1328,48 @@ mod tests {
             index.identity("+15551234567"),
             index.identity("+15559876543")
         );
+    }
+
+    #[test]
+    fn test_us_card_does_not_claim_foreign_handle() {
+        // `+14588345678` shares its last ten digits with `+4588345678`, a complete Danish number.
+        let conn = macos_db();
+        macos_record(&conn, 1, 22, None, false, Some("Ada"), None);
+        macos_phone(&conn, 1, "+14588345678");
+
+        let mut index = ContactsIndex::default();
+        index.add_macos(&conn).unwrap();
+
+        assert!(index.identity("+14588345678").is_some());
+        assert_eq!(index.identity("+4588345678"), None);
+        assert_eq!(full(&index, "+4588345678"), None);
+    }
+
+    #[test]
+    fn test_foreign_card_does_not_claim_us_handle() {
+        let conn = macos_db();
+        macos_record(&conn, 1, 22, None, false, Some("Grace"), None);
+        macos_phone(&conn, 1, "+4588345678");
+
+        let mut index = ContactsIndex::default();
+        index.add_macos(&conn).unwrap();
+
+        assert!(index.identity("+4588345678").is_some());
+        assert_eq!(index.identity("+14588345678"), None);
+    }
+
+    #[test]
+    fn test_card_without_country_code_matches_either_handle() {
+        // A bare card makes no claim, so it fits a `+1` handle and a bare one.
+        let conn = macos_db();
+        macos_record(&conn, 1, 22, None, false, Some("Ada"), None);
+        macos_phone(&conn, 1, "(458) 834-5678");
+
+        let mut index = ContactsIndex::default();
+        index.add_macos(&conn).unwrap();
+
+        assert!(index.identity("+14588345678").is_some());
+        assert_eq!(index.identity("4588345678"), index.identity("+14588345678"));
     }
 
     #[test]
