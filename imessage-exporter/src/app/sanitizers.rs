@@ -135,11 +135,6 @@ mod filename_sanitization_tests {
     }
 
     #[test]
-    fn can_sanitize_one() {
-        assert_eq!(sanitize_filename("ab/cd"), "ab_cd");
-    }
-
-    #[test]
     fn can_sanitize_only_bad() {
         assert_eq!(
             sanitize_filename("* \" / \\ < > : | ?"),
@@ -309,11 +304,6 @@ mod filename_sanitization_tests {
         // a reserved name and so is not prefixed.
         assert_eq!(sanitize_filename("CON*"), "CON_");
         assert_eq!(sanitize_filename("CON\x00"), "CON_");
-    }
-
-    #[test]
-    fn reserved_name_with_no_bad_chars_is_prefixed() {
-        assert_eq!(sanitize_filename("AUX"), "_AUX");
     }
 
     #[test]

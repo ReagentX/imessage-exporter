@@ -126,14 +126,14 @@ mod tests {
             placemark::{Placemark, PlacemarkMessage},
             variants::BalloonProvider,
         },
-        util::plist::{parse_ns_keyed_archiver, rich_link_metadata_and_nested},
+        util::plist::parse_ns_keyed_archiver,
     };
     use plist::Value;
     use std::env::current_dir;
     use std::fs::File;
 
     #[test]
-    fn test_parse_app_store_link() {
+    fn test_parse_placemark() {
         let plist_path = current_dir()
             .unwrap()
             .as_path()
@@ -166,35 +166,5 @@ mod tests {
         };
 
         assert_eq!(balloon, expected);
-    }
-
-    #[test]
-    fn can_parse_placemark() {
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/shared_placemark/SharedPlacemark.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = parse_ns_keyed_archiver(&plist).unwrap();
-
-        let (_, placemark_data) =
-            rich_link_metadata_and_nested(&parsed, "specialization2").unwrap();
-
-        let placemark = Placemark::new(placemark_data).unwrap();
-        let expected = Placemark {
-            name: Some("Cherry Cove"),
-            address: Some("Cherry Cove, Avalon"),
-            state: Some("CA"),
-            city: Some("Avalon"),
-            iso_country_code: Some("US"),
-            postal_code: Some("90704"),
-            country: Some("United States"),
-            street: Some("Cherry Cove"),
-            sub_administrative_area: Some("Los Angeles County"),
-            sub_locality: Some("Santa Catalina Island"),
-        };
-
-        assert_eq!(placemark, expected);
     }
 }

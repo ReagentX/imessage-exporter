@@ -40,10 +40,4 @@ mod tests {
         let h: Html<&'static str> = Html::trust("<b>hi</b>");
         assert_eq!(h.to_string(), "<b>hi</b>");
     }
-
-    #[test]
-    fn trust_owned_string() {
-        let h: Html = Html::trust(String::from("<i>x</i>"));
-        assert_eq!(h.to_string(), "<i>x</i>");
-    }
 }

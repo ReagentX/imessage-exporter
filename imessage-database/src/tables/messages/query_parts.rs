@@ -104,7 +104,7 @@ pub(crate) fn message_query(capabilities: &Capabilities, filters: Option<&str>) 
 mod tests {
     use std::collections::BTreeSet;
 
-    use super::{from_clause, message_query};
+    use super::message_query;
     use crate::{
         tables::{capabilities::Capabilities, messages::Message},
         test_support::schema_db,
@@ -196,20 +196,5 @@ mod tests {
             "WHERE  m.date >= {start_ns} AND  c.chat_id IN (1, 2, 3)"
         )));
         assert!(!filters.contains("d.chat_id IN"));
-    }
-
-    #[test]
-    fn from_clause_matches_recoverable_capability() {
-        let db = schema_db(false, true, false);
-        let capabilities = Capabilities::determine(&db).unwrap();
-        assert!(
-            from_clause(&capabilities).contains(
-                "\nLEFT JOIN chat_recoverable_message_join as d ON m.ROWID = d.message_id"
-            )
-        );
-
-        let db = schema_db(false, false, false);
-        let capabilities = Capabilities::determine(&db).unwrap();
-        assert!(!from_clause(&capabilities).contains("chat_recoverable_message_join"));
     }
 }

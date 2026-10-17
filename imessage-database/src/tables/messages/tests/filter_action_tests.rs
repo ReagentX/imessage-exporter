@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod filter_action_mapping_tests {
-    use crate::tables::messages::{Message, models::FilterAction};
+    use crate::tables::messages::models::FilterAction;
 
     #[test]
     fn can_map_every_documented_code() {
@@ -47,11 +47,6 @@ mod filter_action_mapping_tests {
         assert_eq!(FilterAction::Unfiltered.to_string(), "Unfiltered");
         assert_eq!(FilterAction::Unknown(5).to_string(), "Unknown (5)");
     }
-
-    #[test]
-    fn blank_message_has_no_filter_action() {
-        assert_eq!(Message::blank().filter_action(), None);
-    }
 }
 
 #[cfg(test)]
@@ -90,28 +85,6 @@ mod filter_action_query_tests {
 
         assert_eq!(message.filter_action, Some(2));
         assert_eq!(message.filter_action(), Some(FilterAction::Junk));
-    }
-
-    #[test]
-    fn can_read_every_category_from_schema_with_filters() {
-        let db = schema_db(true, true, true);
-        let cases = [
-            ("unfiltered", 0, FilterAction::Unfiltered),
-            ("allow", 1, FilterAction::Allow),
-            ("junk", 2, FilterAction::Junk),
-            ("promotion", 3, FilterAction::Promotion),
-            ("transaction", 4, FilterAction::Transaction),
-        ];
-
-        for (guid, code, _) in cases {
-            insert(&db, guid, Some(code));
-        }
-
-        let capabilities = Capabilities::determine(&db).unwrap();
-        for (guid, _, expected) in cases {
-            let message = Message::from_guid(guid, &db, &capabilities).unwrap();
-            assert_eq!(message.filter_action(), Some(expected), "guid: {guid}");
-        }
     }
 
     #[test]

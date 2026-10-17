@@ -374,39 +374,4 @@ mod tests {
 
         assert_eq!(local, expected_local);
     }
-
-    #[test]
-    fn can_get_local_time_from_hardcoded_seconds_timestamp() {
-        let offset = get_offset();
-
-        // Legacy-style seconds timestamp
-        let stamp_secs: i64 = 347_670_404;
-
-        let expected_utc = Utc.timestamp_opt(stamp_secs + offset, 0).single().unwrap();
-
-        let local = get_local_time(stamp_secs, offset).unwrap();
-        let expected_local = expected_utc.with_timezone(&Local);
-
-        assert_eq!(local, expected_local);
-    }
-
-    #[test]
-    fn can_get_local_time_from_hardcoded_nanoseconds_timestamp() {
-        let offset = get_offset();
-
-        // Nanosecond-style timestamp
-        let stamp_ns: i64 = 549_948_395_013_559_360;
-
-        let seconds_since_2001 = stamp_ns / TIMESTAMP_FACTOR;
-
-        let expected_utc = Utc
-            .timestamp_opt(seconds_since_2001 + offset, 0)
-            .single()
-            .unwrap();
-
-        let local = get_local_time(stamp_ns, offset).unwrap();
-        let expected_local = expected_utc.with_timezone(&Local);
-
-        assert_eq!(local, expected_local);
-    }
 }

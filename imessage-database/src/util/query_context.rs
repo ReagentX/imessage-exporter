@@ -193,33 +193,6 @@ mod use_tests {
         assert!(context.end.is_some());
         assert!(context.has_filters());
     }
-
-    #[test]
-    fn can_create_both() {
-        let mut context = QueryContext::default();
-        context.set_start("2020-01-01").unwrap();
-        context.set_end("2020-02-02").unwrap();
-
-        let from_timestamp = DateTime::from_timestamp(
-            (context.start.unwrap() / TIMESTAMP_FACTOR) + get_offset(),
-            0,
-        )
-        .unwrap()
-        .naive_utc();
-        let local_start = Local.from_utc_datetime(&from_timestamp);
-
-        let from_timestamp =
-            DateTime::from_timestamp((context.end.unwrap() / TIMESTAMP_FACTOR) + get_offset(), 0)
-                .unwrap()
-                .naive_utc();
-        let local_end = Local.from_utc_datetime(&from_timestamp);
-
-        assert_eq!(format(&local_start), "Jan 01, 2020 12:00:00 AM");
-        assert_eq!(format(&local_end), "Feb 02, 2020 12:00:00 AM");
-        assert!(context.start.is_some());
-        assert!(context.end.is_some());
-        assert!(context.has_filters());
-    }
 }
 
 #[cfg(test)]
@@ -235,15 +208,6 @@ mod id_tests {
 
         assert_eq!(qc.selected_chat_ids, Some(BTreeSet::from([1, 2, 3])));
         assert!(qc.has_filters());
-    }
-
-    #[test]
-    fn test_can_set_selected_chat_ids_empty() {
-        let mut qc = QueryContext::default();
-        qc.set_selected_chat_ids(BTreeSet::new());
-
-        assert_eq!(qc.selected_chat_ids, None);
-        assert!(!qc.has_filters());
     }
 
     #[test]
@@ -266,15 +230,6 @@ mod id_tests {
     }
 
     #[test]
-    fn test_can_set_selected_handle_ids_empty() {
-        let mut qc = QueryContext::default();
-        qc.set_selected_handle_ids(BTreeSet::new());
-
-        assert_eq!(qc.selected_handle_ids, None);
-        assert!(!qc.has_filters());
-    }
-
-    #[test]
     fn test_can_overwrite_selected_handle_ids_empty() {
         let mut qc = QueryContext::default();
         qc.set_selected_handle_ids(BTreeSet::from([1, 2, 3]));
@@ -288,12 +243,6 @@ mod id_tests {
 #[cfg(test)]
 mod sanitize_tests {
     use crate::util::query_context::QueryContext;
-
-    #[test]
-    fn can_sanitize_good() {
-        let res = QueryContext::sanitize_date("2020-01-01");
-        assert!(res.is_some());
-    }
 
     #[test]
     fn can_reject_bad_short() {

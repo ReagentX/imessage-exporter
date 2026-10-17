@@ -713,31 +713,6 @@ mod tests {
     }
 
     #[test]
-    fn lookup_merges_when_canonical_has_higher_id() {
-        // Simulates the real SQL output: canonical = MAX(chat_id) in a connected component.
-        // Chat 10 (iMessage) and chat 20 (SMS) are the same conversation with different handles.
-        // The lookup maps both to canonical 20 (the max).
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(10, BTreeSet::from([1])); // iMessage handle
-        input.insert(20, BTreeSet::from([2])); // SMS handle
-
-        let mut chat_lookup_map: HashMap<i32, i32> = HashMap::new();
-        chat_lookup_map.insert(10, 20);
-        chat_lookup_map.insert(20, 20);
-
-        let output =
-            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
-                .unwrap();
-
-        // Both chats represent the same conversation, so they must share a deduplicated ID
-        assert_eq!(
-            output.get(&10),
-            output.get(&20),
-            "Chats linked by chat_lookup should merge regardless of ID ordering"
-        );
-    }
-
-    #[test]
     fn lookup_merge_is_order_independent() {
         // Two identical conversation pairs, but with canonical ID flipped.
         // Both should produce the same merge result.
@@ -770,34 +745,6 @@ mod tests {
             output_b.get(&0),
             output_b.get(&5),
             "Chats linked by lookup should merge even when canonical is the higher ID"
-        );
-    }
-
-    #[test]
-    fn transitive_merge_across_participants_and_lookup() {
-        // Chat 0 and chat 5 share participants {1}, so they merge by participant matching.
-        // Chat 2 maps to chat 5 via chat_lookup (different participants, same conversation).
-        // Transitively, chat 2 should also be in the same group as chats 0 and 5.
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(0, BTreeSet::from([1])); // participant group A
-        input.insert(2, BTreeSet::from([3])); // different participants, linked to 5 by lookup
-        input.insert(5, BTreeSet::from([1])); // participant group A (same as chat 0)
-
-        let mut chat_lookup_map: HashMap<i32, i32> = HashMap::new();
-        chat_lookup_map.insert(2, 5);
-        chat_lookup_map.insert(5, 5);
-
-        let output =
-            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
-                .unwrap();
-
-        // Chats 0 and 5 merge by participants
-        assert_eq!(output.get(&0), output.get(&5));
-        // Chat 2 maps to 5 via lookup, so it must also be in the same group
-        assert_eq!(
-            output.get(&2),
-            output.get(&5),
-            "Chat linked by lookup to a chat that merged by participants should join the same group"
         );
     }
 

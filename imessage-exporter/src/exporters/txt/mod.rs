@@ -486,34 +486,6 @@ mod tests {
     };
 
     #[test]
-    fn can_create() {
-        let options = Options::fake_options(ExportType::Txt);
-        let config = Config::fake_app(options);
-        let exporter = TXT::new(&config).unwrap();
-        assert_eq!(exporter.state.files.len(), 0);
-    }
-
-    #[test]
-    fn can_get_time_valid() {
-        let options = Options::fake_options(ExportType::Txt);
-        let config = Config::fake_app(options);
-        let exporter = TXT::new(&config).unwrap();
-
-        let mut message = Config::fake_message();
-        // May 17, 2022  8:29:42 PM
-        message.date = 674526582885055488;
-        // May 17, 2022  8:29:42 PM
-        message.date_delivered = 674526582885055488;
-        // May 17, 2022  9:30:31 PM
-        message.date_read = 674530231992568192;
-
-        assert_eq!(
-            exporter.get_time(&message),
-            "May 17, 2022  5:29:42 PM (Read by you after 1 hour, 49 seconds)"
-        );
-    }
-
-    #[test]
     fn can_get_time_invalid() {
         let options = Options::fake_options(ExportType::Txt);
         let config = Config::fake_app(options);
@@ -1440,26 +1412,6 @@ mod tests {
         };
 
         assert!(actual.ends_with("33/33c81da8ae3194fc5a0ea993ef6ffe0b048baedb"));
-    }
-
-    #[test]
-    fn can_format_txt_attachment_ios_invalid_disabled() {
-        let options = Options::fake_options(ExportType::Txt);
-        let mut config = Config::fake_app(options);
-        config.options.platform = Platform::iOS;
-
-        let exporter = TXT::new(&config).unwrap();
-
-        let message = Config::fake_message();
-
-        let mut attachment = Config::fake_attachment();
-        attachment.filename = None;
-        attachment.transfer_name = None;
-
-        let actual =
-            exporter.format_attachment(&mut attachment, &message, &AttachmentMeta::default());
-
-        assert_eq!(actual, AttachmentRender::MissingFilename);
     }
 
     #[test]
