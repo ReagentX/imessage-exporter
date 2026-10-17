@@ -274,14 +274,13 @@ ORDER BY chat;
 
         // Merge chats that the chat_lookup table says are the same conversation,
         // iterating in sorted order so union-by-rank picks deterministic representatives.
-        // The canonical may not exist in duplicated_data (e.g., a chat with no handle rows),
-        // but it still serves as a bridge so that all chats mapping to it are unified.
+        // Union every link, including rows absent from duplicated_data: a chat
+        // with no handle rows still bridges the rows that map to it, and its
+        // display name still counts for the conversation.
         let mut sorted_lookup: Vec<(&i32, &i32)> = chat_lookup_map.iter().collect();
         sorted_lookup.sort_by_key(|(chat_id, _)| *chat_id);
         for (chat_id, canonical) in sorted_lookup {
-            if duplicated_data.contains_key(chat_id) {
-                uf.union(*chat_id, *canonical);
-            }
+            uf.union(*chat_id, *canonical);
         }
 
         // Merge chats that share the same participant set, iterating in
@@ -322,15 +321,22 @@ ORDER BY chat;
         // `chat_lookup` may already have joined an unnamed row to a named row.
         // Attaching that row to the lowest-ID anchor as well would union the two
         // named conversations through it, so skip rows whose component already
-        // has a named member. A lookup canonical can be named without having
-        // handle rows, so look for names beyond `keyed`. When the fallback
-        // attaches a row to a named anchor, record the merged root so rows
-        // linked to that row are skipped too; an unnamed anchor adds nothing.
+        // has a named member. Any linked row can be named without having
+        // handle rows, so look for names across every link, not just `keyed`.
+        // When the fallback attaches a row to a named anchor, record the merged
+        // root so rows linked to that row are skipped too; an unnamed anchor
+        // adds nothing.
         let named = |chat_id: &i32| chats.get(chat_id).and_then(Chat::display_name).is_some();
+        let mut lookup_members: Vec<i32> = chat_lookup_map
+            .iter()
+            .flat_map(|(chat_id, canonical)| [*chat_id, *canonical])
+            .collect();
+        lookup_members.sort_unstable();
+        lookup_members.dedup();
         let mut named_roots: HashSet<i32> = keyed
             .iter()
             .map(|(chat_id, _, _)| chat_id)
-            .chain(chat_lookup_map.values())
+            .chain(lookup_members.iter())
             .filter(|chat_id| named(chat_id))
             .map(|chat_id| uf.find(*chat_id))
             .collect();
@@ -366,6 +372,16 @@ ORDER BY chat;
                 id
             });
             deduplicated_chats.insert(**chat_id, dedup_id);
+        }
+
+        // Handle lookup-only named chats that are not yet in deduplicated_chats.
+        for member in lookup_members {
+            if duplicated_data.contains_key(&member) || !named(&member) {
+                continue;
+            }
+            if let Some(dedup_id) = representative_to_id.get(&uf.find(member)) {
+                deduplicated_chats.insert(member, *dedup_id);
+            }
         }
 
         Ok(deduplicated_chats)
@@ -1164,6 +1180,48 @@ mod tests {
         let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats).unwrap();
 
         assert_ne!(output.get(&10), output.get(&20));
+    }
+
+    #[test]
+    fn named_lookup_member_counts_even_when_not_canonical() {
+        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
+        input.insert(10, BTreeSet::from([1]));
+        input.insert(20, BTreeSet::from([1]));
+        let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
+            (10, chat(10, Some("Beta"))),
+            (20, chat(20, None)),
+            (88, chat(88, Some("Alpha"))),
+            (99, chat(99, None)),
+        ]);
+        let lookup: HashMap<i32, i32> = HashMap::from([(20, 99), (88, 99), (99, 99)]);
+
+        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats).unwrap();
+
+        assert_ne!(output.get(&10), output.get(&20));
+        // The named row joins the conversation; the unnamed row without handle rows does not.
+        assert_eq!(output.get(&88), output.get(&20));
+        assert_eq!(output.get(&99), None);
+    }
+
+    #[test]
+    fn lookup_only_names_reach_the_representative() {
+        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
+        input.insert(10, BTreeSet::from([1]));
+        input.insert(20, BTreeSet::from([1]));
+        let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
+            (10, chat(10, None)),
+            (20, chat(20, None)),
+            (88, chat(88, Some("Alpha"))),
+            (99, chat(99, Some("Beta"))),
+        ]);
+        let lookup: HashMap<i32, i32> = HashMap::from([(10, 88), (88, 88), (20, 99), (99, 99)]);
+
+        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats).unwrap();
+        let representatives = ChatToHandle::representatives(&output, &chats, &HashMap::new());
+
+        assert_ne!(output.get(&10), output.get(&20));
+        assert_eq!(representatives.get(&10), Some(&88));
+        assert_eq!(representatives.get(&20), Some(&99));
     }
 
     #[test]
