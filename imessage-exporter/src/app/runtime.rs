@@ -19,7 +19,7 @@ use imessage_database::{
         chat_handle::{ChatToHandle, Participant},
         handle::{Handle, HandleGroups},
         messages::Message,
-        table::{ATTACHMENTS_DIR, Cacheable, ME, ORPHANED, UNKNOWN, get_db_size},
+        table::{ATTACHMENTS_DIR, ME, ORPHANED, UNKNOWN, get_db_size},
     },
     util::{
         dates::{format as format_date, get_local_time, get_offset, readable_diff},
@@ -303,13 +303,14 @@ impl Config {
 
         eprintln!("Building cache...");
         eprintln!("  [1/5] Caching chats...");
-        let chatrooms = Chat::cache(data_source.db())?;
+        let chatrooms = Chat::by_rowid(data_source.db())?;
 
         // Group handles before deduplicating chats. Compare chats by handle
         // groups, not by raw handle rows.
         eprintln!("  [2/5] Caching participants...");
-        let participants = Handle::cache(data_source.db())?;
-        let mut handle_groups = HandleGroups::from_db(data_source.db())?;
+        let handles = Handle::load(data_source.db())?;
+        let mut handle_groups = HandleGroups::from_rows(&handles);
+        let participants = Handle::ids_by_rowid(handles);
         data_source
             .contacts_index
             .link_handles(&participants, &mut handle_groups);
@@ -319,7 +320,7 @@ impl Config {
             .build_participants_map(&participants, &real_participants);
 
         eprintln!("  [3/5] Caching chatrooms...");
-        let chatroom_participants = ChatToHandle::cache(data_source.db())?;
+        let chatroom_participants = ChatToHandle::participants_by_chat(data_source.db())?;
         let chat_handle_lookup = ChatToHandle::get_chat_lookup_map(data_source.db())?;
         let real_chatrooms = ChatToHandle::dedupe(
             &chatroom_participants,
@@ -332,7 +333,7 @@ impl Config {
             ChatToHandle::representatives(&real_chatrooms, &chatrooms, &last_activity);
 
         eprintln!("  [4/5] Caching tapbacks...");
-        let tapbacks = Message::cache(data_source.db())?;
+        let tapbacks = Message::tapbacks_by_target(data_source.db(), &data_source.capabilities)?;
 
         eprintln!("  [5/5] Caching translations...");
         // Missing translation metadata means no messages need translation lookup.
