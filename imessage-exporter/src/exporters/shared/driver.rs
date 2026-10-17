@@ -8,10 +8,7 @@ use std::{
     path::PathBuf,
 };
 
-use imessage_database::tables::{
-    messages::Message,
-    table::{ORPHANED, Table},
-};
+use imessage_database::tables::{messages::Message, table::ORPHANED};
 
 use crate::{
     app::{error::RuntimeError, progress::ExportProgress, runtime::Config},
@@ -379,10 +376,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use imessage_database::tables::{
-        messages::Message,
-        table::{ORPHANED, Table},
-    };
+    use imessage_database::tables::{messages::Message, table::ORPHANED};
 
     use crate::{
         Config, HTML, Options, TXT, app::export_type::ExportType,

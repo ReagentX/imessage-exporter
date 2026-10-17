@@ -9,7 +9,7 @@ use crate::{
     error::table::TableError,
     tables::{
         diagnostic::{HandleDiagnostic, column_exists, count_query},
-        table::{Cacheable, HANDLE, ME, Table},
+        table::{HANDLE, ME, Table},
     },
     util::union_find::UnionFind,
 };
@@ -36,17 +36,39 @@ impl Table for Handle {
             person_centric_id: row.get("person_centric_id").unwrap_or(None),
         })
     }
-
-    fn get(db: &'_ Connection) -> Result<CachedStatement<'_>, TableError> {
-        Ok(db.prepare_cached(&format!("SELECT * from {HANDLE}"))?)
-    }
 }
 
-// MARK: Cache
-impl Cacheable for Handle {
-    type K = i32;
-    type V = String;
-    /// Cache handle identifiers by row ID.
+// MARK: Rows
+impl Handle {
+    /// Prepare the `SELECT *` statement for the `handle` table.
+    pub fn get(db: &'_ Connection) -> Result<CachedStatement<'_>, TableError> {
+        Ok(db.prepare_cached(&format!("SELECT * from {HANDLE}"))?)
+    }
+
+    /// Load every row of the `handle` table in query order.
+    ///
+    /// Load once and share the rows: borrow them with [`HandleGroups::from_rows`]
+    /// before consuming them with [`Handle::ids_by_rowid`].
+    ///
+    /// # Example:
+    ///
+    /// ```no_run
+    /// use imessage_database::util::dirs::default_db_path;
+    /// use imessage_database::tables::table::get_connection;
+    /// use imessage_database::tables::handle::{Handle, HandleGroups};
+    ///
+    /// let db_path = default_db_path();
+    /// let conn = get_connection(&db_path).unwrap();
+    /// let handles = Handle::load(&conn).unwrap();
+    /// let groups = HandleGroups::from_rows(&handles);
+    /// let ids = Handle::ids_by_rowid(handles);
+    /// ```
+    pub fn load(db: &Connection) -> Result<Vec<Handle>, TableError> {
+        let mut statement = Handle::get(db)?;
+        Handle::rows(&mut statement, [])?.collect()
+    }
+
+    /// Map handle identifiers by row ID.
     ///
     /// In group chats, treat row ID `0` as the local user and map it to [`ME`].
     /// Use [`HandleGroups`] to group rows that belong to one person.
@@ -55,24 +77,23 @@ impl Cacheable for Handle {
     ///
     /// ```no_run
     /// use imessage_database::util::dirs::default_db_path;
-    /// use imessage_database::tables::table::{Cacheable, get_connection};
+    /// use imessage_database::tables::table::get_connection;
     /// use imessage_database::tables::handle::Handle;
     ///
     /// let db_path = default_db_path();
     /// let conn = get_connection(&db_path).unwrap();
-    /// let handles = Handle::cache(&conn);
+    /// let handles = Handle::ids_by_rowid(Handle::load(&conn).unwrap());
     /// ```
-    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
-        let mut map = HashMap::new();
+    #[must_use]
+    pub fn ids_by_rowid(handles: Vec<Handle>) -> HashMap<i32, String> {
+        let mut map = HashMap::with_capacity(handles.len() + 1);
         map.insert(0, ME.to_string());
 
-        let mut statement = Handle::get(db)?;
-        for handle in Handle::rows(&mut statement, [])? {
-            let handle = handle?;
+        for handle in handles {
             map.insert(handle.rowid, handle.id);
         }
 
-        Ok(map)
+        map
     }
 }
 
@@ -117,32 +138,45 @@ pub struct HandleGroups {
 impl HandleGroups {
     /// Seed groups from every row of the `handle` table.
     ///
+    /// Load the table through [`Handle::load`], then seed the groups with
+    /// [`HandleGroups::from_rows`].
+    pub fn from_db(db: &Connection) -> Result<Self, TableError> {
+        Ok(Self::from_rows(&Handle::load(db)?))
+    }
+
+    /// Seed groups from loaded `handle` rows.
+    ///
     /// Include row ID `0` as its own group. Chat participant lists can use it
     /// for the local user.
-    pub fn from_db(db: &Connection) -> Result<Self, TableError> {
+    #[must_use]
+    pub fn from_rows(handles: &[Handle]) -> Self {
         let mut sets = UnionFind::new();
         sets.make_set(0);
 
-        let mut first_by_id: HashMap<String, i32> = HashMap::new();
-        let mut first_by_person: HashMap<String, i32> = HashMap::new();
+        let mut first_by_id: HashMap<&str, i32> = HashMap::new();
+        let mut first_by_person: HashMap<&str, i32> = HashMap::new();
 
-        let mut statement = Handle::get(db)?;
-        for handle in Handle::rows(&mut statement, [])? {
-            let handle = handle?;
+        for handle in handles {
             sets.make_set(handle.rowid);
 
             if !handle.id.is_empty() {
-                let first = *first_by_id.entry(handle.id).or_insert(handle.rowid);
+                let first = *first_by_id
+                    .entry(handle.id.as_str())
+                    .or_insert(handle.rowid);
                 sets.union(handle.rowid, first);
             }
 
-            if let Some(person) = handle.person_centric_id.filter(|p| !p.is_empty()) {
+            if let Some(person) = handle
+                .person_centric_id
+                .as_deref()
+                .filter(|p| !p.is_empty())
+            {
                 let first = *first_by_person.entry(person).or_insert(handle.rowid);
                 sets.union(handle.rowid, first);
             }
         }
 
-        Ok(Self { sets })
+        Self { sets }
     }
 
     /// Merge the groups containing two handle row IDs.
@@ -251,6 +285,62 @@ mod tests {
 
     fn groups_of(map: &HashMap<i32, i32>, rowids: &[i32]) -> HashSet<i32> {
         rowids.iter().map(|r| map[r]).collect()
+    }
+
+    #[test]
+    fn load_returns_every_row() {
+        let db = db_with(&[
+            (1, "+15551234567", "iMessage", Some("p1")),
+            (2, "a@example.com", "SMS", None),
+            (3, "b@example.com", "iMessage", Some("")),
+        ]);
+
+        let handles = Handle::load(&db).unwrap();
+
+        let rows: Vec<(i32, &str, Option<&str>)> = handles
+            .iter()
+            .map(|h| (h.rowid, h.id.as_str(), h.person_centric_id.as_deref()))
+            .collect();
+        assert_eq!(
+            rows,
+            vec![
+                (1, "+15551234567", Some("p1")),
+                (2, "a@example.com", None),
+                (3, "b@example.com", Some("")),
+            ]
+        );
+    }
+
+    #[test]
+    fn ids_by_rowid_includes_me_and_every_row() {
+        let db = db_with(&[
+            (1, "+15551234567", "iMessage", None),
+            (2, "a@example.com", "SMS", None),
+        ]);
+
+        let ids = Handle::ids_by_rowid(Handle::load(&db).unwrap());
+
+        assert_eq!(ids.len(), 3);
+        assert_eq!(ids[&0], "Me");
+        assert_eq!(ids[&1], "+15551234567");
+        assert_eq!(ids[&2], "a@example.com");
+    }
+
+    #[test]
+    fn from_rows_matches_from_db() {
+        let db = db_with(&[
+            (1, "+15551234567", "iMessage", Some("p1")),
+            (2, "+15551234567", "SMS", Some("p1")),
+            (3, "a@example.com", "iMessage", Some("p1")),
+            (4, "b@example.com", "iMessage", None),
+            (5, "b@example.com", "SMS", None),
+            (6, "+15559876543", "iMessage", None),
+        ]);
+
+        let from_rows = HandleGroups::from_rows(&Handle::load(&db).unwrap()).finalize();
+        let from_db = HandleGroups::from_db(&db).unwrap().finalize();
+
+        assert_eq!(from_rows, from_db);
     }
 
     #[test]

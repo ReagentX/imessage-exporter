@@ -449,10 +449,10 @@ impl ContactsIndex {
     /// Join handles that belong to one contact record.
     ///
     /// Union every handle that resolves to one contact record. Skip addresses claimed by multiple
-    /// records and row `0` (the local user). [`HandleGroups::finalize`] labels each class by its
-    /// smallest row ID, so the order handles arrive in does not affect the result.
+    /// records and row `0` (the local user). In [`HandleGroups::finalize`], label each class by its
+    /// smallest row ID to keep the result independent of handle order.
     ///
-    /// - `participants`: handle address keyed by handle row ID, from `Handle::cache`
+    /// - `participants`: handle address keyed by handle row ID, from `Handle::ids_by_rowid`
     /// - `groups`: the groups to add edges to, before `finalize`
     /// - Returns: the number of edges added
     pub fn link_handles(

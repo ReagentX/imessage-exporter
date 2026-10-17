@@ -10,7 +10,7 @@ use crate::{
         chat::Chat,
         diagnostic::{ChatHandleDiagnostic, column_exists},
         handle::HandleGroups,
-        table::{CHAT_HANDLE_JOIN, CHAT_MESSAGE_JOIN, Cacheable, MESSAGE, Table},
+        table::{CHAT_HANDLE_JOIN, CHAT_MESSAGE_JOIN, MESSAGE, Table},
     },
     util::union_find::UnionFind,
 };
@@ -31,47 +31,31 @@ impl Table for ChatToHandle {
             handle_id: row.get("handle_id")?,
         })
     }
+}
 
-    fn get(db: &'_ Connection) -> Result<CachedStatement<'_>, TableError> {
+// MARK: Rows
+impl ChatToHandle {
+    /// Prepare the `SELECT *` statement for the `chat_handle_join` table.
+    pub fn get(db: &'_ Connection) -> Result<CachedStatement<'_>, TableError> {
         Ok(db.prepare_cached(&format!("SELECT * FROM {CHAT_HANDLE_JOIN}"))?)
     }
-}
 
-/// Participant identity used when comparing chats.
-///
-/// Both kinds of ID use `i32`. Keep them in separate variants so callers cannot
-/// confuse a handle row ID with a group ID.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Participant {
-    /// Handle group from [`HandleGroups::finalize`].
-    Group(i32),
-    /// Handle row with no entry in the group map.
-    Handle(i32),
-}
-
-/// `true` when the chat row has a display name.
-fn named(chats: &HashMap<i32, Chat>, chat_id: i32) -> bool {
-    chats.get(&chat_id).and_then(Chat::display_name).is_some()
-}
-
-// MARK: Cache
-impl Cacheable for ChatToHandle {
-    type K = i32;
-    type V = BTreeSet<i32>;
-    /// Cache participant handle IDs by chat row ID.
+    /// Map participant handle IDs by chat row ID.
     ///
     /// # Example:
     ///
     /// ```no_run
     /// use imessage_database::util::dirs::default_db_path;
-    /// use imessage_database::tables::table::{Cacheable, get_connection};
+    /// use imessage_database::tables::table::get_connection;
     /// use imessage_database::tables::chat_handle::ChatToHandle;
     ///
     /// let db_path = default_db_path();
     /// let conn = get_connection(&db_path).unwrap();
-    /// let chatrooms = ChatToHandle::cache(&conn);
+    /// let chatrooms = ChatToHandle::participants_by_chat(&conn);
     /// ```
-    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
+    pub fn participants_by_chat(
+        db: &Connection,
+    ) -> Result<HashMap<i32, BTreeSet<i32>>, TableError> {
         let mut cache: HashMap<i32, BTreeSet<i32>> = HashMap::new();
 
         let mut rows = ChatToHandle::get(db)?;
@@ -88,6 +72,23 @@ impl Cacheable for ChatToHandle {
 
         Ok(cache)
     }
+}
+
+/// Participant identity used when comparing chats.
+///
+/// Use separate variants to distinguish handle row IDs from group IDs:
+/// both are represented as `i32`.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Participant {
+    /// Handle group from [`HandleGroups::finalize`].
+    Group(i32),
+    /// Handle row with no entry in the group map.
+    Handle(i32),
+}
+
+/// `true` when the chat row has a display name.
+fn named(chats: &HashMap<i32, Chat>, chat_id: i32) -> bool {
+    chats.get(&chat_id).and_then(Chat::display_name).is_some()
 }
 
 // MARK: Diagnostic
@@ -133,14 +134,14 @@ impl ChatToHandle {
         });
 
         // Cache all chats
-        let all_chats = Self::cache(db)?;
+        let all_chats = Self::participants_by_chat(db)?;
 
         // Cache chatroom participants
         let chat_handle_lookup = ChatToHandle::get_chat_lookup_map(db)?;
         let handle_groups = HandleGroups::from_db(db)?.finalize();
 
         // Deduplicate chatroom participants
-        let chats = Chat::cache(db)?;
+        let chats = Chat::by_rowid(db)?;
         let real_chatrooms =
             ChatToHandle::dedupe(&all_chats, &chat_handle_lookup, &handle_groups, &chats)?;
 
@@ -253,16 +254,16 @@ ORDER BY chat;
     /// use std::collections::HashMap;
     ///
     /// use imessage_database::util::dirs::default_db_path;
-    /// use imessage_database::tables::table::{Cacheable, get_connection};
+    /// use imessage_database::tables::table::get_connection;
     /// use imessage_database::tables::chat::Chat;
     /// use imessage_database::tables::chat_handle::ChatToHandle;
     /// use imessage_database::tables::handle::HandleGroups;
     ///
     /// let db_path = default_db_path();
     /// let conn = get_connection(&db_path).unwrap();
-    /// let chatrooms = ChatToHandle::cache(&conn).unwrap();
+    /// let chatrooms = ChatToHandle::participants_by_chat(&conn).unwrap();
     /// let handle_groups = HandleGroups::from_db(&conn).unwrap().finalize();
-    /// let chats = Chat::cache(&conn).unwrap();
+    /// let chats = Chat::by_rowid(&conn).unwrap();
     /// let deduped_chatrooms = ChatToHandle::dedupe(&chatrooms, &HashMap::new(), &handle_groups, &chats);
     /// ```
     pub fn dedupe(
