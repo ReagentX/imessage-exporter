@@ -75,7 +75,7 @@ pub struct Config {
 impl Config {
     /// Return the chat and deduplicated chat ID for a message.
     pub fn conversation(&self, message: &Message) -> Option<(&Chat, &i32)> {
-        match message.chat_id.or(message.deleted_from) {
+        match message.chat_rowid() {
             Some(chat_id) => {
                 if let Some(chatroom) = self.chatrooms.get(&chat_id) {
                     self.real_chatrooms.get(&chat_id).map(|id| (chatroom, id))
@@ -1594,6 +1594,28 @@ mod directory_tests {
 
         let sub_dir = app.conversation_attachment_path(Some(1));
         assert_eq!(String::from("orphaned"), sub_dir);
+    }
+
+    #[test]
+    fn recovered_message_attachments_follow_its_transcript() {
+        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let mut app = Config::fake_app(options);
+        app.real_chatrooms.insert(100, 7);
+
+        // A recovered deleted message has no chat_id; deleted_from names its chat.
+        let mut message = Config::fake_message();
+        message.chat_id = None;
+        message.deleted_from = Some(100);
+
+        assert_eq!(message.chat_rowid(), Some(100));
+        assert_eq!(
+            app.conversation_attachment_path(message.chat_rowid()),
+            String::from("7")
+        );
+        assert_eq!(
+            app.conversation_attachment_path(message.chat_id),
+            String::from("orphaned")
+        );
     }
 
     #[test]

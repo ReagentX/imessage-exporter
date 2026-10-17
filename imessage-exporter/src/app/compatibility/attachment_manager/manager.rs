@@ -87,7 +87,7 @@ impl AttachmentManager {
             let mut to = config.attachment_path();
 
             // Add the subdirectory
-            let sub_dir = config.conversation_attachment_path(message.chat_id);
+            let sub_dir = config.conversation_attachment_path(message.chat_rowid());
             to.push(sub_dir);
 
             // Each handwriting payload has a unique ID.
