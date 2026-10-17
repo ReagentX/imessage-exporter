@@ -209,8 +209,8 @@ impl Attachment {
     /// not guaranteed to align with the order of the attachment
     /// [`AttributedRange`](crate::tables::messages::models::AttributedRange)s
     /// (those whose [`attachment`](crate::tables::messages::models::AttributedRange::attachment)
-    /// is `Some`) in the message's
-    /// [`attributed_body()`](crate::tables::messages::message::Message::attributed_body).
+    /// is `Some`) in the message's parsed
+    /// [`components`](crate::tables::messages::Message::components).
     /// Callers pairing body ranges to rows should match on the file-transfer GUID
     /// rather than relying on position.
     pub fn from_message(

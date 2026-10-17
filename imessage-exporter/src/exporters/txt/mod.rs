@@ -1,4 +1,4 @@
-use std::{fs::File, io::BufWriter};
+use std::{convert::identity, fs::File, io::BufWriter};
 
 use crate::{
     app::{error::RuntimeError, runtime::Config},
@@ -320,13 +320,13 @@ impl<'a> MessageFormatter<'a> for TXT<'a> {
             parts.push(MessagePartVM {
                 body,
                 expressive: ctx.expressive,
-                tapbacks: build_tapbacks(self, message, idx, std::convert::identity)?
+                tapbacks: build_tapbacks(self, message, idx, identity)?
                     .map(|tapbacks| TapbacksVM { tapbacks }),
                 replies: build_replies(
                     self,
                     ctx.replies_map.get_mut(&idx),
                     Self::BUFFER_CAPACITY,
-                    std::convert::identity,
+                    identity,
                 )?
                 .map(|replies| RepliesVM { replies }),
             });
@@ -476,7 +476,10 @@ mod tests {
     use imessage_database::{
         message_types::text_effects::text_effect::TextEffect,
         tables::{
-            messages::models::{AttachmentMeta, AttributedRange, BubbleComponent},
+            messages::{
+                Message,
+                models::{AttachmentMeta, AttributedRange, BubbleComponent},
+            },
             table::{FITNESS_RECEIVER, ME},
         },
         util::{dirs::home, platform::Platform},
@@ -532,15 +535,11 @@ mod tests {
         let config = Config::fake_app(options);
         let exporter = TXT::new(&config).unwrap();
 
-        let mut message = Config::fake_message();
+        let mut message = Config::fake_message_with_text("Hello world");
         // May 17, 2022  8:29:42 PM
         message.date = 674526582885055488;
-        message.text = Some("Hello world".to_string());
         message.is_from_me = true;
         message.chat_id = Some(0);
-        message
-            .generate_text_legacy(config.data_source.db())
-            .unwrap();
 
         let mut actual = String::new();
         exporter
@@ -559,15 +558,12 @@ mod tests {
         let config = Config::fake_app(options);
         let exporter = TXT::new(&config).unwrap();
 
-        let mut message = Config::fake_message();
+        let mut message =
+            Config::fake_message_with_text(format!("{FITNESS_RECEIVER} closed all three rings"));
         // May 17, 2022  8:29:42 PM
         message.date = 674526582885055488;
-        message.text = Some(format!("{FITNESS_RECEIVER} closed all three rings"));
         message.is_from_me = true;
         message.chat_id = Some(0);
-        message
-            .generate_text_legacy(config.data_source.db())
-            .unwrap();
 
         let mut actual = String::new();
         exporter
@@ -584,16 +580,12 @@ mod tests {
         let config = Config::fake_app(options);
         let exporter = TXT::new(&config).unwrap();
 
-        let mut message = Config::fake_message();
+        let mut message = Config::fake_message_with_text("Hello world");
         message.date = 674526582885055488;
-        message.text = Some("Hello world".to_string());
         message.is_from_me = true;
         message.chat_id = Some(0);
         message.expressive_send_style_id =
             Some("com.apple.messages.effect.CKConfettiEffect".to_string());
-        message
-            .generate_text_legacy(config.data_source.db())
-            .unwrap();
 
         let mut actual = String::new();
         exporter
@@ -614,13 +606,11 @@ mod tests {
         let exporter = TXT::new(&config).unwrap();
 
         let build = |expressive: Option<String>| {
-            let mut m = Config::fake_message();
+            let mut m = Config::fake_message_with_text("Hello world");
             m.date = 674526582885055488;
-            m.text = Some("Hello world".to_string());
             m.is_from_me = true;
             m.chat_id = Some(0);
             m.expressive_send_style_id = expressive;
-            m.generate_text_legacy(config.data_source.db()).unwrap();
             m
         };
 
@@ -647,15 +637,11 @@ mod tests {
         let config = Config::fake_app(options);
         let exporter = TXT::new(&config).unwrap();
 
-        let mut message = Config::fake_message();
+        let mut message = Config::fake_message_with_text("Hello world");
         // May 17, 2022  8:29:42 PM
-        message.text = Some("Hello world".to_string());
         message.date = 674526582885055488;
         message.is_from_me = true;
         message.deleted_from = Some(0);
-        message
-            .generate_text_legacy(config.data_source.db())
-            .unwrap();
 
         let mut actual = String::new();
         exporter
@@ -672,16 +658,12 @@ mod tests {
         let config = Config::fake_app(options);
         let exporter = TXT::new(&config).unwrap();
 
-        let mut message = Config::fake_message();
-        message.text = Some("Hello world".to_string());
+        let mut message = Config::fake_message_with_text("Hello world");
         // May 17, 2022  8:29:42 PM
         message.date = 674526582885055488;
         // May 17, 2022  9:30:31 PM
         message.date_delivered = 674530231992568192;
         message.is_from_me = true;
-        message
-            .generate_text_legacy(config.data_source.db())
-            .unwrap();
 
         let mut actual = String::new();
         exporter
@@ -703,14 +685,10 @@ mod tests {
         config.real_participants.insert(999999, 999999);
         let exporter = TXT::new(&config).unwrap();
 
-        let mut message = Config::fake_message();
+        let mut message = Config::fake_message_with_text("Hello world");
         // May 17, 2022  8:29:42 PM
         message.date = 674526582885055488;
-        message.text = Some("Hello world".to_string());
         message.handle_id = Some(999999);
-        message
-            .generate_text_legacy(config.data_source.db())
-            .unwrap();
 
         let mut actual = String::new();
         exporter
@@ -731,18 +709,14 @@ mod tests {
         config.real_participants.insert(999999, 999999);
         let exporter = TXT::new(&config).unwrap();
 
-        let mut message = Config::fake_message();
+        let mut message = Config::fake_message_with_text("Hello world");
         message.handle_id = Some(999999);
         // May 17, 2022  8:29:42 PM
         message.date = 674526582885055488;
-        message.text = Some("Hello world".to_string());
         // May 17, 2022  8:29:42 PM
         message.date_delivered = 674526582885055488;
         // May 17, 2022  9:30:31 PM
         message.date_read = 674530231992568192;
-        message
-            .generate_text_legacy(config.data_source.db())
-            .unwrap();
 
         let mut actual = String::new();
         exporter
@@ -764,18 +738,14 @@ mod tests {
         config.real_participants.insert(999999, 999999);
         let exporter = TXT::new(&config).unwrap();
 
-        let mut message = Config::fake_message();
+        let mut message = Config::fake_message_with_text("Hello world");
         message.handle_id = Some(999999);
         // May 17, 2022  8:29:42 PM
         message.date = 674526582885055488;
-        message.text = Some("Hello world".to_string());
         // May 17, 2022  8:29:42 PM
         message.date_delivered = 674526582885055488;
         // May 17, 2022  9:30:31 PM
         message.date_read = 674530231992568192;
-        message
-            .generate_text_legacy(config.data_source.db())
-            .unwrap();
 
         let mut actual = String::new();
         exporter
@@ -862,14 +832,10 @@ mod tests {
         let config = Config::fake_app(options);
         let exporter = TXT::new(&config).unwrap();
 
-        let mut message = Config::fake_message();
+        let mut message = Config::fake_message_with_text("hello");
         message.date = 674526582885055488;
-        message.text = Some("hello".to_string());
         message.is_from_me = true;
         message.chat_id = Some(0);
-        message
-            .generate_text_legacy(config.data_source.db())
-            .unwrap();
 
         let mut standalone = String::new();
         exporter
@@ -1894,28 +1860,21 @@ mod tests {
         let config = Config::fake_app(options);
         let exporter = TXT::new(&config).unwrap();
 
-        let mut message = Config::fake_message();
-
-        // Use test message payload from test database
-        // May 17, 2022  8:29:42 PM
-        message.guid = "FAKEGUID-D0C8-4212-AA87-DD8AE4FD1203".to_string();
-        message.rowid = 123445;
-
-        message.date = 674526582885055488;
-        // Set the message components to a single url
-        message.text = Some("https://example.com".to_string());
-        message.components = vec![BubbleComponent::Run(vec![
-                AttributedRange::text(
-                    0,
-                    84,
-                    vec![
-                        TextEffect::Link("https://www.ghacks.net/2020/01/23/lastpass-no-longer-listed-on-the-chrome-web-store/".to_string()),
-                    ]
-                ),
-            ]),];
-
-        let body = message.parse_body(config.data_source.db()).unwrap();
-        message.apply_body(body);
+        let parsed = Message::from_guid(
+            "FAKEGUID-D0C8-4212-AA87-DD8AE4FD1203",
+            config.data_source.db(),
+            &config.data_source.capabilities,
+        )
+        .unwrap();
+        let message = Message {
+            guid: parsed.guid,
+            rowid: parsed.rowid,
+            date: 674526582885055488,
+            text: parsed.text,
+            components: parsed.components,
+            balloon_bundle_id: parsed.balloon_bundle_id,
+            ..Config::fake_message()
+        };
 
         let mut actual = String::new();
         exporter
@@ -1940,12 +1899,19 @@ mod tests {
 
         let exporter = TXT::new(&config).unwrap();
 
-        let mut message = Config::fake_message();
-        message.guid = "56FE94B9-2345-4A3C-A57F-949BDDDDF9FF".to_string();
-        message.rowid = 548216;
-        message
-            .generate_text_legacy(config.data_source.db())
-            .unwrap();
+        let parsed = Message::from_guid(
+            "56FE94B9-2345-4A3C-A57F-949BDDDDF9FF",
+            config.data_source.db(),
+            &config.data_source.capabilities,
+        )
+        .unwrap();
+        let message = Message {
+            guid: parsed.guid,
+            rowid: parsed.rowid,
+            text: parsed.text,
+            components: parsed.components,
+            ..Config::fake_message()
+        };
 
         let mut actual = String::new();
         exporter

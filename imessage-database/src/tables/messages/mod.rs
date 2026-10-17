@@ -2,7 +2,7 @@
  Data structures and models used to parse and represent message data.
 */
 
-pub use message::{Message, ParsedBody};
+pub use message::Message;
 
 pub(crate) mod body;
 pub(crate) mod columns;

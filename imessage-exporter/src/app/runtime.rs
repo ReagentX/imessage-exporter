@@ -715,6 +715,25 @@ impl Config {
         }
     }
 
+    /// Build a test message with one plain-text body component.
+    pub fn fake_message_with_text(text: impl Into<String>) -> Message {
+        use imessage_database::{
+            message_types::text_effects::text_effect::TextEffect,
+            tables::messages::models::{AttributedRange, BubbleComponent},
+        };
+
+        let text = text.into();
+        Message {
+            components: vec![BubbleComponent::Run(vec![AttributedRange::text(
+                0,
+                text.len(),
+                vec![TextEffect::Default],
+            )])],
+            text: Some(text),
+            ..Self::fake_message()
+        }
+    }
+
     pub(crate) fn fake_attachment() -> Attachment {
         Attachment {
             rowid: 0,

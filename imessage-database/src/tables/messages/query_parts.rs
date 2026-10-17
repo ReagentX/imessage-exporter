@@ -49,12 +49,23 @@ pub(crate) fn from_clause(capabilities: &Capabilities) -> String {
 ///
 /// The projection lists the recognized columns the schema declares (qualified
 /// with `m.`), the derived `chat_id`/`num_attachments` values, and the
-/// capability-gated fragments.
+/// capability-gated fragments. Payload bytes are represented by a non-nullness
+/// flag; only body and edit-summary bytes are needed to parse a message.
 pub(crate) fn message_query(capabilities: &Capabilities, filters: Option<&str>) -> String {
     let mut projection: Vec<String> = capabilities
         .message_columns()
         .iter()
-        .map(|column| format!("m.{column}"))
+        .map(|column| match *column {
+            "payload_data" => "(m.payload_data IS NOT NULL) as has_payload_data".to_owned(),
+            "attributedbody" | "message_summary_info" if capabilities.utf16_text => {
+                // `blob_open` returned text in the database's storage encoding;
+                // a normal text read would transcode UTF-16 bytes to UTF-8.
+                format!(
+                    "CASE WHEN typeof(m.{column}) = 'text' THEN CAST(m.{column} AS BLOB) ELSE m.{column} END as {column}"
+                )
+            }
+            _ => format!("m.{column}"),
+        })
         .collect();
     projection.push("c.chat_id".to_owned());
     projection.push(format!(

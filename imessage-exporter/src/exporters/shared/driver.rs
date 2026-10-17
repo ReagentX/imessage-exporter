@@ -12,7 +12,6 @@ use imessage_database::tables::{
     messages::Message,
     table::{ORPHANED, Table},
 };
-use rusqlite::Connection;
 
 use crate::{
     app::{error::RuntimeError, progress::ExportProgress, runtime::Config},
@@ -141,16 +140,6 @@ fn orphaned_writer(state: &mut ExportState) -> Result<&mut BufWriter<File>, Runt
         }
     };
     Ok(state.orphaned.insert(writer))
-}
-
-/// Decode the message's body via [`Message::parse_body`] and apply it.
-/// `parse_body` failures are non-fatal: they leave the message's
-/// `components` empty, which downstream formatters already treat as
-/// "nothing to render".
-pub fn apply_body(msg: &mut Message, db: &Connection) {
-    if let Ok(body) = msg.parse_body(db) {
-        msg.apply_body(body);
-    }
 }
 
 /// Format-specific hooks consumed by [`run_export`] and
@@ -312,7 +301,7 @@ where
     // and `clear()` retains it.
     let mut msg_buf = String::with_capacity(W::BUFFER_CAPACITY);
     for message in Message::rows(&mut statement, [])? {
-        let mut msg = message?;
+        let msg = message?;
 
         // Early escape if we try and render the same message GUID twice
         // See https://github.com/ReagentX/imessage-exporter/issues/135
@@ -328,8 +317,6 @@ where
             advance_progress(&writer.state().pb, &mut current_message);
             continue;
         }
-
-        apply_body(&mut msg, writer.config().data_source.db());
 
         if msg.is_announcement() {
             msg_buf.clear();
