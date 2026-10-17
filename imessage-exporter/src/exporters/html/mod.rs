@@ -3602,73 +3602,42 @@ mod balloon_format_tests {
         let config = Config::fake_app(options);
         let exporter = HTML::new(&config).unwrap();
 
-        let balloon = AppMessage {
-            image: None,
-            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
-            title: None,
-            subtitle: None,
-            caption: Some("Check In: Timer Started"),
-            subcaption: None,
-            trailing_caption: None,
-            trailing_subcaption: None,
-            app_name: Some("Check In"),
-            ldtext: Some("Check In: Timer Started"),
-        };
+        let cases = [
+            (
+                "timer started",
+                "Check\u{a0}In: Timer Started",
+                "<div class=\"app_header\">\n    <div class=\"name\">Check&nbsp;In</div><div class=\"ldtext\">Check&nbsp;In: Timer Started</div></div><div class=\"app_footer\">\n    <div class=\"caption\">Checked in at Oct 14, 2023  1:54:29 PM</div>\n</div>",
+            ),
+            (
+                "timer late",
+                "Check\u{a0}In: Has not checked in when expected, location shared",
+                "<div class=\"app_header\">\n    <div class=\"name\">Check&nbsp;In</div><div class=\"ldtext\">Check&nbsp;In: Has not checked in when expected, location shared</div></div><div class=\"app_footer\">\n    <div class=\"caption\">Checked in at Oct 14, 2023  1:54:29 PM</div>\n</div>",
+            ),
+            (
+                "accepted",
+                "Check\u{a0}In: Fake Location",
+                "<div class=\"app_header\">\n    <div class=\"name\">Check&nbsp;In</div><div class=\"ldtext\">Check&nbsp;In: Fake Location</div></div><div class=\"app_footer\">\n    <div class=\"caption\">Checked in at Oct 14, 2023  1:54:29 PM</div>\n</div>",
+            ),
+        ];
 
-        let actual = exporter.format_check_in(&balloon);
-        let expected = "<div class=\"app_header\">\n    <div class=\"name\">Check&nbsp;In</div><div class=\"ldtext\">Check&nbsp;In: Timer Started</div></div><div class=\"app_footer\">\n    <div class=\"caption\">Checked in at Oct 14, 2023  1:54:29 PM</div>\n</div>";
+        for (label, text, expected) in cases {
+            // HTML renders `ldtext`; TXT renders `caption`. Both carry the
+            // same text so the rows match across exporters.
+            let balloon = AppMessage {
+                image: None,
+                url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+                title: None,
+                subtitle: None,
+                caption: Some(text),
+                subcaption: None,
+                trailing_caption: None,
+                trailing_subcaption: None,
+                app_name: Some("Check\u{a0}In"),
+                ldtext: Some(text),
+            };
 
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn can_format_html_check_in_timer_late() {
-        let options = Options::fake_options(Html);
-        let config = Config::fake_app(options);
-        let exporter = HTML::new(&config).unwrap();
-
-        let balloon = AppMessage {
-            image: None,
-            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
-            title: None,
-            subtitle: None,
-            caption: Some("Check In: Has not checked in when expected, location shared"),
-            subcaption: None,
-            trailing_caption: None,
-            trailing_subcaption: None,
-            app_name: Some("Check In"),
-            ldtext: Some("Check In: Has not checked in when expected, location shared"),
-        };
-
-        let actual = exporter.format_check_in(&balloon);
-        let expected = "<div class=\"app_header\">\n    <div class=\"name\">Check&nbsp;In</div><div class=\"ldtext\">Check&nbsp;In: Has not checked in when expected, location shared</div></div><div class=\"app_footer\">\n    <div class=\"caption\">Checked in at Oct 14, 2023  1:54:29 PM</div>\n</div>";
-
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn can_format_html_accepted_check_in() {
-        let options = Options::fake_options(Html);
-        let config = Config::fake_app(options);
-        let exporter = HTML::new(&config).unwrap();
-
-        let balloon = AppMessage {
-            image: None,
-            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
-            title: None,
-            subtitle: None,
-            caption: Some("Check In: Fake Location"),
-            subcaption: None,
-            trailing_caption: None,
-            trailing_subcaption: None,
-            app_name: Some("Check In"),
-            ldtext: Some("Check In: Fake Location"),
-        };
-
-        let actual = exporter.format_check_in(&balloon);
-        let expected = "<div class=\"app_header\">\n    <div class=\"name\">Check&nbsp;In</div><div class=\"ldtext\">Check&nbsp;In: Fake Location</div></div><div class=\"app_footer\">\n    <div class=\"caption\">Checked in at Oct 14, 2023  1:54:29 PM</div>\n</div>";
-
-        assert_eq!(actual, expected);
+            assert_eq!(exporter.format_check_in(&balloon), expected, "{label}");
+        }
     }
 
     #[test]

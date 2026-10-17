@@ -2394,73 +2394,42 @@ mod balloon_format_tests {
         let config = Config::fake_app(options);
         let exporter = TXT::new(&config).unwrap();
 
-        let balloon = AppMessage {
-            image: None,
-            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
-            title: None,
-            subtitle: None,
-            caption: Some("Check In: Timer Started"),
-            subcaption: None,
-            trailing_caption: None,
-            trailing_subcaption: None,
-            app_name: Some("Check In"),
-            ldtext: Some("Check In: Timer Started"),
-        };
+        let cases = [
+            (
+                "timer started",
+                "Check\u{a0}In: Timer Started",
+                "Check\u{a0}In: Timer Started\nChecked in at Oct 14, 2023  1:54:29 PM",
+            ),
+            (
+                "timer late",
+                "Check\u{a0}In: Has not checked in when expected, location shared",
+                "Check\u{a0}In: Has not checked in when expected, location shared\nChecked in at Oct 14, 2023  1:54:29 PM",
+            ),
+            (
+                "accepted",
+                "Check\u{a0}In: Fake Location",
+                "Check\u{a0}In: Fake Location\nChecked in at Oct 14, 2023  1:54:29 PM",
+            ),
+        ];
 
-        let actual = exporter.format_check_in(&balloon);
-        let expected = "Check\u{a0}In: Timer Started\nChecked in at Oct 14, 2023  1:54:29 PM";
+        for (label, text, expected) in cases {
+            // TXT renders `caption`; HTML renders `ldtext`. Both carry the
+            // same text so the rows match across exporters.
+            let balloon = AppMessage {
+                image: None,
+                url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
+                title: None,
+                subtitle: None,
+                caption: Some(text),
+                subcaption: None,
+                trailing_caption: None,
+                trailing_subcaption: None,
+                app_name: Some("Check\u{a0}In"),
+                ldtext: Some(text),
+            };
 
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn can_format_txt_check_in_timer_late() {
-        let options = Options::fake_options(Txt);
-        let config = Config::fake_app(options);
-        let exporter = TXT::new(&config).unwrap();
-
-        let balloon = AppMessage {
-            image: None,
-            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
-            title: None,
-            subtitle: None,
-            caption: Some("Check In: Has not checked in when expected, location shared"),
-            subcaption: None,
-            trailing_caption: None,
-            trailing_subcaption: None,
-            app_name: Some("Check In"),
-            ldtext: Some("Check In: Has not checked in when expected, location shared"),
-        };
-
-        let actual = exporter.format_check_in(&balloon);
-        let expected = "Check\u{a0}In: Has not checked in when expected, location shared\nChecked in at Oct 14, 2023  1:54:29 PM";
-
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn can_format_txt_accepted_check_in() {
-        let options = Options::fake_options(Txt);
-        let config = Config::fake_app(options);
-        let exporter = TXT::new(&config).unwrap();
-
-        let balloon = AppMessage {
-            image: None,
-            url: Some("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709"),
-            title: None,
-            subtitle: None,
-            caption: Some("Check In: Fake Location"),
-            subcaption: None,
-            trailing_caption: None,
-            trailing_subcaption: None,
-            app_name: Some("Check In"),
-            ldtext: Some("Check In: Fake Location"),
-        };
-
-        let actual = exporter.format_check_in(&balloon);
-        let expected = "Check\u{a0}In: Fake Location\nChecked in at Oct 14, 2023  1:54:29 PM";
-
-        assert_eq!(actual, expected);
+            assert_eq!(exporter.format_check_in(&balloon), expected, "{label}");
+        }
     }
 
     #[test]

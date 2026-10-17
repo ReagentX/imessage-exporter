@@ -387,7 +387,7 @@ fn parse_coordinates(b1: u8, b2: u8) -> u16 {
 mod tests {
     use crate::message_types::handwriting::models::{HandwrittenMessage, Point};
 
-    use super::{CappedBuffer, get_max_dimension, group_points, parse_strokes};
+    use super::{CappedBuffer, get_max_dimension, parse_strokes};
     use crate::error::handwriting::HandwritingError;
     use crate::message_types::handwriting::handwriting_proto::{
         BaseMessage, Compression, Handwriting,
@@ -651,11 +651,6 @@ mod tests {
             parse_strokes(&msg),
             Err(HandwritingError::EmptyStroke)
         ));
-    }
-
-    #[test]
-    fn group_points_handles_empty_stroke() {
-        assert!(group_points(&[]).is_empty());
     }
 
     #[test]

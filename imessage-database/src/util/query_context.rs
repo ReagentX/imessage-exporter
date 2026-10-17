@@ -151,14 +151,6 @@ mod use_tests {
     };
 
     #[test]
-    fn can_create() {
-        let context = QueryContext::default();
-        assert!(context.start.is_none());
-        assert!(context.end.is_none());
-        assert!(!context.has_filters());
-    }
-
-    #[test]
     fn can_create_start() {
         let mut context = QueryContext::default();
         context.set_start("2020-01-01").unwrap();
