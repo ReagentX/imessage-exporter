@@ -124,7 +124,7 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         This should be resolved automatically, but can be manually provided
         Handles from the messages table will be mapped to names in the provided database
         Generally, one of `AddressBook-v22.abcddb` or `AddressBook.sqlitedb`
-        For an iOS backup, pass a custom Contacts database to use it instead of the copy in the backup
+        For an iOS backup, pass this option to use a custom Contacts database instead of the copy in the backup
         
 --no-progress
         Disable the on-screen progress bar regardless of context
