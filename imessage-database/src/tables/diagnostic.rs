@@ -83,9 +83,11 @@ pub struct HandleDiagnostic {
     /// Total handles in the table.
     pub total_handles: usize,
     /// Distinct `person_centric_id` values, or `None` when the column is unavailable.
-    pub handles_with_multiple_ids: Option<usize>,
-    /// Handles deduplicated into canonical handles.
-    pub total_duplicated: usize,
+    pub person_centric_ids: Option<usize>,
+    /// Number of groups with more than one handle row.
+    pub multi_handle_groups: usize,
+    /// Number of handle rows beyond the first row in each group.
+    pub merged_handles: usize,
 }
 
 /// Diagnostic data for the `message` table.

@@ -50,13 +50,17 @@ Detected converters:
 
 The total number of handles present in the provided iMessage database.
 
-### Handles with more than one ID
+### Distinct `person_centric_id` values
 
-The number of contacts that have multiple entries in the `handle` table, deduplicated by matching their `person_centric_id` across rows. The `person_centric_id` is a field used by Apple to disambiguate contacts. Further deduplication also happens, as noted in the next line.
+The number of distinct `person_centric_id` values in the `handle` table. The iMessage server attached this merge ID to some incoming messages. It stopped issuing the ID for new senders long ago, so current databases include it only for the oldest contacts. We omit this line when the column is absent or empty.
 
-### Total duplicated handles
+### Handles merged into another handle
 
-In addition to the foregoing `person_centric_id`, other deduplication steps map identical handles across services, number formats, and email formats to the same handle ID. The value reflects the number of handles that had multiple entries in the iMessage database coalesed into a single handle.
+The number of `handle` rows absorbed into another row's group. We group rows when their `id` is byte-identical across services (the same phone number on iMessage, SMS, and RCS) or when they share a `person_centric_id`. During export, we count each group as one participant.
+
+### Participants with more than one handle
+
+The number of groups that contain more than one `handle` row after grouping. We show this line only when at least one handle merged.
 
 ## Message diagnostic data
 
@@ -130,7 +134,15 @@ The total size of the database file on the disk.
 
 ### Handles with resolved names
 
-The number of handles in the database that were successfully matched to contact names from the contacts index, out of the total number of handles found. This is followed by the match ratio as a percentage.
+We group `handle` rows that belong to one person (see [the duplicate problem](tables/duplicates.md)), then report how many participant groups match a contact name and the match percentage. This total counts one participant per group, so it is smaller than the raw handle count.
+
+### Handles merged by Contacts
+
+The number of participant groups we eliminate with the Contacts database: handles with different addresses that the Messages database cannot relate, but that appear on one Contacts card. We show this line only when at least one group merged. The Messages-only counts in the handle section above do not include these.
+
+### Chats merged by Contacts
+
+The number of chats we eliminate because, once we group their participants by Contacts card, they have the same participants as another chat. We show this line with the one above.
 
 ### Schema capabilities
 
