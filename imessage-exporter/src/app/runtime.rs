@@ -16,7 +16,7 @@ use imessage_database::{
     tables::{
         attachment::Attachment,
         chat::Chat,
-        chat_handle::ChatToHandle,
+        chat_handle::{ChatToHandle, Participant},
         handle::{Handle, HandleGroups},
         messages::Message,
         table::{ATTACHMENTS_DIR, Cacheable, ME, ORPHANED, UNKNOWN, get_db_size},
@@ -231,63 +231,68 @@ impl Config {
         let export_path_len = self.options.export_path.as_os_str().len();
         let max_len = MAX_LENGTH.saturating_sub(export_path_len + 1);
 
-        // Give each unmapped handle its own key; include it in the count and
-        // use `UNKNOWN` for its name.
-        let groups: BTreeSet<(i32, Option<i32>)> = participants
+        // Groups sort before unmapped handles; each unmapped handle counts
+        // as its own participant and shows as `UNKNOWN`.
+        let groups: BTreeSet<Participant> = participants
             .iter()
             .map(|handle_id| match self.real_participants.get(handle_id) {
-                Some(group) => (*group, None),
-                None => (i32::MAX, Some(*handle_id)),
+                Some(group) => Participant::Group(*group),
+                None => Participant::Handle(*handle_id),
+            })
+            .collect();
+        let all: Vec<&str> = groups
+            .iter()
+            .map(|participant| match participant {
+                Participant::Group(group) => self
+                    .participants
+                    .get(group)
+                    .map_or(UNKNOWN, |name| name.details.as_str()),
+                Participant::Handle(_) => UNKNOWN,
             })
             .collect();
 
         // Add only whole names while they fit. Keep each separator whole too;
         // avoid blank entries such as (", , and 2 others").
-        let mut names: Vec<&str> = Vec::with_capacity(groups.len());
+        let mut kept = 0;
         let mut used = 0;
-        for (group, _) in &groups {
-            let details = match self.participants.get(group) {
-                Some(name) => name.details.as_str(),
-                None => UNKNOWN,
-            };
-            let separator = if names.is_empty() { 0 } else { SEPARATOR.len() };
+        for details in &all {
+            let separator = if kept == 0 { 0 } else { SEPARATOR.len() };
             if used + separator + details.len() > max_len {
                 break;
             }
-            names.push(details);
+            kept += 1;
             used += separator + details.len();
         }
 
-        if names.len() == groups.len() {
-            return names.join(SEPARATOR);
+        if kept == all.len() {
+            return all.join(SEPARATOR);
         }
 
-        if names.is_empty() {
+        if kept == 0 {
             // If the first name does not fit, keep as much as the limit allows.
             // Omit the count; without a name, we cannot identify anyone.
-            let first = groups
-                .first()
-                .and_then(|(group, _)| self.participants.get(group))
-                .map_or(UNKNOWN, |name| name.details.as_str());
+            let first = all[0];
             let truncated = first.floor_char_boundary(min(max_len, first.len()));
             return first[..truncated].to_string();
         }
 
         // When space is tight, drop a name and increase the suffix count by one.
+        let mut names = &all[..kept];
         loop {
-            let extra = format!("{SEPARATOR}and {} others", groups.len() - names.len());
+            let extra = format!("{SEPARATOR}and {} others", all.len() - names.len());
             if used + extra.len() <= max_len {
                 return names.join(SEPARATOR) + &extra;
             }
-            if names.len() == 1 {
+            if let [name] = names {
                 // If one name plus the count exceeds the limit, shorten the
                 // name to preserve the count.
                 let room = max_len.saturating_sub(extra.len());
-                let truncated = names[0].floor_char_boundary(min(room, names[0].len()));
-                return names[0][..truncated].to_string() + &extra;
+                let truncated = name.floor_char_boundary(min(room, name.len()));
+                return name[..truncated].to_string() + &extra;
             }
-            let dropped = names.pop().unwrap_or_default();
-            used -= dropped.len() + SEPARATOR.len();
+            let last = names.len() - 1;
+            used -= names[last].len() + SEPARATOR.len();
+            names = &names[..last];
         }
     }
 
@@ -607,7 +612,7 @@ impl Config {
 
         // Regroup without the contact edges to count the merges Contacts added.
         let db_only_groups = HandleGroups::from_db(self.data_source.db())?.finalize();
-        let db_only_participants = HashSet::<&i32>::from_iter(db_only_groups.values()).len();
+        let db_only_participants = distinct(db_only_groups.values());
         let contact_merged_handles = db_only_participants.saturating_sub(self.participants.len());
         if contact_merged_handles > 0 {
             println!("    Handles merged by Contacts: {contact_merged_handles}");
@@ -618,9 +623,8 @@ impl Config {
                 &db_only_groups,
                 &self.chatrooms,
             )?;
-            let contact_merged_chats = HashSet::<&i32>::from_iter(db_only_chats.values())
-                .len()
-                .saturating_sub(HashSet::<&i32>::from_iter(self.real_chatrooms.values()).len());
+            let contact_merged_chats = distinct(db_only_chats.values())
+                .saturating_sub(distinct(self.real_chatrooms.values()));
             println!("    Chats merged by Contacts: {contact_merged_chats}");
         }
 
@@ -741,6 +745,11 @@ impl Config {
         }
         None
     }
+}
+
+/// Number of distinct values in `values`.
+fn distinct<'a>(values: impl Iterator<Item = &'a i32>) -> usize {
+    values.collect::<HashSet<_>>().len()
 }
 
 // MARK: Test Config

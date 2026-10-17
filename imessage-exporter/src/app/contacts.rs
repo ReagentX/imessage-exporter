@@ -1,9 +1,7 @@
 use std::{
-    collections::{
-        BTreeSet, HashMap, HashSet,
-        hash_map::Entry::{Occupied, Vacant},
-    },
+    collections::{BTreeSet, HashMap, HashSet},
     fs,
+    hash::Hash,
     path::{Path, PathBuf},
 };
 
@@ -37,7 +35,7 @@ const IOS_PROPERTY_EMAIL: i64 = 4;
 const IOS_NONE: i64 = -1;
 
 // MARK: Name
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 /// Contact name and the Messages handle IDs associated with it.
 pub struct Name {
     /// First name.
@@ -106,19 +104,6 @@ impl Name {
             &self.full
         }
     }
-
-    /// Build a name that only carries the details string.
-    pub fn from_details<D: Into<String>>(details: D) -> Self {
-        let details = details.into();
-        Name {
-            first: String::new(),
-            last: String::new(),
-            full: String::new(),
-            addresses: BTreeSet::from([details.clone()]),
-            details,
-            handle_ids: HashSet::new(),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -126,12 +111,8 @@ impl Name {
     /// Build a fake name for tests.
     pub fn fake_name(name: &str) -> Name {
         Name {
-            first: String::new(),
-            last: String::new(),
-            full: String::new(),
             details: name.to_string(),
-            handle_ids: HashSet::new(),
-            addresses: BTreeSet::new(),
+            ..Default::default()
         }
     }
 }
@@ -165,17 +146,8 @@ struct Entry {
 struct Records {
     /// Identity for each source row.
     by_row: HashMap<i64, RecordId>,
-    /// Resolved name for each identity.
-    names: HashMap<RecordId, Candidate>,
-}
-
-#[derive(Default)]
-/// Name chosen so far for one identity.
-struct Candidate {
-    name: Option<Name>,
-    /// `true` after we select the link's preferred member name; we never replace it with a later
-    /// row's name.
-    preferred: bool,
+    /// Best name for each identity so far, ranked by (link-preferred, [`Name::score`]).
+    names: HashMap<RecordId, Option<(bool, Name)>>,
 }
 
 impl Records {
@@ -184,22 +156,11 @@ impl Records {
     /// order, so a tie resolves to the lowest row.
     fn add(&mut self, row: i64, id: RecordId, name: Option<Name>, preferred: bool) {
         self.by_row.insert(row, id);
-        let candidate = self.names.entry(id).or_default();
-        if candidate.preferred {
-            return;
-        }
-        if preferred && name.is_some() {
-            candidate.name = name;
-            candidate.preferred = true;
-            return;
-        }
-        if let Some(incoming) = name {
-            let better = candidate
-                .name
-                .as_ref()
-                .is_none_or(|existing| incoming.score() > existing.score());
-            if better {
-                candidate.name = Some(incoming);
+        let slot = self.names.entry(id).or_default();
+        if let Some(name) = name {
+            let rank = (preferred, name.score());
+            if slot.as_ref().is_none_or(|(p, n)| rank > (*p, n.score())) {
+                *slot = Some((preferred, name));
             }
         }
     }
@@ -207,7 +168,8 @@ impl Records {
     /// Return the identity and name for `row`, if we registered it.
     fn get(&self, row: i64) -> Option<(RecordId, Option<&Name>)> {
         let id = *self.by_row.get(&row)?;
-        Some((id, self.names.get(&id).and_then(|c| c.name.as_ref())))
+        let name = self.names.get(&id).and_then(|slot| slot.as_ref());
+        Some((id, name.map(|(_, name)| name)))
     }
 }
 
@@ -265,6 +227,18 @@ impl ContactsIndex {
         id
     }
 
+    /// Identity for a row: the link's shared identity when it has one, else a fresh one.
+    fn record_for<L: Eq + Hash>(
+        &mut self,
+        by_link: &mut HashMap<L, RecordId>,
+        link: Option<L>,
+    ) -> RecordId {
+        match link {
+            Some(link) => *by_link.entry(link).or_insert_with(|| self.alloc()),
+            None => self.alloc(),
+        }
+    }
+
     /// Insert `key` as owned by `record`.
     ///
     /// When a second record claims a key, mark it ambiguous and keep it that way. Keep the most
@@ -299,7 +273,7 @@ impl ContactsIndex {
 
     /// Insert `keys` for the record owning source row `row`. We skip me-cards and rows with the
     /// wrong entity before calling this method.
-    fn insert_keys(&mut self, records: &Records, row: i64, keys: Vec<String>) {
+    fn insert_keys(&mut self, records: &Records, row: i64, keys: impl IntoIterator<Item = String>) {
         if let Some((id, name)) = records.get(row) {
             for key in keys {
                 self.insert_key(key, id, name);
@@ -333,10 +307,7 @@ impl ContactsIndex {
                 .get::<_, Option<String>>(1)?
                 .filter(|link| !link.is_empty());
             let name = Name::from_opt(row.get(2)?, row.get(3)?);
-            let id = match link {
-                Some(link) => *by_link.entry(link).or_insert_with(|| self.alloc()),
-                None => self.alloc(),
-            };
+            let id = self.record_for(&mut by_link, link);
             records.add(pk, id, name, false);
         }
 
@@ -408,10 +379,7 @@ impl ContactsIndex {
             }
             let name = Name::from_opt(row.get(1)?, row.get(2)?);
             let link = row.get::<_, Option<i64>>(3)?.filter(|l| *l != IOS_NONE);
-            let id = match link {
-                Some(link) => *by_link.entry(link).or_insert_with(|| self.alloc()),
-                None => self.alloc(),
-            };
+            let id = self.record_for(&mut by_link, link);
             let is_preferred = link.and_then(|l| preferred.get(&l)) == Some(&row_id);
             records.add(row_id, id, name, is_preferred);
         }
@@ -425,12 +393,11 @@ impl ContactsIndex {
             let record_id: i64 = row.get(0)?;
             let property: i64 = row.get(1)?;
             let value: String = row.get(2)?;
-            let keys = if property == IOS_PROPERTY_EMAIL {
-                normalize_email(&value).into_iter().collect()
+            if property == IOS_PROPERTY_EMAIL {
+                self.insert_keys(&records, record_id, normalize_email(&value));
             } else {
-                phone_keys(&value)
-            };
-            self.insert_keys(&records, record_id, keys);
+                self.insert_keys(&records, record_id, phone_keys(&value));
+            }
         }
 
         Ok(())
@@ -481,9 +448,9 @@ impl ContactsIndex {
 
     /// Join handles that belong to one contact record.
     ///
-    /// For each contact record, union every matching handle with the lowest-row-ID handle that
-    /// resolved to that record. Skip addresses claimed by multiple records and row `0` (the local
-    /// user).
+    /// Union every handle that resolves to one contact record. Skip addresses claimed by multiple
+    /// records and row `0` (the local user). [`HandleGroups::finalize`] labels each class by its
+    /// smallest row ID, so the order handles arrive in does not affect the result.
     ///
     /// - `participants`: handle address keyed by handle row ID, from `Handle::cache`
     /// - `groups`: the groups to add edges to, before `finalize`
@@ -496,25 +463,17 @@ impl ContactsIndex {
         let mut first_by_record: HashMap<RecordId, i32> = HashMap::new();
         let mut edges = 0;
 
-        // Sort by row ID so each record's first handle stays the same across runs.
-        let mut handles: Vec<(&i32, &String)> = participants.iter().collect();
-        handles.sort_by_key(|(handle_id, _)| **handle_id);
-
-        for (handle_id, address) in handles {
+        for (handle_id, address) in participants {
             if *handle_id == 0 {
                 continue;
             }
             let Some(record) = self.identity(address) else {
                 continue;
             };
-            match first_by_record.entry(record) {
-                Occupied(first) => {
-                    groups.union(*handle_id, *first.get());
-                    edges += 1;
-                }
-                Vacant(slot) => {
-                    slot.insert(*handle_id);
-                }
+            let first = *first_by_record.entry(record).or_insert(*handle_id);
+            if first != *handle_id {
+                groups.union(*handle_id, first);
+                edges += 1;
             }
         }
 
@@ -551,7 +510,7 @@ impl ContactsIndex {
             let mut name = handle_ids
                 .iter()
                 .find_map(|handle_id| self.lookup(&participants[handle_id]))
-                .unwrap_or_else(|| Name::from_details(first.clone()));
+                .unwrap_or_default();
 
             // Keep the lowest-row-ID handle's address for display and fallback.
             name.details = first.clone();
