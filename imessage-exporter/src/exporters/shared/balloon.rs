@@ -13,7 +13,7 @@ use imessage_database::{
 };
 
 use crate::{
-    app::{error::RuntimeError, runtime::Config},
+    app::{error::RuntimeError, runtime::Config, zone::Zone},
     exporters::{formatter::BalloonFormatter, shared::announcement::YOU},
 };
 
@@ -151,14 +151,13 @@ fn url_text_fallback<F: BalloonFormatter>(
 
 // MARK: Check In
 
-/// Build the footer line that accompanies a Check In balloon.
+/// Build the footer line for a Check In balloon.
 ///
-/// The `"<verb> at <local time>"` phrase derived from the balloon's first
-/// [`CheckInKind`] entry. Returns `None` when the balloon has no decodable
-/// check-in metadata, so callers can omit the footer entirely.
-pub fn resolve_check_in_footer(balloon: &AppMessage) -> Option<String> {
-    balloon.check_in_kind(0).map(|(kind, at)| {
-        let at = format(&at);
+/// Format the first [`CheckInKind`] entry as `"<verb> at <time in zone>"`.
+/// Return `None` without decodable Check In metadata; omit the footer in that case.
+pub fn resolve_check_in_footer(balloon: &AppMessage, zone: &Zone) -> Option<String> {
+    balloon.check_in_kind().map(|(kind, at)| {
+        let at = format(&at.with_timezone(zone));
         match kind {
             CheckInKind::Expected => format!("Expected at {at}"),
             CheckInKind::WasExpected => format!("Was expected at {at}"),

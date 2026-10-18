@@ -4,7 +4,7 @@ use imessage_database::{
         messages::{Message, models::BubbleComponent},
         table::ME,
     },
-    util::dates::{get_local_time, readable_diff},
+    util::dates::{readable_diff, to_utc},
 };
 
 use crate::app::runtime::Config;
@@ -103,6 +103,7 @@ pub fn normalize_edited<'a>(
     self_name: &'a str,
 ) -> Option<Edit<'a, NormalizedEditEvent<'a>>> {
     let part = edited.part(part_idx)?;
+    let zone = &config.options.timezone;
     match part.status {
         EditStatus::Original => None,
         EditStatus::Edited => {
@@ -111,13 +112,12 @@ pub fn normalize_edited<'a>(
             for event in &part.edit_history {
                 let diff_since_previous = match previous_timestamp {
                     None => EditDiff::First,
-                    Some(prev) => match (
-                        get_local_time(prev, config.offset),
-                        get_local_time(event.date, config.offset),
-                    ) {
-                        (Ok(start), Ok(end)) => readable_diff(&start, &end)
-                            .map(EditDiff::Computed)
-                            .unwrap_or(EditDiff::Failed),
+                    Some(prev) => match (to_utc(prev), to_utc(event.date)) {
+                        (Ok(start), Ok(end)) => {
+                            readable_diff(&start.with_timezone(zone), &end.with_timezone(zone))
+                                .map(EditDiff::Computed)
+                                .unwrap_or(EditDiff::Failed)
+                        }
                         _ => EditDiff::Failed,
                     },
                 };
@@ -137,10 +137,10 @@ pub fn normalize_edited<'a>(
         }
         EditStatus::Unsent => {
             let elapsed = msg
-                .date(config.offset)
+                .date()
                 .ok()
-                .zip(msg.date_edited(config.offset).ok())
-                .and_then(|(s, e)| readable_diff(&s, &e));
+                .zip(msg.date_edited().ok())
+                .and_then(|(s, e)| readable_diff(&s.with_timezone(zone), &e.with_timezone(zone)));
             let who = resolve_unsent_actor(msg, config, self_name);
             Some(Edit::Unsent { who, elapsed })
         }

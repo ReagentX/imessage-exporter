@@ -76,7 +76,7 @@ pub fn resolve_announcement<'a>(
         who = config.options.custom_name.as_deref().unwrap_or(self_name);
     }
 
-    let timestamp = format_message_date(msg, config.offset);
+    let timestamp = format_message_date(msg, &config.options.timezone);
 
     let participant_name = match &announcement {
         Announcement::GroupAction(

@@ -229,7 +229,7 @@ fn can_format_txt_started_sharing_location_me() {
     message.item_type = 4;
 
     let actual = render(&exporter, &message);
-    let expected = "Dec 31, 2000  4:00:00 PM\nMe\nStarted sharing location!\n\n";
+    let expected = "Dec 31, 2000  5:00:00 PM\nMe\nStarted sharing location!\n\n";
 
     assert_eq!(actual, expected);
 }
@@ -247,7 +247,7 @@ fn can_format_txt_stopped_sharing_location_me() {
     message.item_type = 4;
 
     let actual = render(&exporter, &message);
-    let expected = "Dec 31, 2000  4:00:00 PM\nMe\nStopped sharing location!\n\n";
+    let expected = "Dec 31, 2000  5:00:00 PM\nMe\nStopped sharing location!\n\n";
 
     assert_eq!(actual, expected);
 }
@@ -266,7 +266,7 @@ fn can_format_txt_started_sharing_location_them() {
     message.item_type = 4;
 
     let actual = render(&exporter, &message);
-    let expected = "Dec 31, 2000  4:00:00 PM\nUnknown\nStarted sharing location!\n\n";
+    let expected = "Dec 31, 2000  5:00:00 PM\nUnknown\nStarted sharing location!\n\n";
 
     assert_eq!(actual, expected);
 }
@@ -285,7 +285,7 @@ fn can_format_txt_stopped_sharing_location_them() {
     message.item_type = 4;
 
     let actual = render(&exporter, &message);
-    let expected = "Dec 31, 2000  4:00:00 PM\nUnknown\nStopped sharing location!\n\n";
+    let expected = "Dec 31, 2000  5:00:00 PM\nUnknown\nStopped sharing location!\n\n";
 
     assert_eq!(actual, expected);
 }
@@ -346,7 +346,7 @@ fn can_format_txt_translated_message() {
     };
 
     let actual = render(&exporter, &message);
-    let expected = "Dec 31, 2000  4:00:00 PM\nUnknown\nOh, il a traduit ce que j'ai envoyé !\nTranslated from:\nOh it translated what I sent!\n\n";
+    let expected = "Dec 31, 2000  5:00:00 PM\nUnknown\nOh, il a traduit ce que j'ai envoyé !\nTranslated from:\nOh it translated what I sent!\n\n";
 
     assert_eq!(actual, expected);
 }

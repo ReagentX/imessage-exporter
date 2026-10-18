@@ -22,7 +22,7 @@ use imessage_database::{
         table::{ME, get_db_size},
     },
     util::{
-        dates::{format as format_date, get_local_time, get_offset, readable_diff},
+        dates::{format as format_date, readable_diff, to_utc},
         size::format_file_size,
     },
 };
@@ -72,8 +72,6 @@ pub struct Config {
     pub translated_messages: HashSet<String>,
     /// Parsed application options.
     pub options: Options,
-    /// Unix timestamp offset for the Messages epoch.
-    pub offset: i64,
     /// Database and contact data source.
     pub data_source: DataSource,
 }
@@ -333,7 +331,6 @@ impl Config {
             tapbacks,
             translated_messages,
             options,
-            offset: get_offset(),
             data_source,
         })
     }
@@ -511,8 +508,8 @@ impl Config {
             message_diag.first_message_date,
             message_diag.last_message_date,
         ) && let (Ok(first_date), Ok(last_date)) = (
-            get_local_time(first, self.offset),
-            get_local_time(last, self.offset),
+            to_utc(first).map(|date| date.with_timezone(&self.options.timezone)),
+            to_utc(last).map(|date| date.with_timezone(&self.options.timezone)),
         ) {
             println!(
                 "    Date range: {} to {}\n                {}",
@@ -752,7 +749,6 @@ impl Config {
             tapbacks: HashMap::new(),
             translated_messages: HashSet::new(),
             options,
-            offset: get_offset(),
             data_source,
         }
     }
@@ -1753,7 +1749,10 @@ mod chat_filter_tests {
     fn unmatched_filter_errors_even_with_a_date_filter() {
         let mut options = Options::fake_options(ExportType::Html);
         options.conversation_filter = Some(String::from("nobody@example.com"));
-        options.query_context.set_start("2020-01-01").unwrap();
+        options
+            .query_context
+            .set_start("2020-01-01", &options.timezone)
+            .unwrap();
 
         let mut app = Config::fake_app(options);
         app.resolve_filtered_handles();

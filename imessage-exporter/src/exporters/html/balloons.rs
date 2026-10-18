@@ -148,7 +148,7 @@ impl BalloonFormatter for HTML<'_> {
         render_template(&CheckInVM {
             name: balloon.app_name.unwrap_or("Check In"),
             ldtext: balloon.ldtext.into(),
-            footer: resolve_check_in_footer(balloon),
+            footer: resolve_check_in_footer(balloon, &self.config.options.timezone),
         })
     }
 
