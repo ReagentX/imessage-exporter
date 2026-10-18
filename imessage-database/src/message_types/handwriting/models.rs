@@ -47,13 +47,21 @@ impl HandwrittenMessage {
         let msg =
             BaseMessage::parse_from_bytes(payload).map_err(HandwritingError::ProtobufError)?;
         let (width, height) = parse_dimensions(&msg)?;
+
+        // Pad the frame dimensions by 5 to ensure strokes on the edge stay within the canvas.
+        let (Some(padded_width), Some(padded_height)) =
+            (width.checked_add(5), height.checked_add(5))
+        else {
+            return Err(HandwritingError::InvalidDimensions(width, height));
+        };
+
         let strokes = parse_strokes(&msg)?;
         let (max_x, max_y, max_width) = get_max_dimension(&strokes);
         Ok(Self {
             id: msg.ID.clone(),
             created_at: msg.CreatedAt,
-            height: height + 5,
-            width: width + 5,
+            height: padded_height,
+            width: padded_width,
             strokes: fit_strokes(&strokes, height, width, max_x, max_y, max_width),
         })
     }
@@ -94,6 +102,11 @@ impl HandwrittenMessage {
         let w = ((self.width as usize) * h)
             .checked_div(self.height as usize)
             .unwrap_or(0);
+
+        // Return an empty string if the canvas has no height or width
+        if h == 0 || w == 0 {
+            return String::new();
+        }
         let mut canvas = vec![vec![' '; w]; h];
 
         // Plot the lines on the canvas
@@ -392,7 +405,7 @@ mod tests {
     use crate::message_types::handwriting::handwriting_proto::{
         BaseMessage, Compression, Handwriting,
     };
-    use protobuf::{EnumOrUnknown, MessageField};
+    use protobuf::{EnumOrUnknown, Message, MessageField};
 
     use std::env::current_dir;
     use std::fs::File;
@@ -636,6 +649,45 @@ mod tests {
         expected_data.read_to_string(&mut expected).unwrap();
 
         assert_eq!(balloon.render_svg(), expected);
+    }
+
+    #[test]
+    fn from_payload_rejects_frame_near_u16_max() {
+        let mut msg = BaseMessage::new();
+        msg.Handwriting = MessageField::some(Handwriting {
+            Frame: vec![0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0xFF, 0x7F],
+            ..Default::default()
+        });
+        let payload = msg.write_to_bytes().unwrap();
+
+        assert!(matches!(
+            HandwrittenMessage::from_payload(&payload),
+            Err(HandwritingError::InvalidDimensions(0, u16::MAX))
+        ));
+    }
+
+    #[test]
+    fn render_ascii_with_no_rows_is_empty() {
+        let message = HandwrittenMessage {
+            id: String::new(),
+            created_at: 0,
+            height: 5,
+            width: 5,
+            strokes: vec![vec![
+                Point {
+                    x: 0,
+                    y: 0,
+                    width: 1,
+                },
+                Point {
+                    x: 4,
+                    y: 4,
+                    width: 1,
+                },
+            ]],
+        };
+
+        assert_eq!(message.render_ascii(0), "");
     }
 
     #[test]
