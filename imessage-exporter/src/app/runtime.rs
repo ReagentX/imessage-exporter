@@ -329,8 +329,12 @@ impl Config {
             &chatrooms,
         )?;
         let last_activity = ChatToHandle::get_last_activity(data_source.db())?;
-        let chat_representatives =
-            ChatToHandle::representatives(&real_chatrooms, &chatrooms, &last_activity);
+        let chat_representatives = ChatToHandle::representatives(
+            &real_chatrooms,
+            &chatrooms,
+            &last_activity,
+            &chatroom_participants,
+        );
 
         eprintln!("  [4/5] Caching tapbacks...");
         let tapbacks = Message::tapbacks_by_target(data_source.db(), &data_source.capabilities)?;
@@ -1092,6 +1096,7 @@ mod filename_tests {
             &app.real_chatrooms,
             &app.chatrooms,
             &HashMap::from([(100, 10), (200, 20)]),
+            &app.chatroom_participants,
         );
 
         assert_eq!(app.filename(&named), app.filename(&unnamed));
@@ -1118,6 +1123,7 @@ mod filename_tests {
             &app.real_chatrooms,
             &app.chatrooms,
             &HashMap::from([(100, 50), (200, 10)]),
+            &app.chatroom_participants,
         );
 
         // Row 100 has the latest activity; use its name for both rows.
@@ -1147,8 +1153,12 @@ mod filename_tests {
         app.chatroom_participants.insert(10, BTreeSet::from([1]));
         app.chatroom_participants.insert(20, BTreeSet::from([1]));
         app.real_chatrooms = HashMap::from([(10, 0), (88, 0), (20, 1), (99, 1)]);
-        app.chat_representatives =
-            ChatToHandle::representatives(&app.real_chatrooms, &app.chatrooms, &HashMap::new());
+        app.chat_representatives = ChatToHandle::representatives(
+            &app.real_chatrooms,
+            &app.chatrooms,
+            &HashMap::new(),
+            &app.chatroom_participants,
+        );
 
         let first = app.filename(&app.chatrooms[&10]);
         let second = app.filename(&app.chatrooms[&20]);
