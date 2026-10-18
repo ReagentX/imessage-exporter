@@ -7,6 +7,8 @@ use imessage_database::tables::{
 
 use crate::app::runtime::Config;
 
+use super::plan::CopiedFile;
+
 // MARK: Target
 /// Where an attachment's source lives and where its copy should go. Resolved
 /// once so the dedup probe and the copy step cannot disagree on naming.
@@ -79,16 +81,16 @@ impl AttachmentTarget {
     /// conversion that keeps failing and only leaves a raw copy is served from
     /// that copy rather than retried on every reference.
     ///
-    /// Returns the path to reuse and the media type to record; a [`None`] media
-    /// type leaves the attachment's existing media type unchanged.
-    pub(super) fn existing_copy(
-        &self,
-        attachment: &Attachment,
-    ) -> Option<(PathBuf, Option<MediaType<'static>>)> {
+    /// Returns the [`CopiedFile`] to reuse: the matched path, and the media type
+    /// rebuilt from its extension when a converter produced it.
+    pub(super) fn existing_copy(&self, attachment: &Attachment) -> Option<CopiedFile> {
         // A raw copy keeps the source extension, or no extension for a directory.
         let candidate = self.raw_path(attachment);
         if candidate.exists() {
-            return Some((candidate, None));
+            return Some(CopiedFile {
+                path: candidate,
+                media_type: None,
+            });
         }
 
         // A converted copy uses the converted extension, so rebuild the media
@@ -97,7 +99,10 @@ impl AttachmentTarget {
         for &ext in conversion_output_extensions(&mime_type) {
             let converted = candidate.with_extension(ext);
             if converted.exists() {
-                return Some((converted, converted_media_type(&mime_type, ext)));
+                return Some(CopiedFile {
+                    path: converted,
+                    media_type: converted_media_type(&mime_type, ext),
+                });
             }
         }
 
@@ -164,9 +169,9 @@ mod dedup_tests {
         attachment.mime_type = Some("image/heic".to_string());
         fs::write(dir.join("7.heic"), b"data").unwrap();
 
-        let (path, media_type) = target(&dir, false).existing_copy(&attachment).unwrap();
-        assert_eq!(path, dir.join("7.heic"));
-        assert!(media_type.is_none());
+        let copied = target(&dir, false).existing_copy(&attachment).unwrap();
+        assert_eq!(copied.path, dir.join("7.heic"));
+        assert!(copied.media_type.is_none());
     }
 
     #[test]
@@ -178,9 +183,9 @@ mod dedup_tests {
         attachment.mime_type = Some("image/heic".to_string());
         fs::write(dir.join("7.jpeg"), b"data").unwrap();
 
-        let (path, media_type) = target(&dir, false).existing_copy(&attachment).unwrap();
-        assert_eq!(path, dir.join("7.jpeg"));
-        assert_eq!(media_type.unwrap().as_mime_type(), "image/jpeg");
+        let copied = target(&dir, false).existing_copy(&attachment).unwrap();
+        assert_eq!(copied.path, dir.join("7.jpeg"));
+        assert_eq!(copied.media_type.unwrap().as_mime_type(), "image/jpeg");
     }
 
     #[test]
@@ -193,9 +198,9 @@ mod dedup_tests {
         attachment.is_sticker = true;
         fs::write(dir.join("7.png"), b"data").unwrap();
 
-        let (path, media_type) = target(&dir, false).existing_copy(&attachment).unwrap();
-        assert_eq!(path, dir.join("7.png"));
-        assert_eq!(media_type.unwrap().as_mime_type(), "image/png");
+        let copied = target(&dir, false).existing_copy(&attachment).unwrap();
+        assert_eq!(copied.path, dir.join("7.png"));
+        assert_eq!(copied.media_type.unwrap().as_mime_type(), "image/png");
     }
 
     #[test]
@@ -207,9 +212,9 @@ mod dedup_tests {
         attachment.mime_type = Some("audio/x-caf".to_string());
         fs::write(dir.join("7.mp4"), b"data").unwrap();
 
-        let (path, media_type) = target(&dir, false).existing_copy(&attachment).unwrap();
-        assert_eq!(path, dir.join("7.mp4"));
-        assert_eq!(media_type.unwrap().as_mime_type(), "audio/mp4");
+        let copied = target(&dir, false).existing_copy(&attachment).unwrap();
+        assert_eq!(copied.path, dir.join("7.mp4"));
+        assert_eq!(copied.media_type.unwrap().as_mime_type(), "audio/mp4");
     }
 
     #[test]
@@ -221,9 +226,9 @@ mod dedup_tests {
         attachment.mime_type = Some("video/quicktime".to_string());
         fs::write(dir.join("7.mp4"), b"data").unwrap();
 
-        let (path, media_type) = target(&dir, false).existing_copy(&attachment).unwrap();
-        assert_eq!(path, dir.join("7.mp4"));
-        assert_eq!(media_type.unwrap().as_mime_type(), "video/mp4");
+        let copied = target(&dir, false).existing_copy(&attachment).unwrap();
+        assert_eq!(copied.path, dir.join("7.mp4"));
+        assert_eq!(copied.media_type.unwrap().as_mime_type(), "video/mp4");
     }
 
     #[test]
@@ -237,9 +242,12 @@ mod dedup_tests {
         attachment.mime_type = Some("image/jpeg".to_string());
         fs::write(dir.join("7.jpeg"), b"data").unwrap();
 
-        let (path, media_type) = target(&dir, false).existing_copy(&attachment).unwrap();
-        assert_eq!(path, dir.join("7.jpeg"));
-        assert!(media_type.is_none(), "a raw copy must not rebuild the mime");
+        let copied = target(&dir, false).existing_copy(&attachment).unwrap();
+        assert_eq!(copied.path, dir.join("7.jpeg"));
+        assert!(
+            copied.media_type.is_none(),
+            "a raw copy must not rebuild the mime"
+        );
     }
 
     #[test]
@@ -254,9 +262,9 @@ mod dedup_tests {
         fs::write(dir.join("7.heic"), b"raw").unwrap();
         fs::write(dir.join("7.jpeg"), b"converted").unwrap();
 
-        let (path, media_type) = target(&dir, false).existing_copy(&attachment).unwrap();
-        assert_eq!(path, dir.join("7.heic"));
-        assert!(media_type.is_none());
+        let copied = target(&dir, false).existing_copy(&attachment).unwrap();
+        assert_eq!(copied.path, dir.join("7.heic"));
+        assert!(copied.media_type.is_none());
     }
 
     #[test]
@@ -268,9 +276,9 @@ mod dedup_tests {
         attachment.mime_type = Some("application/octet-stream".to_string());
         fs::create_dir(dir.join("7")).unwrap();
 
-        let (path, media_type) = target(&dir, true).existing_copy(&attachment).unwrap();
-        assert_eq!(path, dir.join("7"));
-        assert!(media_type.is_none());
+        let copied = target(&dir, true).existing_copy(&attachment).unwrap();
+        assert_eq!(copied.path, dir.join("7"));
+        assert!(copied.media_type.is_none());
     }
 
     #[test]

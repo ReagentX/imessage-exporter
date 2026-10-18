@@ -5,7 +5,7 @@ use imessage_database::tables::{
 
 use crate::{
     app::{
-        compatibility::attachment_manager::{AttachmentManagerMode, Plan},
+        compatibility::attachment_manager::{AttachmentManagerMode, CopiedFile, Plan},
         runtime::Config,
     },
     exporters::{formatter::AttachmentRender, shared::driver::ExportState},
@@ -79,9 +79,20 @@ pub(crate) fn prepare_attachment(
     let Some(filename) = attachment.filename() else {
         return Err(AttachmentRender::MissingFilename);
     };
-    if let Err(why) = handle_result {
-        state.pb.println(why);
-        return Err(AttachmentRender::NamedFile(filename.to_string()));
+    let copied: Option<CopiedFile> = match handle_result {
+        Ok(copied) => copied,
+        Err(why) => {
+            state.pb.println(why);
+            return Err(AttachmentRender::NamedFile(filename.to_string()));
+        }
+    };
+
+    // The last writer of exporter state on the row; the next phase removes it.
+    if let Some(copied) = copied {
+        attachment.copied_path = Some(copied.path);
+        if let Some(media_type) = copied.media_type {
+            attachment.mime_type = Some(media_type.as_mime_type());
+        }
     }
     Ok(())
 }

@@ -27,7 +27,11 @@ use crate::app::{
     runtime::Config,
 };
 
-use super::{mode::AttachmentManagerMode, plan::Plan, target::AttachmentTarget};
+use super::{
+    mode::AttachmentManagerMode,
+    plan::{CopiedFile, Plan},
+    target::AttachmentTarget,
+};
 
 // MARK: Manager
 #[derive(Debug, PartialEq, Eq, Default)]
@@ -145,29 +149,28 @@ impl AttachmentManager {
 
         // Repeated references reload a fresh attachment row, so the on-disk
         // output is the durable reuse signal.
-        if let Some((path, media_type)) = target.existing_copy(attachment) {
-            return Ok(Plan::Reuse { path, media_type });
+        if let Some(copied) = target.existing_copy(attachment) {
+            return Ok(Plan::Reuse(copied));
         }
 
         Ok(Plan::Process { target })
     }
 
-    /// Carry out a [`Plan`], updating the attachment's `copied_path` and
-    /// `mime_type` when a file is reused or produced.
+    /// Carry out a [`Plan`]. `None` is [`Plan::Skip`]: nothing was produced and
+    /// the export refers to the source file.
     pub(crate) fn execute(
         &self,
         plan: Plan,
         message: &Message,
-        attachment: &mut Attachment,
+        attachment: &Attachment,
         config: &Config,
-    ) -> Result<(), ConversionError> {
+    ) -> Result<Option<CopiedFile>, ConversionError> {
         match plan {
-            Plan::Skip => Ok(()),
-            Plan::Reuse { path, media_type } => {
-                apply_copy(attachment, path, media_type);
-                Ok(())
+            Plan::Skip => Ok(None),
+            Plan::Reuse(copied) => Ok(Some(copied)),
+            Plan::Process { target } => {
+                self.process(message, attachment, config, &target).map(Some)
             }
-            Plan::Process { target } => self.process(message, attachment, config, &target),
         }
     }
 
@@ -176,10 +179,10 @@ impl AttachmentManager {
     fn process(
         &self,
         message: &Message,
-        attachment: &mut Attachment,
+        attachment: &Attachment,
         config: &Config,
         target: &AttachmentTarget,
-    ) -> Result<(), ConversionError> {
+    ) -> Result<CopiedFile, ConversionError> {
         // The working source; `target.source()` is retained for metadata below
         let mut from = target.source().to_path_buf();
         let mut is_temp = false;
@@ -281,23 +284,16 @@ impl AttachmentManager {
             update_file_metadata(&from, &to, message, config);
         }
 
-        apply_copy(attachment, to, new_media_type);
+        let copied = CopiedFile {
+            path: to,
+            media_type: new_media_type,
+        };
 
         // Remove the temporary file used for decryption, if it exists
         if is_temp && let Err(why) = remove_file(&from) {
             eprintln!("Unable to remove encrypted file {}: {why}", from.display());
         }
 
-        Ok(())
-    }
-}
-
-// MARK: Apply
-/// Record a produced or reused copy on the attachment, updating the media type
-/// when a conversion changed it.
-fn apply_copy(attachment: &mut Attachment, path: PathBuf, media_type: Option<MediaType<'_>>) {
-    attachment.copied_path = Some(path);
-    if let Some(media_type) = media_type {
-        attachment.mime_type = Some(media_type.as_mime_type());
+        Ok(copied)
     }
 }
