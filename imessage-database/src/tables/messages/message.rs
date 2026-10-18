@@ -20,7 +20,7 @@
  };
 
  // Get the default database path and connect to it
- let db_path = default_db_path();
+ let db_path = default_db_path().unwrap();
  let conn = get_connection(&db_path).unwrap();
 
  // Probe the schema once and use the result to compose every message query
@@ -52,7 +52,7 @@
  };
 
  // Get the default database path and connect to it
- let db_path = default_db_path();
+ let db_path = default_db_path().unwrap();
  let conn = get_connection(&db_path).unwrap();
  let capabilities = Capabilities::determine(&conn).unwrap();
  let mut query_context = QueryContext::default();
@@ -151,7 +151,7 @@
      util::dirs::default_db_path
  };
 
- let db_path = default_db_path();
+ let db_path = default_db_path().unwrap();
  let db = get_connection(&db_path).unwrap();
 
  let mut statement = db.prepare_cached("
@@ -350,7 +350,7 @@ impl Message {
     /// use imessage_database::tables::table::get_connection;
     /// use imessage_database::tables::messages::Message;
     ///
-    /// let db_path = default_db_path();
+    /// let db_path = default_db_path().unwrap();
     /// let conn = get_connection(&db_path).unwrap();
     /// Message::run_diagnostic(&conn);
     /// ```
@@ -945,7 +945,7 @@ impl Message {
     /// use imessage_database::util::dirs::default_db_path;
     /// use imessage_database::util::query_context::QueryContext;
     ///
-    /// let db_path = default_db_path();
+    /// let db_path = default_db_path().unwrap();
     /// let conn = get_connection(&db_path).unwrap();
     /// let capabilities = Capabilities::determine(&conn).unwrap();
     /// let context = QueryContext::default();
@@ -988,7 +988,7 @@ impl Message {
     /// use imessage_database::util::dirs::default_db_path;
     /// use imessage_database::util::query_context::QueryContext;
     ///
-    /// let db_path = default_db_path();
+    /// let db_path = default_db_path().unwrap();
     /// let conn = get_connection(&db_path).unwrap();
     /// let capabilities = Capabilities::determine(&conn).unwrap();
     /// let context = QueryContext::default();
@@ -1369,7 +1369,7 @@ impl Message {
     ///     util::dirs::default_db_path,
     /// };
     ///
-    /// let db_path = default_db_path();
+    /// let db_path = default_db_path().unwrap();
     /// let conn = get_connection(&db_path).unwrap();
     /// let capabilities = Capabilities::determine(&conn).unwrap();
     ///

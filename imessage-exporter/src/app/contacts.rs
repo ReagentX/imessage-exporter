@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
+    env::home_dir,
     fs,
     hash::Hash,
     path::{Path, PathBuf},
@@ -9,7 +10,6 @@ use imessage_database::{
     error::table::TableError,
     rusqlite::{Connection, Result},
     tables::{handle::HandleGroups, table::get_connection},
-    util::dirs::home,
 };
 
 /// Default contacts database path inside an iOS backup.
@@ -637,7 +637,9 @@ fn to_phone_digits(raw: &str) -> String {
 /// for AddressBook-v22.abcddb database files.
 fn find_macos_addressbook_db_paths() -> Vec<PathBuf> {
     let mut results = Vec::new();
-    if let Ok(entries) = fs::read_dir(macos_sources_dir()) {
+    if let Some(sources_dir) = macos_sources_dir()
+        && let Ok(entries) = fs::read_dir(sources_dir)
+    {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
@@ -652,12 +654,14 @@ fn find_macos_addressbook_db_paths() -> Vec<PathBuf> {
 }
 
 /// Resolve the standard macOS Contacts Sources directory: `~/Library/Application Support/AddressBook/Sources`
-fn macos_sources_dir() -> PathBuf {
-    PathBuf::from(&home())
-        .join("Library")
-        .join("Application Support")
-        .join("AddressBook")
-        .join("Sources")
+fn macos_sources_dir() -> Option<PathBuf> {
+    Some(
+        home_dir()?
+            .join("Library")
+            .join("Application Support")
+            .join("AddressBook")
+            .join("Sources"),
+    )
 }
 
 // MARK: Tests

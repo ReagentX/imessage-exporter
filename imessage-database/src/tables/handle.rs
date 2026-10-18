@@ -57,7 +57,7 @@ impl Handle {
     /// use imessage_database::tables::table::get_connection;
     /// use imessage_database::tables::handle::{Handle, HandleGroups};
     ///
-    /// let db_path = default_db_path();
+    /// let db_path = default_db_path().unwrap();
     /// let conn = get_connection(&db_path).unwrap();
     /// let handles = Handle::load(&conn).unwrap();
     /// let groups = HandleGroups::from_rows(&handles);
@@ -80,7 +80,7 @@ impl Handle {
     /// use imessage_database::tables::table::get_connection;
     /// use imessage_database::tables::handle::Handle;
     ///
-    /// let db_path = default_db_path();
+    /// let db_path = default_db_path().unwrap();
     /// let conn = get_connection(&db_path).unwrap();
     /// let handles = Handle::ids_by_rowid(Handle::load(&conn).unwrap());
     /// ```
@@ -124,7 +124,7 @@ impl Handle {
 /// use imessage_database::tables::table::get_connection;
 /// use imessage_database::tables::handle::HandleGroups;
 ///
-/// let db_path = default_db_path();
+/// let db_path = default_db_path().unwrap();
 /// let conn = get_connection(&db_path).unwrap();
 /// let mut groups = HandleGroups::from_db(&conn).unwrap();
 /// groups.union(3, 7);
@@ -215,7 +215,7 @@ impl Handle {
     /// use imessage_database::tables::table::get_connection;
     /// use imessage_database::tables::handle::Handle;
     ///
-    /// let db_path = default_db_path();
+    /// let db_path = default_db_path().unwrap();
     /// let conn = get_connection(&db_path).unwrap();
     /// Handle::run_diagnostic(&conn);
     /// ```

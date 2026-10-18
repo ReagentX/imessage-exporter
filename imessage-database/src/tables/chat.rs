@@ -159,7 +159,7 @@ impl Chat {
     /// use imessage_database::tables::table::get_connection;
     /// use imessage_database::tables::chat::Chat;
     ///
-    /// let db_path = default_db_path();
+    /// let db_path = default_db_path().unwrap();
     /// let conn = get_connection(&db_path).unwrap();
     /// let chatrooms = Chat::by_rowid(&conn);
     /// ```

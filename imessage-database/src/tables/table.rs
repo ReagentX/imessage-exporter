@@ -12,7 +12,7 @@
     util::dirs::default_db_path,
  };
 
- let db_path = default_db_path();
+ let db_path = default_db_path().unwrap();
  let db = get_connection(&db_path).unwrap();
 
  let mut statement = Handle::get(&db).unwrap();
@@ -99,7 +99,7 @@ pub(crate) fn flatten_row<T>(item: Result<Result<T, Error>, Error>) -> Result<T,
 ///     tables::table::get_connection
 /// };
 ///
-/// let db_path = default_db_path();
+/// let db_path = default_db_path().unwrap();
 /// let connection = get_connection(&db_path);
 /// ```
 pub fn get_connection(path: &Path) -> Result<Connection, TableError> {
@@ -142,7 +142,7 @@ pub fn get_connection(path: &Path) -> Result<Connection, TableError> {
 ///     tables::table::get_db_size
 /// };
 ///
-/// let db_path = default_db_path();
+/// let db_path = default_db_path().unwrap();
 /// let database_size_in_bytes = get_db_size(&db_path);
 /// ```
 pub fn get_db_size(path: &Path) -> Result<u64, TableError> {

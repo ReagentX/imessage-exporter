@@ -7,7 +7,7 @@ use crate::{
     },
 };
 
-use imessage_database::util::dirs::home;
+use std::env::home_dir;
 
 #[test]
 fn can_format_html_tapback_me() {
@@ -101,7 +101,7 @@ fn can_format_html_tapback_custom_sticker_exists() {
     let actual = exporter.format_tapback(&message).unwrap();
     let expected = format!(
         "<img src=\"{}/Library/Messages/StickerCache/8e682c381ab52ec2-289D9E83-33EE-4153-AF13-43DB31792C6F/289D9E83-33EE-4153-AF13-43DB31792C6F.heic\" loading=\"lazy\"><div class=\"sticker_name\">App: Free People</div><div class=\"sticker_tapback\">&nbsp;by Sample Contact</div>",
-        home()
+        home_dir().unwrap().display()
     );
 
     assert_eq!(actual, expected);

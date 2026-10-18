@@ -33,6 +33,8 @@ Literal strings containing `"$null"` remain strings. The parser identifies the a
 
 `tables::table` no longer defines `YOU`, `UNKNOWN`, `ORPHANED`, `ATTACHMENTS_DIR`, or `ATTRIBUTED_BODY`. Define any you use in your own crate; the library does not read them. `ME`, `FITNESS_RECEIVER`, the table and column names, and the default database paths remain.
 
+`util::dirs::home()` is removed; call `std::env::home_dir()`, which reads `HOME` on Unix and `USERPROFILE` on Windows. `util::dirs::default_db_path()` returns `Option<PathBuf>` and is `None` when no home directory is known. `util::dirs::expand_home()` replaces a leading `~` in a stored attachment path with the home directory.
+
 The modules `tables::messages::message`, `message_types::digital_touch::models`, and `message_types::handwriting::models` are private. Import `Message` from `tables::messages`, `DigitalTouchMessage`, `Color`, `ImageBackdrop`, and `Point` from `message_types::digital_touch`, and `HandwrittenMessage` and `Point` from `message_types::handwriting`. The Digital Touch `decode_*` helpers and the `util::typedstream` module (`TypeLengthPair`, `as_type_length_pair`) are no longer public.
 
 `HandwritingError` gains `InvalidDimensions(u16, u16)`, returned by `HandwrittenMessage::from_payload()` for a frame whose width or height cannot be padded without overflowing.
