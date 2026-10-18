@@ -2,14 +2,17 @@
  CLI option parsing and validation.
 */
 
-use std::path::PathBuf;
+use std::{env::home_dir, path::PathBuf};
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 
 use imessage_database::{
-    tables::{attachment::DEFAULT_MESSAGES_ROOT, table::DEFAULT_PATH_IOS},
+    tables::{
+        attachment::DEFAULT_MESSAGES_ROOT,
+        table::{DEFAULT_PATH_IOS, DEFAULT_PATH_MACOS},
+    },
     util::{
-        dirs::{default_db_path, home},
+        dirs::{default_db_path, expand_home},
         platform::Platform,
         query_context::QueryContext,
     },
@@ -230,16 +233,36 @@ impl Options {
         // We have to allocate a PathBuf here because it can be created from data owned by this function in the default state
         let db_path = match user_path {
             Some(path) => PathBuf::from(path),
-            None => default_db_path(),
+            None => default_db_path().ok_or_else(|| {
+                RuntimeError::InvalidOptions(format!(
+                    "Unable to determine the home directory; specify the database location with --{OPTION_DB_PATH}"
+                ))
+            })?,
         };
 
         // Build the Platform
         let platform = match platform_type {
             Some(platform_str) => {
-                Platform::from_cli(platform_str).ok_or(RuntimeError::InvalidOptions(format!(
-                    "{platform_str} is not a valid platform! Must be one of <{SUPPORTED_PLATFORMS}>"
-                )))?
+                let platform =
+                    Platform::from_cli(platform_str).ok_or(RuntimeError::InvalidOptions(format!(
+                        "{platform_str} is not a valid platform! Must be one of <{SUPPORTED_PLATFORMS}>"
+                    )))?;
+                // For an explicit iOS platform, validate the backup root before reading its
+                // manifest so we can report path hints instead of a manifest read error.
+                if platform == Platform::iOS
+                    && user_path.is_some()
+                    && Platform::determine(&db_path)? == Platform::macOS
+                {
+                    return Err(RuntimeError::InvalidOptions(format!(
+                        "--{OPTION_PLATFORM} is {platform}, but `{}` is a file, not a backup directory",
+                        db_path.display()
+                    )));
+                }
+                platform
             }
+            // Defer validation of the default macOS database path to connection setup to avoid
+            // repeating the filesystem checks and path diagnostics.
+            None if user_path.is_none() => Platform::macOS,
             None => Platform::determine(&db_path)?,
         };
 
@@ -321,6 +344,14 @@ impl Options {
     }
 }
 
+/// Return the default export directory: `imessage_export` under the home directory.
+///
+/// Falls back to `imessage_export` under the current directory when the home directory is unknown:
+/// `home_dir()` yields `None` only when neither `HOME`/`USERPROFILE` nor the OS user record names one.
+fn default_export_path() -> PathBuf {
+    home_dir().unwrap_or_default().join(DEFAULT_OUTPUT_DIR)
+}
+
 /// Resolve and validate the export directory.
 ///
 /// When an export type is selected, the directory must not already contain
@@ -330,8 +361,7 @@ fn validate_path(
     export_type: Option<&ExportType>,
 ) -> Result<PathBuf, RuntimeError> {
     // Build a path from the user-provided data or the default location
-    let resolved_path =
-        PathBuf::from(export_path.unwrap_or(&format!("{}/{DEFAULT_OUTPUT_DIR}", home())));
+    let resolved_path = export_path.map_or_else(default_export_path, PathBuf::from);
 
     // If there is an export type selected, ensure we do not overwrite files of the same type
     if let Some(export_type) = export_type
@@ -407,7 +437,7 @@ fn get_command() -> Command {
             Arg::new(OPTION_DB_PATH)
                 .short('p')
                 .long(OPTION_DB_PATH)
-                .help(format!("Specify an optional custom path for the iMessage database location\nFor macOS, specify a path to a `chat.db` file\nFor iOS, specify a path to the root of a device backup directory\nIf the iOS backup is encrypted, --{OPTION_CLEARTEXT_PASSWORD} can be passed or you will be prompted for the password\nIf omitted, the default directory is {}\n", default_db_path().display()))
+                .help(format!("Specify an optional custom path for the iMessage database location\nFor macOS, specify a path to a `chat.db` file\nFor iOS, specify a path to the root of a device backup directory\nIf the iOS backup is encrypted, --{OPTION_CLEARTEXT_PASSWORD} can be passed or you will be prompted for the password\nIf omitted, the default directory is {}\n", default_db_path().map_or_else(|| format!("~/{DEFAULT_PATH_MACOS}"), |path| path.display().to_string())))
                 .display_order(3)
                 .value_name("path/to/source"),
         )
@@ -415,7 +445,7 @@ fn get_command() -> Command {
             Arg::new(OPTION_ATTACHMENT_ROOT)
                 .short('r')
                 .long(OPTION_ATTACHMENT_ROOT)
-                .help(format!("Specify an optional custom path to look for attachment data in\nOnly use this if attachments are stored separately from the database's default location\nThe provided path should be absolute\nThis option affects both the `Attachments` and `StickerCache` directories\nAlso works with jailbroken iOS sms.db databases (use `--platform macOS`)\nHas no effect on iOS backups\nThe default location is {}\n", DEFAULT_MESSAGES_ROOT.replacen('~', &home(), 1)))
+                .help(format!("Specify an optional custom path to look for attachment data in\nOnly use this if attachments are stored separately from the database's default location\nThe provided path should be absolute\nThis option affects both the `Attachments` and `StickerCache` directories\nAlso works with jailbroken iOS sms.db databases (use `--platform macOS`)\nHas no effect on iOS backups\nThe default location is {}\n", expand_home(DEFAULT_MESSAGES_ROOT)))
                 .display_order(4)
                 .value_name("path/to/messages/root"),
         )
@@ -431,7 +461,7 @@ fn get_command() -> Command {
             Arg::new(OPTION_EXPORT_PATH)
                 .short('o')
                 .long(OPTION_EXPORT_PATH)
-                .help(format!("Specify an optional custom directory for outputting exported data\nIf omitted, the default directory is {}/{DEFAULT_OUTPUT_DIR}\n", home()))
+                .help(format!("Specify an optional custom directory for outputting exported data\nIf omitted, the default directory is {}\n", default_export_path().display()))
                 .display_order(6)
                 .value_name("path/to/save/files"),
         )
@@ -583,7 +613,7 @@ mod arg_tests {
 
         // Expected data
         let expected = Options {
-            db_path: default_db_path(),
+            db_path: default_db_path().unwrap(),
             attachment_root: None,
             attachment_manager: AttachmentManager::from(AttachmentManagerMode::Disabled),
             diagnostic: true,
@@ -660,7 +690,7 @@ mod arg_tests {
 
         // Expected data
         let expected = Options {
-            db_path: default_db_path(),
+            db_path: default_db_path().unwrap(),
             attachment_root: None,
             attachment_manager: AttachmentManager::from(AttachmentManagerMode::Disabled),
             diagnostic: false,
@@ -692,7 +722,7 @@ mod arg_tests {
 
         // Expected data
         let expected = Options {
-            db_path: default_db_path(),
+            db_path: default_db_path().unwrap(),
             attachment_root: None,
             attachment_manager: AttachmentManager::from(AttachmentManagerMode::Disabled),
             diagnostic: false,
@@ -767,7 +797,7 @@ mod arg_tests {
 
         // Expected data
         let expected = Options {
-            db_path: default_db_path(),
+            db_path: default_db_path().unwrap(),
             attachment_root: None,
             attachment_manager: AttachmentManager::from(AttachmentManagerMode::Disabled),
             diagnostic: false,
@@ -807,7 +837,7 @@ mod arg_tests {
 
         // Expected data
         let expected = Options {
-            db_path: default_db_path(),
+            db_path: default_db_path().unwrap(),
             attachment_root: None,
             attachment_manager: AttachmentManager::from(AttachmentManagerMode::Disabled),
             diagnostic: false,
@@ -861,7 +891,7 @@ mod arg_tests {
 
         // Expected data
         let expected = Options {
-            db_path: default_db_path(),
+            db_path: default_db_path().unwrap(),
             attachment_root: None,
             attachment_manager: AttachmentManager::from(AttachmentManagerMode::Disabled),
             diagnostic: false,
@@ -893,7 +923,7 @@ mod arg_tests {
 
         // Expected data
         let expected = Options {
-            db_path: default_db_path(),
+            db_path: default_db_path().unwrap(),
             attachment_root: None,
             attachment_manager: AttachmentManager::from(AttachmentManagerMode::Disabled),
             diagnostic: false,
@@ -926,7 +956,7 @@ mod arg_tests {
 
         // Expected data
         let expected = Options {
-            db_path: default_db_path(),
+            db_path: default_db_path().unwrap(),
             attachment_root: None,
             attachment_manager: AttachmentManager::from(AttachmentManagerMode::Disabled),
             diagnostic: false,
@@ -958,7 +988,7 @@ mod arg_tests {
 
         // Expected data
         let expected = Options {
-            db_path: default_db_path(),
+            db_path: default_db_path().unwrap(),
             attachment_root: None,
             attachment_manager: AttachmentManager::from(AttachmentManagerMode::Full),
             diagnostic: false,
@@ -990,7 +1020,7 @@ mod arg_tests {
 
         // Expected data
         let expected = Options {
-            db_path: default_db_path(),
+            db_path: default_db_path().unwrap(),
             attachment_root: None,
             attachment_manager: AttachmentManager::from(AttachmentManagerMode::Clone),
             diagnostic: false,
@@ -1061,7 +1091,7 @@ mod arg_tests {
 
         // Expected data
         let expected = Options {
-            db_path: default_db_path(),
+            db_path: default_db_path().unwrap(),
             attachment_root: None,
             attachment_manager: AttachmentManager::from(AttachmentManagerMode::Disabled),
             diagnostic: false,
@@ -1167,15 +1197,12 @@ mod arg_tests {
 #[cfg(test)]
 mod path_tests {
     use std::fs;
-    use std::path::PathBuf;
 
     use crate::app::{
         export_type::ExportType,
-        options::{DEFAULT_OUTPUT_DIR, validate_path},
+        options::{default_export_path, validate_path},
         test_dir::unique_test_dir,
     };
-
-    use imessage_database::util::dirs::home;
 
     #[test]
     fn can_validate_empty() {
@@ -1228,9 +1255,6 @@ mod path_tests {
 
         let result = validate_path(export_path, export_type);
 
-        assert_eq!(
-            result.unwrap(),
-            PathBuf::from(&format!("{}/{DEFAULT_OUTPUT_DIR}", home()))
-        );
+        assert_eq!(result.unwrap(), default_export_path());
     }
 }

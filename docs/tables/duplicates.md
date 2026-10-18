@@ -60,12 +60,10 @@ When `A` writes to you and `B` from `X` over SMS, you see those messages under c
 
 ### Handles Solution
 
-We need one identifier for every row that belongs to the same person, including rows connected through a third row. To assign these identifiers, we seed a union-find with the `Handle ID`s and add an edge whenever two rows provide evidence that they belong to one person. We get two kinds of evidence from the database:
+We need one identifier for every row that belongs to the same person, including rows connected through a third row. To assign these identifiers, we seed a union-find with the `Handle ID`s and add an edge whenever two rows provide evidence that they belong to one person. We get two kinds of evidence from the database, with third from the Contacts database when available:
 
 1. Matching `id` values, byte for byte, as with handles `2` and `3`. Messages already lowercases email addresses and canonicalizes phone numbers before storing them, so we do not need to normalize these values again. If we match phone numbers by digits alone, we could merge a short code with a full number that happens to share its suffix.
 2. Matching `Person Centric ID` values, as with handles `1` and `2`.
-
-We add a third kind of evidence from the Contacts database:
 
 3. Addresses that appear on one Contacts card. We match phone numbers as written: a leading `+` claims a country code, a number without one may carry any, and a `+1` number also matches its bare ten digits. We treat cards linked through `PersonLink` on iOS or `ZLINKID` on macOS as one card. We skip the "me" card, and we add no edge for an address that appears on two different cards, since we cannot tell which person it belongs to.
 

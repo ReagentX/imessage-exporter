@@ -7,6 +7,7 @@ use std::{fmt::Display, path::Path};
 use crate::{
     error::table::{TableConnectError, TableError},
     tables::table::DEFAULT_PATH_IOS,
+    util::path_hint::{Presence, diagnose, presence},
 };
 
 /// Platform that produced the Messages database.
@@ -22,19 +23,35 @@ pub enum Platform {
 
 impl Platform {
     /// Detect whether a path points to an iOS backup root or a macOS database.
+    ///
+    /// Require a Messages database at [`DEFAULT_PATH_IOS`] before accepting an iOS backup root.
+    /// Return an error for any other directory or a missing or inaccessible path, with hints
+    /// from the surrounding filesystem when available. Treat files as macOS database inputs;
+    /// validate their contents with [`get_connection`](crate::tables::table::get_connection).
     pub fn determine(db_path: &Path) -> Result<Self, TableError> {
         // iOS inputs must be backup roots, not the nested database path.
         if db_path.ends_with(DEFAULT_PATH_IOS) {
             return Err(TableError::CannotConnect(TableConnectError::NotBackupRoot));
         }
 
-        if db_path.join(DEFAULT_PATH_IOS).exists() {
-            return Ok(Self::iOS);
-        } else if db_path.is_file() {
-            return Ok(Self::macOS);
-        }
-        // Connection setup reports the missing path later.
-        Ok(Self::default())
+        let connect_error = match presence(db_path) {
+            Err(why) => TableConnectError::Inaccessible(db_path.to_path_buf(), why),
+            Ok(Presence::Missing) => {
+                TableConnectError::DoesNotExist(db_path.to_path_buf(), diagnose(db_path))
+            }
+            Ok(Presence::Directory) => {
+                let messages_db = db_path.join(DEFAULT_PATH_IOS);
+                match presence(&messages_db) {
+                    Ok(Presence::File) => return Ok(Self::iOS),
+                    Err(why) => TableConnectError::Inaccessible(messages_db, why),
+                    Ok(_) => {
+                        TableConnectError::IsDirectory(db_path.to_path_buf(), diagnose(db_path))
+                    }
+                }
+            }
+            Ok(Presence::File | Presence::Other) => return Ok(Self::macOS),
+        };
+        Err(TableError::CannotConnect(connect_error))
     }
 
     /// Parse a platform name from CLI input.
@@ -66,7 +83,81 @@ impl Display for Platform {
 
 #[cfg(test)]
 mod tests {
-    use crate::{tables::table::DEFAULT_PATH_IOS, util::platform::Platform};
+    use std::{
+        env::temp_dir,
+        fs::{File, create_dir_all, remove_dir_all},
+        path::PathBuf,
+        process,
+    };
+
+    use crate::{
+        error::table::{TableConnectError, TableError},
+        tables::table::DEFAULT_PATH_IOS,
+        util::platform::Platform,
+    };
+
+    fn scratch(label: &str) -> PathBuf {
+        let path = temp_dir().join(format!(
+            "imessage-database-platform-{}-{label}",
+            process::id()
+        ));
+        let _ = remove_dir_all(&path);
+        create_dir_all(&path).unwrap();
+        path
+    }
+
+    #[test]
+    fn detects_backup_root() {
+        let dir = scratch("root");
+        let messages_db = dir.join(DEFAULT_PATH_IOS);
+        create_dir_all(messages_db.parent().unwrap()).unwrap();
+        File::create(&messages_db).unwrap();
+
+        assert_eq!(Platform::determine(&dir).unwrap(), Platform::iOS);
+
+        remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn file_is_macos() {
+        let dir = scratch("file");
+        let file = dir.join("chat.db");
+        File::create(&file).unwrap();
+
+        assert_eq!(Platform::determine(&file).unwrap(), Platform::macOS);
+
+        remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn missing_path_is_an_error() {
+        let dir = scratch("missing");
+
+        assert!(matches!(
+            Platform::determine(&dir.join("absent")),
+            Err(TableError::CannotConnect(TableConnectError::DoesNotExist(
+                _,
+                _
+            )))
+        ));
+
+        remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn directory_without_backup_is_an_error() {
+        let dir = scratch("plain-dir");
+
+        assert!(matches!(
+            Platform::determine(&dir),
+            Err(TableError::CannotConnect(TableConnectError::IsDirectory(
+                _,
+                _
+            )))
+        ));
+
+        remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn can_parse_macos_any_case() {

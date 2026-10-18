@@ -27,7 +27,7 @@ use crate::{
     },
     util::{
         bundle_id::parse_balloon_bundle_id,
-        dirs::home,
+        dirs::expand_home,
         platform::Platform,
         plist::{get_owned_string_from_dict, get_value_from_dict, plist_as_dictionary},
         query_context::QueryContext,
@@ -455,7 +455,7 @@ impl Attachment {
     /// use imessage_database::tables::table::get_connection;
     /// use imessage_database::tables::attachment::Attachment;
     ///
-    /// let db_path = default_db_path();
+    /// let db_path = default_db_path().unwrap();
     /// let conn = get_connection(&db_path).unwrap();
     /// Attachment::run_diagnostic(&conn, &db_path, &Platform::macOS, None);
     /// ```
@@ -551,10 +551,7 @@ impl Attachment {
 
     /// Resolve a macOS attachment path.
     fn gen_macos_attachment(path: &str) -> String {
-        if path.starts_with('~') {
-            return path.replacen('~', &home(), 1);
-        }
-        path.to_string()
+        expand_home(path).into_owned()
     }
 
     /// Resolve an encrypted iOS backup attachment path.

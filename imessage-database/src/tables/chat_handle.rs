@@ -49,7 +49,7 @@ impl ChatToHandle {
     /// use imessage_database::tables::table::get_connection;
     /// use imessage_database::tables::chat_handle::ChatToHandle;
     ///
-    /// let db_path = default_db_path();
+    /// let db_path = default_db_path().unwrap();
     /// let conn = get_connection(&db_path).unwrap();
     /// let chatrooms = ChatToHandle::participants_by_chat(&conn);
     /// ```
@@ -104,7 +104,7 @@ impl ChatToHandle {
     /// use imessage_database::tables::table::get_connection;
     /// use imessage_database::tables::chat_handle::ChatToHandle;
     ///
-    /// let db_path = default_db_path();
+    /// let db_path = default_db_path().unwrap();
     /// let conn = get_connection(&db_path).unwrap();
     /// ChatToHandle::run_diagnostic(&conn);
     /// ```
@@ -180,7 +180,7 @@ impl ChatToHandle {
     /// use imessage_database::tables::table::get_connection;
     /// use imessage_database::tables::chat_handle::ChatToHandle;
     ///
-    /// let db_path = default_db_path();
+    /// let db_path = default_db_path().unwrap();
     /// let conn = get_connection(&db_path).unwrap();
     /// ChatToHandle::get_chat_lookup_map(&conn);
     /// ```
@@ -272,7 +272,7 @@ ORDER BY chat;
     /// use imessage_database::tables::chat_handle::ChatToHandle;
     /// use imessage_database::tables::handle::HandleGroups;
     ///
-    /// let db_path = default_db_path();
+    /// let db_path = default_db_path().unwrap();
     /// let conn = get_connection(&db_path).unwrap();
     /// let chatrooms = ChatToHandle::participants_by_chat(&conn).unwrap();
     /// let handle_groups = HandleGroups::from_db(&conn).unwrap().finalize();
@@ -410,7 +410,7 @@ impl ChatToHandle {
     /// use imessage_database::tables::table::get_connection;
     /// use imessage_database::tables::chat_handle::ChatToHandle;
     ///
-    /// let db_path = default_db_path();
+    /// let db_path = default_db_path().unwrap();
     /// let conn = get_connection(&db_path).unwrap();
     /// let last_activity = ChatToHandle::get_last_activity(&conn);
     /// ```

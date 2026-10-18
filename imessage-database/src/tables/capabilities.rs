@@ -7,10 +7,12 @@ probes the live schema once; query composition then includes exactly what the
 database supports.
 */
 
+use std::path::PathBuf;
+
 use rusqlite::Connection;
 
 use crate::{
-    error::table::TableError,
+    error::table::{TableConnectError, TableError},
     tables::{
         attachment::ATTACHMENT_COLUMNS,
         diagnostic::{column_names, table_exists},
@@ -58,6 +60,13 @@ pub struct Capabilities {
 impl Capabilities {
     /// Probe the schema of the supplied database.
     pub fn determine(db: &Connection) -> Result<Self, TableError> {
+        if !table_exists(db, MESSAGE)? {
+            return Err(TableError::CannotConnect(
+                TableConnectError::NotMessagesDatabase(PathBuf::from(
+                    db.path().unwrap_or_default(),
+                )),
+            ));
+        }
         let message_names = column_names(db, MESSAGE)?;
         let attachment_names = column_names(db, ATTACHMENT)?;
 
@@ -129,8 +138,27 @@ impl Capabilities {
 
 #[cfg(test)]
 mod tests {
+    use rusqlite::Connection;
+
     use super::Capabilities;
-    use crate::test_support::schema_db;
+    use crate::{
+        error::table::{TableConnectError, TableError},
+        test_support::schema_db,
+    };
+
+    #[test]
+    fn rejects_database_without_message_table() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch("CREATE TABLE Files (fileID TEXT)")
+            .unwrap();
+
+        assert!(matches!(
+            Capabilities::determine(&db),
+            Err(TableError::CannotConnect(
+                TableConnectError::NotMessagesDatabase(_)
+            ))
+        ));
+    }
 
     #[test]
     fn detects_present_features() {
