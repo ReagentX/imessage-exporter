@@ -173,8 +173,6 @@ pub const RECENTLY_DELETED: &str = "chat_recoverable_message_join";
 pub const MESSAGE_PAYLOAD: &str = "payload_data";
 /// [`plist`](crate::util::plist)-encoded message summary column.
 pub const MESSAGE_SUMMARY_INFO: &str = "message_summary_info";
-/// [`typedstream`](crate::util::typedstream)-encoded attributed body column.
-pub const ATTRIBUTED_BODY: &str = "attributedBody";
 /// [`plist`](crate::util::plist)-encoded sticker metadata column.
 pub const STICKER_USER_INFO: &str = "sticker_user_info";
 /// [`plist`](crate::util::plist)-encoded attachment attribution column.
@@ -185,20 +183,12 @@ pub const PROPERTIES: &str = "properties";
 // Default information
 /// First-person display name for the database owner.
 pub const ME: &str = "Me";
-/// Second-person display name for the database owner.
-pub const YOU: &str = "You";
-/// Display name used when a contact or chat name is unavailable.
-pub const UNKNOWN: &str = "Unknown";
 /// Default macOS Messages database path.
 pub const DEFAULT_PATH_MACOS: &str = "Library/Messages/chat.db";
 /// Default Messages database path inside an iOS backup.
 pub const DEFAULT_PATH_IOS: &str = "3d/3d0d7e5fb2ce288813306e4d4636395e047a3d28";
-/// Chat name reserved for messages that do not belong to a chat row.
-pub const ORPHANED: &str = "orphaned";
 /// Replacement token found in Fitness.app messages.
 pub const FITNESS_RECEIVER: &str = "$(kIMTranscriptPluginBreadcrumbTextReceiverIdentifier)";
-/// Attachments directory name used in exports.
-pub const ATTACHMENTS_DIR: &str = "attachments";
 
 #[cfg(test)]
 mod tests {

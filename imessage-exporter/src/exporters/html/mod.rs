@@ -15,7 +15,7 @@ use crate::{
             AttachmentRender, MessageFormatter, PartBodyBuilder, RenderContext, TextEffectFormatter,
         },
         shared::{
-            announcement::{AnnouncementBody, resolve_announcement},
+            announcement::{AnnouncementBody, YOU, resolve_announcement},
             attachment::prepare_attachment,
             balloon::dispatch_app_balloon,
             driver::{ExportState, MessageWriter},
@@ -41,7 +41,6 @@ use imessage_database::{
             Message,
             models::{AttachmentMeta, AttributedRange, BubbleComponent, SharedLocation},
         },
-        table::YOU,
     },
 };
 

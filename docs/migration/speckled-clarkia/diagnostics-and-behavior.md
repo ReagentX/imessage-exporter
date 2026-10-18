@@ -27,9 +27,11 @@ Apply updates in their intended order. An empty vote list names no voters, so it
 
 Literal strings containing `"$null"` remain strings. The parser identifies the archive's null object by its object-table position as well as its contents.
 
-## Removed variants
+## Removed and moved items
 
-Three variants were never constructed and are removed: `Announcement::Unknown`, `MessageError::TypedStreamError`, and `PlistParseError::StreamTypedError`, along with the `From` conversions into the two error variants. `Message::get_announcement()` returns `None` for an unmapped `item_type`, so no `Unknown` arm is reachable. Remove any match arms for them.
+`Announcement::Unknown`, `MessageError::TypedStreamError`, and `PlistParseError::StreamTypedError` are removed, along with the `From` conversions into the two error variants. Remove any match arms for them; none of these variants was ever produced, so no replacement is needed.
+
+`tables::table` no longer defines `YOU`, `UNKNOWN`, `ORPHANED`, `ATTACHMENTS_DIR`, or `ATTRIBUTED_BODY`. Define any you use in your own crate; the library does not read them. `ME`, `FITNESS_RECEIVER`, the table and column names, and the default database paths remain.
 
 ## CLI and export changes
 

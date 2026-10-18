@@ -19,7 +19,7 @@ use imessage_database::{
         chat_handle::{ChatToHandle, Participant},
         handle::{Handle, HandleGroups},
         messages::Message,
-        table::{ATTACHMENTS_DIR, ME, ORPHANED, UNKNOWN, get_db_size},
+        table::{ME, get_db_size},
     },
     util::{
         dates::{format as format_date, get_local_time, get_offset, readable_diff},
@@ -41,6 +41,12 @@ use crate::{
 const MAX_LENGTH: usize = 235;
 /// Separator between participant names in a generated filename.
 const SEPARATOR: &str = ", ";
+/// Display name used when a contact or chat name is unavailable.
+pub(crate) const UNKNOWN: &str = "Unknown";
+/// Transcript and attachment directory name for messages that do not belong to a chat row.
+pub(crate) const ORPHANED: &str = "orphaned";
+/// Attachments directory name under the export root.
+pub(crate) const ATTACHMENTS_DIR: &str = "attachments";
 
 // MARK: Config
 /// Cached application state used during export.
