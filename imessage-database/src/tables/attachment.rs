@@ -6,12 +6,7 @@ use plist::Value;
 use rusqlite::{Connection, Error, Result, Row};
 use sha1::{Digest, Sha1};
 
-use std::{
-    borrow::Cow,
-    fs::File,
-    io::Read,
-    path::{Path, PathBuf},
-};
+use std::{borrow::Cow, fs::File, io::Read, path::Path};
 
 use crate::{
     error::{attachment::AttachmentError, table::TableError},
@@ -174,8 +169,6 @@ pub struct Attachment {
     pub hide_attachment: i32,
     /// Prompt used to generate a Genmoji.
     pub emoji_description: Option<String>,
-    /// Auxiliary data to denote that an attachment has been copied or converted.
-    pub copied_path: Option<PathBuf>,
 }
 
 // MARK: Table
@@ -192,7 +185,6 @@ impl Table for Attachment {
             is_sticker: row.get("is_sticker").unwrap_or(false),
             hide_attachment: row.get("hide_attachment").unwrap_or(0),
             emoji_description: row.get("emoji_image_short_description").unwrap_or(None),
-            copied_path: None,
         })
     }
 }
@@ -702,7 +694,6 @@ mod tests {
             is_sticker: false,
             hide_attachment: 0,
             emoji_description: None,
-            copied_path: None,
         }
     }
 

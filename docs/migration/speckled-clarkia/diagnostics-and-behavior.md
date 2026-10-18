@@ -53,6 +53,8 @@ Use `util::path_hint::PathHint` to identify literal quote characters, backups fo
 
 The modules `tables::messages::message`, `message_types::digital_touch::models`, and `message_types::handwriting::models` are private. Import `Message` from `tables::messages`, `DigitalTouchMessage`, `Color`, `ImageBackdrop`, and `Point` from `message_types::digital_touch`, and `HandwrittenMessage` and `Point` from `message_types::handwriting`. The Digital Touch `decode_*` helpers and the `util::typedstream` module (`TypeLengthPair`, `as_type_length_pair`) are no longer public.
 
+`Attachment` no longer has a `copied_path` field, and the library never writes `mime_type` after `from_row()`. If you copied or converted attachment files and recorded the result on the row, keep the output path and, for a conversion, the output media type in a value of your own beside the row. Read `mime_type()` for the source type and your value for the exported type. Struct literals drop the `copied_path: None` line.
+
 `HandwritingError` gains `InvalidDimensions(u16, u16)`, returned by `HandwrittenMessage::from_payload()` for a frame whose width or height cannot be padded without overflowing.
 
 `imessage_database` re-exports `chrono`, `plist`, and `rusqlite`. Import their types through the re-exports, for example `imessage_database::rusqlite::Connection`, and remove your own dependency on each crate unless other code needs it.

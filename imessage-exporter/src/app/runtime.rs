@@ -828,7 +828,6 @@ impl Config {
             is_sticker: false,
             hide_attachment: 0,
             emoji_description: None,
-            copied_path: None,
         }
     }
 }
