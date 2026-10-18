@@ -10,7 +10,7 @@ use crate::{
 };
 
 /// Platform that produced the Messages database.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Platform {
     /// macOS Messages database.
     #[allow(non_camel_case_types)]
