@@ -131,8 +131,7 @@ impl Config {
         String::from(ORPHANED)
     }
 
-    /// Return `path` relative to the export root when it lies under it, else
-    /// `path` as displayed.
+    /// Return the displayed `path` with the export-root prefix removed, if present.
     pub fn relative_path(&self, path: &Path) -> String {
         if let Ok(relative_path) = path.strip_prefix(&self.options.export_path) {
             return relative_path.display().to_string();

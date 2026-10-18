@@ -15,29 +15,26 @@ use crate::{
 
 pub(crate) use crate::app::compatibility::attachment_manager::ExportFile;
 
-/// Why no file could be prepared. Converts into the
+/// Reason for an attachment preparation failure. Convert into the
 /// [`AttachmentRender`](crate::exporters::formatter::AttachmentRender)
 /// variant of the same name.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum AttachmentFailure {
-    /// The row has no filename metadata.
+    /// No filename metadata on the row.
     MissingFilename,
-    /// The manager could not process the file; carries the display name.
+    /// Failure to process the file, with the attachment's display name.
     NamedFile(String),
 }
 
-/// Run the per-attachment side effects every exporter needs before it can
-/// emit a reference to a file on disk: surface a busy indicator on the
-/// progress bar for conversions that spawn ffmpeg (video transcoding and
-/// animated-sticker decoding), then ask the
-/// [`AttachmentManager`](crate::app::compatibility::attachment_manager::AttachmentManager)
-/// to copy or convert the file.
+/// Prepare an attachment before rendering a reference to its file: show a busy
+/// indicator for ffmpeg video transcoding and animated-sticker decoding, then
+/// copy or convert the file with the
+/// [`AttachmentManager`](crate::app::compatibility::attachment_manager::AttachmentManager).
 ///
-/// Returns the [`ExportFile`] the export should refer to: the manager's copy
-/// when it produced or reused one, else the resolved source path, else the
-/// bare filename. The filename check runs after the manager so a copy failure
-/// on a nameless row is [`AttachmentFailure::MissingFilename`] and prints
-/// nothing.
+/// Return an [`ExportFile`] for the produced or reused copy, else the resolved
+/// source path, else the bare filename. Check for a filename after processing
+/// the attachment. Without one, return [`AttachmentFailure::MissingFilename`]
+/// and suppress any copy error instead of printing it.
 pub(crate) fn prepare_attachment<'a>(
     config: &Config,
     state: &ExportState,
@@ -104,8 +101,8 @@ pub(crate) fn prepare_attachment<'a>(
         }
     };
 
-    // `Plan::Skip`: the export points at the source. An unresolvable source
-    // is not an error here, so the bare filename stands in.
+    // For `Plan::Skip`, use the source path in the export. If the source cannot
+    // be resolved, use the bare filename without reporting an error.
     Ok(file.unwrap_or_else(|| ExportFile {
         path: attachment
             .resolved_attachment_path(

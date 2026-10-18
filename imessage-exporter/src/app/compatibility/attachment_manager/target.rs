@@ -22,7 +22,7 @@ pub(crate) struct AttachmentTarget<'a> {
     source_is_dir: bool,
     /// Destination directory for this conversation's attachments.
     dir: PathBuf,
-    /// The attachment's display name, carried onto the [`ExportFile`].
+    /// Display name for the resulting [`ExportFile`].
     name: &'a str,
 }
 
@@ -40,7 +40,7 @@ impl<'a> AttachmentTarget<'a> {
             config.options.attachment_root.as_deref(),
         )?);
         let source_is_dir = source.is_dir();
-        // A row whose path resolved has a stored filename, so this is `Some`.
+        // The stored filename is available as a fallback after resolving the source.
         let name = attachment.filename()?;
 
         let mut dir = config.attachment_path();
@@ -78,23 +78,21 @@ impl<'a> AttachmentTarget<'a> {
 
     /// Locate an existing output for this attachment, if any.
     ///
-    /// The rowid is unique within the conversation directory, so any file there
-    /// whose stem is the rowid belongs to this attachment.
-    /// The source extension is probed first: [`copy_raw`](crate::app::compatibility::converters::common::copy_raw)
-    /// (Clone mode, unconvertible types, and the fallback used when a converter
-    /// fails) writes `<rowid>.<source_ext>` and leaves the media type unchanged.
-    /// If that is absent, a converter must have run, so the conversion outputs
-    /// are probed and the media type is rebuilt from the matched extension.
+    /// Within the conversation directory, identify output by its unique rowid.
+    /// Check the source extension first: with [`copy_raw`](crate::app::compatibility::converters::common::copy_raw),
+    /// output is stored at `<rowid>.<source_ext>` with the source media type.
+    /// Use that path in Clone mode, for unconvertible types, and after conversion failures.
+    /// Without a raw copy, check the conversion output extensions and
+    /// reconstruct the media type from the matching extension.
     ///
-    /// The mode is deliberately not consulted, so reusing an export directory
-    /// across modes can reuse an existing sibling. A clean export is exact. A
-    /// conversion that keeps failing and only leaves a raw copy is served from
-    /// that copy rather than retried on every reference.
+    /// Reuse output regardless of the current mode. When changing modes, use a
+    /// clean export directory to apply the new mode to every attachment. Reuse
+    /// raw copies after conversion failures to avoid retrying each reference.
     ///
-    /// Returns the [`ExportFile`] to reuse: the matched path, and the media type
-    /// rebuilt from its extension when a converter produced it, else the row's.
+    /// Return the [`ExportFile`] to reuse: the matched path and either the
+    /// reconstructed media type for a conversion or the source row's type.
     pub(super) fn existing_copy(&self, attachment: &'a Attachment) -> Option<ExportFile<'a>> {
-        // A raw copy keeps the source extension, or no extension for a directory.
+        // Check the source extension for a raw copy, or no extension for a directory.
         let candidate = self.raw_path(attachment);
         if candidate.exists() {
             return Some(ExportFile {
@@ -104,13 +102,12 @@ impl<'a> AttachmentTarget<'a> {
             });
         }
 
-        // A converted copy uses the converted extension, so rebuild the media
-        // type from that extension.
+        // For converted output, reconstruct the media type from the output extension.
         let mime_type = attachment.mime_type();
         for &ext in conversion_output_extensions(&mime_type) {
             let converted = candidate.with_extension(ext);
             if converted.exists() {
-                // Every category with conversion outputs rebuilds to `Some`.
+                // A media type can be reconstructed for every category with conversion outputs.
                 return Some(ExportFile {
                     path: converted,
                     media_type: converted_media_type(&mime_type, ext).unwrap_or(mime_type),

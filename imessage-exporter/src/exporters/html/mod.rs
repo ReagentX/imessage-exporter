@@ -204,23 +204,20 @@ impl<'a> MessageFormatter<'a> for HTML<'a> {
         let kind = normalize_edited(msg, edited_message, message_part_idx, self.config, YOU)?
             .map_rows(|event| {
                 let rendered_text = match event.components.first() {
-                    // A run carrying an inline sticker interleaves text ranges
-                    // with glyph-sized `<img>`s, exactly as `render_run` does
-                    // for live messages so an edited Memoji/genmoji renders
-                    // as its image, not a bare `\u{FFFC}` placeholder.
+                    // Interleave text ranges with glyph-sized `<img>`s as in
+                    // `render_run` for live messages, so an edited Memoji/genmoji
+                    // is displayed as its image instead of a bare `\u{FFFC}` placeholder.
                     Some(BubbleComponent::Run(ranges))
                         if ranges
                             .iter()
                             .any(|range| range.attachment.is_some() && range.emoji_image) =>
                     {
-                        // Edit-history components always come from
-                        // `parse_body_typedstream`, so each attachment range
-                        // carries a file-transfer GUID and `resolve` is
-                        // idempotent (a GUID lookup, not a positional-cursor
-                        // advance). That keeps this per-row resolve safe
-                        // despite the resolver's "once per range" contract: a
-                        // GUID-less range repeated across rows would otherwise
-                        // drift the positional cursor.
+                        // Edit-history components are always parsed with
+                        // `parse_body_typedstream`, with a file-transfer GUID
+                        // on each attachment range. Resolving the same GUID
+                        // repeatedly is safe: look it up without advancing the
+                        // positional cursor. For GUID-less ranges, resolve only
+                        // once per range to avoid advancing the cursor across rows.
                         inline_segments_to_html(self.interleave_segments(
                             event.text,
                             ranges,
@@ -680,8 +677,8 @@ impl<'a> HTML<'a> {
         }
     }
 
-    /// Render a prepared attachment as its embed markup. The media type and
-    /// embed path come from `file`; the displayed size comes from the row.
+    /// Render a prepared attachment as embed markup. Use the media type and
+    /// embed path from `file` and the displayed size from the row.
     fn render_attachment(
         &self,
         attachment: &Attachment,
@@ -692,7 +689,7 @@ impl<'a> HTML<'a> {
 
         let variant = match &file.media_type {
             MediaType::Image(_) => AttachmentVariant::Image,
-            // Video duplicates the source tag intentionally; see
+            // Duplicate the video source tag intentionally; see
             // https://github.com/ReagentX/imessage-exporter/issues/73
             MediaType::Video(media_type) => AttachmentVariant::Video { media_type },
             MediaType::Audio(media_type) => match metadata.transcription.as_deref() {
@@ -728,8 +725,8 @@ impl<'a> HTML<'a> {
         })
     }
 
-    /// Render a prepared sticker as a block attachment followed by its
-    /// decoration suffix, when the row's file carries one.
+    /// Render a prepared sticker as a block attachment, followed by a
+    /// decoration suffix when available in the row's file.
     fn render_sticker(&self, sticker: &Attachment, file: &ExportFile<'_>) -> String {
         let mut sticker_embed = self.render_attachment(sticker, file, &AttachmentMeta::default());
 
@@ -749,8 +746,8 @@ impl<'a> HTML<'a> {
         sticker_embed
     }
 
-    /// Render a prepared static sticker as a glyph-sized inline `<img>` whose
-    /// `title=` carries the decoration label.
+    /// Render a prepared static sticker as a glyph-sized inline `<img>` with
+    /// the decoration label in `title=`.
     fn render_sticker_inline(&self, sticker: &Attachment, file: &ExportFile<'_>) -> String {
         let label = sticker
             .get_sticker_decoration(

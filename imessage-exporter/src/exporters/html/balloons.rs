@@ -39,8 +39,8 @@ use crate::exporters::{
 
 use crate::app::runtime::Config;
 
-/// Prepare the attachment backing a Digital Touch media message and confirm the
-/// prepared file exists; `None` falls back to the labeled black canvas.
+/// Prepare the attachment backing a Digital Touch media message and confirm its
+/// presence on disk. On `None`, render the labeled black canvas.
 fn digital_touch_file<'a>(
     config: &Config,
     state: &ExportState,

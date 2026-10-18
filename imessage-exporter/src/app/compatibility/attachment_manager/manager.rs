@@ -128,9 +128,8 @@ impl AttachmentManager {
     /// Decide what to do for an attachment without performing any decryption or
     /// conversion.
     ///
-    /// The returned [`Plan`] records whether an existing output can be reused,
-    /// so callers can suppress conversion progress before
-    /// [`execute`](Self::execute) runs it.
+    /// Check the returned [`Plan`] for reusable output before calling
+    /// [`execute`](Self::execute), and suppress conversion progress when reusing it.
     pub(crate) fn plan<'a>(
         &self,
         message: &Message,
@@ -147,8 +146,8 @@ impl AttachmentManager {
             });
         };
 
-        // Repeated references reload a fresh attachment row, so the on-disk
-        // output is the durable reuse signal.
+        // Check for output on disk because a fresh attachment row is loaded
+        // for each reference.
         if let Some(file) = target.existing_copy(attachment) {
             return Ok(Plan::Reuse(file));
         }
@@ -156,8 +155,8 @@ impl AttachmentManager {
         Ok(Plan::Process { target })
     }
 
-    /// Carry out a [`Plan`]. `None` is [`Plan::Skip`]: nothing was produced and
-    /// the export refers to the source file.
+    /// Carry out a [`Plan`]. Return `None` for [`Plan::Skip`]; in that case,
+    /// use the source file in the export.
     pub(crate) fn execute<'a>(
         &self,
         plan: Plan<'a>,

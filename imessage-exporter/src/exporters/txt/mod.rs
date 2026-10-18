@@ -108,8 +108,8 @@ impl<'a> MessageFormatter<'a> for TXT<'a> {
     fn format_sticker(&self, sticker: &'a Attachment, message: &'a Message) -> String {
         match prepare_attachment(self.config, &self.state, sticker, message) {
             Ok(file) => self.render_sticker(sticker, &file, message),
-            // No file to read a decoration from: the line carries the failure's
-            // display name alone.
+            // Without a prepared file, omit the decoration and use only the
+            // failure's display name for the attachment.
             Err(why) => render_template(&StickerVM {
                 effect_prefix: None,
                 who: self.config.who(
@@ -409,7 +409,7 @@ impl PartBodyBuilder for TXT<'_> {
 // MARK: Impl
 impl TXT<'_> {
     /// Render a prepared attachment as its export-relative path, followed by
-    /// the transcription line when `metadata` carries one.
+    /// the transcription line when available in `metadata`.
     fn render_attachment(&self, file: &ExportFile<'_>, metadata: &AttachmentMeta) -> String {
         render_template(&AttachmentVM {
             embed_path: self.config.relative_path(&file.path),

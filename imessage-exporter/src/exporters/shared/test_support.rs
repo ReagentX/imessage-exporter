@@ -48,8 +48,8 @@ pub(crate) fn received(text: &str, handle: i32) -> Message {
     message
 }
 
-/// The file a render half would receive for `attachment` after a copy to
-/// `relative` under the export root, with the row's own media type.
+/// Build an export file for rendering `attachment` after a copy to `relative`
+/// under the export root. Use the row's media type.
 pub(crate) fn export_file<'a>(
     config: &Config,
     attachment: &'a Attachment,
