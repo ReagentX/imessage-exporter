@@ -12,7 +12,7 @@
  ## Origin
 
  Introduced in Mac OS X 10.2 as part of the Foundation framework, `NSKeyedArchiver` replaced `NSArchiver`
- ([`typedstream`](crate::util::typedstream)) system as Apple's primary object serialization mechanism.
+ ([`typedstream`](https://github.com/ReagentX/crabstep)) system as Apple's primary object serialization mechanism.
 
  ## Features
 
