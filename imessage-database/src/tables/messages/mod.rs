@@ -9,4 +9,5 @@ pub(crate) mod columns;
 mod message;
 pub mod models;
 pub(crate) mod query_parts;
+#[cfg(test)]
 mod tests;
