@@ -131,34 +131,7 @@ impl Config {
         String::from(ORPHANED)
     }
 
-    /// Return the export-relative path for an attachment.
-    ///
-    /// Copied attachments resolve relative to the export root; uncopied
-    /// attachments resolve to their source path or stored filename.
-    pub fn message_attachment_path(&self, attachment: &Attachment) -> String {
-        match &attachment.copied_path {
-            Some(path) => {
-                if let Ok(relative_path) = path.strip_prefix(&self.options.export_path) {
-                    return relative_path.display().to_string();
-                }
-                path.display().to_string()
-            }
-            None => attachment
-                .resolved_attachment_path(
-                    &self.options.platform,
-                    &self.options.db_path,
-                    self.options.attachment_root.as_deref(),
-                )
-                .unwrap_or_else(|| {
-                    attachment
-                        .filename()
-                        .unwrap_or("Attachment missing name metadata!")
-                        .to_string()
-                }),
-        }
-    }
-
-    /// Return an export-relative path when possible.
+    /// Return the displayed `path` with the export-root prefix removed, if present.
     pub fn relative_path(&self, path: &Path) -> String {
         if let Ok(relative_path) = path.strip_prefix(&self.options.export_path) {
             return relative_path.display().to_string();
@@ -854,7 +827,6 @@ impl Config {
             is_sticker: false,
             hide_attachment: 0,
             emoji_description: None,
-            copied_path: None,
         }
     }
 }
@@ -1548,7 +1520,7 @@ mod who_tests {
 #[cfg(test)]
 mod directory_tests {
     use crate::{Config, Options};
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn can_get_valid_attachment_sub_dir() {
@@ -1606,49 +1578,25 @@ mod directory_tests {
     }
 
     #[test]
-    fn can_get_path_not_copied() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
-        let app = Config::fake_app(options);
-
-        let attachment = Config::fake_attachment();
-
-        let result = app.message_attachment_path(&attachment);
-        let expected = String::from("a/b/c/d.jpg");
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn can_get_path_copied() {
+    fn relative_path_strips_export_root() {
         let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
-        // Set an export path
         options.export_path = PathBuf::from("/Users/ReagentX/exports");
 
         let app = Config::fake_app(options);
 
-        let mut attachment = Config::fake_attachment();
-        let mut full_path = PathBuf::from("/Users/ReagentX/exports/attachments");
-        full_path.push(attachment.filename().unwrap());
-        attachment.copied_path = Some(full_path);
-
-        let result = app.message_attachment_path(&attachment);
-        let expected = String::from("attachments/d.jpg");
-        assert_eq!(result, expected);
+        let result = app.relative_path(Path::new("/Users/ReagentX/exports/attachments/d.jpg"));
+        assert_eq!(result, "attachments/d.jpg");
     }
 
     #[test]
-    fn can_get_path_copied_bad() {
+    fn relative_path_keeps_path_outside_export_root() {
         let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
-        // Set an export path
         options.export_path = PathBuf::from("/Users/ReagentX/exports");
 
         let app = Config::fake_app(options);
 
-        let mut attachment = Config::fake_attachment();
-        attachment.copied_path = Some(PathBuf::from(attachment.filename.as_ref().unwrap()));
-
-        let result = app.message_attachment_path(&attachment);
-        let expected = String::from("a/b/c/d.jpg");
-        assert_eq!(result, expected);
+        let result = app.relative_path(Path::new("a/b/c/d.jpg"));
+        assert_eq!(result, "a/b/c/d.jpg");
     }
 }
 

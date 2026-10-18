@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use imessage_database::tables::{
     attachment::{Attachment, MediaType},
     messages::Message,
@@ -8,25 +10,37 @@ use crate::{
         compatibility::attachment_manager::{AttachmentManagerMode, Plan},
         runtime::Config,
     },
-    exporters::{formatter::AttachmentRender, shared::driver::ExportState},
+    exporters::shared::driver::ExportState,
 };
 
-/// Run the per-attachment side effects every exporter needs before it can
-/// emit a reference to a file on disk: surface a busy indicator on the
-/// progress bar for conversions that spawn ffmpeg (video transcoding and
-/// animated-sticker decoding), then ask the
-/// [`AttachmentManager`](crate::app::compatibility::attachment_manager::AttachmentManager)
-/// to copy or convert the file.
+pub(crate) use crate::app::compatibility::attachment_manager::ExportFile;
+
+/// Reason for an attachment preparation failure. Convert into the
+/// [`AttachmentRender`](crate::exporters::formatter::AttachmentRender)
+/// variant of the same name.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum AttachmentFailure {
+    /// No filename metadata on the row.
+    MissingFilename,
+    /// Failure to process the file, with the attachment's display name.
+    NamedFile(String),
+}
+
+/// Prepare an attachment before rendering a reference to its file: show a busy
+/// indicator for ffmpeg video transcoding and animated-sticker decoding, then
+/// copy or convert the file with the
+/// [`AttachmentManager`](crate::app::compatibility::attachment_manager::AttachmentManager).
 ///
-/// Returns `Ok(())` when the attachment has a filename and the copy/convert
-/// succeeded; otherwise returns the [`AttachmentRender`] fallback the caller
-/// should propagate.
-pub(crate) fn prepare_attachment(
+/// Return an [`ExportFile`] for the produced or reused copy, else the resolved
+/// source path, else the bare filename. Check for a filename after processing
+/// the attachment. Without one, return [`AttachmentFailure::MissingFilename`]
+/// and suppress any copy error instead of printing it.
+pub(crate) fn prepare_attachment<'a>(
     config: &Config,
     state: &ExportState,
-    attachment: &mut Attachment,
+    attachment: &'a Attachment,
     message: &Message,
-) -> Result<(), AttachmentRender> {
+) -> Result<ExportFile<'a>, AttachmentFailure> {
     let manager = &config.options.attachment_manager;
 
     // Classify the `ffmpeg`-spawning conversion paths, which get a busy bar:
@@ -76,12 +90,28 @@ pub(crate) fn prepare_attachment(
         state.pb.set_default_style();
     }
 
-    let Some(filename) = attachment.filename() else {
-        return Err(AttachmentRender::MissingFilename);
+    let Some(name) = attachment.filename() else {
+        return Err(AttachmentFailure::MissingFilename);
     };
-    if let Err(why) = handle_result {
-        state.pb.println(why);
-        return Err(AttachmentRender::NamedFile(filename.to_string()));
-    }
-    Ok(())
+    let file = match handle_result {
+        Ok(file) => file,
+        Err(why) => {
+            state.pb.println(why);
+            return Err(AttachmentFailure::NamedFile(name.to_string()));
+        }
+    };
+
+    // For `Plan::Skip`, use the source path in the export. If the source cannot
+    // be resolved, use the bare filename without reporting an error.
+    Ok(file.unwrap_or_else(|| ExportFile {
+        path: attachment
+            .resolved_attachment_path(
+                &config.options.platform,
+                &config.options.db_path,
+                config.options.attachment_root.as_deref(),
+            )
+            .map_or_else(|| PathBuf::from(name), PathBuf::from),
+        media_type: attachment.mime_type(),
+        name,
+    }))
 }

@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use imessage_database::{
     message_types::{
         app::AppMessage,
@@ -32,51 +30,25 @@ use crate::exporters::{
         },
     },
     shared::{
-        attachment::prepare_attachment, balloon::resolve_check_in_footer, driver::ExportState,
+        attachment::{ExportFile, prepare_attachment},
+        balloon::resolve_check_in_footer,
+        driver::ExportState,
         render::render_template,
     },
 };
 
 use crate::app::runtime::Config;
 
-/// Resolve and prepare the photo or video backing a Digital Touch media message.
-///
-/// The media is a normal attachment on the message row: it is looked up with
-/// [`Attachment::from_message`], run through the attachment manager, and
-/// confirmed present on disk. Returns `None` for any condition that prevents a
-/// usable backing file, including a missing attachment row, unresolved source
-/// path, missing filename, copy/convert/decryption failure, or missing final
-/// file. The caller intentionally falls back to the labeled black canvas.
-fn digital_touch_attachment(
+/// Prepare the attachment backing a Digital Touch media message and confirm its
+/// presence on disk. On `None`, render the labeled black canvas.
+fn digital_touch_file<'a>(
     config: &Config,
     state: &ExportState,
+    attachment: &'a Attachment,
     msg: &Message,
-) -> Option<Attachment> {
-    let mut attachment = Attachment::from_message(
-        config.data_source.db(),
-        msg,
-        &config.data_source.capabilities,
-    )
-    .ok()?
-    .into_iter()
-    .next()?;
-
-    // Prepare this as a normal attachment. Depending on the attachment-manager
-    // mode this may copy, convert, reuse an existing export copy, or leave the
-    // original path in place. If preparation fails, the render falls back to the
-    // labeled black canvas.
-    prepare_attachment(config, state, &mut attachment, msg).ok()?;
-
-    // Keep the attachment only when the referenced file is actually present.
-    let on_disk = match &attachment.copied_path {
-        Some(path) => path.clone(),
-        None => PathBuf::from(attachment.resolved_attachment_path(
-            &config.options.platform,
-            &config.options.db_path,
-            config.options.attachment_root.as_deref(),
-        )?),
-    };
-    on_disk.exists().then_some(attachment)
+) -> Option<ExportFile<'a>> {
+    let file = prepare_attachment(config, state, attachment, msg).ok()?;
+    file.path.exists().then_some(file)
 }
 
 // MARK: Balloons
@@ -267,11 +239,11 @@ impl BalloonFormatter for HTML<'_> {
         &self,
         balloon: &AppMessage,
         bundle_id: &str,
-        attachments: &mut Vec<Attachment>,
+        attachments: &[Attachment],
         msg: &Message,
     ) -> String {
         let attachment_html = if balloon.image.is_none() {
-            attachments.get_mut(0).map(|attachment| {
+            attachments.first().map(|attachment| {
                 let rendered =
                     match self.format_attachment(attachment, msg, &AttachmentMeta::default()) {
                         AttachmentRender::Embedded(html) => html,
@@ -298,13 +270,23 @@ impl HTML<'_> {
         let DigitalTouchMessage::Media(media) = balloon else {
             return balloon.render_svg(None);
         };
-        let Some(attachment) = digital_touch_attachment(self.config, &self.state, msg) else {
+        // The media is a normal attachment on the message row.
+        let Some(attachment) = Attachment::from_message(
+            self.config.data_source.db(),
+            msg,
+            &self.config.data_source.capabilities,
+        )
+        .ok()
+        .and_then(|rows| rows.into_iter().next()) else {
             return balloon.render_svg(None);
         };
-        let embed_path = self.config.message_attachment_path(&attachment);
+        let Some(file) = digital_touch_file(self.config, &self.state, &attachment, msg) else {
+            return balloon.render_svg(None);
+        };
+        let embed_path = self.config.relative_path(&file.path);
 
         // Dispatch on the parsed kind, but require the resolved file to match
-        match (&media.kind, attachment.mime_type()) {
+        match (&media.kind, &file.media_type) {
             // Reuse the shared attachment `<video>` template so the player gets the
             // correct `type` hint and the duplicated source tag (see issue #73).
             (MediaKind::Video, MediaType::Video(media_type)) => render_template(&AttachmentVM {

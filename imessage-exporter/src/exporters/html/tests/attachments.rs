@@ -5,11 +5,17 @@ use crate::{
     app::{compatibility::attachment_manager::AttachmentManagerMode, export_type::ExportType},
     exporters::{
         formatter::{AttachmentRender, MessageFormatter},
-        shared::test_support::config,
+        shared::{
+            attachment::ExportFile,
+            test_support::{config, export_file},
+        },
     },
 };
 
-use imessage_database::{tables::messages::models::AttachmentMeta, util::platform::Platform};
+use imessage_database::{
+    tables::{attachment::MediaType, messages::models::AttachmentMeta},
+    util::platform::Platform,
+};
 
 #[test]
 fn can_format_html_attachment_macos() {
@@ -18,9 +24,9 @@ fn can_format_html_attachment_macos() {
 
     let message = Config::fake_message();
 
-    let mut attachment = Config::fake_attachment();
+    let attachment = Config::fake_attachment();
 
-    let actual = exporter.format_attachment(&mut attachment, &message, &AttachmentMeta::default());
+    let actual = exporter.format_attachment(&attachment, &message, &AttachmentMeta::default());
 
     assert_eq!(
         actual,
@@ -39,7 +45,7 @@ fn can_format_html_attachment_macos_invalid_disabled() {
     attachment.filename = None;
     attachment.transfer_name = None;
 
-    let actual = exporter.format_attachment(&mut attachment, &message, &AttachmentMeta::default());
+    let actual = exporter.format_attachment(&attachment, &message, &AttachmentMeta::default());
 
     assert_eq!(actual, AttachmentRender::MissingFilename);
 }
@@ -58,7 +64,7 @@ fn can_format_html_attachment_macos_invalid_clone() {
     attachment.filename = None;
     attachment.transfer_name = None;
 
-    let actual = exporter.format_attachment(&mut attachment, &message, &AttachmentMeta::default());
+    let actual = exporter.format_attachment(&attachment, &message, &AttachmentMeta::default());
 
     assert_eq!(actual, AttachmentRender::MissingFilename);
 }
@@ -71,10 +77,10 @@ fn can_format_html_attachment_ios() {
     let exporter = HTML::new(&config).unwrap();
     let message = Config::fake_message();
 
-    let mut attachment = Config::fake_attachment();
+    let attachment = Config::fake_attachment();
 
     let AttachmentRender::Embedded(actual) =
-        exporter.format_attachment(&mut attachment, &message, &AttachmentMeta::default())
+        exporter.format_attachment(&attachment, &message, &AttachmentMeta::default())
     else {
         panic!("expected AttachmentRender::Embedded");
     };
@@ -87,8 +93,6 @@ fn can_format_html_attachment_folder() {
     let config = config(ExportType::Html);
     let exporter = HTML::new(&config).unwrap();
 
-    let message = Config::fake_message();
-
     let mut attachment = Config::fake_attachment();
     let folder_path = current_dir()
         .unwrap()
@@ -97,9 +101,13 @@ fn can_format_html_attachment_folder() {
         .join("imessage-database/test_data/");
     attachment.mime_type = None;
     attachment.transfer_name = Some("test_data".to_string());
-    attachment.copied_path = Some(folder_path);
+    let file = ExportFile {
+        path: folder_path,
+        media_type: MediaType::Unknown,
+        name: "test_data",
+    };
 
-    let actual = exporter.format_attachment(&mut attachment, &message, &AttachmentMeta::default());
+    let actual = exporter.render_attachment(&attachment, &file, &AttachmentMeta::default());
 
     let abs_path = current_dir()
         .unwrap()
@@ -111,7 +119,7 @@ fn can_format_html_attachment_folder() {
         abs_path.display()
     );
 
-    assert_eq!(actual, AttachmentRender::Embedded(expected));
+    assert_eq!(actual, expected);
 }
 
 #[test]
@@ -127,7 +135,7 @@ fn can_format_html_attachment_text_download() {
     attachment.filename = Some("notes.txt".to_string());
     attachment.transfer_name = Some("notes.txt".to_string());
 
-    let actual = exporter.format_attachment(&mut attachment, &message, &AttachmentMeta::default());
+    let actual = exporter.format_attachment(&attachment, &message, &AttachmentMeta::default());
 
     assert_eq!(
         actual,
@@ -150,7 +158,7 @@ fn can_format_html_attachment_application_download() {
     attachment.filename = Some("doc.pdf".to_string());
     attachment.transfer_name = Some("doc.pdf".to_string());
 
-    let actual = exporter.format_attachment(&mut attachment, &message, &AttachmentMeta::default());
+    let actual = exporter.format_attachment(&attachment, &message, &AttachmentMeta::default());
 
     assert_eq!(
         actual,
@@ -172,7 +180,7 @@ fn can_format_html_attachment_other_media_type() {
     attachment.mime_type = Some("model/gltf-binary".to_string());
     attachment.filename = Some("scene.glb".to_string());
 
-    let actual = exporter.format_attachment(&mut attachment, &message, &AttachmentMeta::default());
+    let actual = exporter.format_attachment(&attachment, &message, &AttachmentMeta::default());
 
     assert_eq!(
         actual,
@@ -187,22 +195,20 @@ fn can_format_html_attachment_unknown() {
     let config = config(ExportType::Html);
     let exporter = HTML::new(&config).unwrap();
 
-    let message = Config::fake_message();
-
     let mut attachment = Config::fake_attachment();
-    let folder_path = "Fake";
     attachment.mime_type = None;
     attachment.transfer_name = Some("test_data".to_string());
-    attachment.copied_path = Some(PathBuf::from(folder_path));
+    let file = ExportFile {
+        path: PathBuf::from("Fake"),
+        media_type: MediaType::Unknown,
+        name: "test_data",
+    };
 
-    let actual = exporter.format_attachment(&mut attachment, &message, &AttachmentMeta::default());
+    let actual = exporter.render_attachment(&attachment, &file, &AttachmentMeta::default());
 
     assert_eq!(
         actual,
-        AttachmentRender::Embedded(
-            "<p>Unknown attachment type: Fake</p>\n<a href=\"Fake\">Download (100.00 B)</a>"
-                .to_string()
-        )
+        "<p>Unknown attachment type: Fake</p>\n<a href=\"Fake\">Download (100.00 B)</a>"
     );
 }
 
@@ -210,8 +216,6 @@ fn can_format_html_attachment_unknown() {
 fn can_format_html_attachment_sticker() {
     let config = config(ExportType::Html);
     let exporter = HTML::new(&config).unwrap();
-
-    let message = Config::fake_message();
 
     let mut attachment = Config::fake_attachment();
     attachment.rowid = 3;
@@ -222,14 +226,13 @@ fn can_format_html_attachment_sticker() {
         .unwrap()
         .join("imessage-database/test_data/stickers/outline.heic");
     attachment.filename = Some(sticker_path.to_string_lossy().to_string());
-    attachment.copied_path = Some(
-        config
-            .options
-            .export_path
-            .join("imessage-database/test_data/stickers/outline.heic"),
+    let file = export_file(
+        &config,
+        &attachment,
+        "imessage-database/test_data/stickers/outline.heic",
     );
 
-    let actual = exporter.format_sticker(&mut attachment, &message);
+    let actual = exporter.render_sticker(&attachment, &file);
 
     assert_eq!(
         actual,
@@ -242,8 +245,6 @@ fn can_format_html_attachment_sticker_genmoji() {
     let config = config(ExportType::Html);
     let exporter = HTML::new(&config).unwrap();
 
-    let message = Config::fake_message();
-
     let mut attachment = Config::fake_attachment();
     attachment.rowid = 2;
     attachment.is_sticker = true;
@@ -253,15 +254,14 @@ fn can_format_html_attachment_sticker_genmoji() {
         .unwrap()
         .join("imessage-database/test_data/stickers/outline.heic");
     attachment.filename = Some(sticker_path.to_string_lossy().to_string());
-    attachment.copied_path = Some(
-        config
-            .options
-            .export_path
-            .join("imessage-database/test_data/stickers/outline.heic"),
-    );
     attachment.emoji_description = Some("pink poodle".to_string());
+    let file = export_file(
+        &config,
+        &attachment,
+        "imessage-database/test_data/stickers/outline.heic",
+    );
 
-    let actual = exporter.format_sticker(&mut attachment, &message);
+    let actual = exporter.render_sticker(&attachment, &file);
 
     assert_eq!(
         actual,
@@ -274,8 +274,6 @@ fn can_format_html_attachment_sticker_app() {
     let config = config(ExportType::Html);
     let exporter = HTML::new(&config).unwrap();
 
-    let message = Config::fake_message();
-
     let mut attachment = Config::fake_attachment();
     attachment.rowid = 1;
     attachment.is_sticker = true;
@@ -285,14 +283,13 @@ fn can_format_html_attachment_sticker_app() {
         .unwrap()
         .join("imessage-database/test_data/stickers/outline.heic");
     attachment.filename = Some(sticker_path.to_string_lossy().to_string());
-    attachment.copied_path = Some(
-        config
-            .options
-            .export_path
-            .join("imessage-database/test_data/stickers/outline.heic"),
+    let file = export_file(
+        &config,
+        &attachment,
+        "imessage-database/test_data/stickers/outline.heic",
     );
 
-    let actual = exporter.format_sticker(&mut attachment, &message);
+    let actual = exporter.render_sticker(&attachment, &file);
 
     assert_eq!(
         actual,
@@ -308,8 +305,6 @@ fn format_sticker_inline_renders_with_effect_title() {
     let config = config(ExportType::Html);
     let exporter = HTML::new(&config).unwrap();
 
-    let message = Config::fake_message();
-
     let mut attachment = Config::fake_attachment();
     attachment.rowid = 3;
     attachment.is_sticker = true;
@@ -319,14 +314,13 @@ fn format_sticker_inline_renders_with_effect_title() {
         .unwrap()
         .join("imessage-database/test_data/stickers/outline.heic");
     attachment.filename = Some(sticker_path.to_string_lossy().to_string());
-    attachment.copied_path = Some(
-        config
-            .options
-            .export_path
-            .join("imessage-database/test_data/stickers/outline.heic"),
+    let file = export_file(
+        &config,
+        &attachment,
+        "imessage-database/test_data/stickers/outline.heic",
     );
 
-    let actual = exporter.format_sticker_inline(&mut attachment, &message);
+    let actual = exporter.render_sticker_inline(&attachment, &file);
     let expected = "<img class=\"inline_sticker\" src=\"imessage-database/test_data/stickers/outline.heic\" alt=\"Sent with Outline effect\" title=\"Sent with Outline effect\" loading=\"lazy\">";
     assert_eq!(actual, expected);
 }
@@ -335,8 +329,6 @@ fn format_sticker_inline_renders_with_effect_title() {
 fn format_sticker_inline_renders_with_genmoji_title() {
     let config = config(ExportType::Html);
     let exporter = HTML::new(&config).unwrap();
-
-    let message = Config::fake_message();
 
     let mut attachment = Config::fake_attachment();
     attachment.rowid = 2;
@@ -347,15 +339,14 @@ fn format_sticker_inline_renders_with_genmoji_title() {
         .unwrap()
         .join("imessage-database/test_data/stickers/outline.heic");
     attachment.filename = Some(sticker_path.to_string_lossy().to_string());
-    attachment.copied_path = Some(
-        config
-            .options
-            .export_path
-            .join("imessage-database/test_data/stickers/outline.heic"),
-    );
     attachment.emoji_description = Some("pink poodle".to_string());
+    let file = export_file(
+        &config,
+        &attachment,
+        "imessage-database/test_data/stickers/outline.heic",
+    );
 
-    let actual = exporter.format_sticker_inline(&mut attachment, &message);
+    let actual = exporter.render_sticker_inline(&attachment, &file);
     let expected = "<img class=\"inline_sticker\" src=\"imessage-database/test_data/stickers/outline.heic\" alt=\"Genmoji prompt: pink poodle\" title=\"Genmoji prompt: pink poodle\" loading=\"lazy\">";
     assert_eq!(actual, expected);
 }
@@ -364,8 +355,6 @@ fn format_sticker_inline_renders_with_genmoji_title() {
 fn format_sticker_inline_renders_with_app_title() {
     let config = config(ExportType::Html);
     let exporter = HTML::new(&config).unwrap();
-
-    let message = Config::fake_message();
 
     let mut attachment = Config::fake_attachment();
     attachment.rowid = 1;
@@ -376,14 +365,13 @@ fn format_sticker_inline_renders_with_app_title() {
         .unwrap()
         .join("imessage-database/test_data/stickers/outline.heic");
     attachment.filename = Some(sticker_path.to_string_lossy().to_string());
-    attachment.copied_path = Some(
-        config
-            .options
-            .export_path
-            .join("imessage-database/test_data/stickers/outline.heic"),
+    let file = export_file(
+        &config,
+        &attachment,
+        "imessage-database/test_data/stickers/outline.heic",
     );
 
-    let actual = exporter.format_sticker_inline(&mut attachment, &message);
+    let actual = exporter.render_sticker_inline(&attachment, &file);
     let expected = "<img class=\"inline_sticker\" src=\"imessage-database/test_data/stickers/outline.heic\" alt=\"App: Free People\" title=\"App: Free People\" loading=\"lazy\">";
     assert_eq!(actual, expected);
 }
@@ -406,7 +394,7 @@ fn can_format_html_attachment_audio_transcript() {
         ..Default::default()
     };
 
-    let actual = exporter.format_attachment(&mut attachment, &message, &meta);
+    let actual = exporter.format_attachment(&attachment, &message, &meta);
 
     assert_eq!(
         actual,

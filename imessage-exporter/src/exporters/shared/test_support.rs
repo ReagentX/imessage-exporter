@@ -1,9 +1,12 @@
-use imessage_database::tables::{messages::Message, table::ME};
+use imessage_database::tables::{attachment::Attachment, messages::Message, table::ME};
 
 use crate::{
     Config, Options,
     app::{contacts::Name, export_type::ExportType},
-    exporters::formatter::{MessageFormatter, RenderContext},
+    exporters::{
+        formatter::{MessageFormatter, RenderContext},
+        shared::attachment::ExportFile,
+    },
 };
 
 /// May 17, 2022  8:29:42 PM
@@ -43,6 +46,20 @@ pub(crate) fn received(text: &str, handle: i32) -> Message {
     message.date = SAMPLE_DATE;
     message.handle_id = Some(handle);
     message
+}
+
+/// Build an export file for rendering `attachment` after a copy to `relative`
+/// under the export root. Use the row's media type.
+pub(crate) fn export_file<'a>(
+    config: &Config,
+    attachment: &'a Attachment,
+    relative: &str,
+) -> ExportFile<'a> {
+    ExportFile {
+        path: config.options.export_path.join(relative),
+        media_type: attachment.mime_type(),
+        name: attachment.filename().unwrap(),
+    }
 }
 
 /// Render a top-level message to a string.

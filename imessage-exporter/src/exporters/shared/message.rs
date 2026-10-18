@@ -8,13 +8,10 @@ use imessage_database::{
 
 use crate::app::error::RuntimeError;
 
-/// Per-message data resolved up front so exporters can iterate over a
-/// message's parts without re-issuing the same DB queries or repeating the
-/// `Expressive::None` filter. `attachments` and `replies_map` are owned
-/// because the per-part loop mutates them: attachments are passed `&mut` to
-/// the part-body builder so attachment resolution can record disk side
-/// effects, and `replies_map` entries are pulled out via `get_mut` for the
-/// reply recursion.
+/// Per-message data resolved before iterating over the parts to avoid repeated
+/// DB queries and `Expressive::None` filtering. Own the loaded `attachments`
+/// here and borrow them while rendering each part. Use `get_mut` on
+/// `replies_map` entries to render replies recursively.
 pub(crate) struct MessageContext<'a> {
     pub attachments: Vec<Attachment>,
     pub replies_map: HashMap<usize, Vec<Message>>,

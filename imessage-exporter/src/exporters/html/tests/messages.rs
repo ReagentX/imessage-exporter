@@ -462,7 +462,7 @@ fn empty_ctx<'a>() -> crate::exporters::shared::message::MessageContext<'a> {
     }
 }
 
-fn make_static_sticker(config: &Config) -> imessage_database::tables::attachment::Attachment {
+fn make_static_sticker() -> imessage_database::tables::attachment::Attachment {
     let sticker_path = current_dir()
         .unwrap()
         .parent()
@@ -473,12 +473,6 @@ fn make_static_sticker(config: &Config) -> imessage_database::tables::attachment
     sticker.is_sticker = true;
     sticker.mime_type = Some("image/heic".to_string());
     sticker.filename = Some(sticker_path.to_string_lossy().to_string());
-    sticker.copied_path = Some(
-        config
-            .options
-            .export_path
-            .join("imessage-database/test_data/stickers/outline.heic"),
-    );
     sticker
 }
 
@@ -498,7 +492,6 @@ fn inline_stickers_resolve_by_guid_in_body_order() {
         s.mime_type = Some("image/heic".to_string());
         s.guid = Some(guid.to_string());
         s.filename = Some(file.to_string());
-        s.copied_path = Some(config.options.export_path.join(file));
         s
     };
     // An inline-sticker range carrying its file-transfer GUID.
@@ -649,7 +642,7 @@ fn inline_sticker_between_text_renders_one_bubble() {
     ])];
 
     let mut ctx = empty_ctx();
-    ctx.attachments = vec![make_static_sticker(&config)];
+    ctx.attachments = vec![make_static_sticker()];
 
     let actual = render_parts(&exporter, &message, &mut ctx);
 
@@ -700,7 +693,7 @@ fn inline_memoji_among_text_renders_inline_and_keeps_text() {
     ])];
 
     // A static image/heic Memoji, matching the real attachment row.
-    let mut memoji = make_static_sticker(&config);
+    let mut memoji = make_static_sticker();
     memoji.guid = Some(guid.to_string());
     let mut ctx = empty_ctx();
     ctx.attachments = vec![memoji];
@@ -777,7 +770,7 @@ fn edited_message_inlines_memoji_sticker() {
         }],
     });
 
-    let mut memoji = make_static_sticker(&config);
+    let mut memoji = make_static_sticker();
     memoji.guid = Some(guid.to_string());
     let mut ctx = empty_ctx();
     ctx.attachments = vec![memoji];
@@ -836,7 +829,7 @@ fn single_inline_sticker_renders_jumbo_bubble() {
     ])];
 
     let mut ctx = empty_ctx();
-    ctx.attachments = vec![make_static_sticker(&config)];
+    ctx.attachments = vec![make_static_sticker()];
 
     let actual = render_parts(&exporter, &message, &mut ctx);
     assert!(
@@ -875,7 +868,7 @@ fn multiple_inline_stickers_render_in_one_bubble() {
     ])];
 
     let mut ctx = empty_ctx();
-    ctx.attachments = (0..6).map(|_| make_static_sticker(&config)).collect();
+    ctx.attachments = (0..6).map(|_| make_static_sticker()).collect();
 
     let actual = render_parts(&exporter, &message, &mut ctx);
     let sticker_count = actual.matches("<img class=\"inline_sticker\"").count();
@@ -920,7 +913,7 @@ fn animated_sticker_renders_as_block() {
         )]),
     ];
 
-    let mut animated = make_static_sticker(&config);
+    let mut animated = make_static_sticker();
     animated.mime_type = Some("image/heic-sequence".to_string());
     let mut ctx = empty_ctx();
     ctx.attachments = vec![animated];
@@ -958,7 +951,7 @@ fn translated_message_with_inline_sticker_uses_block_path() {
     )])];
 
     let mut ctx = empty_ctx();
-    ctx.attachments = vec![make_static_sticker(&config)];
+    ctx.attachments = vec![make_static_sticker()];
 
     let actual = render_parts(&exporter, &message, &mut ctx);
     assert!(
@@ -1000,7 +993,7 @@ fn translated_message_with_inline_sticker_keeps_text_and_sticker() {
         AttributedRange::text(16, 20, vec![TextEffect::Default]),
     ])];
 
-    let mut memoji = make_static_sticker(&config);
+    let mut memoji = make_static_sticker();
     memoji.guid = Some(sticker_guid.to_string());
     let mut ctx = empty_ctx();
     ctx.attachments = vec![memoji];
@@ -1063,7 +1056,7 @@ fn edited_text_part_flushes_block_but_sibling_sticker_inlines() {
     message.date_edited = SAMPLE_DATE;
 
     let mut ctx = empty_ctx();
-    ctx.attachments = vec![make_static_sticker(&config)];
+    ctx.attachments = vec![make_static_sticker()];
 
     let actual = render_parts(&exporter, &message, &mut ctx);
     // Edited text part block-flushes through dispatch_part_body's
@@ -1098,10 +1091,9 @@ fn missing_inline_sticker_renders_as_broken_image() {
     sticker.rowid = 3;
     sticker.is_sticker = true;
     sticker.mime_type = Some("image/heic".to_string());
-    // No filename and no copied_path → AttachmentRender::MissingFilename.
+    // No filename → `AttachmentFailure::MissingFilename`.
     sticker.filename = None;
     sticker.transfer_name = None;
-    sticker.copied_path = None;
 
     let mut ctx = empty_ctx();
     ctx.attachments = vec![sticker];
@@ -1151,7 +1143,7 @@ fn inline_bubble_carries_part_tapbacks() {
     ])];
 
     let mut ctx = empty_ctx();
-    ctx.attachments = vec![make_static_sticker(&config)];
+    ctx.attachments = vec![make_static_sticker()];
 
     let actual = render_parts(&exporter, &message, &mut ctx);
     let bubble_count = actual.matches("<span class=\"bubble\"").count();
@@ -1204,7 +1196,7 @@ fn inline_bubble_carries_part_replies() {
     replies_map.insert(0, vec![reply_a, reply_b]);
 
     let mut ctx = empty_ctx();
-    ctx.attachments = vec![make_static_sticker(&config)];
+    ctx.attachments = vec![make_static_sticker()];
     ctx.replies_map = replies_map;
 
     let actual = render_parts(&exporter, &message, &mut ctx);
@@ -1242,7 +1234,7 @@ fn expressive_renders_once_on_merged_inline_bubble() {
         Some("com.apple.MobileSMS.expressivesend.confetti".to_string());
 
     let mut ctx = empty_ctx();
-    ctx.attachments = vec![make_static_sticker(&config)];
+    ctx.attachments = vec![make_static_sticker()];
     ctx.expressive = match message.get_expressive() {
         imessage_database::message_types::expressives::Expressive::None
         | imessage_database::message_types::expressives::Expressive::Unknown("") => None,
@@ -1272,7 +1264,7 @@ fn animated_sticker_alone_is_not_jumbo() {
         AttachmentMeta::default(),
     )])];
 
-    let mut animated = make_static_sticker(&config);
+    let mut animated = make_static_sticker();
     animated.mime_type = Some("image/heic-sequence".to_string());
     let mut ctx = empty_ctx();
     ctx.attachments = vec![animated];

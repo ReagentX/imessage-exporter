@@ -25,7 +25,7 @@ use crate::{
 pub fn dispatch_app_balloon<F: BalloonFormatter>(
     formatter: &F,
     message: &Message,
-    attachments: &mut Vec<Attachment>,
+    attachments: &[Attachment],
     config: &Config,
 ) -> Result<String, RuntimeError> {
     // First, determine if is a balloon message; if it is not, bail out early

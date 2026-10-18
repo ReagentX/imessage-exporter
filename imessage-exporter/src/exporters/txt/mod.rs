@@ -6,7 +6,7 @@ use crate::{
         formatter::{AttachmentRender, MessageFormatter, PartBodyBuilder, RenderContext},
         shared::{
             announcement::{AnnouncementBody, YOU, resolve_announcement},
-            attachment::prepare_attachment,
+            attachment::{AttachmentFailure, ExportFile, prepare_attachment},
             balloon::dispatch_app_balloon,
             driver::{ExportState, MessageWriter},
             edited::{EditDiff, normalize_edited},
@@ -95,66 +95,41 @@ impl<'a> MessageWriter<'a> for TXT<'a> {
 impl<'a> MessageFormatter<'a> for TXT<'a> {
     fn format_attachment(
         &self,
-        attachment: &'a mut Attachment,
-        message: &Message,
+        attachment: &'a Attachment,
+        message: &'a Message,
         metadata: &AttachmentMeta,
     ) -> AttachmentRender {
-        if let Err(render) = prepare_attachment(self.config, &self.state, attachment, message) {
-            return render;
+        match prepare_attachment(self.config, &self.state, attachment, message) {
+            Ok(file) => AttachmentRender::Embedded(self.render_attachment(&file, metadata)),
+            Err(why) => why.into(),
         }
-
-        AttachmentRender::Embedded(render_template(&AttachmentVM {
-            embed_path: self.config.message_attachment_path(attachment),
-            transcription: metadata.transcription.as_deref(),
-        }))
     }
 
-    fn format_sticker(&self, sticker: &'a mut Attachment, message: &Message) -> String {
-        let who = self.config.who(
-            message.handle_id,
-            message.is_from_me(),
-            &message.destination_caller_id,
-        );
-        let (path, has_source) =
-            match self.format_attachment(sticker, message, &AttachmentMeta::default()) {
-                AttachmentRender::Embedded(p) => (p, true),
-                AttachmentRender::MissingFilename => (String::new(), false),
-                AttachmentRender::NamedFile(name) => (name, false),
-            };
-
-        let decoration = if has_source {
-            sticker.get_sticker_decoration(
-                self.config.data_source.db(),
-                &self.config.options.platform,
-                &self.config.options.db_path,
-                self.config.options.attachment_root.as_deref(),
-            )
-        } else {
-            None
-        };
-
-        let (effect_prefix, suffix) = match decoration {
-            Some(StickerDecoration::GenmojiPrompt(prompt)) => {
-                (None, Some(format!(" (Genmoji prompt: {prompt})")))
-            }
-            Some(StickerDecoration::Memoji) => (None, Some(" (App: Memoji)".to_string())),
-            Some(StickerDecoration::Effect(effect)) => (Some(format!("{effect} ")), None),
-            Some(StickerDecoration::AppName(name)) => (None, Some(format!(" (App: {name})"))),
-            None => (None, None),
-        };
-
-        render_template(&StickerVM {
-            effect_prefix,
-            who,
-            path,
-            suffix,
-        })
+    fn format_sticker(&self, sticker: &'a Attachment, message: &'a Message) -> String {
+        match prepare_attachment(self.config, &self.state, sticker, message) {
+            Ok(file) => self.render_sticker(sticker, &file, message),
+            // Without a prepared file, omit the decoration and use only the
+            // failure's display name for the attachment.
+            Err(why) => render_template(&StickerVM {
+                effect_prefix: None,
+                who: self.config.who(
+                    message.handle_id,
+                    message.is_from_me(),
+                    &message.destination_caller_id,
+                ),
+                path: match why {
+                    AttachmentFailure::MissingFilename => String::new(),
+                    AttachmentFailure::NamedFile(name) => name,
+                },
+                suffix: None,
+            }),
+        }
     }
 
     fn format_app(
         &self,
         message: &'a Message,
-        attachments: &mut Vec<Attachment>,
+        attachments: &[Attachment],
     ) -> Result<String, RuntimeError> {
         dispatch_app_balloon(self, message, attachments, self.config)
     }
@@ -193,7 +168,7 @@ impl<'a> MessageFormatter<'a> for TXT<'a> {
         message_part_idx: usize,
         // Plain text can't embed media, so the edit history keeps the parsed
         // `\u{FFFC}` placeholder rather than inlining the sticker image.
-        _attachments: &'a mut Vec<Attachment>,
+        _attachments: &'a [Attachment],
         _resolver: &mut AttachmentResolver,
     ) -> Option<String> {
         let kind = normalize_edited(msg, edited_message, message_part_idx, self.config, YOU)?
@@ -244,7 +219,7 @@ impl<'a> MessageFormatter<'a> for TXT<'a> {
         &'a self,
         message: &'a Message,
         ranges: &'a [AttributedRange],
-        attachments: &'a mut Vec<Attachment>,
+        attachments: &'a [Attachment],
         resolver: &mut AttachmentResolver,
     ) -> <Self as PartBodyBuilder>::Body {
         let text = message.text.as_deref().unwrap_or_default();
@@ -271,7 +246,7 @@ impl<'a> MessageFormatter<'a> for TXT<'a> {
         let mut lines: Vec<String> = Vec::with_capacity(ranges.len());
         for (range, idx) in resolve_run(ranges, resolver) {
             if let (Some(meta), Some(idx)) = (range.attachment.as_ref(), idx) {
-                let line = match attachments.get_mut(idx) {
+                let line = match attachments.get(idx) {
                     Some(attachment) if attachment.is_sticker => {
                         self.format_sticker(attachment, message)
                     }
@@ -313,7 +288,7 @@ impl<'a> MessageFormatter<'a> for TXT<'a> {
                 message,
                 idx,
                 message_part,
-                &mut ctx.attachments,
+                &ctx.attachments,
                 &mut resolver,
             );
             parts.push(MessagePartVM {
@@ -433,6 +408,55 @@ impl PartBodyBuilder for TXT<'_> {
 
 // MARK: Impl
 impl TXT<'_> {
+    /// Render a prepared attachment as its export-relative path, followed by
+    /// the transcription line when available in `metadata`.
+    fn render_attachment(&self, file: &ExportFile<'_>, metadata: &AttachmentMeta) -> String {
+        render_template(&AttachmentVM {
+            embed_path: self.config.relative_path(&file.path),
+            transcription: metadata.transcription.as_deref(),
+        })
+    }
+
+    /// Render a prepared sticker as its sender, path, and the decoration read
+    /// from the row's file.
+    fn render_sticker(
+        &self,
+        sticker: &Attachment,
+        file: &ExportFile<'_>,
+        message: &Message,
+    ) -> String {
+        let who = self.config.who(
+            message.handle_id,
+            message.is_from_me(),
+            &message.destination_caller_id,
+        );
+        let path = self.render_attachment(file, &AttachmentMeta::default());
+
+        let decoration = sticker.get_sticker_decoration(
+            self.config.data_source.db(),
+            &self.config.options.platform,
+            &self.config.options.db_path,
+            self.config.options.attachment_root.as_deref(),
+        );
+
+        let (effect_prefix, suffix) = match decoration {
+            Some(StickerDecoration::GenmojiPrompt(prompt)) => {
+                (None, Some(format!(" (Genmoji prompt: {prompt})")))
+            }
+            Some(StickerDecoration::Memoji) => (None, Some(" (App: Memoji)".to_string())),
+            Some(StickerDecoration::Effect(effect)) => (Some(format!("{effect} ")), None),
+            Some(StickerDecoration::AppName(name)) => (None, Some(format!(" (App: {name})"))),
+            None => (None, None),
+        };
+
+        render_template(&StickerVM {
+            effect_prefix,
+            who,
+            path,
+            suffix,
+        })
+    }
+
     fn get_time(&self, message: &Message) -> String {
         let (mut date, read_receipt) = message_time(self.config, message);
         if read_receipt.is_empty() {

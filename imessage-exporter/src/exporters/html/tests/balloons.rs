@@ -668,8 +668,7 @@ fn can_format_html_generic_app() {
         ldtext: Some("ldtext"),
     };
 
-    let actual =
-        exporter.format_generic_app(&balloon, "bundle_id", &mut vec![], &Config::fake_message());
+    let actual = exporter.format_generic_app(&balloon, "bundle_id", &[], &Config::fake_message());
     let expected = "<a href=\"url\"><div class=\"app_header\"><img src=\"image\"><div class=\"name\">app_name</div><div class=\"image_title\">title</div><div class=\"image_subtitle\">subtitle</div><div class=\"ldtext\">ldtext</div></div><div class=\"app_footer\"><div class=\"caption\">caption</div><div class=\"subcaption\">subcaption</div><div class=\"trailing_caption\">trailing_caption\n        </div><div class=\"trailing_subcaption\">trailing_subcaption</div></div></a>";
 
     assert_eq!(actual, expected);

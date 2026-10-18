@@ -35,7 +35,7 @@ pub enum TapbackKind<'a, S> {
 pub(crate) fn resolve_tapback<'a, S>(
     msg: &'a Message,
     config: &'a Config,
-    sticker_renderer: impl FnOnce(&mut Attachment) -> S,
+    sticker_renderer: impl FnOnce(&Attachment) -> S,
 ) -> Result<Option<TapbackKind<'a, S>>, RuntimeError> {
     let Variant::Tapback(_, action, tapback) = msg.variant() else {
         unreachable!(
@@ -49,12 +49,12 @@ pub(crate) fn resolve_tapback<'a, S>(
     let who = config.who(msg.handle_id, msg.is_from_me(), &msg.destination_caller_id);
     let kind = match tapback {
         Tapback::Sticker => {
-            let mut paths = Attachment::from_message(
+            let paths = Attachment::from_message(
                 config.data_source.db(),
                 msg,
                 &config.data_source.capabilities,
             )?;
-            match paths.get_mut(0) {
+            match paths.first() {
                 Some(sticker) => TapbackKind::Sticker {
                     payload: sticker_renderer(sticker),
                     who,
