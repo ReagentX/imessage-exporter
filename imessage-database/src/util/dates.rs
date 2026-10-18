@@ -5,7 +5,7 @@
 */
 use std::fmt::Write;
 
-use chrono::{DateTime, Datelike, Local, Months, TimeZone, Timelike, Utc};
+use chrono::{DateTime, Datelike, Months, TimeZone, Timelike, Utc};
 
 use crate::error::message::MessageError;
 
@@ -20,64 +20,50 @@ const SECONDS_PER_YEAR: i64 = 365 * SECONDS_PER_DAY;
 /// Most Messages timestamps use nanoseconds, while older rows may store seconds.
 pub const TIMESTAMP_FACTOR: i64 = 1_000_000_000;
 
-/// Return the Unix timestamp offset for the Messages epoch.
-///
-/// Messages stores dates relative to `2001-01-01 00:00:00` UTC.
-///
-/// # Example
-///
-/// ```
-/// use imessage_database::util::dates::get_offset;
-///
-/// let current_epoch = get_offset();
-/// ```
-#[must_use]
-pub fn get_offset() -> i64 {
-    Utc.with_ymd_and_hms(2001, 1, 1, 0, 0, 0)
-        .unwrap()
-        .timestamp()
-}
+/// Unix seconds at the Messages epoch, `2001-01-01 00:00:00 UTC`.
+pub const MESSAGES_EPOCH_UNIX_SECS: i64 = 978_307_200;
 
-/// Convert a raw Messages timestamp into local time.
+/// Decode a raw Messages timestamp to an instant.
 ///
-/// `offset` is usually [`get_offset`].
+/// Interpret newer timestamps as nanoseconds since the Messages epoch and
+/// older timestamps as seconds. Discard sub-second precision. Return
+/// [`MessageError::InvalidTimestamp`] for a decoded value outside chrono's
+/// supported range.
 ///
 /// # Example
 ///
 /// ```
-/// use imessage_database::util::dates::{get_local_time, get_offset};
+/// use imessage_database::util::dates::to_utc;
 ///
-/// let current_offset = get_offset();
-/// let local = get_local_time(674526582885055488, current_offset).unwrap();
+/// let instant = to_utc(674526582885055488).unwrap();
+/// assert_eq!(instant.timestamp(), 1652833782);
 /// ```
-pub fn get_local_time(date_stamp: i64, offset: i64) -> Result<DateTime<Local>, MessageError> {
-    // Newer databases store timestamps as nanoseconds since 2001-01-01,
-    // while older ones store plain seconds since 2001-01-01.
-    let seconds_since_2001 = if date_stamp >= 1_000_000_000_000 {
-        date_stamp / TIMESTAMP_FACTOR
+pub fn to_utc(stamp: i64) -> Result<DateTime<Utc>, MessageError> {
+    // Interpret newer timestamps as nanoseconds since 2001-01-01 and older
+    // timestamps as seconds since the same epoch.
+    let seconds_since_2001 = if stamp >= 1_000_000_000_000 {
+        stamp / TIMESTAMP_FACTOR
     } else {
-        date_stamp
+        stamp
     };
 
-    let utc_stamp = DateTime::from_timestamp(seconds_since_2001 + offset, 0)
-        .ok_or(MessageError::InvalidTimestamp(date_stamp))?
-        .naive_utc();
-    Ok(Local.from_utc_datetime(&utc_stamp))
+    DateTime::from_timestamp(seconds_since_2001 + MESSAGES_EPOCH_UNIX_SECS, 0)
+        .ok_or(MessageError::InvalidTimestamp(stamp))
 }
 
-/// Format a local timestamp for export output.
+/// Format a timestamp for export output in the wall-clock time of its zone.
 ///
 /// # Example:
 ///
 /// ```
-/// use chrono::offset::Local;
+/// use chrono::prelude::*;
 /// use imessage_database::util::dates::format;
 ///
-/// let date = format(&Local::now());
-/// println!("{date}");
+/// let date = Utc.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
+/// assert_eq!(format(&date), "May 20, 2020  9:10:11 AM");
 /// ```
 #[must_use]
-pub fn format(date: &DateTime<Local>) -> String {
+pub fn format<Tz: TimeZone>(date: &DateTime<Tz>) -> String {
     // Equivalent to `date.format("%b %d, %Y %l:%M:%S %p").to_string()` but
     // written directly into one pre-sized buffer
     const MONTHS: [&str; 12] = [
@@ -103,7 +89,10 @@ pub fn format(date: &DateTime<Local>) -> String {
     out
 }
 
-/// Format the elapsed time between two local timestamps.
+/// Format the elapsed time between two timestamps.
+///
+/// Pass both arguments in the same zone to count whole years on that zone's
+/// calendar. Return `None` for a negative elapsed time.
 ///
 /// # Example:
 ///
@@ -111,12 +100,12 @@ pub fn format(date: &DateTime<Local>) -> String {
 /// use chrono::prelude::*;
 /// use imessage_database::util::dates::readable_diff;
 ///
-/// let start = Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
-/// let end = Local.with_ymd_and_hms(2020, 5, 20, 9, 15, 13).unwrap();
-/// println!("{}", readable_diff(&start, &end).unwrap()) // "5 minutes, 2 seconds"
+/// let start = Utc.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
+/// let end = Utc.with_ymd_and_hms(2020, 5, 20, 9, 15, 13).unwrap();
+/// assert_eq!(readable_diff(&start, &end).unwrap(), "5 minutes, 2 seconds");
 /// ```
 #[must_use]
-pub fn readable_diff(start: &DateTime<Local>, end: &DateTime<Local>) -> Option<String> {
+pub fn readable_diff<Tz: TimeZone>(start: &DateTime<Tz>, end: &DateTime<Tz>) -> Option<String> {
     let seconds = end.timestamp() - start.timestamp();
 
     if seconds < 0 {
@@ -144,20 +133,27 @@ pub fn readable_diff(start: &DateTime<Local>, end: &DateTime<Local>) -> Option<S
 }
 
 /// Calculate whole years and the remaining seconds between two dates.
-fn years_and_remainder(start: &DateTime<Local>, end: &DateTime<Local>) -> Option<(i64, i64)> {
+fn years_and_remainder<Tz: TimeZone>(
+    start: &DateTime<Tz>,
+    end: &DateTime<Tz>,
+) -> Option<(i64, i64)> {
     let mut years = end.year() - start.year();
 
     if years <= 0 {
         return Some((0, end.timestamp() - start.timestamp()));
     }
 
-    let mut remainder_start =
-        start.checked_add_months(Months::new(u32::try_from(years).ok()?.checked_mul(12)?))?;
+    // Clone before adding months to pass an owned `DateTime<Tz>` without
+    // requiring `Tz::Offset: Copy`.
+    let mut remainder_start = start
+        .clone()
+        .checked_add_months(Months::new(u32::try_from(years).ok()?.checked_mul(12)?))?;
 
     if remainder_start > *end {
         years -= 1;
-        remainder_start =
-            start.checked_add_months(Months::new(u32::try_from(years).ok()?.checked_mul(12)?))?;
+        remainder_start = start
+            .clone()
+            .checked_add_months(Months::new(u32::try_from(years).ok()?.checked_mul(12)?))?;
     }
 
     Some((
@@ -182,53 +178,64 @@ fn append_component(out_s: &mut String, value: i64, singular: &str, plural: &str
 
 #[cfg(test)]
 mod tests {
-    use crate::util::dates::{TIMESTAMP_FACTOR, format, get_local_time, get_offset, readable_diff};
+    use crate::util::dates::{
+        MESSAGES_EPOCH_UNIX_SECS, TIMESTAMP_FACTOR, format, readable_diff, to_utc,
+    };
     use chrono::prelude::*;
 
     #[test]
     fn can_format_date_single_digit() {
-        let date = Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
+        let date = Utc.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
         assert_eq!(format(&date), "May 20, 2020  9:10:11 AM");
     }
 
     #[test]
     fn can_format_date_double_digit() {
-        let date = Local.with_ymd_and_hms(2020, 5, 20, 10, 10, 11).unwrap();
+        let date = Utc.with_ymd_and_hms(2020, 5, 20, 10, 10, 11).unwrap();
         assert_eq!(format(&date), "May 20, 2020 10:10:11 AM");
     }
 
     #[test]
     fn can_format_date_midnight() {
         // Hour 0 renders as 12 AM (and single-digit minute/second are zero-padded).
-        let date = Local.with_ymd_and_hms(2020, 5, 20, 0, 5, 9).unwrap();
+        let date = Utc.with_ymd_and_hms(2020, 5, 20, 0, 5, 9).unwrap();
         assert_eq!(format(&date), "May 20, 2020 12:05:09 AM");
     }
 
     #[test]
     fn can_format_date_noon() {
         // Hour 12 renders as 12 PM, not 0 PM.
-        let date = Local.with_ymd_and_hms(2020, 5, 20, 12, 0, 0).unwrap();
+        let date = Utc.with_ymd_and_hms(2020, 5, 20, 12, 0, 0).unwrap();
         assert_eq!(format(&date), "May 20, 2020 12:00:00 PM");
     }
 
     #[test]
     fn can_format_date_afternoon() {
         // Hour 15 maps to a space-padded 12-hour `3` (note the double space) PM.
-        let date = Local.with_ymd_and_hms(2020, 5, 20, 15, 4, 5).unwrap();
+        let date = Utc.with_ymd_and_hms(2020, 5, 20, 15, 4, 5).unwrap();
         assert_eq!(format(&date), "May 20, 2020  3:04:05 PM");
     }
 
     #[test]
+    fn can_format_date_in_fixed_offset_wall_clock() {
+        // Expect the wall-clock time in the supplied zone:
+        // 09:10:11 UTC is 14:40:11 at +05:30.
+        let instant = Utc.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
+        let zoned = instant.with_timezone(&FixedOffset::east_opt(5 * 3600 + 30 * 60).unwrap());
+        assert_eq!(format(&zoned), "May 20, 2020  2:40:11 PM");
+    }
+
+    #[test]
     fn cant_format_diff_backwards() {
-        let end = Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
-        let start = Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 30).unwrap();
+        let end = Utc.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
+        let start = Utc.with_ymd_and_hms(2020, 5, 20, 9, 10, 30).unwrap();
         assert_eq!(readable_diff(&start, &end), None);
     }
 
     #[test]
     fn can_format_diff_all_singular() {
-        let start = Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
-        let end = Local.with_ymd_and_hms(2020, 5, 21, 10, 11, 12).unwrap();
+        let start = Utc.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
+        let end = Utc.with_ymd_and_hms(2020, 5, 21, 10, 11, 12).unwrap();
         assert_eq!(
             readable_diff(&start, &end),
             Some("1 day, 1 hour, 1 minute, 1 second".to_owned())
@@ -237,8 +244,8 @@ mod tests {
 
     #[test]
     fn can_format_diff_mixed_singular() {
-        let start = Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
-        let end = Local.with_ymd_and_hms(2020, 5, 22, 10, 20, 12).unwrap();
+        let start = Utc.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
+        let end = Utc.with_ymd_and_hms(2020, 5, 22, 10, 20, 12).unwrap();
         assert_eq!(
             readable_diff(&start, &end),
             Some("2 days, 1 hour, 10 minutes, 1 second".to_owned())
@@ -247,7 +254,7 @@ mod tests {
 
     #[test]
     fn can_format_diff_components() {
-        let start = Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
+        let start = Utc.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
         let cases = [
             ("seconds", (2020, 5, 20, 9, 10, 30), "19 seconds"),
             ("minutes", (2020, 5, 20, 9, 15, 11), "5 minutes"),
@@ -270,7 +277,7 @@ mod tests {
             ),
         ];
         for (label, (year, month, day, hour, minute, second), expected) in cases {
-            let end = Local
+            let end = Utc
                 .with_ymd_and_hms(year, month, day, hour, minute, second)
                 .unwrap();
             assert_eq!(
@@ -283,22 +290,22 @@ mod tests {
 
     #[test]
     fn can_format_diff_month() {
-        let start = Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
-        let end = Local.with_ymd_and_hms(2020, 7, 20, 9, 10, 11).unwrap();
+        let start = Utc.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
+        let end = Utc.with_ymd_and_hms(2020, 7, 20, 9, 10, 11).unwrap();
         assert_eq!(readable_diff(&start, &end), Some("61 days".to_owned()));
     }
 
     #[test]
     fn can_format_diff_single_year() {
-        let start = Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
-        let end = Local.with_ymd_and_hms(2021, 5, 20, 9, 10, 11).unwrap();
+        let start = Utc.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
+        let end = Utc.with_ymd_and_hms(2021, 5, 20, 9, 10, 11).unwrap();
         assert_eq!(readable_diff(&start, &end), Some("1 year".to_owned()));
     }
 
     #[test]
     fn can_format_diff_years_days() {
-        let start = Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
-        let end = Local.with_ymd_and_hms(2022, 7, 20, 9, 10, 11).unwrap();
+        let start = Utc.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
+        let end = Utc.with_ymd_and_hms(2022, 7, 20, 9, 10, 11).unwrap();
         assert_eq!(
             readable_diff(&start, &end),
             Some("2 years, 61 days".to_owned())
@@ -307,49 +314,45 @@ mod tests {
 
     #[test]
     fn can_format_diff_leap_day_anniversary_as_year() {
-        let start = Local.with_ymd_and_hms(2020, 2, 29, 9, 10, 11).unwrap();
-        let end = Local.with_ymd_and_hms(2021, 2, 28, 9, 10, 11).unwrap();
+        let start = Utc.with_ymd_and_hms(2020, 2, 29, 9, 10, 11).unwrap();
+        let end = Utc.with_ymd_and_hms(2021, 2, 28, 9, 10, 11).unwrap();
         assert_eq!(readable_diff(&start, &end), Some("1 year".to_owned()));
     }
 
     #[test]
     fn can_format_no_diff() {
-        let start = Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
-        let end = Local.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
+        let start = Utc.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
+        let end = Utc.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
         assert_eq!(readable_diff(&start, &end), Some(String::new()));
     }
 
     #[test]
-    fn can_get_local_time_from_seconds_timestamp() {
-        let offset = get_offset();
-        let expected_utc = Utc
-            .with_ymd_and_hms(2020, 5, 20, 9, 10, 11)
-            .single()
-            .unwrap();
-
-        // Older databases store seconds since 2001-01-01 00:00:00
-        let stamp_secs = expected_utc.timestamp() - offset;
-
-        let local = get_local_time(stamp_secs, offset).unwrap();
-        let expected_local = expected_utc.with_timezone(&Local);
-
-        assert_eq!(local, expected_local);
+    fn messages_epoch_is_2001_01_01_utc() {
+        assert_eq!(
+            MESSAGES_EPOCH_UNIX_SECS,
+            Utc.with_ymd_and_hms(2001, 1, 1, 0, 0, 0)
+                .unwrap()
+                .timestamp()
+        );
     }
 
     #[test]
-    fn can_get_local_time_from_nanoseconds_timestamp() {
-        let offset = get_offset();
-        let expected_utc = Utc
-            .with_ymd_and_hms(2020, 5, 20, 9, 10, 11)
-            .single()
-            .unwrap();
+    fn can_decode_seconds_timestamp() {
+        let expected = Utc.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
+
+        // Use seconds since 2001-01-01 00:00:00, as in older databases.
+        let stamp_secs = expected.timestamp() - MESSAGES_EPOCH_UNIX_SECS;
+
+        assert_eq!(to_utc(stamp_secs).unwrap(), expected);
+    }
+
+    #[test]
+    fn can_decode_nanoseconds_timestamp() {
+        let expected = Utc.with_ymd_and_hms(2020, 5, 20, 9, 10, 11).unwrap();
 
         // Newer databases store nanoseconds since 2001-01-01 00:00:00
-        let stamp_ns = (expected_utc.timestamp() - offset) * TIMESTAMP_FACTOR;
+        let stamp_ns = (expected.timestamp() - MESSAGES_EPOCH_UNIX_SECS) * TIMESTAMP_FACTOR;
 
-        let local = get_local_time(stamp_ns, offset).unwrap();
-        let expected_local = expected_utc.with_timezone(&Local);
-
-        assert_eq!(local, expected_local);
+        assert_eq!(to_utc(stamp_ns).unwrap(), expected);
     }
 }

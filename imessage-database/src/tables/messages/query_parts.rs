@@ -102,6 +102,7 @@ pub(crate) fn message_query(capabilities: &Capabilities, filters: Option<&str>) 
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
     use std::collections::BTreeSet;
 
     use super::message_query;
@@ -174,7 +175,7 @@ mod tests {
     #[test]
     fn context_filters_follow_recoverable_capability() {
         let mut context = QueryContext::default();
-        context.set_start("2020-01-01").unwrap();
+        context.set_start("2020-01-01", &Utc).unwrap();
         context.set_selected_chat_ids(BTreeSet::from([1, 2, 3]));
         let start_ns = context.start.unwrap();
 

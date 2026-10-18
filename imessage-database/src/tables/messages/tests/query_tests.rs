@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod exclude_recoverable_tests {
+    use chrono::Utc;
     use std::collections::BTreeSet;
 
     use crate::{tables::messages::Message, util::query_context::QueryContext};
@@ -15,7 +16,7 @@ mod exclude_recoverable_tests {
     #[test]
     fn can_generate_filter_statement_start() {
         let mut context = QueryContext::default();
-        context.set_start("2020-01-01").unwrap();
+        context.set_start("2020-01-01", &Utc).unwrap();
         let start_ns = context.start.unwrap();
 
         let statement = Message::generate_filter_statement(&context, false);
@@ -25,7 +26,7 @@ mod exclude_recoverable_tests {
     #[test]
     fn can_generate_filter_statement_end() {
         let mut context = QueryContext::default();
-        context.set_end("2020-01-01").unwrap();
+        context.set_end("2020-01-01", &Utc).unwrap();
         let end_ns = context.end.unwrap();
 
         let statement = Message::generate_filter_statement(&context, false);
@@ -35,8 +36,8 @@ mod exclude_recoverable_tests {
     #[test]
     fn can_generate_filter_statement_start_end() {
         let mut context = QueryContext::default();
-        context.set_start("2020-01-01").unwrap();
-        context.set_end("2020-02-02").unwrap();
+        context.set_start("2020-01-01", &Utc).unwrap();
+        context.set_end("2020-02-02", &Utc).unwrap();
         let start_ns = context.start.unwrap();
         let end_ns = context.end.unwrap();
 
@@ -59,8 +60,8 @@ mod exclude_recoverable_tests {
     #[test]
     fn can_generate_filter_statement_start_end_chat_ids() {
         let mut context = QueryContext::default();
-        context.set_start("2020-01-01").unwrap();
-        context.set_end("2020-02-02").unwrap();
+        context.set_start("2020-01-01", &Utc).unwrap();
+        context.set_end("2020-02-02", &Utc).unwrap();
         context.set_selected_chat_ids(BTreeSet::from([1, 2, 3]));
         let start_ns = context.start.unwrap();
         let end_ns = context.end.unwrap();
@@ -77,7 +78,7 @@ mod exclude_recoverable_tests {
     #[test]
     fn can_create_invalid_start() {
         let mut context = QueryContext::default();
-        assert!(context.set_start("2020-13-32").is_err());
+        assert!(context.set_start("2020-13-32", &Utc).is_err());
         assert!(!context.has_filters());
 
         let statement = Message::generate_filter_statement(&context, false);
@@ -87,7 +88,7 @@ mod exclude_recoverable_tests {
     #[test]
     fn can_create_invalid_end() {
         let mut context = QueryContext::default();
-        assert!(context.set_end("fake").is_err());
+        assert!(context.set_end("fake", &Utc).is_err());
         assert!(!context.has_filters());
 
         let statement = Message::generate_filter_statement(&context, false);
@@ -106,8 +107,8 @@ mod exclude_recoverable_tests {
     #[test]
     fn can_generate_filter_statement_boundary_dates() {
         let mut context = QueryContext::default();
-        context.set_start("1800-01-01").unwrap();
-        context.set_end("2200-01-01").unwrap();
+        context.set_start("1800-01-01", &Utc).unwrap();
+        context.set_end("2200-01-01", &Utc).unwrap();
 
         let statement = Message::generate_filter_statement(&context, false);
         assert!(statement.contains("m.date >= "));
@@ -117,6 +118,7 @@ mod exclude_recoverable_tests {
 
 #[cfg(test)]
 mod include_recoverable_tests {
+    use chrono::Utc;
     use std::collections::BTreeSet;
 
     use crate::{tables::messages::Message, util::query_context::QueryContext};
@@ -136,8 +138,8 @@ mod include_recoverable_tests {
     #[test]
     fn can_generate_filter_statement_start_end_chat_ids() {
         let mut context = QueryContext::default();
-        context.set_start("2020-01-01").unwrap();
-        context.set_end("2020-02-02").unwrap();
+        context.set_start("2020-01-01", &Utc).unwrap();
+        context.set_end("2020-02-02", &Utc).unwrap();
         context.set_selected_chat_ids(BTreeSet::from([1, 2, 3]));
         let start_ns = context.start.unwrap();
         let end_ns = context.end.unwrap();

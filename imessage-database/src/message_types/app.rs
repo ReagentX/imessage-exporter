@@ -5,16 +5,13 @@
 
 use std::collections::HashMap;
 
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Utc};
 use plist::Value;
 
 use crate::{
     error::plist::PlistParseError,
     message_types::variants::BalloonProvider,
-    util::{
-        dates::{TIMESTAMP_FACTOR, get_local_time},
-        plist::{get_string_from_dict, get_string_from_nested_dict},
-    },
+    util::plist::{get_string_from_dict, get_string_from_nested_dict},
 };
 
 /// This struct represents Apple's [`MSMessageTemplateLayout`](https://developer.apple.com/documentation/messages/msmessagetemplatelayout).
@@ -87,17 +84,15 @@ impl AppMessage<'_> {
         map
     }
 
-    /// Identifies the metadata state of a Check In balloon and resolves its
-    /// associated timestamp to local time. Returns `None` when no recognized
-    /// Check In key is present in [`parse_query_string`](Self::parse_query_string)
-    /// or the value isn't a parseable iMessage timestamp.
+    /// Identify the metadata state of a Check In balloon and decode its
+    /// timestamp to an instant. Return `None` without a recognized Check In key
+    /// in [`parse_query_string`](Self::parse_query_string), or for an unparseable
+    /// timestamp or a date outside chrono's supported range.
     ///
-    /// `offset` is the seconds adjustment to apply to the iMessage epoch when
-    /// converting to local time: pass `0` to use the system's current
-    /// timezone, or a [`get_offset`](crate::util::dates::get_offset)-derived
-    /// value when reading a database exported from a different timezone.
+    /// Interpret the payload value as Unix seconds (`sendDate=1697316869.688709`)
+    /// and discard fractional seconds.
     #[must_use]
-    pub fn check_in_kind(&self, offset: i64) -> Option<(CheckInKind, DateTime<Local>)> {
+    pub fn check_in_kind(&self) -> Option<(CheckInKind, DateTime<Utc>)> {
         let metadata = self.parse_query_string();
         let (kind, date_str) = if let Some(d) = metadata.get("estimatedEndTime") {
             (CheckInKind::Expected, *d)
@@ -107,8 +102,8 @@ impl AppMessage<'_> {
             let d = metadata.get("sendDate")?;
             (CheckInKind::CheckedIn, *d)
         };
-        let date_stamp = (date_str.parse::<f64>().ok()? as i64).checked_mul(TIMESTAMP_FACTOR)?;
-        let date_time = get_local_time(date_stamp, offset).ok()?;
+        let secs = date_str.parse::<f64>().ok()? as i64;
+        let date_time = DateTime::from_timestamp(secs, 0)?;
         Some((kind, date_time))
     }
 }
@@ -160,7 +155,7 @@ mod tests {
             "?estimatedEndTime=1697316869.688709&triggerTime=1697316869.688709&sendDate=1697316869.688709",
         );
         assert!(matches!(
-            balloon.check_in_kind(0),
+            balloon.check_in_kind(),
             Some((CheckInKind::Expected, _)),
         ));
     }
@@ -169,7 +164,7 @@ mod tests {
     fn check_in_kind_falls_back_to_trigger_time() {
         let balloon = check_in_msg("?triggerTime=1697316869.688709&sendDate=1697316869.688709");
         assert!(matches!(
-            balloon.check_in_kind(0),
+            balloon.check_in_kind(),
             Some((CheckInKind::WasExpected, _)),
         ));
     }
@@ -178,7 +173,7 @@ mod tests {
     fn check_in_kind_uses_send_date_when_only_option() {
         let balloon = check_in_msg("?messageType=1&interfaceVersion=1&sendDate=1697316869.688709");
         assert!(matches!(
-            balloon.check_in_kind(0),
+            balloon.check_in_kind(),
             Some((CheckInKind::CheckedIn, _)),
         ));
     }
@@ -186,22 +181,21 @@ mod tests {
     #[test]
     fn check_in_kind_returns_none_for_unparsable_timestamp() {
         let balloon = check_in_msg("?sendDate=not_a_number");
-        assert!(balloon.check_in_kind(0).is_none());
+        assert!(balloon.check_in_kind().is_none());
     }
 
     #[test]
     fn check_in_kind_returns_none_for_overflowing_timestamp() {
-        // The nanosecond conversion (`seconds * 1_000_000_000`) overflows i64 for
-        // this value; it must degrade to None rather than panic (debug) or wrap to
-        // a bogus date (release).
-        let balloon = check_in_msg("?sendDate=99999999999");
-        assert!(balloon.check_in_kind(0).is_none());
+        // `1e30 as i64` is `i64::MAX`, outside chrono's date range
+        // (about ±262,000 years). Expect None without a panic.
+        let balloon = check_in_msg("?sendDate=1e30");
+        assert!(balloon.check_in_kind().is_none());
     }
 
     #[test]
     fn check_in_kind_returns_none_without_recognized_key() {
         let balloon = check_in_msg("?messageType=1&interfaceVersion=1");
-        assert!(balloon.check_in_kind(0).is_none());
+        assert!(balloon.check_in_kind().is_none());
     }
 
     #[test]
