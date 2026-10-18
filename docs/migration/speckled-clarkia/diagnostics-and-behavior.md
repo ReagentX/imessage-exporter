@@ -27,6 +27,10 @@ Apply updates in their intended order. An empty vote list names no voters, so it
 
 Literal strings containing `"$null"` remain strings. The parser identifies the archive's null object by its object-table position as well as its contents.
 
+## Removed variants
+
+Three variants were never constructed and are removed: `Announcement::Unknown`, `MessageError::TypedStreamError`, and `PlistParseError::StreamTypedError`, along with the `From` conversions into the two error variants. `Message::get_announcement()` returns `None` for an unmapped `item_type`, so no `Unknown` arm is reachable. Remove any match arms for them.
+
 ## CLI and export changes
 
 Existing export commands remain usable. When Contacts provides an unambiguous relationship between a person's addresses, the exporter can combine conversations previously written separately. Participant grouping, representative selection, and filename truncation can also change transcript names and attachment directory names.
