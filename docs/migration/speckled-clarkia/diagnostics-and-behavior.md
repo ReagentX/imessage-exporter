@@ -27,6 +27,22 @@ Apply updates in their intended order. An empty vote list names no voters, so it
 
 Literal strings containing `"$null"` remain strings. The parser identifies the archive's null object by its object-table position as well as its contents.
 
+## Database path errors
+
+Handle `TableError::CannotConnect` from `Platform::determine()` for a missing or inaccessible path, or a directory without a Messages database. If you previously probed a path you knew was absent, handle the error instead of expecting `Platform::macOS`.
+
+Update your `TableConnectError` match arms for the 5.0 variants:
+
+| 4.3.0 variant | 5.0 variant |
+| --- | --- |
+| `NotAFile(PathBuf)` | `IsDirectory(PathBuf, Vec<PathHint>)` |
+| `DoesNotExist(PathBuf)` | `DoesNotExist(PathBuf, Vec<PathHint>)` |
+| No equivalent | `Inaccessible(PathBuf, std::io::Error)` for a filesystem error when inspecting or opening a path |
+| No equivalent | `NotADatabase(PathBuf)` for a file without the SQLite header |
+| No equivalent | `NotMessagesDatabase(PathBuf)` from `Capabilities::determine()` when the `message` table is absent |
+
+Use `util::path_hint::PathHint` to identify literal quote characters, backups found on disk, a `chat.db` inside the directory, a backup root without a Messages database, a pre-iOS 10 flat layout, or the first missing path component. Call `util::path_hint::diagnose()` to collect the hints and `util::path_hint::presence()` to distinguish a missing path from a permission error. Call `util::dirs::default_backup_roots()` to locate the host's default Finder, iTunes, and Apple Devices backup directories.
+
 ## Removed and moved items
 
 `Announcement::Unknown`, `MessageError::TypedStreamError`, and `PlistParseError::StreamTypedError` are removed, along with the `From` conversions into the two error variants. Remove any match arms for them; none of these variants was ever produced, so no replacement is needed.

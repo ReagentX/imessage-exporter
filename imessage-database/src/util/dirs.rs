@@ -2,7 +2,11 @@
  Default local paths for Messages data.
 */
 
-use std::{borrow::Cow, env::home_dir, path::PathBuf};
+use std::{
+    borrow::Cow,
+    env::{home_dir, var_os},
+    path::PathBuf,
+};
 
 use crate::tables::table::DEFAULT_PATH_MACOS;
 
@@ -22,6 +26,52 @@ use crate::tables::table::DEFAULT_PATH_MACOS;
 #[must_use]
 pub fn default_db_path() -> Option<PathBuf> {
     home_dir().map(|home| home.join(DEFAULT_PATH_MACOS))
+}
+
+/// Return the host's default parent directories for per-device backups from Finder, iTunes,
+/// and Apple Devices.
+///
+/// macOS: `~/Library/Application Support/MobileSync/Backup`. Windows:
+/// `%APPDATA%\Apple Computer\MobileSync\Backup` for iTunes from Apple and
+/// `%USERPROFILE%\Apple\MobileSync\Backup` for iTunes and Apple Devices from the Microsoft Store.
+/// On Linux, return an empty list; no standard backup location is defined.
+///
+/// # Example:
+///
+/// ```
+/// use imessage_database::util::dirs::default_backup_roots;
+///
+/// for root in default_backup_roots() {
+///     println!("{}", root.display());
+/// }
+/// ```
+#[must_use]
+pub fn default_backup_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    if cfg!(target_os = "macos")
+        && let Some(home) = home_dir()
+    {
+        roots.push(
+            home.join("Library")
+                .join("Application Support")
+                .join("MobileSync")
+                .join("Backup"),
+        );
+    }
+    if cfg!(target_os = "windows") {
+        if let Some(appdata) = var_os("APPDATA") {
+            roots.push(
+                PathBuf::from(appdata)
+                    .join("Apple Computer")
+                    .join("MobileSync")
+                    .join("Backup"),
+            );
+        }
+        if let Some(home) = home_dir() {
+            roots.push(home.join("Apple").join("MobileSync").join("Backup"));
+        }
+    }
+    roots
 }
 
 /// Replace a leading `~` with the current user's home directory.

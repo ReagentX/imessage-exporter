@@ -243,10 +243,26 @@ impl Options {
         // Build the Platform
         let platform = match platform_type {
             Some(platform_str) => {
-                Platform::from_cli(platform_str).ok_or(RuntimeError::InvalidOptions(format!(
-                    "{platform_str} is not a valid platform! Must be one of <{SUPPORTED_PLATFORMS}>"
-                )))?
+                let platform =
+                    Platform::from_cli(platform_str).ok_or(RuntimeError::InvalidOptions(format!(
+                        "{platform_str} is not a valid platform! Must be one of <{SUPPORTED_PLATFORMS}>"
+                    )))?;
+                // For an explicit iOS platform, validate the backup root before reading its
+                // manifest so we can report path hints instead of a manifest read error.
+                if platform == Platform::iOS
+                    && user_path.is_some()
+                    && Platform::determine(&db_path)? == Platform::macOS
+                {
+                    return Err(RuntimeError::InvalidOptions(format!(
+                        "--{OPTION_PLATFORM} is {platform}, but `{}` is a file, not a backup directory",
+                        db_path.display()
+                    )));
+                }
+                platform
             }
+            // Defer validation of the default macOS database path to connection setup to avoid
+            // repeating the filesystem checks and path diagnostics.
+            None if user_path.is_none() => Platform::macOS,
             None => Platform::determine(&db_path)?,
         };
 
