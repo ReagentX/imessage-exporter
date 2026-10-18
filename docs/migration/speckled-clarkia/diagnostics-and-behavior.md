@@ -15,6 +15,20 @@ These counts describe different things. A group of three handle rows contributes
 
 `Handle::run_diagnostic()` uses Messages data alone. The exporter reports additional Contacts-based merges in its global diagnostics. Its name-resolution percentage now counts grouped participants, so its denominator differs from the raw handle count. Scripts that parse the diagnostic text must also update the renamed labels and account for lines omitted when no merges occur. See [diagnostics](../../diagnostics.md) for the output fields.
 
+## Dates
+
+Decode timestamps to `DateTime<Utc>` without passing an epoch offset. Replace `util::dates::get_offset()` with the constant `util::dates::MESSAGES_EPOCH_UNIX_SECS`, and migrate `get_local_time()` calls as shown below.
+
+| 4.3.0 | 5.0 |
+| --- | --- |
+| `get_local_time(stamp, offset)` | `to_utc(stamp)?.with_timezone(&Local)` |
+| `message.date(offset)` and the other three date accessors | `message.date()?.with_timezone(&Local)` |
+| `message.time_until_read(offset)` | `message.time_until_read(&Local)` |
+| `balloon.check_in_kind(0)` | `balloon.check_in_kind()`, then `with_timezone()` on the returned `DateTime<Utc>` |
+| `context.set_start(date)` / `set_end(date)` | `context.set_start(date, &Local)` / `set_end(date, &Local)` |
+
+Pass `&DateTime<Tz>` to `format()` and `readable_diff()` for any `Tz: TimeZone`. Use the same zone for both arguments of `readable_diff()`. For file timestamps or sorting, use the `DateTime<Utc>` directly, without `with_timezone()`. Replace `Local` with any other `TimeZone` to render in a different zone.
+
 ## Poll vote updates
 
 `Poll::count_votes()` retains its signature, but now applies each payload as the current selections for the voters it names. It removes those voters' previous selections, deduplicates repeated votes, and applies the new selections. Votes belonging to other participants remain intact. `Poll::apply_votes()` exposes the same operation for an already parsed `Vec<PollVote>`.
