@@ -896,13 +896,10 @@ mod filename_tests {
 
         app.participants.insert(10, Name::fake_name("Person 10"));
         app.participants.insert(11, Name::fake_name("Person 11"));
-        app.real_participants.insert(10, 10);
-        app.real_participants.insert(11, 11);
+        app.real_participants.extend([(10, 10), (11, 11)]);
 
         // Add participants
-        let mut people = BTreeSet::new();
-        people.insert(10);
-        people.insert(11);
+        let people = BTreeSet::from([10, 11]);
 
         let filename = app.filename_from_participants(&people);
         assert_eq!(filename, "Person 10, Person 11".to_string());
@@ -918,9 +915,7 @@ mod filename_tests {
         // Person B (group 1).
         app.participants.insert(0, Name::fake_name("Person A"));
         app.participants.insert(1, Name::fake_name("Person B"));
-        app.real_participants.insert(10, 0);
-        app.real_participants.insert(11, 0);
-        app.real_participants.insert(12, 1);
+        app.real_participants.extend([(10, 0), (11, 0), (12, 1)]);
 
         let people = BTreeSet::from([10, 11, 12]);
 
@@ -944,10 +939,8 @@ mod filename_tests {
             .insert(1, Name::fake_name(&"B".repeat(200)));
         app.participants
             .insert(2, Name::fake_name(&"C".repeat(200)));
-        app.real_participants.insert(10, 0);
-        app.real_participants.insert(11, 0);
-        app.real_participants.insert(12, 1);
-        app.real_participants.insert(13, 2);
+        app.real_participants
+            .extend([(10, 0), (11, 0), (12, 1), (13, 2)]);
 
         let people = BTreeSet::from([10, 11, 12, 13]);
         let filename = app.filename_from_participants(&people);
@@ -967,9 +960,7 @@ mod filename_tests {
         // handle for Person A in each row.
         app.participants.insert(0, Name::fake_name("Person A"));
         app.participants.insert(1, Name::fake_name("Person B"));
-        app.real_participants.insert(10, 0);
-        app.real_participants.insert(11, 0);
-        app.real_participants.insert(12, 1);
+        app.real_participants.extend([(10, 0), (11, 0), (12, 1)]);
         app.chatroom_participants
             .insert(100, BTreeSet::from([10, 12]));
         app.chatroom_participants
@@ -1066,9 +1057,7 @@ mod filename_tests {
 
         app.participants.insert(0, Name::fake_name("Person A"));
         app.participants.insert(1, Name::fake_name("Person B"));
-        app.real_participants.insert(10, 0);
-        app.real_participants.insert(11, 0);
-        app.real_participants.insert(12, 1);
+        app.real_participants.extend([(10, 0), (11, 0), (12, 1)]);
         app.chatroom_participants
             .insert(100, BTreeSet::from([10, 12]));
         app.chatroom_participants
@@ -1218,25 +1207,10 @@ mod filename_tests {
             17,
             Name::fake_name("Person With An Extremely and Excessively Long Name 17"),
         );
-        app.real_participants.insert(10, 10);
-        app.real_participants.insert(11, 11);
-        app.real_participants.insert(12, 12);
-        app.real_participants.insert(13, 13);
-        app.real_participants.insert(14, 14);
-        app.real_participants.insert(15, 15);
-        app.real_participants.insert(16, 16);
-        app.real_participants.insert(17, 17);
+        app.real_participants.extend((10..=17).map(|id| (id, id)));
 
         // Add participants
-        let mut people = BTreeSet::new();
-        people.insert(10);
-        people.insert(11);
-        people.insert(12);
-        people.insert(13);
-        people.insert(14);
-        people.insert(15);
-        people.insert(16);
-        people.insert(17);
+        let people = BTreeSet::from([10, 11, 12, 13, 14, 15, 16, 17]);
 
         let filename = app.filename_from_participants(&people);
         assert_eq!(filename, "Person With An Extremely and Excessively Long Name 10, Person With An Extremely and Excessively Long Name 11, Person With An Extremely and Excessively Long Name 12, and 5 others".to_string());
@@ -1253,8 +1227,7 @@ mod filename_tests {
         app.real_participants.insert(10, 10);
 
         // Add 1 person
-        let mut people = BTreeSet::new();
-        people.insert(10);
+        let people = BTreeSet::from([10]);
 
         let filename = app.filename_from_participants(&people);
         assert_eq!(filename, "He slipped his key into the lock, and we all very quietly entered the cell. The sleeper half turned, and then settled down once more into a deep slumber. Holmes stooped to the water-jug, moistened his sponge, and then rubbed it tw".to_string());
@@ -1277,12 +1250,9 @@ mod filename_tests {
 
         app.participants.insert(10, Name::fake_name(&first));
         app.participants.insert(11, Name::fake_name(&second));
-        app.real_participants.insert(10, 10);
-        app.real_participants.insert(11, 11);
+        app.real_participants.extend([(10, 10), (11, 11)]);
 
-        let mut people = BTreeSet::new();
-        people.insert(10);
-        people.insert(11);
+        let people = BTreeSet::from([10, 11]);
 
         let actual = app.filename_from_participants(&people);
         assert!(actual.len() <= max_len);
@@ -1337,13 +1307,10 @@ mod filename_tests {
 
         app.participants.insert(10, Name::fake_name("Person 10"));
         app.participants.insert(11, Name::fake_name("Person 11"));
-        app.real_participants.insert(10, 10);
-        app.real_participants.insert(11, 11);
+        app.real_participants.extend([(10, 10), (11, 11)]);
 
         // Add participants
-        let mut people = BTreeSet::new();
-        people.insert(10);
-        people.insert(11);
+        let people = BTreeSet::from([10, 11]);
         app.chatroom_participants.insert(chat.rowid, people);
 
         let filename = app.filename(&chat);
@@ -1389,8 +1356,7 @@ mod filename_tests {
         app.participants.insert(10, Name::fake_name(&emoji_name));
         app.real_participants.insert(10, 10);
 
-        let mut people = BTreeSet::new();
-        people.insert(10);
+        let people = BTreeSet::from([10]);
 
         // Should not panic and should produce valid UTF-8
         let filename = app.filename_from_participants(&people);
@@ -1413,10 +1379,7 @@ mod filename_tests {
             app.real_participants.insert(i, i);
         }
 
-        let mut people = BTreeSet::new();
-        for i in 10..18 {
-            people.insert(i);
-        }
+        let people: BTreeSet<i32> = (10..18).collect();
 
         // Should not panic and should produce valid UTF-8 within the length limit
         let filename = app.filename_from_participants(&people);
@@ -1433,8 +1396,7 @@ mod filename_tests {
         app.participants.insert(10, Name::fake_name(&cjk_name));
         app.real_participants.insert(10, 10);
 
-        let mut people = BTreeSet::new();
-        people.insert(10);
+        let people = BTreeSet::from([10]);
 
         let filename = app.filename_from_participants(&people);
         assert!(filename.len() <= MAX_LENGTH);
@@ -1714,35 +1676,24 @@ mod chat_filter_tests {
         }
 
         // Chatroom 1: Included
-        let mut chatroom_1 = BTreeSet::new();
-        chatroom_1.insert(10);
-        app.chatroom_participants.insert(1, chatroom_1);
+        app.chatroom_participants.insert(1, BTreeSet::from([10]));
 
         // Chatroom 2: Included
-        let mut chatroom_2 = BTreeSet::new();
-        chatroom_2.insert(11);
-        app.chatroom_participants.insert(2, chatroom_2);
+        app.chatroom_participants.insert(2, BTreeSet::from([11]));
 
         // Chatroom 3: Included
-        let mut chatroom_3 = BTreeSet::new();
-        chatroom_3.insert(12);
-        app.chatroom_participants.insert(3, chatroom_3);
+        app.chatroom_participants.insert(3, BTreeSet::from([12]));
 
         // Chatroom 4: Excluded
-        let mut chatroom_4 = BTreeSet::new();
-        chatroom_4.insert(13);
-        app.chatroom_participants.insert(4, chatroom_4);
+        app.chatroom_participants.insert(4, BTreeSet::from([13]));
 
         // Chatroom 5: Included
-        let mut chatroom_5 = BTreeSet::new();
-        chatroom_5.insert(10);
-        chatroom_5.insert(11);
+        let chatroom_5 = BTreeSet::from([10, 11]);
         app.chatroom_participants.insert(5, chatroom_5);
 
         // Chatroom 6: Included
-        let mut chatroom_6 = BTreeSet::new();
-        chatroom_6.insert(12);
-        chatroom_6.insert(13); // Even though this person is excluded, the above person is
+        // Even though this person is excluded, the above person is
+        let chatroom_6 = BTreeSet::from([12, 13]);
         app.chatroom_participants.insert(6, chatroom_6);
 
         app.resolve_filtered_handles();
@@ -1777,35 +1728,24 @@ mod chat_filter_tests {
         }
 
         // Chatroom 1: Excluded
-        let mut chatroom_1 = BTreeSet::new();
-        chatroom_1.insert(10);
-        app.chatroom_participants.insert(1, chatroom_1);
+        app.chatroom_participants.insert(1, BTreeSet::from([10]));
 
         // Chatroom 2: Excluded
-        let mut chatroom_2 = BTreeSet::new();
-        chatroom_2.insert(11);
-        app.chatroom_participants.insert(2, chatroom_2);
+        app.chatroom_participants.insert(2, BTreeSet::from([11]));
 
         // Chatroom 3: Excluded
-        let mut chatroom_3 = BTreeSet::new();
-        chatroom_3.insert(12);
-        app.chatroom_participants.insert(3, chatroom_3);
+        app.chatroom_participants.insert(3, BTreeSet::from([12]));
 
         // Chatroom 4: Included
-        let mut chatroom_4 = BTreeSet::new();
-        chatroom_4.insert(13);
-        app.chatroom_participants.insert(4, chatroom_4);
+        app.chatroom_participants.insert(4, BTreeSet::from([13]));
 
         // Chatroom 5: Excluded
-        let mut chatroom_5 = BTreeSet::new();
-        chatroom_5.insert(10);
-        chatroom_5.insert(11);
+        let chatroom_5 = BTreeSet::from([10, 11]);
         app.chatroom_participants.insert(5, chatroom_5);
 
         // Chatroom 6: Included
-        let mut chatroom_6 = BTreeSet::new();
-        chatroom_6.insert(12);
-        chatroom_6.insert(13); // Even though this person is excluded, the above person is
+        // Even though this person is excluded, the above person is
+        let chatroom_6 = BTreeSet::from([12, 13]);
         app.chatroom_participants.insert(6, chatroom_6);
 
         app.resolve_filtered_handles();

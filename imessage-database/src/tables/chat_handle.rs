@@ -562,9 +562,7 @@ mod tests {
         input.insert(4, BTreeSet::from([2])); // Maps to 0
         input.insert(5, BTreeSet::from([1])); // Canonical 5
 
-        let mut chat_lookup_map: HashMap<i32, i32> = HashMap::new();
-        chat_lookup_map.insert(2, 5);
-        chat_lookup_map.insert(4, 0);
+        let chat_lookup_map = HashMap::from([(2, 5), (4, 0)]);
 
         let output =
             ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
@@ -586,9 +584,7 @@ mod tests {
         input.insert(2, BTreeSet::from([3, 4])); // Maps to 0
         input.insert(3, BTreeSet::from([1, 2])); // No mapping
 
-        let mut chat_lookup_map: HashMap<i32, i32> = HashMap::new();
-        chat_lookup_map.insert(1, 0);
-        chat_lookup_map.insert(2, 0);
+        let chat_lookup_map = HashMap::from([(1, 0), (2, 0)]);
 
         let output =
             ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
@@ -610,9 +606,7 @@ mod tests {
         input.insert(3, BTreeSet::from([2])); // Maps to 0
         input.insert(4, BTreeSet::from([3])); // No mapping
 
-        let mut chat_lookup_map: HashMap<i32, i32> = HashMap::new();
-        chat_lookup_map.insert(1, 0);
-        chat_lookup_map.insert(3, 0);
+        let chat_lookup_map = HashMap::from([(1, 0), (3, 0)]);
 
         let output =
             ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
@@ -670,13 +664,9 @@ mod tests {
     fn lookup_merges_through_missing_canonical() {
         // Chat 99 has no handle rows, so it is absent from duplicated_data.
         // Map chats 10 and 20 to the same canonical ID, 99; keep them in one group.
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(10, BTreeSet::from([1]));
-        input.insert(20, BTreeSet::from([2]));
+        let input = HashMap::from([(10, BTreeSet::from([1])), (20, BTreeSet::from([2]))]);
 
-        let mut chat_lookup_map: HashMap<i32, i32> = HashMap::new();
-        chat_lookup_map.insert(10, 99);
-        chat_lookup_map.insert(20, 99);
+        let chat_lookup_map = HashMap::from([(10, 99), (20, 99)]);
 
         let output =
             ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
@@ -696,12 +686,9 @@ mod tests {
 
     #[test]
     fn lookup_component_without_handle_rows_gets_its_own_id() {
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(10, BTreeSet::from([1]));
+        let input = HashMap::from([(10, BTreeSet::from([1]))]);
 
-        let mut chat_lookup_map: HashMap<i32, i32> = HashMap::new();
-        chat_lookup_map.insert(10, 20);
-        chat_lookup_map.insert(30, 40);
+        let chat_lookup_map = HashMap::from([(10, 20), (30, 40)]);
 
         let output =
             ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
@@ -738,9 +725,7 @@ mod tests {
 
     #[test]
     fn chats_differing_by_group_stay_separate() {
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(10, BTreeSet::from([1, 3]));
-        input.insert(20, BTreeSet::from([2, 3]));
+        let input = HashMap::from([(10, BTreeSet::from([1, 3])), (20, BTreeSet::from([2, 3]))]);
 
         let groups: HashMap<i32, i32> = HashMap::from([(1, 0), (2, 5), (3, 1)]);
 
@@ -755,9 +740,7 @@ mod tests {
         // Handle 7 is absent from the group map; group 7 exists for handle 1.
         // Keep the chat with raw handle 7 separate from the chat whose member
         // belongs to group 7.
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(10, BTreeSet::from([1]));
-        input.insert(20, BTreeSet::from([7]));
+        let input = HashMap::from([(10, BTreeSet::from([1])), (20, BTreeSet::from([7]))]);
 
         let groups: HashMap<i32, i32> = HashMap::from([(1, 7)]);
 
@@ -928,9 +911,7 @@ mod tests {
     // MARK: Display names
     #[test]
     fn same_people_with_different_names_are_different_groups() {
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(10, BTreeSet::from([1, 2]));
-        input.insert(20, BTreeSet::from([1, 2]));
+        let input = HashMap::from([(10, BTreeSet::from([1, 2])), (20, BTreeSet::from([1, 2]))]);
         let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
             (10, chat(10, Some("Sunday Call"))),
             (20, chat(20, Some("Da Boys"))),
@@ -944,9 +925,7 @@ mod tests {
 
     #[test]
     fn same_people_with_the_same_name_merge() {
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(10, BTreeSet::from([1, 2]));
-        input.insert(20, BTreeSet::from([1, 2]));
+        let input = HashMap::from([(10, BTreeSet::from([1, 2])), (20, BTreeSet::from([1, 2]))]);
         let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
             (10, chat(10, Some("Family"))),
             (20, chat(20, Some("Family"))),
@@ -960,11 +939,7 @@ mod tests {
 
     #[test]
     fn unnamed_row_joins_the_first_named_row_with_its_people() {
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(10, BTreeSet::from([1, 2]));
-        input.insert(20, BTreeSet::from([1, 2]));
-        input.insert(30, BTreeSet::from([1, 2]));
-        input.insert(40, BTreeSet::from([1, 2]));
+        let input = HashMap::from([10, 20, 30, 40].map(|id| (id, BTreeSet::from([1, 2]))));
         let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
             (10, chat(10, Some("Sunday Call"))),
             (20, chat(20, Some("Da Boys"))),
@@ -982,9 +957,7 @@ mod tests {
 
     #[test]
     fn unnamed_rows_merge_with_each_other_when_nothing_is_named() {
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(10, BTreeSet::from([1, 2]));
-        input.insert(20, BTreeSet::from([1, 2]));
+        let input = HashMap::from([(10, BTreeSet::from([1, 2])), (20, BTreeSet::from([1, 2]))]);
         let chats: HashMap<i32, crate::tables::chat::Chat> =
             HashMap::from([(10, chat(10, None)), (20, chat(20, None))]);
 
@@ -996,10 +969,7 @@ mod tests {
 
     #[test]
     fn unnamed_row_keeps_its_chat_lookup_conversation() {
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(10, BTreeSet::from([1, 2]));
-        input.insert(20, BTreeSet::from([1, 2]));
-        input.insert(30, BTreeSet::from([1, 2]));
+        let input = HashMap::from([10, 20, 30].map(|id| (id, BTreeSet::from([1, 2]))));
         let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
             (10, chat(10, Some("Alpha"))),
             (20, chat(20, Some("Beta"))),
@@ -1056,9 +1026,7 @@ mod tests {
 
     #[test]
     fn named_lookup_canonical_without_handle_rows_still_counts_as_named() {
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(10, BTreeSet::from([1, 2]));
-        input.insert(20, BTreeSet::from([1, 2]));
+        let input = HashMap::from([(10, BTreeSet::from([1, 2])), (20, BTreeSet::from([1, 2]))]);
         let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
             (10, chat(10, Some("Alpha"))),
             (20, chat(20, None)),
@@ -1073,9 +1041,7 @@ mod tests {
 
     #[test]
     fn lookup_members_without_handle_rows_join_the_conversation() {
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(10, BTreeSet::from([1]));
-        input.insert(20, BTreeSet::from([1]));
+        let input = HashMap::from([(10, BTreeSet::from([1])), (20, BTreeSet::from([1]))]);
         let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
             (10, chat(10, Some("Beta"))),
             (20, chat(20, None)),
@@ -1095,9 +1061,7 @@ mod tests {
 
     #[test]
     fn unnamed_rows_join_a_sibling_linked_to_a_named_row() {
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(10, BTreeSet::from([1]));
-        input.insert(20, BTreeSet::from([1]));
+        let input = HashMap::from([(10, BTreeSet::from([1])), (20, BTreeSet::from([1]))]);
         let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
             (10, chat(10, None)),
             (20, chat(20, None)),
@@ -1113,9 +1077,7 @@ mod tests {
 
     #[test]
     fn linked_row_pulls_in_an_earlier_unnamed_anchor() {
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(10, BTreeSet::from([1]));
-        input.insert(20, BTreeSet::from([1]));
+        let input = HashMap::from([(10, BTreeSet::from([1])), (20, BTreeSet::from([1]))]);
         let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
             (10, chat(10, None)),
             (20, chat(20, None)),
@@ -1131,10 +1093,7 @@ mod tests {
 
     #[test]
     fn unlinked_row_joins_the_lower_of_two_linked_conversations() {
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(10, BTreeSet::from([1]));
-        input.insert(20, BTreeSet::from([1]));
-        input.insert(30, BTreeSet::from([1]));
+        let input = HashMap::from([10, 20, 30].map(|id| (id, BTreeSet::from([1]))));
         let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
             (10, chat(10, None)),
             (20, chat(20, None)),
@@ -1154,9 +1113,7 @@ mod tests {
 
     #[test]
     fn lookup_only_names_reach_the_representative() {
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(10, BTreeSet::from([1]));
-        input.insert(20, BTreeSet::from([1]));
+        let input = HashMap::from([(10, BTreeSet::from([1])), (20, BTreeSet::from([1]))]);
         let chats: HashMap<i32, crate::tables::chat::Chat> = HashMap::from([
             (10, chat(10, None)),
             (20, chat(20, None)),
@@ -1177,9 +1134,7 @@ mod tests {
     #[test]
     fn chat_lookup_still_joins_differently_named_rows() {
         // Honor Apple's `chat_lookup` link even when display names differ.
-        let mut input: HashMap<i32, BTreeSet<i32>> = HashMap::new();
-        input.insert(10, BTreeSet::from([1]));
-        input.insert(20, BTreeSet::from([2]));
+        let input = HashMap::from([(10, BTreeSet::from([1])), (20, BTreeSet::from([2]))]);
         let chats: HashMap<i32, crate::tables::chat::Chat> =
             HashMap::from([(10, chat(10, Some("A"))), (20, chat(20, Some("B")))]);
         let lookup: HashMap<i32, i32> = HashMap::from([(10, 20), (20, 20)]);
