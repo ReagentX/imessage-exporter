@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use imessage_database::tables::{
     attachment::{Attachment, MediaType},
     messages::Message,
@@ -8,8 +10,29 @@ use crate::{
         compatibility::attachment_manager::{AttachmentManagerMode, CopiedFile, Plan},
         runtime::Config,
     },
-    exporters::{formatter::AttachmentRender, shared::driver::ExportState},
+    exporters::shared::driver::ExportState,
 };
+
+/// The file an export refers to for one attachment: the copy under the
+/// export root when the manager produced or reused one, else the source.
+pub(crate) struct ExportFile<'a> {
+    pub path: PathBuf,
+    /// The copy's type after conversion, else the row's.
+    pub media_type: MediaType<'a>,
+    /// [`Attachment::filename()`]: `transfer_name`, else the stored path.
+    pub name: &'a str,
+}
+
+/// Why no file could be prepared. Converts into the
+/// [`AttachmentRender`](crate::exporters::formatter::AttachmentRender)
+/// variant of the same name.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum AttachmentFailure {
+    /// The row has no filename metadata.
+    MissingFilename,
+    /// The manager could not process the file; carries the display name.
+    NamedFile(String),
+}
 
 /// Run the per-attachment side effects every exporter needs before it can
 /// emit a reference to a file on disk: surface a busy indicator on the
@@ -18,15 +41,17 @@ use crate::{
 /// [`AttachmentManager`](crate::app::compatibility::attachment_manager::AttachmentManager)
 /// to copy or convert the file.
 ///
-/// Returns `Ok(())` when the attachment has a filename and the copy/convert
-/// succeeded; otherwise returns the [`AttachmentRender`] fallback the caller
-/// should propagate.
-pub(crate) fn prepare_attachment(
+/// Returns the [`ExportFile`] the export should refer to: the manager's copy
+/// when it produced or reused one, else the resolved source path, else the
+/// bare filename. The filename check runs after the manager so a copy failure
+/// on a nameless row is [`AttachmentFailure::MissingFilename`] and prints
+/// nothing.
+pub(crate) fn prepare_attachment<'a>(
     config: &Config,
     state: &ExportState,
-    attachment: &mut Attachment,
+    attachment: &'a Attachment,
     message: &Message,
-) -> Result<(), AttachmentRender> {
+) -> Result<ExportFile<'a>, AttachmentFailure> {
     let manager = &config.options.attachment_manager;
 
     // Classify the `ffmpeg`-spawning conversion paths, which get a busy bar:
@@ -76,23 +101,35 @@ pub(crate) fn prepare_attachment(
         state.pb.set_default_style();
     }
 
-    let Some(filename) = attachment.filename() else {
-        return Err(AttachmentRender::MissingFilename);
+    let Some(name) = attachment.filename() else {
+        return Err(AttachmentFailure::MissingFilename);
     };
     let copied: Option<CopiedFile> = match handle_result {
         Ok(copied) => copied,
         Err(why) => {
             state.pb.println(why);
-            return Err(AttachmentRender::NamedFile(filename.to_string()));
+            return Err(AttachmentFailure::NamedFile(name.to_string()));
         }
     };
 
-    // The last writer of exporter state on the row; the next phase removes it.
-    if let Some(copied) = copied {
-        attachment.copied_path = Some(copied.path);
-        if let Some(media_type) = copied.media_type {
-            attachment.mime_type = Some(media_type.as_mime_type());
-        }
-    }
-    Ok(())
+    Ok(match copied {
+        Some(CopiedFile { path, media_type }) => ExportFile {
+            path,
+            media_type: media_type.unwrap_or_else(|| attachment.mime_type()),
+            name,
+        },
+        // `Plan::Skip`: the export points at the source. An unresolvable
+        // source is not an error here, so the bare filename stands in.
+        None => ExportFile {
+            path: attachment
+                .resolved_attachment_path(
+                    &config.options.platform,
+                    &config.options.db_path,
+                    config.options.attachment_root.as_deref(),
+                )
+                .map_or_else(|| PathBuf::from(name), PathBuf::from),
+            media_type: attachment.mime_type(),
+            name,
+        },
+    })
 }

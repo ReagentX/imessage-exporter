@@ -10,11 +10,9 @@ use crate::app::error::RuntimeError;
 
 /// Per-message data resolved up front so exporters can iterate over a
 /// message's parts without re-issuing the same DB queries or repeating the
-/// `Expressive::None` filter. `attachments` and `replies_map` are owned
-/// because the per-part loop mutates them: attachments are passed `&mut` to
-/// the part-body builder so attachment resolution can record disk side
-/// effects, and `replies_map` entries are pulled out via `get_mut` for the
-/// reply recursion.
+/// `Expressive::None` filter. `attachments` is owned because the context
+/// loads it; the per-part loop only borrows it. `replies_map` entries are
+/// pulled out via `get_mut` for the reply recursion.
 pub(crate) struct MessageContext<'a> {
     pub attachments: Vec<Attachment>,
     pub replies_map: HashMap<usize, Vec<Message>>,

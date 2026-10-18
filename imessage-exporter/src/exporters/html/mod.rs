@@ -16,10 +16,10 @@ use crate::{
         },
         shared::{
             announcement::{AnnouncementBody, YOU, resolve_announcement},
-            attachment::prepare_attachment,
+            attachment::{AttachmentFailure, ExportFile, prepare_attachment},
             balloon::dispatch_app_balloon,
             driver::{ExportState, MessageWriter},
-            edited::{Edit, EditDiff, normalize_edited},
+            edited::{EditDiff, normalize_edited},
             message::MessageContext,
             part::{AttachmentResolver, dispatch_part_body, resolve_run},
             render::{render_template, render_template_into},
@@ -126,94 +126,30 @@ impl<'a> MessageWriter<'a> for HTML<'a> {
 impl<'a> MessageFormatter<'a> for HTML<'a> {
     fn format_attachment(
         &self,
-        attachment: &'a mut Attachment,
-        message: &Message,
+        attachment: &'a Attachment,
+        message: &'a Message,
         metadata: &AttachmentMeta,
     ) -> AttachmentRender {
-        if let Err(render) = prepare_attachment(self.config, &self.state, attachment, message) {
-            return render;
+        match prepare_attachment(self.config, &self.state, attachment, message) {
+            Ok(file) => {
+                AttachmentRender::Embedded(self.render_attachment(attachment, &file, metadata))
+            }
+            Err(why) => why.into(),
         }
-
-        let embed_path = self.config.message_attachment_path(attachment);
-
-        let variant = match attachment.mime_type() {
-            MediaType::Image(_) => AttachmentVariant::Image,
-            // Video duplicates the source tag intentionally; see
-            // https://github.com/ReagentX/imessage-exporter/issues/73
-            MediaType::Video(media_type) => AttachmentVariant::Video { media_type },
-            MediaType::Audio(media_type) => match metadata.transcription.as_deref() {
-                Some(transcription) => AttachmentVariant::AudioTranscription {
-                    media_type,
-                    transcription,
-                },
-                None => AttachmentVariant::Audio { media_type },
-            },
-            MediaType::Text(_) | MediaType::Application(_) => {
-                let Some(filename) = attachment.filename() else {
-                    return AttachmentRender::MissingFilename;
-                };
-                AttachmentVariant::Download {
-                    filename,
-                    file_size: attachment.file_size(),
-                }
-            }
-            MediaType::Unknown => {
-                if attachment
-                    .copied_path
-                    .as_ref()
-                    .is_some_and(|path| path.is_dir())
-                {
-                    let Some(filename) = attachment.filename() else {
-                        return AttachmentRender::MissingFilename;
-                    };
-                    AttachmentVariant::UnknownFolder {
-                        filename,
-                        file_size: attachment.file_size(),
-                    }
-                } else {
-                    AttachmentVariant::UnknownOther {
-                        file_size: attachment.file_size(),
-                    }
-                }
-            }
-            MediaType::Other(media_type) => AttachmentVariant::Other { media_type },
-        };
-
-        AttachmentRender::Embedded(render_template(&AttachmentVM {
-            lazy: !self.config.options.no_lazy,
-            embed_path,
-            variant,
-        }))
     }
 
-    fn format_sticker(&self, sticker: &'a mut Attachment, message: &Message) -> String {
-        let mut sticker_embed =
-            match self.format_attachment(sticker, message, &AttachmentMeta::default()) {
-                AttachmentRender::Embedded(html) => html,
-                AttachmentRender::MissingFilename => return String::new(),
-                AttachmentRender::NamedFile(name) => return sanitize_html(&name).into_owned(),
-            };
-
-        if let Some(kind) = sticker.get_sticker_decoration(
-            self.config.data_source.db(),
-            &self.config.options.platform,
-            &self.config.options.db_path,
-            self.config.options.attachment_root.as_deref(),
-        ) {
-            let suffix_html = render_template(&StickerSuffixVM {
-                class: sticker_decoration_class(&kind),
-                label: sticker_decoration_label(&kind),
-            });
-            sticker_embed.push_str(&suffix_html);
+    fn format_sticker(&self, sticker: &'a Attachment, message: &'a Message) -> String {
+        match prepare_attachment(self.config, &self.state, sticker, message) {
+            Ok(file) => self.render_sticker(sticker, &file),
+            Err(AttachmentFailure::MissingFilename) => String::new(),
+            Err(AttachmentFailure::NamedFile(name)) => sanitize_html(&name).into_owned(),
         }
-
-        sticker_embed
     }
 
     fn format_app(
         &self,
         message: &'a Message,
-        attachments: &mut Vec<Attachment>,
+        attachments: &[Attachment],
     ) -> Result<String, RuntimeError> {
         dispatch_app_balloon(self, message, attachments, self.config)
     }
@@ -262,63 +198,53 @@ impl<'a> MessageFormatter<'a> for HTML<'a> {
         msg: &'a Message,
         edited_message: &'a EditedMessage,
         message_part_idx: usize,
-        attachments: &'a mut Vec<Attachment>,
+        attachments: &'a [Attachment],
         resolver: &mut AttachmentResolver,
     ) -> Option<String> {
-        let normalized = normalize_edited(msg, edited_message, message_part_idx, self.config, YOU)?;
-        // Build rows in a direct loop rather than `map_rows`: rendering an inline
-        // sticker needs a `&'a mut Attachment`, which a closure capture can't
-        // hold across iterations.
-        let kind = match normalized {
-            Edit::Unsent { who, elapsed } => Edit::Unsent { who, elapsed },
-            Edit::Edited { rows } => {
-                let mut out = Vec::with_capacity(rows.len());
-                for event in rows {
-                    let rendered_text = match event.components.first() {
-                        // A run carrying an inline sticker interleaves text ranges
-                        // with glyph-sized `<img>`s, exactly as `render_run` does
-                        // for live messages so an edited Memoji/genmoji renders
-                        // as its image, not a bare `\u{FFFC}` placeholder.
-                        Some(BubbleComponent::Run(ranges))
-                            if ranges
-                                .iter()
-                                .any(|range| range.attachment.is_some() && range.emoji_image) =>
-                        {
-                            // Edit-history components always come from
-                            // `parse_body_typedstream`, so each attachment range
-                            // carries a file-transfer GUID and `resolve` is
-                            // idempotent (a GUID lookup, not a positional-cursor
-                            // advance). That keeps this per-row resolve safe
-                            // despite the resolver's "once per range" contract: a
-                            // GUID-less range repeated across rows would otherwise
-                            // drift the positional cursor.
-                            inline_segments_to_html(self.interleave_segments(
-                                event.text,
-                                ranges,
-                                msg,
-                                attachments,
-                                resolver,
-                            ))
-                        }
-                        Some(BubbleComponent::Run(ranges)) => {
-                            self.format_attributes(event.text, ranges)
-                        }
-                        _ => sanitize_html(event.text).into_owned(),
-                    };
-                    let timestamp = match event.diff_since_previous {
-                        EditDiff::First => String::new(),
-                        EditDiff::Failed => "Edited later".to_string(),
-                        EditDiff::Computed(diff) => format!("Edited {diff} later"),
-                    };
-                    out.push(EditedRow {
-                        is_last: event.is_last,
-                        timestamp,
-                        text_html: Html::trust(rendered_text),
-                    });
+        let kind = normalize_edited(msg, edited_message, message_part_idx, self.config, YOU)?
+            .map_rows(|event| {
+                let rendered_text = match event.components.first() {
+                    // A run carrying an inline sticker interleaves text ranges
+                    // with glyph-sized `<img>`s, exactly as `render_run` does
+                    // for live messages so an edited Memoji/genmoji renders
+                    // as its image, not a bare `\u{FFFC}` placeholder.
+                    Some(BubbleComponent::Run(ranges))
+                        if ranges
+                            .iter()
+                            .any(|range| range.attachment.is_some() && range.emoji_image) =>
+                    {
+                        // Edit-history components always come from
+                        // `parse_body_typedstream`, so each attachment range
+                        // carries a file-transfer GUID and `resolve` is
+                        // idempotent (a GUID lookup, not a positional-cursor
+                        // advance). That keeps this per-row resolve safe
+                        // despite the resolver's "once per range" contract: a
+                        // GUID-less range repeated across rows would otherwise
+                        // drift the positional cursor.
+                        inline_segments_to_html(self.interleave_segments(
+                            event.text,
+                            ranges,
+                            msg,
+                            attachments,
+                            resolver,
+                        ))
+                    }
+                    Some(BubbleComponent::Run(ranges)) => {
+                        self.format_attributes(event.text, ranges)
+                    }
+                    _ => sanitize_html(event.text).into_owned(),
+                };
+                let timestamp = match event.diff_since_previous {
+                    EditDiff::First => String::new(),
+                    EditDiff::Failed => "Edited later".to_string(),
+                    EditDiff::Computed(diff) => format!("Edited {diff} later"),
+                };
+                EditedRow {
+                    is_last: event.is_last,
+                    timestamp,
+                    text_html: Html::trust(rendered_text),
                 }
-                Edit::Edited { rows: out }
-            }
-        };
+            });
 
         Some(render_template(&EditedVM { kind }))
     }
@@ -386,7 +312,7 @@ impl<'a> MessageFormatter<'a> for HTML<'a> {
         &'a self,
         message: &'a Message,
         ranges: &'a [AttributedRange],
-        attachments: &'a mut Vec<Attachment>,
+        attachments: &'a [Attachment],
         resolver: &mut AttachmentResolver,
     ) -> <Self as PartBodyBuilder>::Body {
         let text = message.text.as_deref().unwrap_or_default();
@@ -444,7 +370,7 @@ impl<'a> MessageFormatter<'a> for HTML<'a> {
                 let (Some(meta), Some(idx)) = (range.attachment.as_ref(), idx) else {
                     continue;
                 };
-                body = match attachments.get_mut(idx) {
+                body = match attachments.get(idx) {
                     Some(attachment) if attachment.is_sticker => {
                         let content = self.format_sticker(attachment, message);
                         self.body_sticker(content)
@@ -643,7 +569,7 @@ impl<'a> HTML<'a> {
                 message,
                 idx,
                 message_part,
-                &mut ctx.attachments,
+                &ctx.attachments,
                 &mut resolver,
             );
             // Plumb the per-message glyph class into bubble bodies so pure-glyph
@@ -707,14 +633,14 @@ impl<'a> HTML<'a> {
         text: &str,
         ranges: &[AttributedRange],
         message: &Message,
-        attachments: &mut [Attachment],
+        attachments: &[Attachment],
         resolver: &mut AttachmentResolver,
     ) -> Vec<InlineSegment> {
         let resolved = resolve_run(ranges, resolver);
         let mut segments = Vec::with_capacity(resolved.len());
         for (range, idx) in resolved {
             match idx {
-                Some(idx) => match attachments.get_mut(idx) {
+                Some(idx) => match attachments.get(idx) {
                     Some(attachment) => {
                         let img = self.format_sticker_inline(attachment, message);
                         segments.push(InlineSegment::Sticker(Html::trust(img)));
@@ -737,31 +663,107 @@ impl<'a> HTML<'a> {
     /// screen readers. On a prepare failure the segment still emits an
     /// `<img>` (with no or unreachable `src`) so the browser shows its
     /// broken-image glyph.
-    fn format_sticker_inline(&self, sticker: &mut Attachment, message: &Message) -> String {
-        let (embed_path, label) =
-            match prepare_attachment(self.config, &self.state, sticker, message) {
-                Ok(()) => {
-                    let path = self.config.message_attachment_path(sticker);
-                    let label = sticker
-                        .get_sticker_decoration(
-                            self.config.data_source.db(),
-                            &self.config.options.platform,
-                            &self.config.options.db_path,
-                            self.config.options.attachment_root.as_deref(),
-                        )
-                        .map(|kind| sticker_decoration_label(&kind));
-                    (Some(path), label)
+    fn format_sticker_inline(&self, sticker: &Attachment, message: &Message) -> String {
+        let lazy = !self.config.options.no_lazy;
+        match prepare_attachment(self.config, &self.state, sticker, message) {
+            Ok(file) => self.render_sticker_inline(sticker, &file),
+            Err(AttachmentFailure::MissingFilename) => render_template(&StickerInlineVM {
+                lazy,
+                embed_path: None,
+                label: None,
+            }),
+            Err(AttachmentFailure::NamedFile(name)) => render_template(&StickerInlineVM {
+                lazy,
+                embed_path: Some(name),
+                label: None,
+            }),
+        }
+    }
+
+    /// Render a prepared attachment as its embed markup. The media type and
+    /// embed path come from `file`; the displayed size comes from the row.
+    fn render_attachment(
+        &self,
+        attachment: &Attachment,
+        file: &ExportFile<'_>,
+        metadata: &AttachmentMeta,
+    ) -> String {
+        let embed_path = self.config.relative_path(&file.path);
+
+        let variant = match &file.media_type {
+            MediaType::Image(_) => AttachmentVariant::Image,
+            // Video duplicates the source tag intentionally; see
+            // https://github.com/ReagentX/imessage-exporter/issues/73
+            MediaType::Video(media_type) => AttachmentVariant::Video { media_type },
+            MediaType::Audio(media_type) => match metadata.transcription.as_deref() {
+                Some(transcription) => AttachmentVariant::AudioTranscription {
+                    media_type,
+                    transcription,
+                },
+                None => AttachmentVariant::Audio { media_type },
+            },
+            MediaType::Text(_) | MediaType::Application(_) => AttachmentVariant::Download {
+                filename: file.name,
+                file_size: attachment.file_size(),
+            },
+            MediaType::Unknown => {
+                if file.path.is_dir() {
+                    AttachmentVariant::UnknownFolder {
+                        filename: file.name,
+                        file_size: attachment.file_size(),
+                    }
+                } else {
+                    AttachmentVariant::UnknownOther {
+                        file_size: attachment.file_size(),
+                    }
                 }
-                Err(AttachmentRender::MissingFilename) => (None, None),
-                Err(AttachmentRender::NamedFile(name)) => (Some(name), None),
-                Err(AttachmentRender::Embedded(_)) => {
-                    unreachable!("prepare_attachment never returns Embedded as an Err variant")
-                }
-            };
+            }
+            MediaType::Other(media_type) => AttachmentVariant::Other { media_type },
+        };
+
+        render_template(&AttachmentVM {
+            lazy: !self.config.options.no_lazy,
+            embed_path,
+            variant,
+        })
+    }
+
+    /// Render a prepared sticker as a block attachment followed by its
+    /// decoration suffix, when the row's file carries one.
+    fn render_sticker(&self, sticker: &Attachment, file: &ExportFile<'_>) -> String {
+        let mut sticker_embed = self.render_attachment(sticker, file, &AttachmentMeta::default());
+
+        if let Some(kind) = sticker.get_sticker_decoration(
+            self.config.data_source.db(),
+            &self.config.options.platform,
+            &self.config.options.db_path,
+            self.config.options.attachment_root.as_deref(),
+        ) {
+            let suffix_html = render_template(&StickerSuffixVM {
+                class: sticker_decoration_class(&kind),
+                label: sticker_decoration_label(&kind),
+            });
+            sticker_embed.push_str(&suffix_html);
+        }
+
+        sticker_embed
+    }
+
+    /// Render a prepared static sticker as a glyph-sized inline `<img>` whose
+    /// `title=` carries the decoration label.
+    fn render_sticker_inline(&self, sticker: &Attachment, file: &ExportFile<'_>) -> String {
+        let label = sticker
+            .get_sticker_decoration(
+                self.config.data_source.db(),
+                &self.config.options.platform,
+                &self.config.options.db_path,
+                self.config.options.attachment_root.as_deref(),
+            )
+            .map(|kind| sticker_decoration_label(&kind));
 
         render_template(&StickerInlineVM {
             lazy: !self.config.options.no_lazy,
-            embed_path,
+            embed_path: Some(self.config.relative_path(&file.path)),
             label,
         })
     }

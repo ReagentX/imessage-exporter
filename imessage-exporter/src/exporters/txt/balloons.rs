@@ -222,7 +222,7 @@ impl BalloonFormatter for TXT<'_> {
         &self,
         balloon: &AppMessage,
         bundle_id: &str,
-        _: &mut Vec<Attachment>,
+        _: &[Attachment],
         _: &Message,
     ) -> String {
         render_balloon(&GenericAppVM {

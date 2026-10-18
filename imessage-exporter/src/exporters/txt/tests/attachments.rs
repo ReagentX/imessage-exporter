@@ -5,7 +5,7 @@ use crate::{
     app::{compatibility::attachment_manager::AttachmentManagerMode, export_type::ExportType},
     exporters::{
         formatter::{AttachmentRender, MessageFormatter},
-        shared::test_support::{config, with_me},
+        shared::test_support::{config, export_file, with_me},
     },
 };
 
@@ -22,9 +22,9 @@ fn can_format_txt_attachment_macos() {
 
     let message = Config::fake_message();
 
-    let mut attachment = Config::fake_attachment();
+    let attachment = Config::fake_attachment();
 
-    let actual = exporter.format_attachment(&mut attachment, &message, &AttachmentMeta::default());
+    let actual = exporter.format_attachment(&attachment, &message, &AttachmentMeta::default());
 
     assert_eq!(
         actual,
@@ -43,7 +43,7 @@ fn can_format_txt_attachment_macos_invalid_disabled() {
     attachment.filename = None;
     attachment.transfer_name = None;
 
-    let actual = exporter.format_attachment(&mut attachment, &message, &AttachmentMeta::default());
+    let actual = exporter.format_attachment(&attachment, &message, &AttachmentMeta::default());
 
     assert_eq!(actual, AttachmentRender::MissingFilename);
 }
@@ -62,7 +62,7 @@ fn can_format_txt_attachment_macos_invalid_clone() {
     attachment.filename = None;
     attachment.transfer_name = None;
 
-    let actual = exporter.format_attachment(&mut attachment, &message, &AttachmentMeta::default());
+    let actual = exporter.format_attachment(&attachment, &message, &AttachmentMeta::default());
 
     assert_eq!(actual, AttachmentRender::MissingFilename);
 }
@@ -75,10 +75,10 @@ fn can_format_txt_attachment_ios() {
 
     let message = Config::fake_message();
 
-    let mut attachment = Config::fake_attachment();
+    let attachment = Config::fake_attachment();
 
     let AttachmentRender::Embedded(actual) =
-        exporter.format_attachment(&mut attachment, &message, &AttachmentMeta::default())
+        exporter.format_attachment(&attachment, &message, &AttachmentMeta::default())
     else {
         panic!("expected AttachmentRender::Embedded");
     };
@@ -102,7 +102,7 @@ fn can_format_txt_attachment_ios_invalid_clone() {
     attachment.filename = None;
     attachment.transfer_name = None;
 
-    let actual = exporter.format_attachment(&mut attachment, &message, &AttachmentMeta::default());
+    let actual = exporter.format_attachment(&attachment, &message, &AttachmentMeta::default());
 
     assert_eq!(actual, AttachmentRender::MissingFilename);
 }
@@ -125,14 +125,13 @@ fn can_format_txt_attachment_sticker() {
         .unwrap()
         .join("imessage-database/test_data/stickers/outline.heic");
     attachment.filename = Some(sticker_path.to_string_lossy().to_string());
-    attachment.copied_path = Some(
-        config
-            .options
-            .export_path
-            .join("imessage-database/test_data/stickers/outline.heic"),
+    let file = export_file(
+        &config,
+        &attachment,
+        "imessage-database/test_data/stickers/outline.heic",
     );
 
-    let actual = exporter.format_sticker(&mut attachment, &message);
+    let actual = exporter.render_sticker(&attachment, &file, &message);
 
     assert_eq!(
         actual,
@@ -159,14 +158,13 @@ fn can_format_txt_attachment_sticker_genmoji() {
         .unwrap()
         .join("imessage-database/test_data/stickers/outline.heic");
     attachment.filename = Some(sticker_path.to_string_lossy().to_string());
-    attachment.copied_path = Some(
-        config
-            .options
-            .export_path
-            .join("imessage-database/test_data/stickers/outline.heic"),
+    let file = export_file(
+        &config,
+        &attachment,
+        "imessage-database/test_data/stickers/outline.heic",
     );
 
-    let actual = exporter.format_sticker(&mut attachment, &message);
+    let actual = exporter.render_sticker(&attachment, &file, &message);
 
     assert_eq!(
         actual,
@@ -192,14 +190,13 @@ fn can_format_txt_attachment_sticker_app() {
         .unwrap()
         .join("imessage-database/test_data/stickers/outline.heic");
     attachment.filename = Some(sticker_path.to_string_lossy().to_string());
-    attachment.copied_path = Some(
-        config
-            .options
-            .export_path
-            .join("imessage-database/test_data/stickers/outline.heic"),
+    let file = export_file(
+        &config,
+        &attachment,
+        "imessage-database/test_data/stickers/outline.heic",
     );
 
-    let actual = exporter.format_sticker(&mut attachment, &message);
+    let actual = exporter.render_sticker(&attachment, &file, &message);
 
     assert_eq!(
         actual,
@@ -235,26 +232,14 @@ fn dispatch_part_body_advances_index_between_stickers() {
     sticker_a.rowid = 3;
     sticker_a.is_sticker = true;
     sticker_a.filename = Some(sticker_path.to_string_lossy().to_string());
-    sticker_a.copied_path = Some(
-        config
-            .options
-            .export_path
-            .join("imessage-database/test_data/stickers/outline.heic"),
-    );
 
     // rowid 1 → "Sticker from Me: … (App: Free People)"
     let mut sticker_b = Config::fake_attachment();
     sticker_b.rowid = 1;
     sticker_b.is_sticker = true;
     sticker_b.filename = Some(sticker_path.to_string_lossy().to_string());
-    sticker_b.copied_path = Some(
-        config
-            .options
-            .export_path
-            .join("imessage-database/test_data/stickers/outline.heic"),
-    );
 
-    let mut attachments = vec![sticker_a, sticker_b];
+    let attachments = vec![sticker_a, sticker_b];
     let part = BubbleComponent::Run(vec![AttributedRange::attachment(
         0,
         3,
@@ -262,34 +247,21 @@ fn dispatch_part_body_advances_index_between_stickers() {
     )]);
     let mut resolver = AttachmentResolver::new(&attachments);
 
-    let first = dispatch_part_body(
-        &exporter,
-        &message,
-        0,
-        &part,
-        &mut attachments,
-        &mut resolver,
-    );
+    let first = dispatch_part_body(&exporter, &message, 0, &part, &attachments, &mut resolver);
     let PartBody::Line { text: first_text } = first else {
         panic!("expected PartBody::Line for sticker arm");
     };
-    let expected_first =
-        "Outline Sticker from Me: imessage-database/test_data/stickers/outline.heic";
+    let expected_first = format!("Outline Sticker from Me: {}", sticker_path.display());
     assert_eq!(first_text, expected_first);
 
-    let second = dispatch_part_body(
-        &exporter,
-        &message,
-        1,
-        &part,
-        &mut attachments,
-        &mut resolver,
-    );
+    let second = dispatch_part_body(&exporter, &message, 1, &part, &attachments, &mut resolver);
     let PartBody::Line { text: second_text } = second else {
         panic!("expected PartBody::Line for sticker arm");
     };
-    let expected_second =
-        "Sticker from Me: imessage-database/test_data/stickers/outline.heic (App: Free People)";
+    let expected_second = format!(
+        "Sticker from Me: {} (App: Free People)",
+        sticker_path.display()
+    );
     assert_eq!(second_text, expected_second);
 }
 
@@ -321,28 +293,15 @@ fn translated_mixed_run_keeps_translation() {
     sticker.rowid = 3;
     sticker.is_sticker = true;
     sticker.filename = Some(sticker_path.to_string_lossy().to_string());
-    sticker.copied_path = Some(
-        config
-            .options
-            .export_path
-            .join("imessage-database/test_data/stickers/outline.heic"),
-    );
 
-    let mut attachments = vec![sticker];
+    let attachments = vec![sticker];
     let part = BubbleComponent::Run(vec![
         AttributedRange::text(0, 5, vec![TextEffect::Default]),
         AttributedRange::inline_attachment(5, 8, AttachmentMeta::default()),
     ]);
     let mut resolver = AttachmentResolver::new(&attachments);
 
-    let body = dispatch_part_body(
-        &exporter,
-        &message,
-        0,
-        &part,
-        &mut attachments,
-        &mut resolver,
-    );
+    let body = dispatch_part_body(&exporter, &message, 0, &part, &attachments, &mut resolver);
     let PartBody::Translated {
         translated,
         original,
@@ -387,17 +346,11 @@ fn dispatch_part_body_advances_index_after_sticker() {
     sticker.rowid = 3;
     sticker.is_sticker = true;
     sticker.filename = Some(sticker_path.to_string_lossy().to_string());
-    sticker.copied_path = Some(
-        config
-            .options
-            .export_path
-            .join("imessage-database/test_data/stickers/outline.heic"),
-    );
 
     // Default `fake_attachment` renders as `AttachmentRender::Embedded("a/b/c/d.jpg")`.
     let image = Config::fake_attachment();
 
-    let mut attachments = vec![sticker, image];
+    let attachments = vec![sticker, image];
     let part = BubbleComponent::Run(vec![AttributedRange::attachment(
         0,
         3,
@@ -405,29 +358,14 @@ fn dispatch_part_body_advances_index_after_sticker() {
     )]);
     let mut resolver = AttachmentResolver::new(&attachments);
 
-    let first = dispatch_part_body(
-        &exporter,
-        &message,
-        0,
-        &part,
-        &mut attachments,
-        &mut resolver,
-    );
+    let first = dispatch_part_body(&exporter, &message, 0, &part, &attachments, &mut resolver);
     let PartBody::Line { text: first_text } = first else {
         panic!("expected PartBody::Line for sticker arm");
     };
-    let expected_first =
-        "Outline Sticker from Me: imessage-database/test_data/stickers/outline.heic";
+    let expected_first = format!("Outline Sticker from Me: {}", sticker_path.display());
     assert_eq!(first_text, expected_first);
 
-    let second = dispatch_part_body(
-        &exporter,
-        &message,
-        1,
-        &part,
-        &mut attachments,
-        &mut resolver,
-    );
+    let second = dispatch_part_body(&exporter, &message, 1, &part, &attachments, &mut resolver);
     let PartBody::Line { text: second_text } = second else {
         panic!("expected PartBody::Line for attachment arm");
     };
@@ -453,7 +391,7 @@ fn can_format_txt_attachment_audio_transcript() {
         ..Default::default()
     };
 
-    let actual = exporter.format_attachment(&mut attachment, &message, &meta);
+    let actual = exporter.format_attachment(&attachment, &message, &meta);
 
     assert_eq!(
         actual,

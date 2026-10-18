@@ -675,8 +675,7 @@ fn can_format_txt_generic_app() {
         ldtext: Some("ldtext"),
     };
 
-    let actual =
-        exporter.format_generic_app(&balloon, "bundle_id", &mut vec![], &Config::fake_message());
+    let actual = exporter.format_generic_app(&balloon, "bundle_id", &[], &Config::fake_message());
     let expected = "app_name message:\ntitle\nsubtitle\ncaption\nsubcaption\ntrailing_caption\ntrailing_subcaption";
 
     assert_eq!(actual, expected);
