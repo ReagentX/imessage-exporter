@@ -4,22 +4,27 @@ use imessage_database::tables::attachment::MediaType;
 
 use super::target::AttachmentTarget;
 
-// MARK: CopiedFile
-/// A file the manager wrote or found under the export root for one attachment.
-pub(crate) struct CopiedFile {
+// MARK: ExportFile
+/// The file an export refers to for one attachment: the copy under the
+/// export root when the manager produced or reused one, else the source.
+pub(crate) struct ExportFile<'a> {
     pub path: PathBuf,
-    /// The converter's output type; `None` when the copy kept the source type.
-    pub media_type: Option<MediaType<'static>>,
+    /// The copy's type after conversion, else the row's.
+    pub media_type: MediaType<'a>,
+    /// [`Attachment::filename()`](imessage_database::tables::attachment::Attachment::filename):
+    /// `transfer_name`, else the stored path.
+    pub name: &'a str,
 }
 
 // MARK: Plan
 /// The work an [`AttachmentManager`](super::AttachmentManager) resolved for an
-/// attachment, ready to be executed.
-pub(crate) enum Plan {
+/// attachment, ready to be executed. Borrows the row for the media type and
+/// display name the resulting [`ExportFile`] carries.
+pub(crate) enum Plan<'a> {
     /// Copying is disabled; nothing to do.
     Skip,
     /// Existing output should be reused.
-    Reuse(CopiedFile),
+    Reuse(ExportFile<'a>),
     /// No existing copy; the attachment must be copied or converted to `target`.
-    Process { target: AttachmentTarget },
+    Process { target: AttachmentTarget<'a> },
 }

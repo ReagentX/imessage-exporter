@@ -7,21 +7,13 @@ use imessage_database::tables::{
 
 use crate::{
     app::{
-        compatibility::attachment_manager::{AttachmentManagerMode, CopiedFile, Plan},
+        compatibility::attachment_manager::{AttachmentManagerMode, Plan},
         runtime::Config,
     },
     exporters::shared::driver::ExportState,
 };
 
-/// The file an export refers to for one attachment: the copy under the
-/// export root when the manager produced or reused one, else the source.
-pub(crate) struct ExportFile<'a> {
-    pub path: PathBuf,
-    /// The copy's type after conversion, else the row's.
-    pub media_type: MediaType<'a>,
-    /// [`Attachment::filename()`]: `transfer_name`, else the stored path.
-    pub name: &'a str,
-}
+pub(crate) use crate::app::compatibility::attachment_manager::ExportFile;
 
 /// Why no file could be prepared. Converts into the
 /// [`AttachmentRender`](crate::exporters::formatter::AttachmentRender)
@@ -104,32 +96,25 @@ pub(crate) fn prepare_attachment<'a>(
     let Some(name) = attachment.filename() else {
         return Err(AttachmentFailure::MissingFilename);
     };
-    let copied: Option<CopiedFile> = match handle_result {
-        Ok(copied) => copied,
+    let file = match handle_result {
+        Ok(file) => file,
         Err(why) => {
             state.pb.println(why);
             return Err(AttachmentFailure::NamedFile(name.to_string()));
         }
     };
 
-    Ok(match copied {
-        Some(CopiedFile { path, media_type }) => ExportFile {
-            path,
-            media_type: media_type.unwrap_or_else(|| attachment.mime_type()),
-            name,
-        },
-        // `Plan::Skip`: the export points at the source. An unresolvable
-        // source is not an error here, so the bare filename stands in.
-        None => ExportFile {
-            path: attachment
-                .resolved_attachment_path(
-                    &config.options.platform,
-                    &config.options.db_path,
-                    config.options.attachment_root.as_deref(),
-                )
-                .map_or_else(|| PathBuf::from(name), PathBuf::from),
-            media_type: attachment.mime_type(),
-            name,
-        },
-    })
+    // `Plan::Skip`: the export points at the source. An unresolvable source
+    // is not an error here, so the bare filename stands in.
+    Ok(file.unwrap_or_else(|| ExportFile {
+        path: attachment
+            .resolved_attachment_path(
+                &config.options.platform,
+                &config.options.db_path,
+                config.options.attachment_root.as_deref(),
+            )
+            .map_or_else(|| PathBuf::from(name), PathBuf::from),
+        media_type: attachment.mime_type(),
+        name,
+    }))
 }

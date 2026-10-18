@@ -7,12 +7,12 @@ use imessage_database::tables::{
 
 use crate::app::runtime::Config;
 
-use super::plan::CopiedFile;
+use super::plan::ExportFile;
 
 // MARK: Target
 /// Where an attachment's source lives and where its copy should go. Resolved
 /// once so the dedup probe and the copy step cannot disagree on naming.
-pub(crate) struct AttachmentTarget {
+pub(crate) struct AttachmentTarget<'a> {
     /// Resolved source path on the host, before any decryption rebinds it.
     /// iOS backups resolve to a flat hash-named file, so backup attachments are
     /// always treated as files; directory attachments only occur for macOS
@@ -22,14 +22,16 @@ pub(crate) struct AttachmentTarget {
     source_is_dir: bool,
     /// Destination directory for this conversation's attachments.
     dir: PathBuf,
+    /// The attachment's display name, carried onto the [`ExportFile`].
+    name: &'a str,
 }
 
-impl AttachmentTarget {
+impl<'a> AttachmentTarget<'a> {
     /// Resolve the source and destination directory, or [`None`] if the
     /// attachment's path cannot be resolved.
     pub(super) fn resolve(
         message: &Message,
-        attachment: &Attachment,
+        attachment: &'a Attachment,
         config: &Config,
     ) -> Option<Self> {
         let source = PathBuf::from(attachment.resolved_attachment_path(
@@ -38,6 +40,8 @@ impl AttachmentTarget {
             config.options.attachment_root.as_deref(),
         )?);
         let source_is_dir = source.is_dir();
+        // A row whose path resolved has a stored filename, so this is `Some`.
+        let name = attachment.filename()?;
 
         let mut dir = config.attachment_path();
         dir.push(config.conversation_attachment_path(message.chat_rowid()));
@@ -46,12 +50,18 @@ impl AttachmentTarget {
             source,
             source_is_dir,
             dir,
+            name,
         })
     }
 
     /// The resolved source path on the host, before any decryption rebinds it.
     pub(super) fn source(&self) -> &Path {
         &self.source
+    }
+
+    /// The attachment's display name.
+    pub(super) fn name(&self) -> &'a str {
+        self.name
     }
 
     /// The destination for a raw copy: `<dir>/<rowid>.<source_ext>`, or bare
@@ -81,15 +91,16 @@ impl AttachmentTarget {
     /// conversion that keeps failing and only leaves a raw copy is served from
     /// that copy rather than retried on every reference.
     ///
-    /// Returns the [`CopiedFile`] to reuse: the matched path, and the media type
-    /// rebuilt from its extension when a converter produced it.
-    pub(super) fn existing_copy(&self, attachment: &Attachment) -> Option<CopiedFile> {
+    /// Returns the [`ExportFile`] to reuse: the matched path, and the media type
+    /// rebuilt from its extension when a converter produced it, else the row's.
+    pub(super) fn existing_copy(&self, attachment: &'a Attachment) -> Option<ExportFile<'a>> {
         // A raw copy keeps the source extension, or no extension for a directory.
         let candidate = self.raw_path(attachment);
         if candidate.exists() {
-            return Some(CopiedFile {
+            return Some(ExportFile {
                 path: candidate,
-                media_type: None,
+                media_type: attachment.mime_type(),
+                name: self.name,
             });
         }
 
@@ -99,9 +110,11 @@ impl AttachmentTarget {
         for &ext in conversion_output_extensions(&mime_type) {
             let converted = candidate.with_extension(ext);
             if converted.exists() {
-                return Some(CopiedFile {
+                // Every category with conversion outputs rebuilds to `Some`.
+                return Some(ExportFile {
                     path: converted,
-                    media_type: converted_media_type(&mime_type, ext),
+                    media_type: converted_media_type(&mime_type, ext).unwrap_or(mime_type),
+                    name: self.name,
                 });
             }
         }
@@ -152,11 +165,12 @@ mod dedup_tests {
 
     /// An [`AttachmentTarget`] pointing at `dir`; `source` is unused by
     /// [`AttachmentTarget::existing_copy`], so a placeholder is fine.
-    fn target(dir: &Path, source_is_dir: bool) -> AttachmentTarget {
+    fn target(dir: &Path, source_is_dir: bool) -> AttachmentTarget<'static> {
         AttachmentTarget {
             source: PathBuf::new(),
             source_is_dir,
             dir: dir.to_path_buf(),
+            name: "",
         }
     }
 
@@ -171,7 +185,7 @@ mod dedup_tests {
 
         let copied = target(&dir, false).existing_copy(&attachment).unwrap();
         assert_eq!(copied.path, dir.join("7.heic"));
-        assert!(copied.media_type.is_none());
+        assert_eq!(copied.media_type, MediaType::Image("heic"));
     }
 
     #[test]
@@ -185,7 +199,7 @@ mod dedup_tests {
 
         let copied = target(&dir, false).existing_copy(&attachment).unwrap();
         assert_eq!(copied.path, dir.join("7.jpeg"));
-        assert_eq!(copied.media_type.unwrap().as_mime_type(), "image/jpeg");
+        assert_eq!(copied.media_type.as_mime_type(), "image/jpeg");
     }
 
     #[test]
@@ -200,7 +214,7 @@ mod dedup_tests {
 
         let copied = target(&dir, false).existing_copy(&attachment).unwrap();
         assert_eq!(copied.path, dir.join("7.png"));
-        assert_eq!(copied.media_type.unwrap().as_mime_type(), "image/png");
+        assert_eq!(copied.media_type.as_mime_type(), "image/png");
     }
 
     #[test]
@@ -214,7 +228,7 @@ mod dedup_tests {
 
         let copied = target(&dir, false).existing_copy(&attachment).unwrap();
         assert_eq!(copied.path, dir.join("7.mp4"));
-        assert_eq!(copied.media_type.unwrap().as_mime_type(), "audio/mp4");
+        assert_eq!(copied.media_type.as_mime_type(), "audio/mp4");
     }
 
     #[test]
@@ -228,26 +242,7 @@ mod dedup_tests {
 
         let copied = target(&dir, false).existing_copy(&attachment).unwrap();
         assert_eq!(copied.path, dir.join("7.mp4"));
-        assert_eq!(copied.media_type.unwrap().as_mime_type(), "video/mp4");
-    }
-
-    #[test]
-    fn already_compatible_extension_is_left_as_raw() {
-        // `jpeg` is also a conversion output, so this pins that the source
-        // extension is probed first and the media type is left unchanged.
-        let dir = unique_test_dir("compatible");
-        let mut attachment = Config::fake_attachment();
-        attachment.rowid = 7;
-        attachment.filename = Some("x/y/photo.jpeg".to_string());
-        attachment.mime_type = Some("image/jpeg".to_string());
-        fs::write(dir.join("7.jpeg"), b"data").unwrap();
-
-        let copied = target(&dir, false).existing_copy(&attachment).unwrap();
-        assert_eq!(copied.path, dir.join("7.jpeg"));
-        assert!(
-            copied.media_type.is_none(),
-            "a raw copy must not rebuild the mime"
-        );
+        assert_eq!(copied.media_type.as_mime_type(), "video/mp4");
     }
 
     #[test]
@@ -264,7 +259,7 @@ mod dedup_tests {
 
         let copied = target(&dir, false).existing_copy(&attachment).unwrap();
         assert_eq!(copied.path, dir.join("7.heic"));
-        assert!(copied.media_type.is_none());
+        assert_eq!(copied.media_type, MediaType::Image("heic"));
     }
 
     #[test]
@@ -278,7 +273,7 @@ mod dedup_tests {
 
         let copied = target(&dir, true).existing_copy(&attachment).unwrap();
         assert_eq!(copied.path, dir.join("7"));
-        assert!(copied.media_type.is_none());
+        assert_eq!(copied.media_type, MediaType::Application("octet-stream"));
     }
 
     #[test]

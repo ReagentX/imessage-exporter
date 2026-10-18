@@ -29,7 +29,7 @@ use crate::app::{
 
 use super::{
     mode::AttachmentManagerMode,
-    plan::{CopiedFile, Plan},
+    plan::{ExportFile, Plan},
     target::AttachmentTarget,
 };
 
@@ -131,12 +131,12 @@ impl AttachmentManager {
     /// The returned [`Plan`] records whether an existing output can be reused,
     /// so callers can suppress conversion progress before
     /// [`execute`](Self::execute) runs it.
-    pub(crate) fn plan(
+    pub(crate) fn plan<'a>(
         &self,
         message: &Message,
-        attachment: &Attachment,
+        attachment: &'a Attachment,
         config: &Config,
-    ) -> Result<Plan, ConversionError> {
+    ) -> Result<Plan<'a>, ConversionError> {
         if matches!(self.mode, AttachmentManagerMode::Disabled) {
             return Ok(Plan::Skip);
         }
@@ -149,8 +149,8 @@ impl AttachmentManager {
 
         // Repeated references reload a fresh attachment row, so the on-disk
         // output is the durable reuse signal.
-        if let Some(copied) = target.existing_copy(attachment) {
-            return Ok(Plan::Reuse(copied));
+        if let Some(file) = target.existing_copy(attachment) {
+            return Ok(Plan::Reuse(file));
         }
 
         Ok(Plan::Process { target })
@@ -158,16 +158,16 @@ impl AttachmentManager {
 
     /// Carry out a [`Plan`]. `None` is [`Plan::Skip`]: nothing was produced and
     /// the export refers to the source file.
-    pub(crate) fn execute(
+    pub(crate) fn execute<'a>(
         &self,
-        plan: Plan,
+        plan: Plan<'a>,
         message: &Message,
-        attachment: &Attachment,
+        attachment: &'a Attachment,
         config: &Config,
-    ) -> Result<Option<CopiedFile>, ConversionError> {
+    ) -> Result<Option<ExportFile<'a>>, ConversionError> {
         match plan {
             Plan::Skip => Ok(None),
-            Plan::Reuse(copied) => Ok(Some(copied)),
+            Plan::Reuse(file) => Ok(Some(file)),
             Plan::Process { target } => {
                 self.process(message, attachment, config, &target).map(Some)
             }
@@ -176,13 +176,13 @@ impl AttachmentManager {
 
     /// Decrypt (when needed), copy or convert, and write the attachment to the
     /// resolved `target`.
-    fn process(
+    fn process<'a>(
         &self,
         message: &Message,
-        attachment: &Attachment,
+        attachment: &'a Attachment,
         config: &Config,
-        target: &AttachmentTarget,
-    ) -> Result<CopiedFile, ConversionError> {
+        target: &AttachmentTarget<'a>,
+    ) -> Result<ExportFile<'a>, ConversionError> {
         // The working source; `target.source()` is retained for metadata below
         let mut from = target.source().to_path_buf();
         let mut is_temp = false;
@@ -284,9 +284,10 @@ impl AttachmentManager {
             update_file_metadata(&from, &to, message, config);
         }
 
-        let copied = CopiedFile {
+        let file = ExportFile {
             path: to,
-            media_type: new_media_type,
+            media_type: new_media_type.unwrap_or(mime_type),
+            name: target.name(),
         };
 
         // Remove the temporary file used for decryption, if it exists
@@ -294,6 +295,6 @@ impl AttachmentManager {
             eprintln!("Unable to remove encrypted file {}: {why}", from.display());
         }
 
-        Ok(copied)
+        Ok(file)
     }
 }
