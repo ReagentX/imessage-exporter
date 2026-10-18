@@ -674,13 +674,13 @@ impl Message {
         matches!(self.variant(), Variant::App(CustomBalloon::URL))
     }
 
-    /// `true` when the message is a [`HandwrittenMessage`](crate::message_types::handwriting::models::HandwrittenMessage).
+    /// `true` when the message is a [`HandwrittenMessage`](crate::message_types::handwriting::HandwrittenMessage).
     #[must_use]
     pub fn is_handwriting(&self) -> bool {
         matches!(self.variant(), Variant::App(CustomBalloon::Handwriting))
     }
 
-    /// `true` when the message is a [`Digital Touch`](crate::message_types::digital_touch::models) message.
+    /// `true` when the message is a [`Digital Touch`](crate::message_types::digital_touch) message.
     #[must_use]
     pub fn is_digital_touch(&self) -> bool {
         matches!(self.variant(), Variant::App(CustomBalloon::DigitalTouch))

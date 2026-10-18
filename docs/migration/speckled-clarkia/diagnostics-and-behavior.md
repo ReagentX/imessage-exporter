@@ -33,6 +33,8 @@ Literal strings containing `"$null"` remain strings. The parser identifies the a
 
 `tables::table` no longer defines `YOU`, `UNKNOWN`, `ORPHANED`, `ATTACHMENTS_DIR`, or `ATTRIBUTED_BODY`. Define any you use in your own crate; the library does not read them. `ME`, `FITNESS_RECEIVER`, the table and column names, and the default database paths remain.
 
+The modules `tables::messages::message`, `message_types::digital_touch::models`, and `message_types::handwriting::models` are private. Import `Message` from `tables::messages`, `DigitalTouchMessage`, `Color`, `ImageBackdrop`, and `Point` from `message_types::digital_touch`, and `HandwrittenMessage` and `Point` from `message_types::handwriting`. The Digital Touch `decode_*` helpers are no longer public.
+
 ## CLI and export changes
 
 Existing export commands remain usable. When Contacts provides an unambiguous relationship between a person's addresses, the exporter can combine conversations previously written separately. Participant grouping, representative selection, and filename truncation can also change transcript names and attachment directory names.

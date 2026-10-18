@@ -17,7 +17,7 @@ const START_PATTERN: [u8; 2] = [0x0001, 0x002b];
 /// - <https://www.compart.com/en/unicode/U+0084>
 const END_PATTERN: [u8; 2] = [0x0086, 0x0084];
 
-/// Parse plain body [text](crate::tables::messages::message::Message::text) from a `streamtyped` `attributedBody` blob.
+/// Parse plain body [text](crate::tables::messages::Message::text) from a `streamtyped` `attributedBody` blob.
 ///
 /// `attributedBody` `typedstream` data looks like:
 ///
