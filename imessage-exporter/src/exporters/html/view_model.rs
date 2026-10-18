@@ -123,25 +123,14 @@ impl AppStoreVM<'_> {
 /// The placemark's full address model.
 #[derive(Template)]
 #[template(path = "balloons/placemark.html")]
-#[allow(dead_code)]
 pub(super) struct PlacemarkVM<'a> {
     pub place_name: OptionalText<'a>,
     pub url: OptionalText<'a>,
     pub name: OptionalText<'a>,
     pub address: OptionalText<'a>,
-    // Retained for completeness but not rendered by the template
-    pub state: OptionalText<'a>,
-    // Retained for completeness but not rendered by the template
-    pub city: OptionalText<'a>,
-    // Retained for completeness but not rendered by the template
-    pub iso_country_code: OptionalText<'a>,
     pub postal_code: OptionalText<'a>,
     pub country: OptionalText<'a>,
-    // Retained for completeness but not rendered by the template
-    pub street: OptionalText<'a>,
     pub sub_administrative_area: OptionalText<'a>,
-    // Retained for completeness but not rendered by the template
-    pub sub_locality: OptionalText<'a>,
 }
 
 impl PlacemarkVM<'_> {

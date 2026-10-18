@@ -221,7 +221,6 @@ use crate::{
 
 /// Row from the `message` table, with body and edit metadata parsed during row decoding.
 #[derive(Debug)]
-#[allow(non_snake_case)]
 pub struct Message {
     /// Message row ID.
     pub rowid: i32,
