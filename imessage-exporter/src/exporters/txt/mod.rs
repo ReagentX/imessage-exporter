@@ -5,7 +5,7 @@ use crate::{
     exporters::{
         formatter::{AttachmentRender, MessageFormatter, PartBodyBuilder, RenderContext},
         shared::{
-            announcement::{AnnouncementBody, resolve_announcement},
+            announcement::{AnnouncementBody, YOU, resolve_announcement},
             attachment::prepare_attachment,
             balloon::dispatch_app_balloon,
             driver::{ExportState, MessageWriter},
@@ -28,7 +28,6 @@ use imessage_database::{
             Message,
             models::{AttachmentMeta, AttributedRange, SharedLocation},
         },
-        table::YOU,
     },
 };
 

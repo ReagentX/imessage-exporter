@@ -159,21 +159,17 @@ mod url_tests {
     use std::fs::File;
 
     fn nested_url(url: &str) -> Value {
-        let mut inner = Dictionary::new();
-        inner.insert("URL".to_string(), Value::String(url.to_string()));
+        let inner = Dictionary::from_iter([("URL".to_string(), Value::String(url.to_string()))]);
 
-        let mut outer = Dictionary::new();
-        outer.insert("URL".to_string(), Value::Dictionary(inner));
+        let outer = Dictionary::from_iter([("URL".to_string(), Value::Dictionary(inner))]);
 
         Value::Dictionary(outer)
     }
 
     fn nested_array_payload(key: &str, items: Vec<Value>) -> Value {
-        let mut inner = Dictionary::new();
-        inner.insert(key.to_string(), Value::Array(items));
+        let inner = Dictionary::from_iter([(key.to_string(), Value::Array(items))]);
 
-        let mut outer = Dictionary::new();
-        outer.insert(key.to_string(), Value::Dictionary(inner));
+        let outer = Dictionary::from_iter([(key.to_string(), Value::Dictionary(inner))]);
 
         Value::Dictionary(outer)
     }

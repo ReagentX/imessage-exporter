@@ -221,7 +221,6 @@ use crate::{
 
 /// Row from the `message` table, with body and edit metadata parsed during row decoding.
 #[derive(Debug)]
-#[allow(non_snake_case)]
 pub struct Message {
     /// Message row ID.
     pub rowid: i32,
@@ -275,11 +274,16 @@ pub struct Message {
     pub date_edited: i64,
     /// Emoji associated with a custom emoji tapback.
     pub associated_message_emoji: Option<String>,
-    /// Chat row ID this message belongs to.
+    /// The [`rowid`](crate::tables::chat::Chat::rowid) of the chat this message belongs to.
+    ///
+    /// `None` for a recovered deleted message; most callers should prefer
+    /// [`chat_rowid()`](Self::chat_rowid).
     pub chat_id: Option<i32>,
     /// Number of attached files included in the message.
     pub num_attachments: i32,
-    /// The [`rowid`](crate::tables::chat::Chat::rowid) of the chat the message was deleted from
+    /// The [`rowid`](crate::tables::chat::Chat::rowid) of the chat the message was deleted from.
+    ///
+    /// Most callers should prefer [`chat_rowid()`](Self::chat_rowid).
     pub deleted_from: Option<i32>,
     /// Number of replies to the message.
     pub num_replies: i32,
@@ -669,13 +673,13 @@ impl Message {
         matches!(self.variant(), Variant::App(CustomBalloon::URL))
     }
 
-    /// `true` when the message is a [`HandwrittenMessage`](crate::message_types::handwriting::models::HandwrittenMessage).
+    /// `true` when the message is a [`HandwrittenMessage`](crate::message_types::handwriting::HandwrittenMessage).
     #[must_use]
     pub fn is_handwriting(&self) -> bool {
         matches!(self.variant(), Variant::App(CustomBalloon::Handwriting))
     }
 
-    /// `true` when the message is a [`Digital Touch`](crate::message_types::digital_touch::models) message.
+    /// `true` when the message is a [`Digital Touch`](crate::message_types::digital_touch) message.
     #[must_use]
     pub fn is_digital_touch(&self) -> bool {
         matches!(self.variant(), Variant::App(CustomBalloon::DigitalTouch))
@@ -796,6 +800,17 @@ impl Message {
     #[must_use]
     pub fn is_deleted(&self) -> bool {
         self.deleted_from.is_some()
+    }
+
+    /// The [`rowid`](crate::tables::chat::Chat::rowid) of the chat this message belongs to.
+    ///
+    /// A recovered deleted message has no `chat_message_join` row, so its
+    /// [`chat_id`](Self::chat_id) is `None` and [`deleted_from`](Self::deleted_from)
+    /// is the only reference to its chat. Resolve a message's chat through this
+    /// method so its transcript and attachments land in the same conversation.
+    #[must_use]
+    pub fn chat_rowid(&self) -> Option<i32> {
+        self.chat_id.or(self.deleted_from)
     }
 
     /// `true` when the message summary includes translation metadata.

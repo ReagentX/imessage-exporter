@@ -8,10 +8,14 @@ use std::{
     path::PathBuf,
 };
 
-use imessage_database::tables::{messages::Message, table::ORPHANED};
+use imessage_database::tables::messages::Message;
 
 use crate::{
-    app::{error::RuntimeError, progress::ExportProgress, runtime::Config},
+    app::{
+        error::RuntimeError,
+        progress::ExportProgress,
+        runtime::{Config, ORPHANED},
+    },
     exporters::{
         formatter::{MessageFormatter, RenderContext},
         shared::date_span::{DateSpan, Timestamp},
@@ -376,10 +380,11 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use imessage_database::tables::{messages::Message, table::ORPHANED};
+    use imessage_database::tables::messages::Message;
 
     use crate::{
-        Config, HTML, Options, TXT, app::export_type::ExportType,
+        Config, HTML, Options, TXT,
+        app::{export_type::ExportType, runtime::ORPHANED},
         exporters::shared::driver::run_export,
     };
 

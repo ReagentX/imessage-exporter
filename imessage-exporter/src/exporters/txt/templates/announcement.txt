@@ -1,7 +1,6 @@
 {% match kind %}{% when AnnouncementBody::Action { timestamp, who, announcement, participant_name } %}{{ timestamp }} {{ who }} {% match announcement -%}
 {%- when Announcement::AudioMessageKept -%}kept an audio message.
 {%- when Announcement::FullyUnsent -%}unsent a message!
-{%- when Announcement::Unknown(num) -%}performed unknown action {{ num }}.
 {%- when Announcement::GroupAction(group) -%}
 {%- match group -%}
 {%- when GroupAction::ParticipantAdded(_) -%}added {{ participant_name }} to the conversation.

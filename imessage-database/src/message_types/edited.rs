@@ -34,7 +34,7 @@ pub struct EditedEvent {
     /// Edit timestamp in Apple's nanosecond epoch.
     pub date: i64,
     /// The content of the edited message part, deserialized from the
-    /// [`typedstream`](crate::util::typedstream) format.
+    /// [`typedstream`](https://github.com/ReagentX/crabstep) format.
     pub text: String,
     /// Parsed body components for the edited text.
     pub components: Vec<BubbleComponent>,
@@ -82,7 +82,7 @@ impl Default for EditedMessagePart {
 ///
 /// Edited or unsent messages are stored with a `NULL` `text` field.
 /// Edited messages include `message_summary_info` that contains a dictionary
-/// with message body part data, including [`typedstream`](crate::util::typedstream)-encoded
+/// with message body part data, including [`typedstream`](https://github.com/ReagentX/crabstep)-encoded
 /// edit history. The order of entries in the edit history represents the order
 /// the part changed: item `0` is the original text and the last item is the
 /// current text.

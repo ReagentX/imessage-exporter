@@ -88,11 +88,20 @@ We read the Contacts database on every run and never cache its identities. When 
 
 We use handle groups as per-person identifiers when comparing chats; the chats table has no such identifier. After grouping handles, we build a second union-find over the `Chat ID`s and add edges from two kinds of evidence:
 
-1. Follow `chat_lookup` links transitively and group the chats they connect.
-2. Match chats by the set of *handle groups* in their participant lists. Replace each `Handle ID` with its group ID before comparing. When participant groups match, merge named rows only when their display names also match. Attach each unnamed row to the lowest-ID named row with the same participants, unless a `chat_lookup` link already placed it with a named row; if no named row matches, merge the unnamed rows together.
+1. Follow `chat_lookup` links transitively to group related chats.
+2. Compare participant sets after replacing each `Handle ID` with its group ID. For matching sets, merge named rows only with matching display names. Attach each unnamed row to the lowest-ID named row with the same participants, unless you already grouped it with a named row through `chat_lookup`. For an unnamed row linked to a named conversation, use that conversation when attaching other unnamed rows with matching participants. Preserve existing assignments to other named conversations from `chat_lookup`. Without a matching named row, merge the unnamed rows together.
+
+Assign an ID to every row referenced in `chat_lookup`, including rows without handle rows. Assign a separate ID to each conversation made entirely of such rows.
 
 For the sample rows, chats `10` and `11` both contain participant group `{0}`, while chats `12` and `13` both contain groups `{0, 1}`. We assign each resulting set a sequential unique chat ID, using the same ordering as for handle groups. During export, we use the `Chat ID` to unique chat ID map to place messages in the right conversations. We also use that unique ID to name each chat's attachment directory, keeping each transcript and its attachments together.
 
-We store `display_name` per chat row, so rows in a merged conversation can have different names. A row created before you named the group may have no display name. We choose one representative row for each conversation's filename: use the most recently active row if it has a name; otherwise use the named row with the lowest ID. If no row has a name, use the most recently active row. When you view a message in Messages.app, you see the name stored on its chat row. For a named conversation, use the representative row's name in the filename so the filename matches the name you see in the app.
+We store `display_name` per chat row, so we can record different names within a merged conversation. You may have unnamed rows from before you named the group. Choose one representative row for each conversation's filename:
+
+1. Use the most recently active row if named.
+2. Otherwise, use the named row with the lowest ID.
+3. For an entirely unnamed conversation, use the most recently active row with handle rows.
+4. For an unnamed conversation without handle rows, use the most recently active row.
+
+Prefer rows with a name or participants for building filenames; use an unnamed lookup-only row only for a conversation without either. When viewing a message in Messages.app, you see the name stored on its chat row. For a named conversation, use the representative row's name in the filename to match the name you see in the app.
 
 When no row in a conversation has a display name, we build its filename from one name per participant group rather than one name per handle row. We use that filename for every chat in the merged conversation.

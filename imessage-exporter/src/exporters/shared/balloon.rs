@@ -8,17 +8,13 @@ use imessage_database::{
         url::URLMessage,
         variants::{BalloonProvider, CustomBalloon, URLOverride, Variant},
     },
-    tables::{
-        attachment::Attachment,
-        messages::Message,
-        table::{FITNESS_RECEIVER, YOU},
-    },
+    tables::{attachment::Attachment, messages::Message, table::FITNESS_RECEIVER},
     util::{bundle_id::parse_balloon_bundle_id, dates::format, plist::parse_ns_keyed_archiver},
 };
 
 use crate::{
     app::{error::RuntimeError, runtime::Config},
-    exporters::formatter::BalloonFormatter,
+    exporters::{formatter::BalloonFormatter, shared::announcement::YOU},
 };
 
 // MARK: Dispatch

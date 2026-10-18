@@ -16,7 +16,7 @@ use imessage_database::{
     error::table::TableError,
     tables::{capabilities::Capabilities, messages::Message},
 };
-use rusqlite::Connection;
+use imessage_database::rusqlite::Connection;
 
 fn inspect_message(
     db: &Connection,
@@ -31,7 +31,7 @@ fn inspect_message(
 }
 ```
 
-Remove calls to `Message::parse_body()`, `Message::apply_body()`, and `Message::generate_text_legacy()`. Remove imports of `ParsedBody`, including imports through `tables::messages::message`. Body parsing still exists internally, but callers no longer invoke it separately.
+Remove calls to `Message::parse_body()`, `Message::apply_body()`, and `Message::generate_text_legacy()`. Remove imports of `ParsedBody`, including imports through `tables::messages::message`. Body parsing still exists internally, but callers no longer invoke it separately. Only those methods produced `MessageError::NoText` and `MessageError::StreamTypedParseError`, so both variants are removed along with the `From<StreamTypedError>` conversion; remove any match arms for them.
 
 Parsing is best effort: a failed text recovery preserves the row's metadata and any recovered components or edit history. Code that previously matched on the result of `parse_body()` must instead inspect the decoded fields. Row-fetch and required-column decoding errors still return `TableError`.
 

@@ -10,10 +10,10 @@ There are several ways to install this software.
 
 This binary is available on [crates.io](https://crates.io/crates/imessage-exporter).
 
-`cargo install imessage-exporter` is the best way to install the app for normal use.
+`cargo install --locked imessage-exporter` is the best way to install the app for normal use.
 
 <details><summary>Upgrade steps</summary><p><pre>$ cargo uninstall imessage-exporter
-$ cargo install imessage-exporter</pre></p></details>
+$ cargo install --locked imessage-exporter</pre></p></details>
 
 <details><summary>Uninstall steps</summary><p><pre>$ cargo uninstall imessage-exporter</pre></p><p>Optional: uninstall Rust<pre>$ rustup self uninstall</pre></p></details>
 
@@ -124,7 +124,7 @@ The [releases page](https://github.com/ReagentX/imessage-exporter/releases) prov
         This should be resolved automatically, but can be manually provided
         Handles from the messages table will be mapped to names in the provided database
         Generally, one of `AddressBook-v22.abcddb` or `AddressBook.sqlitedb`
-        For an iOS backup, pass a custom Contacts database to use it instead of the copy in the backup
+        For an iOS backup, pass this option to use a custom Contacts database instead of the copy in the backup
         
 --no-progress
         Disable the on-screen progress bar regardless of context
@@ -291,4 +291,4 @@ This persisted after granting `cargo`, `imessage-exporter`, and `wkhtmltopdf` Fu
 
 #### Browser Automation
 
-There are several `chomedriver` wrappers for Rust. The ones that use async make this binary too large (over `10mb`) and have too many dependencies. The sync implementation in the `headless-chrome` crate works, but [times out](https://github.com/atroche/rust-headless-chrome/issues/319) when generating large `PDF`s, even with an extreme timeout.
+There are several `chromedriver` wrappers for Rust. The ones that use async make this binary too large (over `10mb`) and have too many dependencies. The sync implementation in the `headless-chrome` crate works, but [times out](https://github.com/atroche/rust-headless-chrome/issues/319) when generating large `PDF`s, even with an extreme timeout.

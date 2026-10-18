@@ -1,6 +1,6 @@
 /// Animation applied to a message text range.
 ///
-/// A message's [`typedstream`](crate::util::typedstream) contains an [`i64`] identifier under the key `__kIMTextEffectAttributeName`.
+/// A message's [`typedstream`](https://github.com/ReagentX/crabstep) contains an [`i64`] identifier under the key `__kIMTextEffectAttributeName`.
 ///
 /// Read more about text styles [here](https://www.apple.com/newsroom/2024/06/ios-18-makes-iphone-more-personal-capable-and-intelligent-than-ever/).
 #[derive(Debug, PartialEq, Eq, Clone)]

@@ -12,7 +12,7 @@
  ## Origin
 
  Introduced in Mac OS X 10.2 as part of the Foundation framework, `NSKeyedArchiver` replaced `NSArchiver`
- ([`typedstream`](crate::util::typedstream)) system as Apple's primary object serialization mechanism.
+ ([`typedstream`](https://github.com/ReagentX/crabstep)) system as Apple's primary object serialization mechanism.
 
  ## Features
 
@@ -68,7 +68,7 @@ const NULL_PLACEHOLDER: &str = "$null";
 ///
 /// # Data Source
 ///
-/// The source plist data generally comes from [`Message::payload_data()`](crate::tables::messages::message::Message::payload_data).
+/// The source plist data generally comes from [`Message::payload_data()`](crate::tables::messages::Message::payload_data).
 pub fn parse_ns_keyed_archiver(plist: &Value) -> Result<Value, PlistParseError> {
     let body = plist_as_dictionary(plist)?;
     let objects = extract_array_key(body, "$objects")?;

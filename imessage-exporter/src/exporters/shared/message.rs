@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
-use rusqlite::Connection;
-
 use imessage_database::{
     message_types::expressives::Expressive,
+    rusqlite::Connection,
     tables::{attachment::Attachment, capabilities::Capabilities, messages::Message},
 };
 

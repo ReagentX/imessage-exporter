@@ -135,8 +135,6 @@ pub enum Announcement<'a> {
     GroupAction(GroupAction<'a>),
     /// User kept an audio message.
     AudioMessageKept,
-    /// Unmapped `item_type`.
-    Unknown(&'a i32),
 }
 
 /// Whether a tapback was added or removed.

@@ -7,14 +7,14 @@ use crate::{
     tables::messages::models::attachment_meta::AttachmentMeta,
 };
 
-/// One attribute run of a message's [`NSAttributedString`](crate::util::typedstream)
+/// One attribute run of a message's [`NSAttributedString`](https://github.com/ReagentX/crabstep)
 /// body: a byte range into the [`Message`](crate::tables::messages::Message)'s [`text`](crate::tables::messages::Message::text)
 /// plus every attribute applied to it.
 ///
 /// A range is a *text* range when [`attachment`](Self::attachment) is `None` and
 /// an *attachment* range (a `\u{FFFC}` placeholder for an inline attachment)
 /// when it is `Some`. Effects, styles, and the inline-emoji hint apply to either
-/// kind. The [`typedstream`](crate::util::typedstream) attribute dictionary is a flat bag, so an attachment
+/// kind. The [`typedstream`](https://github.com/ReagentX/crabstep) attribute dictionary is a flat bag, so an attachment
 /// range can also carry, say, an [`Animated`](TextEffect::Animated) effect.
 ///
 /// Ranges that share a `__kIMMessagePartAttributeName` index are grouped into one

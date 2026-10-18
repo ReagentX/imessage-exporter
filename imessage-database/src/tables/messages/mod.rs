@@ -6,7 +6,8 @@ pub use message::Message;
 
 pub(crate) mod body;
 pub(crate) mod columns;
-pub mod message;
+mod message;
 pub mod models;
 pub(crate) mod query_parts;
+#[cfg(test)]
 mod tests;

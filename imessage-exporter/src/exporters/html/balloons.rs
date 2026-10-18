@@ -130,14 +130,9 @@ impl BalloonFormatter for HTML<'_> {
             url: balloon.get_url().into(),
             name: balloon.placemark.name.into(),
             address: balloon.placemark.address.into(),
-            state: balloon.placemark.state.into(),
-            city: balloon.placemark.city.into(),
-            iso_country_code: balloon.placemark.iso_country_code.into(),
             postal_code: balloon.placemark.postal_code.into(),
             country: balloon.placemark.country.into(),
-            street: balloon.placemark.street.into(),
             sub_administrative_area: balloon.placemark.sub_administrative_area.into(),
-            sub_locality: balloon.placemark.sub_locality.into(),
         })
     }
 

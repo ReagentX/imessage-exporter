@@ -38,7 +38,7 @@ impl AttachmentTarget {
         let source_is_dir = source.is_dir();
 
         let mut dir = config.attachment_path();
-        dir.push(config.conversation_attachment_path(message.chat_id));
+        dir.push(config.conversation_attachment_path(message.chat_rowid()));
 
         Some(Self {
             source,

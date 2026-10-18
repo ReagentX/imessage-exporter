@@ -27,6 +27,18 @@ Apply updates in their intended order. An empty vote list names no voters, so it
 
 Literal strings containing `"$null"` remain strings. The parser identifies the archive's null object by its object-table position as well as its contents.
 
+## Removed and moved items
+
+`Announcement::Unknown`, `MessageError::TypedStreamError`, and `PlistParseError::StreamTypedError` are removed, along with the `From` conversions into the two error variants. Remove any match arms for them; none of these variants was ever produced, so no replacement is needed.
+
+`tables::table` no longer defines `YOU`, `UNKNOWN`, `ORPHANED`, `ATTACHMENTS_DIR`, or `ATTRIBUTED_BODY`. Define any you use in your own crate; the library does not read them. `ME`, `FITNESS_RECEIVER`, the table and column names, and the default database paths remain.
+
+The modules `tables::messages::message`, `message_types::digital_touch::models`, and `message_types::handwriting::models` are private. Import `Message` from `tables::messages`, `DigitalTouchMessage`, `Color`, `ImageBackdrop`, and `Point` from `message_types::digital_touch`, and `HandwrittenMessage` and `Point` from `message_types::handwriting`. The Digital Touch `decode_*` helpers and the `util::typedstream` module (`TypeLengthPair`, `as_type_length_pair`) are no longer public.
+
+`HandwritingError` gains `InvalidDimensions(u16, u16)`, returned by `HandwrittenMessage::from_payload()` for a frame whose width or height cannot be padded without overflowing.
+
+`imessage_database` re-exports `chrono`, `plist`, and `rusqlite`. Import their types through the re-exports, for example `imessage_database::rusqlite::Connection`, and remove your own dependency on each crate unless other code needs it.
+
 ## CLI and export changes
 
 Existing export commands remain usable. When Contacts provides an unambiguous relationship between a person's addresses, the exporter can combine conversations previously written separately. Participant grouping, representative selection, and filename truncation can also change transcript names and attachment directory names.

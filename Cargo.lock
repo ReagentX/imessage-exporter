@@ -612,7 +612,6 @@ dependencies = [
  "fs2",
  "imessage-database",
  "rpassword",
- "rusqlite",
 ]
 
 [[package]]
