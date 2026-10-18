@@ -143,7 +143,7 @@ impl ChatToHandle {
         // Deduplicate chatroom participants
         let chats = Chat::by_rowid(db)?;
         let real_chatrooms =
-            ChatToHandle::dedupe(&all_chats, &chat_handle_lookup, &handle_groups, &chats)?;
+            ChatToHandle::dedupe(&all_chats, &chat_handle_lookup, &handle_groups, &chats);
 
         // Count only chats with handle rows in both totals. Include lookup-only
         // components in `real_chatrooms` for routing, but exclude them here to
@@ -284,7 +284,7 @@ ORDER BY chat;
         chat_lookup_map: &HashMap<i32, i32>,
         handle_groups: &HashMap<i32, i32>,
         chats: &HashMap<i32, Chat>,
-    ) -> Result<HashMap<i32, i32>, TableError> {
+    ) -> HashMap<i32, i32> {
         let mut uf = UnionFind::new();
 
         for chat_id in duplicated_data.keys() {
@@ -390,7 +390,7 @@ ORDER BY chat;
             .iter()
             .copied()
             .filter(|member| !duplicated_data.contains_key(member));
-        Ok(uf.label(keyed.iter().map(|(id, _, _)| *id).chain(lookup_only)))
+        uf.label(keyed.iter().map(|(id, _, _)| *id).chain(lookup_only))
     }
 }
 
@@ -528,8 +528,7 @@ mod tests {
         input.insert(6, BTreeSet::from([3])); // 2
 
         let output =
-            ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &HashMap::new())
-                .unwrap();
+            ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &HashMap::new());
         let expected: HashMap<i32, i32> =
             HashMap::from([(1, 0), (2, 0), (3, 0), (4, 1), (5, 1), (6, 2)]);
         assert_eq!(output, expected);
@@ -546,8 +545,7 @@ mod tests {
         input.insert(6, BTreeSet::from([3])); // 3
 
         let output =
-            ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &HashMap::new())
-                .unwrap();
+            ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &HashMap::new());
         let expected: HashMap<i32, i32> =
             HashMap::from([(1, 0), (2, 1), (3, 1), (4, 0), (5, 2), (6, 3)]);
         assert_eq!(output, expected);
@@ -565,8 +563,7 @@ mod tests {
         let chat_lookup_map = HashMap::from([(2, 5), (4, 0)]);
 
         let output =
-            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
-                .unwrap();
+            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new());
 
         // Chats 0,1,5 share participants {1}, and chat 2 maps to 5 via lookup,
         // and chat 4 maps to 0 via lookup. All are the same conversation
@@ -587,8 +584,7 @@ mod tests {
         let chat_lookup_map = HashMap::from([(1, 0), (2, 0)]);
 
         let output =
-            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
-                .unwrap();
+            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new());
 
         // Chats 0,1,2 all map to 0, so same deduplicated ID
         assert_eq!(output.get(&0), output.get(&1));
@@ -609,8 +605,7 @@ mod tests {
         let chat_lookup_map = HashMap::from([(1, 0), (3, 0)]);
 
         let output =
-            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
-                .unwrap();
+            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new());
 
         // Chats 0,1,3 map to 0, same ID
         assert_eq!(output.get(&0), output.get(&1));
@@ -654,8 +649,7 @@ mod tests {
         ];
         for (label, input, chat_lookup_map, expected) in cases {
             let output =
-                ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
-                    .unwrap();
+                ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new());
             assert_eq!(output, expected, "{label}");
         }
     }
@@ -669,8 +663,7 @@ mod tests {
         let chat_lookup_map = HashMap::from([(10, 99), (20, 99)]);
 
         let output =
-            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
-                .unwrap();
+            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new());
 
         // Keep both chats in one group even though their canonical chat is absent.
         assert_eq!(
@@ -691,8 +684,7 @@ mod tests {
         let chat_lookup_map = HashMap::from([(10, 20), (30, 40)]);
 
         let output =
-            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new())
-                .unwrap();
+            ChatToHandle::dedupe(&input, &chat_lookup_map, &HashMap::new(), &HashMap::new());
 
         assert_eq!(output.len(), 4);
         assert_eq!(output.get(&10), Some(&0));
@@ -712,8 +704,7 @@ mod tests {
 
         let groups: HashMap<i32, i32> = HashMap::from([(1, 0), (2, 0), (3, 1)]);
 
-        let output =
-            ChatToHandle::dedupe(&input, &HashMap::new(), &groups, &HashMap::new()).unwrap();
+        let output = ChatToHandle::dedupe(&input, &HashMap::new(), &groups, &HashMap::new());
 
         assert_eq!(output.get(&10), output.get(&20));
         assert_eq!(
@@ -729,8 +720,7 @@ mod tests {
 
         let groups: HashMap<i32, i32> = HashMap::from([(1, 0), (2, 5), (3, 1)]);
 
-        let output =
-            ChatToHandle::dedupe(&input, &HashMap::new(), &groups, &HashMap::new()).unwrap();
+        let output = ChatToHandle::dedupe(&input, &HashMap::new(), &groups, &HashMap::new());
 
         assert_ne!(output.get(&10), output.get(&20));
     }
@@ -744,8 +734,7 @@ mod tests {
 
         let groups: HashMap<i32, i32> = HashMap::from([(1, 7)]);
 
-        let output =
-            ChatToHandle::dedupe(&input, &HashMap::new(), &groups, &HashMap::new()).unwrap();
+        let output = ChatToHandle::dedupe(&input, &HashMap::new(), &groups, &HashMap::new());
 
         assert_ne!(output.get(&10), output.get(&20));
     }
@@ -762,7 +751,7 @@ mod tests {
         let groups: HashMap<i32, i32> = HashMap::from([(1, 0), (2, 0), (9, 4)]);
         let lookup: HashMap<i32, i32> = HashMap::from([(30, 20), (20, 20)]);
 
-        let output = ChatToHandle::dedupe(&input, &lookup, &groups, &HashMap::new()).unwrap();
+        let output = ChatToHandle::dedupe(&input, &lookup, &groups, &HashMap::new());
 
         let unique: HashSet<i32> = output.values().copied().collect();
         assert_eq!(unique.len(), 1);
@@ -917,8 +906,7 @@ mod tests {
             (20, chat(20, Some("Da Boys"))),
         ]);
 
-        let output =
-            ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &chats).unwrap();
+        let output = ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &chats);
 
         assert_ne!(output.get(&10), output.get(&20));
     }
@@ -931,8 +919,7 @@ mod tests {
             (20, chat(20, Some("Family"))),
         ]);
 
-        let output =
-            ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &chats).unwrap();
+        let output = ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &chats);
 
         assert_eq!(output.get(&10), output.get(&20));
     }
@@ -947,8 +934,7 @@ mod tests {
             (40, chat(40, Some(""))),
         ]);
 
-        let output =
-            ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &chats).unwrap();
+        let output = ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &chats);
 
         assert_eq!(output.get(&30), output.get(&10));
         assert_eq!(output.get(&40), output.get(&10));
@@ -961,8 +947,7 @@ mod tests {
         let chats: HashMap<i32, crate::tables::chat::Chat> =
             HashMap::from([(10, chat(10, None)), (20, chat(20, None))]);
 
-        let output =
-            ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &chats).unwrap();
+        let output = ChatToHandle::dedupe(&input, &HashMap::new(), &HashMap::new(), &chats);
 
         assert_eq!(output.get(&10), output.get(&20));
     }
@@ -977,7 +962,7 @@ mod tests {
         ]);
         let lookup: HashMap<i32, i32> = HashMap::from([(30, 20)]);
 
-        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats).unwrap();
+        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats);
 
         assert_eq!(output.get(&30), output.get(&20));
         assert_ne!(output.get(&10), output.get(&20));
@@ -996,7 +981,7 @@ mod tests {
         ]);
         let lookup: HashMap<i32, i32> = HashMap::from([(40, 30)]);
 
-        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats).unwrap();
+        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats);
 
         assert_eq!(output.get(&30), output.get(&10));
         assert_eq!(output.get(&40), output.get(&10));
@@ -1017,7 +1002,7 @@ mod tests {
         ]);
         let lookup: HashMap<i32, i32> = HashMap::from([(20, 30)]);
 
-        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats).unwrap();
+        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats);
 
         assert_eq!(output.get(&10), output.get(&20));
         assert_eq!(output.get(&20), output.get(&30));
@@ -1034,7 +1019,7 @@ mod tests {
         ]);
         let lookup: HashMap<i32, i32> = HashMap::from([(20, 99)]);
 
-        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats).unwrap();
+        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats);
 
         assert_ne!(output.get(&10), output.get(&20));
     }
@@ -1050,7 +1035,7 @@ mod tests {
         ]);
         let lookup: HashMap<i32, i32> = HashMap::from([(20, 99), (88, 99), (99, 99)]);
 
-        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats).unwrap();
+        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats);
 
         assert_ne!(output.get(&10), output.get(&20));
         // Route messages from both linked rows to the conversation, even
@@ -1069,7 +1054,7 @@ mod tests {
         ]);
         let lookup: HashMap<i32, i32> = HashMap::from([(10, 88), (88, 88)]);
 
-        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats).unwrap();
+        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats);
 
         assert_eq!(output.get(&10), output.get(&20));
         assert_eq!(output.get(&10), output.get(&88));
@@ -1085,7 +1070,7 @@ mod tests {
         ]);
         let lookup: HashMap<i32, i32> = HashMap::from([(20, 88), (88, 88)]);
 
-        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats).unwrap();
+        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats);
 
         assert_eq!(output.get(&10), output.get(&20));
         assert_eq!(output.get(&10), output.get(&88));
@@ -1103,7 +1088,7 @@ mod tests {
         ]);
         let lookup: HashMap<i32, i32> = HashMap::from([(10, 88), (88, 88), (20, 99), (99, 99)]);
 
-        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats).unwrap();
+        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats);
 
         assert_ne!(output.get(&10), output.get(&20));
         assert_eq!(output.get(&30), output.get(&10));
@@ -1122,7 +1107,7 @@ mod tests {
         ]);
         let lookup: HashMap<i32, i32> = HashMap::from([(10, 88), (88, 88), (20, 99), (99, 99)]);
 
-        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats).unwrap();
+        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats);
         let representatives =
             ChatToHandle::representatives(&output, &chats, &HashMap::new(), &input);
 
@@ -1139,7 +1124,7 @@ mod tests {
             HashMap::from([(10, chat(10, Some("A"))), (20, chat(20, Some("B")))]);
         let lookup: HashMap<i32, i32> = HashMap::from([(10, 20), (20, 20)]);
 
-        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats).unwrap();
+        let output = ChatToHandle::dedupe(&input, &lookup, &HashMap::new(), &chats);
 
         assert_eq!(output.get(&10), output.get(&20));
     }

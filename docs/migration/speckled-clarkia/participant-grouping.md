@@ -4,10 +4,10 @@
 
 `HandleGroups::from_rows()` and `from_db()` join identical non-empty addresses and matching non-empty `person_centric_id` values. They do not read Contacts. The exporter supplies Contacts relationships separately; library callers can add their own relationships with `union(handle_row_id, handle_row_id)` before finalizing. Unknown row IDs have no effect.
 
-`ChatToHandle::dedupe()` now takes four arguments:
+`ChatToHandle::dedupe()` now takes four arguments and returns the map directly instead of a `Result`; remove the `?` or `unwrap()` on the call:
 
 ```rust,ignore
-ChatToHandle::dedupe(&participants_by_chat, &chat_lookup, &handle_groups, &chats)?;
+ChatToHandle::dedupe(&participants_by_chat, &chat_lookup, &handle_groups, &chats);
 ```
 
 Load handle groups before deduplicating chats, because chat comparisons now use participant groups. The following example accepts externally resolved pairs of handle row IDs and returns the representative chat row ID for each merged conversation's member rows:
@@ -40,7 +40,7 @@ fn conversation_representatives(
     let participants_by_chat = ChatToHandle::participants_by_chat(db)?;
     let chat_lookup = ChatToHandle::get_chat_lookup_map(db)?;
     let merged_chats =
-        ChatToHandle::dedupe(&participants_by_chat, &chat_lookup, &handle_groups, &chats)?;
+        ChatToHandle::dedupe(&participants_by_chat, &chat_lookup, &handle_groups, &chats);
     let last_activity = ChatToHandle::get_last_activity(db)?;
 
     Ok(ChatToHandle::representatives(

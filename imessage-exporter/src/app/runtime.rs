@@ -333,7 +333,7 @@ impl Config {
             &chat_handle_lookup,
             &real_participants,
             &chatrooms,
-        )?;
+        );
         let last_activity = ChatToHandle::get_last_activity(data_source.db())?;
         let chat_representatives = ChatToHandle::representatives(
             &real_chatrooms,
@@ -633,7 +633,7 @@ impl Config {
                 &chat_lookup,
                 &db_only_groups,
                 &self.chatrooms,
-            )?;
+            );
             let contact_merged_chats = distinct(db_only_chats.values())
                 .saturating_sub(distinct(self.real_chatrooms.values()));
             println!("    Chats merged by Contacts: {contact_merged_chats}");
@@ -976,8 +976,7 @@ mod filename_tests {
             &HashMap::new(),
             &app.real_participants,
             &app.chatrooms,
-        )
-        .unwrap();
+        );
 
         let mut first = fake_chat();
         first.rowid = 100;
@@ -1073,8 +1072,7 @@ mod filename_tests {
             &HashMap::new(),
             &app.real_participants,
             &app.chatrooms,
-        )
-        .unwrap();
+        );
 
         let make = |rowid: i32, name: Option<&str>| {
             let mut chat = fake_chat();
