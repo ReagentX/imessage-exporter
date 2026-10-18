@@ -5,10 +5,10 @@ use std::{
 
 use crabapple::Backup;
 use imessage_database::{
+    rusqlite::Connection,
     tables::{capabilities::Capabilities, table::get_connection},
     util::platform::Platform,
 };
-use rusqlite::Connection;
 
 use crate::app::{
     compatibility::backup::{

@@ -37,6 +37,8 @@ The modules `tables::messages::message`, `message_types::digital_touch::models`,
 
 `HandwritingError` gains `InvalidDimensions(u16, u16)`, returned by `HandwrittenMessage::from_payload()` for a frame whose width or height cannot be padded without overflowing.
 
+`imessage_database` re-exports `chrono`, `plist`, and `rusqlite`. Import their types through the re-exports, for example `imessage_database::rusqlite::Connection`, and remove your own dependency on each crate unless other code needs it.
+
 ## CLI and export changes
 
 Existing export commands remain usable. When Contacts provides an unambiguous relationship between a person's addresses, the exporter can combine conversations previously written separately. Participant grouping, representative selection, and filename truncation can also change transcript names and attachment directory names.

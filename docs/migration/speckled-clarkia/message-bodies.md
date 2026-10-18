@@ -16,7 +16,7 @@ use imessage_database::{
     error::table::TableError,
     tables::{capabilities::Capabilities, messages::Message},
 };
-use rusqlite::Connection;
+use imessage_database::rusqlite::Connection;
 
 fn inspect_message(
     db: &Connection,

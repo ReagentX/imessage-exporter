@@ -23,7 +23,7 @@ use imessage_database::{
         handle::{Handle, HandleGroups},
     },
 };
-use rusqlite::Connection;
+use imessage_database::rusqlite::Connection;
 
 fn conversation_representatives(
     db: &Connection,

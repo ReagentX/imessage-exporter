@@ -7,10 +7,10 @@ use std::{
 
 use imessage_database::{
     error::table::TableError,
+    rusqlite::{Connection, Result},
     tables::{handle::HandleGroups, table::get_connection},
     util::dirs::home,
 };
-use rusqlite::{Connection, Result};
 
 /// Default contacts database path inside an iOS backup.
 pub const DEFAULT_PATH_IOS: &str = "31/31bb7ba8914766d4ba40d6dfb6113c8b614be442";
@@ -664,6 +664,7 @@ fn macos_sources_dir() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use imessage_database::rusqlite;
 
     #[test]
     fn test_phone_lookup_us_with_country_code_with_plus() {

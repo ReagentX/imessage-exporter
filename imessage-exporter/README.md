@@ -10,10 +10,10 @@ There are several ways to install this software.
 
 This binary is available on [crates.io](https://crates.io/crates/imessage-exporter).
 
-`cargo install imessage-exporter` is the best way to install the app for normal use.
+`cargo install --locked imessage-exporter` is the best way to install the app for normal use.
 
 <details><summary>Upgrade steps</summary><p><pre>$ cargo uninstall imessage-exporter
-$ cargo install imessage-exporter</pre></p></details>
+$ cargo install --locked imessage-exporter</pre></p></details>
 
 <details><summary>Uninstall steps</summary><p><pre>$ cargo uninstall imessage-exporter</pre></p><p>Optional: uninstall Rust<pre>$ rustup self uninstall</pre></p></details>
 

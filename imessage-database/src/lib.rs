@@ -8,3 +8,8 @@ pub mod tables;
 #[cfg(test)]
 mod test_support;
 pub mod util;
+
+// Re-export commonly used crates for convenience
+pub use chrono;
+pub use plist;
+pub use rusqlite;

@@ -17,7 +17,7 @@ use imessage_database::{
     tables::{capabilities::Capabilities, messages::Message},
     util::query_context::QueryContext,
 };
-use rusqlite::Connection;
+use imessage_database::rusqlite::Connection;
 
 fn read_messages(db: &Connection) -> Result<(), TableError> {
     let capabilities = Capabilities::determine(db)?;
@@ -44,7 +44,7 @@ use imessage_database::{
     error::table::TableError,
     tables::{handle::Handle, table::Table},
 };
-use rusqlite::Connection;
+use imessage_database::rusqlite::Connection;
 
 fn read_handles(db: &Connection) -> Result<(), TableError> {
     let mut statement = Handle::get(db)?;
