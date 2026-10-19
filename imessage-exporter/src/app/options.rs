@@ -22,6 +22,7 @@ use crate::app::{
     compatibility::attachment_manager::{AttachmentManager, AttachmentManagerMode},
     error::RuntimeError,
     export_type::ExportType,
+    zone::Zone,
 };
 
 // MARK: Constants
@@ -75,6 +76,8 @@ pub struct Options {
     pub export_path: PathBuf,
     /// SQL query filters.
     pub query_context: QueryContext,
+    /// Timezone for rendering timestamps and setting date-filter bounds.
+    pub timezone: Zone,
     /// Whether to omit `loading="lazy"` in HTML exports.
     pub no_lazy: bool,
     /// Custom name for the database owner in output.
@@ -108,6 +111,7 @@ impl std::fmt::Debug for Options {
             .field("export_type", &self.export_type)
             .field("export_path", &self.export_path)
             .field("query_context", &self.query_context)
+            .field("timezone", &self.timezone)
             .field("no_lazy", &self.no_lazy)
             .field("custom_name", &self.custom_name)
             .field("use_caller_id", &self.use_caller_id)
@@ -217,15 +221,19 @@ impl Options {
             )));
         }
 
+        // Choose the zone before setting date filters to use midnight in the
+        // same zone for filtering and rendering.
+        let timezone = Zone::Local;
+
         // Build query context
         let mut query_context = QueryContext::default();
         if let Some(start) = start_date
-            && let Err(why) = query_context.set_start(start)
+            && let Err(why) = query_context.set_start(start, &timezone)
         {
             return Err(RuntimeError::InvalidOptions(format!("{why}")));
         }
         if let Some(end) = end_date
-            && let Err(why) = query_context.set_end(end)
+            && let Err(why) = query_context.set_end(end, &timezone)
         {
             return Err(RuntimeError::InvalidOptions(format!("{why}")));
         }
@@ -322,6 +330,7 @@ impl Options {
             export_type,
             export_path,
             query_context,
+            timezone,
             no_lazy,
             custom_name: custom_name.cloned(),
             use_caller_id,
@@ -555,6 +564,8 @@ fn get_command() -> Command {
 #[cfg(test)]
 impl Options {
     pub fn fake_options(export_type: ExportType) -> Options {
+        use imessage_database::chrono::FixedOffset;
+
         use crate::app::test_dir::unique_test_dir;
 
         Options {
@@ -569,6 +580,9 @@ impl Options {
             export_type: Some(export_type),
             export_path: unique_test_dir("fake-options"),
             query_context: QueryContext::default(),
+            // Use fixed -07:00 to match Pacific daylight time for fixture stamps
+            // without depending on the host zone or daylight-saving rules.
+            timezone: Zone::Fixed(FixedOffset::west_opt(7 * 3600).unwrap()),
             no_lazy: false,
             custom_name: None,
             use_caller_id: false,
@@ -601,6 +615,7 @@ mod arg_tests {
         export_type::ExportType,
         options::{Options, get_command, validate_path},
         test_dir::unique_test_dir,
+        zone::Zone,
     };
 
     #[test]
@@ -620,6 +635,7 @@ mod arg_tests {
             export_type: None,
             export_path: validate_path(None, None).unwrap(),
             query_context: QueryContext::default(),
+            timezone: Zone::Local,
             no_lazy: false,
             custom_name: None,
             use_caller_id: false,
@@ -697,6 +713,7 @@ mod arg_tests {
             export_type: Some(ExportType::Html),
             export_path: validate_path(Some(&dir_str), None).unwrap(),
             query_context: QueryContext::default(),
+            timezone: Zone::Local,
             no_lazy: false,
             custom_name: None,
             use_caller_id: false,
@@ -729,6 +746,7 @@ mod arg_tests {
             export_type: Some(ExportType::Txt),
             export_path: validate_path(None, None).unwrap(),
             query_context: QueryContext::default(),
+            timezone: Zone::Local,
             no_lazy: true,
             custom_name: None,
             use_caller_id: false,
@@ -804,6 +822,7 @@ mod arg_tests {
             export_type: Some(ExportType::Txt),
             export_path: validate_path(None, None).unwrap(),
             query_context: QueryContext::default(),
+            timezone: Zone::Local,
             no_lazy: false,
             custom_name: None,
             use_caller_id: false,
@@ -844,6 +863,7 @@ mod arg_tests {
             export_type: Some(ExportType::Txt),
             export_path: validate_path(None, None).unwrap(),
             query_context: QueryContext::default(),
+            timezone: Zone::Local,
             no_lazy: false,
             custom_name: None,
             use_caller_id: false,
@@ -898,6 +918,7 @@ mod arg_tests {
             export_type: Some(ExportType::Txt),
             export_path: validate_path(None, None).unwrap(),
             query_context: QueryContext::default(),
+            timezone: Zone::Local,
             no_lazy: false,
             custom_name: Some("Name".to_string()),
             use_caller_id: false,
@@ -930,6 +951,7 @@ mod arg_tests {
             export_type: Some(ExportType::Txt),
             export_path: validate_path(None, None).unwrap(),
             query_context: QueryContext::default(),
+            timezone: Zone::Local,
             no_lazy: false,
             custom_name: None,
             use_caller_id: true,
@@ -963,6 +985,7 @@ mod arg_tests {
             export_type: Some(ExportType::Txt),
             export_path: validate_path(None, None).unwrap(),
             query_context: QueryContext::default(),
+            timezone: Zone::Local,
             no_lazy: false,
             custom_name: None,
             use_caller_id: false,
@@ -995,6 +1018,7 @@ mod arg_tests {
             export_type: Some(ExportType::Txt),
             export_path: validate_path(None, None).unwrap(),
             query_context: QueryContext::default(),
+            timezone: Zone::Local,
             no_lazy: false,
             custom_name: None,
             use_caller_id: false,
@@ -1027,6 +1051,7 @@ mod arg_tests {
             export_type: Some(ExportType::Txt),
             export_path: validate_path(None, None).unwrap(),
             query_context: QueryContext::default(),
+            timezone: Zone::Local,
             no_lazy: false,
             custom_name: None,
             use_caller_id: false,
@@ -1098,6 +1123,7 @@ mod arg_tests {
             export_type: Some(ExportType::Txt),
             export_path: validate_path(None, None).unwrap(),
             query_context: QueryContext::default(),
+            timezone: Zone::Local,
             no_lazy: false,
             custom_name: None,
             use_caller_id: false,

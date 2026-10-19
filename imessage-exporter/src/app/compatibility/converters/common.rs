@@ -121,7 +121,7 @@ pub(crate) fn update_file_metadata(from: &Path, to: &Path, message: &Message, co
     // Update file metadata
     if let Ok(metadata) = metadata(from) {
         // Prefer the message date for mtime, then fall back to the source file.
-        let mtime = match message.date(config.offset) {
+        let mtime = match message.date() {
             Ok(date) => unix_to_system_time(date.timestamp(), date.timestamp_subsec_nanos())
                 .or_else(|| metadata.modified().ok()),
             Err(_) => metadata.modified().ok(),
@@ -148,7 +148,7 @@ mod tests {
         time::{Duration, SystemTime, UNIX_EPOCH},
     };
 
-    use imessage_database::tables::messages::Message;
+    use imessage_database::{tables::messages::Message, util::dates::MESSAGES_EPOCH_UNIX_SECS};
 
     use crate::app::{
         export_type::ExportType,
@@ -164,8 +164,8 @@ mod tests {
     /// truncates sub-second precision.
     const MESSAGE_UNIX_SECS: i64 = 1_500_000_000;
 
-    fn expected_message_time(config: &Config, message: &Message) -> SystemTime {
-        let date = message.date(config.offset).unwrap();
+    fn expected_message_time(message: &Message) -> SystemTime {
+        let date = message.date().unwrap();
         unix_to_system_time(date.timestamp(), date.timestamp_subsec_nanos()).unwrap()
     }
 
@@ -182,11 +182,11 @@ mod tests {
         File::create(&to).unwrap();
 
         let mut message = Config::fake_message();
-        message.date = MESSAGE_UNIX_SECS - config.offset;
+        message.date = MESSAGE_UNIX_SECS - MESSAGES_EPOCH_UNIX_SECS;
 
         update_file_metadata(&from, &to, &message, &config);
 
-        let expected = expected_message_time(&config, &message);
+        let expected = expected_message_time(&message);
         let metadata = metadata(&to).unwrap();
         assert_eq!(metadata.modified().unwrap(), expected);
 
@@ -213,11 +213,11 @@ mod tests {
         set_file_times(&to, Some(prior_created), None, None);
 
         let mut message = Config::fake_message();
-        message.date = MESSAGE_UNIX_SECS - config.offset;
+        message.date = MESSAGE_UNIX_SECS - MESSAGES_EPOCH_UNIX_SECS;
 
         update_file_metadata(&from, &to, &message, &config);
 
-        let expected = expected_message_time(&config, &message);
+        let expected = expected_message_time(&message);
         let metadata = metadata(&to).unwrap();
         assert_eq!(metadata.modified().unwrap(), expected);
 

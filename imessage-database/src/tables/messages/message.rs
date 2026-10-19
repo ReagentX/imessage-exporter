@@ -42,6 +42,7 @@
 
  ## Example
  ```no_run
+ use chrono::Utc;
  use imessage_database::{
      tables::{
          capabilities::Capabilities,
@@ -58,9 +59,9 @@
  let mut query_context = QueryContext::default();
 
  // Customize the query context as needed
- // For example, to filter messages by date:
- query_context.set_start("2023-01-01").unwrap();
- query_context.set_end("2023-12-31").unwrap();
+ // For example, filter messages by date using midnight in `Utc`:
+ query_context.set_start("2023-01-01", &Utc).unwrap();
+ query_context.set_end("2023-12-31", &Utc).unwrap();
 
  // Prepare the statement for streaming rows
  let mut statement = Message::stream_rows(&conn, &capabilities, &query_context).unwrap();
@@ -182,7 +183,7 @@ use std::{
     io::{Cursor, Read},
 };
 
-use chrono::{DateTime, offset::Local};
+use chrono::{DateTime, TimeZone, Utc};
 use crabstep::TypedStreamDeserializer;
 use plist::Value;
 use rusqlite::{CachedStatement, Connection, Params, Result, Statement};
@@ -213,7 +214,7 @@ use crate::{
     },
     util::{
         bundle_id::parse_balloon_bundle_id,
-        dates::{get_local_time, readable_diff},
+        dates::{readable_diff, to_utc},
         query_context::QueryContext,
         streamtyped,
     },
@@ -578,40 +579,36 @@ impl Message {
     }
 
     // MARK: Dates
-    /// Convert [`date`](Self::date) to local time.
+    /// Decode [`date`](Self::date) to an instant.
     ///
-    /// This field is stored as a unix timestamp with an epoch of `2001-01-01 00:00:00` in the local time zone
-    ///
-    /// `offset` can be provided by [`get_offset`](crate::util::dates::get_offset) or manually.
-    pub fn date(&self, offset: i64) -> Result<DateTime<Local>, MessageError> {
-        get_local_time(self.date, offset)
+    /// Stored as nanoseconds (seconds in older rows) since the Messages epoch,
+    /// `2001-01-01 00:00:00` UTC. Call `with_timezone()` to render in another zone.
+    pub fn date(&self) -> Result<DateTime<Utc>, MessageError> {
+        to_utc(self.date)
     }
 
-    /// Convert [`date_delivered`](Self::date_delivered) to local time.
+    /// Decode [`date_delivered`](Self::date_delivered) to an instant.
     ///
-    /// This field is stored as a unix timestamp with an epoch of `2001-01-01 00:00:00` in the local time zone
-    ///
-    /// `offset` can be provided by [`get_offset`](crate::util::dates::get_offset) or manually.
-    pub fn date_delivered(&self, offset: i64) -> Result<DateTime<Local>, MessageError> {
-        get_local_time(self.date_delivered, offset)
+    /// Stored as nanoseconds (seconds in older rows) since the Messages epoch,
+    /// `2001-01-01 00:00:00` UTC. Call `with_timezone()` to render in another zone.
+    pub fn date_delivered(&self) -> Result<DateTime<Utc>, MessageError> {
+        to_utc(self.date_delivered)
     }
 
-    /// Convert [`date_read`](Self::date_read) to local time.
+    /// Decode [`date_read`](Self::date_read) to an instant.
     ///
-    /// This field is stored as a unix timestamp with an epoch of `2001-01-01 00:00:00` in the local time zone
-    ///
-    /// `offset` can be provided by [`get_offset`](crate::util::dates::get_offset) or manually.
-    pub fn date_read(&self, offset: i64) -> Result<DateTime<Local>, MessageError> {
-        get_local_time(self.date_read, offset)
+    /// Stored as nanoseconds (seconds in older rows) since the Messages epoch,
+    /// `2001-01-01 00:00:00` UTC. Call `with_timezone()` to render in another zone.
+    pub fn date_read(&self) -> Result<DateTime<Utc>, MessageError> {
+        to_utc(self.date_read)
     }
 
-    /// Convert [`date_edited`](Self::date_edited) to local time.
+    /// Decode [`date_edited`](Self::date_edited) to an instant.
     ///
-    /// This field is stored as a unix timestamp with an epoch of `2001-01-01 00:00:00` in the local time zone
-    ///
-    /// `offset` can be provided by [`get_offset`](crate::util::dates::get_offset) or manually.
-    pub fn date_edited(&self, offset: i64) -> Result<DateTime<Local>, MessageError> {
-        get_local_time(self.date_edited, offset)
+    /// Stored as nanoseconds (seconds in older rows) since the Messages epoch,
+    /// `2001-01-01 00:00:00` UTC. Call `with_timezone()` to render in another zone.
+    pub fn date_edited(&self) -> Result<DateTime<Utc>, MessageError> {
+        to_utc(self.date_edited)
     }
 
     /// Calculate the elapsed time until the message was read or delivered.
@@ -628,16 +625,23 @@ impl Message {
     /// If more than one message has been sent in a thread before getting read,
     /// only the most recent message will get the tag.
     ///
-    /// `offset` can be provided by [`get_offset`](crate::util::dates::get_offset) or manually.
+    /// Use the calendar in `zone` to count whole years; see
+    /// [`readable_diff`](crate::util::dates::readable_diff).
     #[must_use]
-    pub fn time_until_read(&self, offset: i64) -> Option<String> {
+    pub fn time_until_read<Tz: TimeZone>(&self, zone: &Tz) -> Option<String> {
         // Message we received
         if !self.is_from_me && self.date_read != 0 && self.date != 0 {
-            return readable_diff(&self.date(offset).ok()?, &self.date_read(offset).ok()?);
+            return readable_diff(
+                &self.date().ok()?.with_timezone(zone),
+                &self.date_read().ok()?.with_timezone(zone),
+            );
         }
         // Message we sent
         else if self.is_from_me && self.date_delivered != 0 && self.date != 0 {
-            return readable_diff(&self.date(offset).ok()?, &self.date_delivered(offset).ok()?);
+            return readable_diff(
+                &self.date().ok()?.with_timezone(zone),
+                &self.date_delivered().ok()?.with_timezone(zone),
+            );
         }
         None
     }

@@ -9,9 +9,9 @@ use crate::{
     },
 };
 
-/// May 17, 2022  8:29:42 PM
+/// May 18, 2022 00:29:42 UTC
 pub(crate) const SAMPLE_DATE: i64 = 674526582885055488;
-/// May 17, 2022  9:30:31 PM
+/// May 18, 2022 01:30:31 UTC
 pub(crate) const SAMPLE_DATE_LATER: i64 = 674530231992568192;
 
 /// Config for the given export type with no participants.

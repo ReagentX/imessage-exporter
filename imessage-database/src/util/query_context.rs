@@ -3,11 +3,11 @@
 */
 use std::collections::BTreeSet;
 
-use chrono::prelude::*;
+use chrono::TimeZone;
 
 use crate::{
     error::query_context::QueryContextError,
-    util::dates::{TIMESTAMP_FACTOR, get_offset},
+    util::dates::{MESSAGES_EPOCH_UNIX_SECS, TIMESTAMP_FACTOR},
 };
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -26,16 +26,23 @@ pub struct QueryContext {
 impl QueryContext {
     /// Set the inclusive lower-bound date from `YYYY-MM-DD`.
     ///
+    /// Use midnight on that date in `zone` as the bound.
+    ///
     /// # Example:
     ///
     /// ```
+    /// use chrono::Utc;
     /// use imessage_database::util::query_context::QueryContext;
     ///
     /// let mut context = QueryContext::default();
-    /// context.set_start("2023-01-01");
+    /// context.set_start("2023-01-01", &Utc);
     /// ```
-    pub fn set_start(&mut self, start: &str) -> Result<(), QueryContextError> {
-        let timestamp = QueryContext::sanitize_date(start)
+    pub fn set_start<Tz: TimeZone>(
+        &mut self,
+        start: &str,
+        zone: &Tz,
+    ) -> Result<(), QueryContextError> {
+        let timestamp = QueryContext::sanitize_date(start, zone)
             .ok_or(QueryContextError::InvalidDate(start.to_string()))?;
         self.start = Some(timestamp);
         Ok(())
@@ -43,16 +50,19 @@ impl QueryContext {
 
     /// Set the inclusive upper-bound date from `YYYY-MM-DD`.
     ///
+    /// Use midnight on that date in `zone` as the bound.
+    ///
     /// # Example:
     ///
     /// ```
+    /// use chrono::Utc;
     /// use imessage_database::util::query_context::QueryContext;
     ///
     /// let mut context = QueryContext::default();
-    /// context.set_end("2023-01-01");
+    /// context.set_end("2023-01-01", &Utc);
     /// ```
-    pub fn set_end(&mut self, end: &str) -> Result<(), QueryContextError> {
-        let timestamp = QueryContext::sanitize_date(end)
+    pub fn set_end<Tz: TimeZone>(&mut self, end: &str, zone: &Tz) -> Result<(), QueryContextError> {
+        let timestamp = QueryContext::sanitize_date(end, zone)
             .ok_or(QueryContextError::InvalidDate(end.to_string()))?;
         self.end = Some(timestamp);
         Ok(())
@@ -88,8 +98,8 @@ impl QueryContext {
         self.selected_chat_ids = (!selected_chat_ids.is_empty()).then_some(selected_chat_ids);
     }
 
-    /// Parse `YYYY-MM-DD` as a Messages timestamp.
-    fn sanitize_date(date: &str) -> Option<i64> {
+    /// Parse `YYYY-MM-DD` as the Messages timestamp of midnight in `zone`.
+    fn sanitize_date<Tz: TimeZone>(date: &str, zone: &Tz) -> Option<i64> {
         if date.len() < 9 {
             return None;
         }
@@ -114,10 +124,10 @@ impl QueryContext {
             return None;
         }
 
-        let local = Local.with_ymd_and_hms(year, month, day, 0, 0, 0).single()?;
-        let stamp = local.timestamp_nanos_opt().unwrap_or(0);
+        let midnight = zone.with_ymd_and_hms(year, month, day, 0, 0, 0).single()?;
+        let stamp = midnight.timestamp_nanos_opt().unwrap_or(0);
 
-        Some(stamp - (get_offset() * TIMESTAMP_FACTOR))
+        Some(stamp - (MESSAGES_EPOCH_UNIX_SECS * TIMESTAMP_FACTOR))
     }
 
     /// `true` when any filter is set.
@@ -125,11 +135,12 @@ impl QueryContext {
     /// # Example:
     ///
     /// ```
+    /// use chrono::Utc;
     /// use imessage_database::util::query_context::QueryContext;
     ///
     /// let mut context = QueryContext::default();
     /// assert!(!context.has_filters());
-    /// context.set_start("2023-01-01");
+    /// context.set_start("2023-01-01", &Utc);
     /// assert!(context.has_filters());
     /// ```
     #[must_use]
@@ -146,24 +157,31 @@ mod use_tests {
     use chrono::prelude::*;
 
     use crate::util::{
-        dates::{TIMESTAMP_FACTOR, format, get_offset},
+        dates::{MESSAGES_EPOCH_UNIX_SECS, TIMESTAMP_FACTOR, format},
         query_context::QueryContext,
     };
+
+    /// Use +05:30 to check midnight in the supplied zone rather than UTC or
+    /// the host zone.
+    fn zone() -> FixedOffset {
+        FixedOffset::east_opt(5 * 3600 + 30 * 60).unwrap()
+    }
 
     #[test]
     fn can_create_start() {
         let mut context = QueryContext::default();
-        context.set_start("2020-01-01").unwrap();
+        context.set_start("2020-01-01", &zone()).unwrap();
 
-        let from_timestamp = DateTime::from_timestamp(
-            (context.start.unwrap() / TIMESTAMP_FACTOR) + get_offset(),
+        let instant = DateTime::from_timestamp(
+            (context.start.unwrap() / TIMESTAMP_FACTOR) + MESSAGES_EPOCH_UNIX_SECS,
             0,
         )
-        .unwrap()
-        .naive_utc();
-        let local = Local.from_utc_datetime(&from_timestamp);
+        .unwrap();
 
-        assert_eq!(format(&local), "Jan 01, 2020 12:00:00 AM");
+        assert_eq!(
+            format(&instant.with_timezone(&zone())),
+            "Jan 01, 2020 12:00:00 AM"
+        );
         assert!(context.start.is_some());
         assert!(context.end.is_none());
         assert!(context.has_filters());
@@ -172,15 +190,18 @@ mod use_tests {
     #[test]
     fn can_create_end() {
         let mut context = QueryContext::default();
-        context.set_end("2020-01-01").unwrap();
+        context.set_end("2020-01-01", &zone()).unwrap();
 
-        let from_timestamp =
-            DateTime::from_timestamp((context.end.unwrap() / TIMESTAMP_FACTOR) + get_offset(), 0)
-                .unwrap()
-                .naive_utc();
-        let local = Local.from_utc_datetime(&from_timestamp);
+        let instant = DateTime::from_timestamp(
+            (context.end.unwrap() / TIMESTAMP_FACTOR) + MESSAGES_EPOCH_UNIX_SECS,
+            0,
+        )
+        .unwrap();
 
-        assert_eq!(format(&local), "Jan 01, 2020 12:00:00 AM");
+        assert_eq!(
+            format(&instant.with_timezone(&zone())),
+            "Jan 01, 2020 12:00:00 AM"
+        );
         assert!(context.start.is_none());
         assert!(context.end.is_some());
         assert!(context.has_filters());
@@ -234,41 +255,43 @@ mod id_tests {
 
 #[cfg(test)]
 mod sanitize_tests {
+    use chrono::Utc;
+
     use crate::util::query_context::QueryContext;
 
     #[test]
     fn can_reject_bad_short() {
-        let res = QueryContext::sanitize_date("1-1-20");
+        let res = QueryContext::sanitize_date("1-1-20", &Utc);
         assert!(res.is_none());
     }
 
     #[test]
     fn can_reject_bad_order() {
-        let res = QueryContext::sanitize_date("01-01-2020");
+        let res = QueryContext::sanitize_date("01-01-2020", &Utc);
         assert!(res.is_none());
     }
 
     #[test]
     fn can_reject_bad_month() {
-        let res = QueryContext::sanitize_date("2020-31-01");
+        let res = QueryContext::sanitize_date("2020-31-01", &Utc);
         assert!(res.is_none());
     }
 
     #[test]
     fn can_reject_bad_day() {
-        let res = QueryContext::sanitize_date("2020-01-32");
+        let res = QueryContext::sanitize_date("2020-01-32", &Utc);
         assert!(res.is_none());
     }
 
     #[test]
     fn can_reject_bad_data() {
-        let res = QueryContext::sanitize_date("2020-AB-CD");
+        let res = QueryContext::sanitize_date("2020-AB-CD", &Utc);
         assert!(res.is_none());
     }
 
     #[test]
     fn can_reject_wrong_hyphen() {
-        let res = QueryContext::sanitize_date("2020–01–01");
+        let res = QueryContext::sanitize_date("2020–01–01", &Utc);
         assert!(res.is_none());
     }
 }

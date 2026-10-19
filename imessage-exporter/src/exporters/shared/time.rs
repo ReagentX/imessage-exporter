@@ -1,16 +1,15 @@
 use imessage_database::{
     tables::messages::Message,
-    util::dates::{format, get_local_time},
+    util::dates::{format, to_utc},
 };
 
-use crate::app::runtime::Config;
+use crate::app::{runtime::Config, zone::Zone};
 
-/// Format `message`'s timestamp via [`format()`], falling back to the
-/// timestamp error's `Display` output. Centralizes the `Ok/Err → String`
-/// pattern used by every formatter.
-pub fn format_message_date(message: &Message, offset: i64) -> String {
-    match message.date(offset) {
-        Ok(d) => format(&d),
+/// Format `message`'s timestamp in `zone` via [`format()`]. On failure, use
+/// the timestamp error's `Display` output.
+pub fn format_message_date(message: &Message, zone: &Zone) -> String {
+    match message.date() {
+        Ok(d) => format(&d.with_timezone(zone)),
         Err(why) => why.to_string(),
     }
 }
@@ -18,9 +17,9 @@ pub fn format_message_date(message: &Message, offset: i64) -> String {
 /// Same as [`format_message_date`] but for a raw `i64` iMessage timestamp
 /// (used by edit-history events, which carry their own `date` field rather
 /// than a `Message`).
-pub fn format_timestamp(timestamp: i64, offset: i64) -> String {
-    match get_local_time(timestamp, offset) {
-        Ok(d) => format(&d),
+pub fn format_timestamp(timestamp: i64, zone: &Zone) -> String {
+    match to_utc(timestamp) {
+        Ok(d) => format(&d.with_timezone(zone)),
         Err(why) => why.to_string(),
     }
 }
@@ -29,9 +28,10 @@ pub fn format_timestamp(timestamp: i64, offset: i64) -> String {
 /// Returns `(formatted_date, read_receipt)` where `read_receipt` is
 /// empty if there is no read receipt data.
 pub fn message_time(config: &Config, message: &Message) -> (String, String) {
-    let date = format_message_date(message, config.offset);
+    let zone = &config.options.timezone;
+    let date = format_message_date(message, zone);
     let mut read_receipt = String::new();
-    if let Some(time) = message.time_until_read(config.offset)
+    if let Some(time) = message.time_until_read(zone)
         && !time.is_empty()
     {
         let who = if message.is_from_me() {

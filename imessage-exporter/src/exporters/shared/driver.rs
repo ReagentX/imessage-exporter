@@ -123,8 +123,8 @@ impl ExportState {
 /// Convert the message date into a file-span timestamp.
 ///
 /// A date that [`Message::date`] cannot convert contributes nothing to the span.
-fn message_timestamp(config: &Config, message: &Message) -> Option<Timestamp> {
-    let date = message.date(config.offset).ok()?;
+fn message_timestamp(message: &Message) -> Option<Timestamp> {
+    let date = message.date().ok()?;
     Some((date.timestamp(), date.timestamp_subsec_nanos()))
 }
 
@@ -196,7 +196,7 @@ where
     let at = config
         .options
         .use_message_times
-        .then(|| message_timestamp(config, message))
+        .then(|| message_timestamp(message))
         .flatten();
     match config.conversation(message) {
         Some((chatroom, _)) => {
@@ -407,7 +407,7 @@ mod tests {
         .unwrap();
         let dates: Vec<i64> = Message::rows(&mut statement, [])
             .unwrap()
-            .map(|message| message.unwrap().date(config.offset).unwrap().timestamp())
+            .map(|message| message.unwrap().date().unwrap().timestamp())
             .collect();
         (
             *dates.iter().min().expect("fixture has messages"),
@@ -504,7 +504,10 @@ mod tests {
         let mut options = Options::fake_options(ExportType::Txt);
         options.use_message_times = true;
         // Exclude every fixture message; the orphaned file is still created.
-        options.query_context.set_start("2100-01-01").unwrap();
+        options
+            .query_context
+            .set_start("2100-01-01", &options.timezone)
+            .unwrap();
         let config = Config::fake_app(options);
 
         let before = seconds(SystemTime::now());

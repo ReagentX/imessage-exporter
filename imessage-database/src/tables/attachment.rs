@@ -662,6 +662,8 @@ impl Attachment {
 // MARK: Tests
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
+
     use crate::{
         tables::{
             attachment::{
@@ -977,8 +979,8 @@ mod tests {
         let connection = get_connection(&db_path).unwrap();
 
         let mut context = QueryContext::default();
-        context.set_start("2020-01-01").unwrap();
-        context.set_end("2021-01-01").unwrap();
+        context.set_start("2020-01-01", &Utc).unwrap();
+        context.set_end("2021-01-01", &Utc).unwrap();
         context.set_selected_chat_ids(BTreeSet::from([1, 2, 3]));
         context.set_selected_handle_ids(BTreeSet::from([1, 2, 3]));
 

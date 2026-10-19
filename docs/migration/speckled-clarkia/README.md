@@ -34,6 +34,6 @@ Build participant groups before merging chats, then choose consistent conversati
 
 ## Diagnostics and changed semantics
 
-Update diagnostic consumers, poll and archive handling, and CLI automation that depends on export output.
+Update diagnostic consumers, date decoding, poll and archive handling, and CLI automation that depends on export output.
 
 [Read diagnostics and changed semantics](diagnostics-and-behavior.md).

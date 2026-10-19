@@ -175,7 +175,7 @@ impl<'a> MessageFormatter<'a> for TXT<'a> {
             .map_rows(|event| {
                 let timestamp_prefix = match event.diff_since_previous {
                     EditDiff::First => {
-                        let mut s = format_timestamp(event.date, self.config.offset);
+                        let mut s = format_timestamp(event.date, &self.config.options.timezone);
                         s.push(' ');
                         s
                     }
