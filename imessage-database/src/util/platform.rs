@@ -24,10 +24,11 @@ pub enum Platform {
 impl Platform {
     /// Detect whether a path points to an iOS backup root or a macOS database.
     ///
-    /// Require a Messages database at [`DEFAULT_PATH_IOS`] before accepting an iOS backup root.
-    /// Return an error for any other directory or a missing or inaccessible path, with hints
-    /// from the surrounding filesystem when available. Treat files as macOS database inputs;
-    /// validate their contents with [`get_connection`](crate::tables::table::get_connection).
+    /// Require a Messages database at [`DEFAULT_PATH_IOS`] before accepting an iOS backup root;
+    /// any other directory is [`MissingBackupDatabase`](TableConnectError::MissingBackupDatabase).
+    /// Return an error for a missing or inaccessible path, with hints from the surrounding
+    /// filesystem when available. Treat files as macOS database inputs; validate their contents
+    /// with [`get_connection`](crate::tables::table::get_connection).
     pub fn determine(db_path: &Path) -> Result<Self, TableError> {
         // iOS inputs must be backup roots, not the nested database path.
         if db_path.ends_with(DEFAULT_PATH_IOS) {
@@ -44,9 +45,10 @@ impl Platform {
                 match presence(&messages_db) {
                     Ok(Presence::File) => return Ok(Self::iOS),
                     Err(why) => TableConnectError::Inaccessible(messages_db, why),
-                    Ok(_) => {
-                        TableConnectError::IsDirectory(db_path.to_path_buf(), diagnose(db_path))
-                    }
+                    Ok(_) => TableConnectError::MissingBackupDatabase(
+                        db_path.to_path_buf(),
+                        diagnose(db_path),
+                    ),
                 }
             }
             Ok(Presence::File | Presence::Other) => return Ok(Self::macOS),
@@ -150,11 +152,22 @@ mod tests {
 
         assert!(matches!(
             Platform::determine(&dir),
-            Err(TableError::CannotConnect(TableConnectError::IsDirectory(
-                _,
-                _
-            )))
+            Err(TableError::CannotConnect(
+                TableConnectError::MissingBackupDatabase(_, _)
+            ))
         ));
+
+        remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn backup_without_messages_database_names_the_backup() {
+        let dir = scratch("backup-no-messages");
+        File::create(dir.join("Manifest.db")).unwrap();
+
+        let error = Platform::determine(&dir).unwrap_err().to_string();
+        assert!(error.contains("contains no Messages database"), "{error}");
+        assert!(error.contains("is an iOS backup"), "{error}");
 
         remove_dir_all(&dir).unwrap();
     }

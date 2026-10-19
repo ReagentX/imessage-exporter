@@ -52,6 +52,7 @@ Update your `TableConnectError` match arms for the 5.0 variants:
 | `NotAFile(PathBuf)` | `IsDirectory(PathBuf, Vec<PathHint>)` |
 | `DoesNotExist(PathBuf)` | `DoesNotExist(PathBuf, Vec<PathHint>)` |
 | No equivalent | `Inaccessible(PathBuf, std::io::Error)` for a filesystem error when inspecting or opening a path |
+| No equivalent | `MissingBackupDatabase(PathBuf, Vec<PathHint>)` from `Platform::determine()` for a directory without a Messages database at the iOS backup path |
 | No equivalent | `NotADatabase(PathBuf)` for a file without the SQLite header |
 | No equivalent | `NotMessagesDatabase(PathBuf)` from `Capabilities::determine()` when the `message` table is absent |
 
@@ -71,7 +72,7 @@ Omit `copied_path` when constructing an `Attachment`; remove `copied_path: None`
 
 `HandwritingError` gains `InvalidDimensions(u16, u16)`, returned by `HandwrittenMessage::from_payload()` for a frame whose width or height cannot be padded without overflowing.
 
-`imessage_database` re-exports `chrono`, `plist`, and `rusqlite`. Import their types through the re-exports, for example `imessage_database::rusqlite::Connection`, and remove your own dependency on each crate unless other code needs it.
+`imessage_database` re-exports `chrono`, `crabstep`, `plist`, and `rusqlite`. Import their types through the re-exports, for example `imessage_database::rusqlite::Connection` and `imessage_database::crabstep::error::TypedStreamError` (the payload of `PlistParseError::TypedStreamError`), and remove your own dependency on each crate unless other code needs it.
 
 ## CLI and export changes
 
