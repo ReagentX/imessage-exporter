@@ -806,6 +806,38 @@ mod arg_tests {
     }
 
     #[test]
+    fn cant_build_option_ios_platform_with_file_path() {
+        let dir = crate::app::test_dir::unique_test_dir("ios-file-path");
+        let file = dir.join("chat.db");
+        std::fs::File::create(&file).unwrap();
+        let path = file.to_string_lossy().into_owned();
+        let command = get_command();
+        let args =
+            command.get_matches_from(["imessage-exporter", "-a", "ios", "-f", "txt", "-p", &path]);
+
+        let error = Options::from_args(&args).unwrap_err().to_string();
+
+        assert!(
+            error.contains("is a file, not a backup directory"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn cant_build_option_ios_platform_with_directory_lacking_messages_database() {
+        let dir = crate::app::test_dir::unique_test_dir("ios-empty-dir");
+        let path = dir.to_string_lossy().into_owned();
+        let command = get_command();
+        let args =
+            command.get_matches_from(["imessage-exporter", "-a", "ios", "-f", "txt", "-p", &path]);
+
+        let error = Options::from_args(&args).unwrap_err().to_string();
+
+        assert!(error.contains("contains no Messages database"), "{error}");
+        assert!(!error.contains("not a database file"), "{error}");
+    }
+
+    #[test]
     fn can_build_option_valid_platform() {
         let command = get_command();
         let args = command.get_matches_from(["imessage-exporter", "-a", "ios", "-f", "txt"]);

@@ -7,7 +7,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::util::path_hint::PathHint;
+use crate::{tables::table::DEFAULT_PATH_IOS, util::path_hint::PathHint};
 
 /// Errors that can happen when extracting data from a `SQLite` table
 #[derive(Debug)]
@@ -30,6 +30,8 @@ pub enum TableConnectError {
     Inaccessible(PathBuf, std::io::Error),
     /// Directory supplied in place of a database file, with hints from its contents
     IsDirectory(PathBuf, Vec<PathHint>),
+    /// Directory with no Messages database at the iOS backup path, with hints from its contents
+    MissingBackupDatabase(PathBuf, Vec<PathHint>),
     /// File without the `SQLite` header
     NotADatabase(PathBuf),
     /// `SQLite` database without a `message` table
@@ -70,6 +72,14 @@ impl Display for TableConnectError {
                 write!(
                     fmt,
                     "Specified path `{}` is a directory, not a database file!",
+                    path.display()
+                )?;
+                write_hints(fmt, hints)
+            }
+            TableConnectError::MissingBackupDatabase(path, hints) => {
+                write!(
+                    fmt,
+                    "Specified path `{}` is a directory, but it contains no Messages database at `{DEFAULT_PATH_IOS}`!",
                     path.display()
                 )?;
                 write_hints(fmt, hints)
