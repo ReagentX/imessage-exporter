@@ -2,7 +2,7 @@
  Group actions encoded by a message row.
 */
 
-use crate::tables::messages::message::Message;
+use crate::tables::messages::Message;
 
 /// Group action encoded by a message row.
 #[derive(Debug, PartialEq, Eq)]

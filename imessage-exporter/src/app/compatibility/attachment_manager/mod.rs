@@ -9,4 +9,4 @@ mod target;
 
 pub use manager::AttachmentManager;
 pub use mode::AttachmentManagerMode;
-pub(crate) use plan::Plan;
+pub(crate) use plan::{ExportFile, Plan};

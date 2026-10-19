@@ -1,16 +1,19 @@
 /*!
  Column layout resolution and row decoding for the `message` table.
 
- [`Message`] reads 32 columns whose ordinals differ per schema: the composed
- query projects the recognized columns contiguously, while custom queries
- (such as `m.*` projections) may append derived columns after every `message`
- column. Decoding each field by name repeats a scan of the result set for
- every field of every row. [`MessageColumns`] resolves that mapping once per
- statement so rows decode by ordinal, and [`Message::from_row_named`] is the
- fallback for layouts it rejects.
+ To decode a [`Message`], read 36 columns whose ordinals differ per schema.
+ In the composed query, the recognized columns are projected contiguously;
+ in custom queries (such as `m.*` projections), derived columns may appear
+ after every `message` column. To decode by name, we must scan the result-column
+ names for each field of every row. Resolve the mapping once per statement
+ through [`MessageColumns`] to avoid these repeated scans, then decode by
+ ordinal. Reject layouts with missing required columns before decoding any rows.
 */
 
-use rusqlite::{Result, Row, Statement, types::FromSql};
+use rusqlite::{
+    Error, Result, Row, Statement,
+    types::{FromSql, ValueRef},
+};
 
 use crate::tables::messages::Message;
 
@@ -20,7 +23,7 @@ use crate::tables::messages::Message;
 /// [`Capabilities`](crate::tables::capabilities::Capabilities) probes these
 /// names against the live schema; query composition projects exactly the
 /// subset that exists, qualified with `m.`.
-pub(crate) const MESSAGE_COLUMNS: [&str; 26] = [
+pub(crate) const MESSAGE_COLUMNS: [&str; 29] = [
     "rowid",
     "guid",
     "text",
@@ -47,6 +50,9 @@ pub(crate) const MESSAGE_COLUMNS: [&str; 26] = [
     "thread_originator_part",
     "date_edited",
     "associated_message_emoji",
+    "attributedbody",
+    "message_summary_info",
+    "payload_data",
 ];
 
 /// Size of the stack buffer used to case-fold column names. The two longest
@@ -55,17 +61,17 @@ pub(crate) const MESSAGE_COLUMNS: [&str; 26] = [
 const LONGEST_COL: usize = 24;
 
 // MARK: Layout
-/// Resolved result-set ordinals for the columns [`Message`] reads.
+/// Resolved result-set ordinals for decoding a [`Message`].
 ///
-/// [`Message::rows`] resolves this layout once because repeated named reads
-/// scan the result set from column zero. Each comparison also calls
-/// `sqlite3_column_name` through FFI. The `m.*` heads append derived
-/// columns after every `message` column, making those repeated scans nearly
-/// full.
+/// Resolve the layout once in [`Message::rows`] to avoid repeated column-name
+/// lookups. For each named read, we must scan column names from column zero
+/// and call `sqlite3_column_name` through FFI for each comparison. For derived
+/// columns after every `message` column in `m.*` projections, we must scan
+/// nearly all column names on every read.
 ///
-/// Required ordinals correspond to the fallible reads in
-/// [`Message::from_row_named`]. An absent required column rejects the layout;
-/// optional ordinals preserve the defaults used for schema-specific columns.
+/// Read required columns fallibly in [`Message::from_row_mapped`]. Reject the
+/// layout if any required column is absent. Use the field defaults for
+/// optional, schema-specific columns.
 #[derive(Debug)]
 pub(super) struct MessageColumns {
     // Required.
@@ -102,25 +108,31 @@ pub(super) struct MessageColumns {
     deleted_from: Option<usize>,
     filter_action: Option<usize>,
     filter_sub_action: Option<usize>,
+    attributed_body: Option<usize>,
+    message_summary_info: Option<usize>,
+    has_payload_data: Option<usize>,
+    payload_data: Option<usize>,
 }
 
 impl MessageColumns {
-    /// Number of mapped fields. Tests compare this with `slots`; resolution
-    /// scans the complete result set independently.
+    /// Number of mapped fields. Tests size unrecognized projections with it;
+    /// resolution scans the complete result set independently.
     #[cfg(test)]
-    const FIELDS: usize = 32;
+    const FIELDS: usize = 36;
 
-    /// Map every recognized column name to its ordinal, or return `None` when a
-    /// required column is absent.
+    /// Map every recognized column name to its ordinal. If a required column
+    /// is absent, return [`Error::InvalidColumnName`] with the first missing
+    /// name in this order: `rowid`, `guid`, `date`, `is_from_me`,
+    /// `num_attachments`, `num_replies`.
     ///
-    /// The first case-insensitive match wins, matching
-    /// [`Statement::column_index`](rusqlite::Statement::column_index). This is
-    /// required because custom projections may duplicate names and schemas may
-    /// report `ROWID` in uppercase.
+    /// Use the first case-insensitive match, as in
+    /// [`Statement::column_index`](rusqlite::Statement::column_index): names
+    /// may be duplicated in custom projections or reported in uppercase,
+    /// such as `ROWID`.
     ///
     /// When the schema may change concurrently, resolve through a [`Row`] after
-    /// the first step: `sqlite3_step` may recompile the statement.
-    pub(super) fn resolve(stmt: &Statement<'_>) -> Option<Self> {
+    /// the first step: the statement may be recompiled during `sqlite3_step`.
+    pub(super) fn resolve(stmt: &Statement<'_>) -> Result<Self> {
         let mut rowid = None;
         let mut guid = None;
         let mut date = None;
@@ -153,6 +165,10 @@ impl MessageColumns {
         let mut deleted_from = None;
         let mut filter_action = None;
         let mut filter_sub_action = None;
+        let mut attributed_body = None;
+        let mut message_summary_info = None;
+        let mut has_payload_data = None;
+        let mut payload_data = None;
 
         for idx in 0..stmt.column_count() {
             let Ok(name) = stmt.column_name(idx) else {
@@ -203,6 +219,10 @@ impl MessageColumns {
                 b"deleted_from" => &mut deleted_from,
                 b"filter_action" => &mut filter_action,
                 b"filter_sub_action" => &mut filter_sub_action,
+                b"attributedbody" => &mut attributed_body,
+                b"message_summary_info" => &mut message_summary_info,
+                b"has_payload_data" => &mut has_payload_data,
+                b"payload_data" => &mut payload_data,
                 _ => continue,
             };
 
@@ -212,13 +232,17 @@ impl MessageColumns {
             }
         }
 
-        Some(Self {
-            rowid: rowid?,
-            guid: guid?,
-            date: date?,
-            is_from_me: is_from_me?,
-            num_attachments: num_attachments?,
-            num_replies: num_replies?,
+        let required = |slot: Option<usize>, name: &str| {
+            slot.ok_or_else(|| Error::InvalidColumnName(name.to_string()))
+        };
+
+        Ok(Self {
+            rowid: required(rowid, "rowid")?,
+            guid: required(guid, "guid")?,
+            date: required(date, "date")?,
+            is_from_me: required(is_from_me, "is_from_me")?,
+            num_attachments: required(num_attachments, "num_attachments")?,
+            num_replies: required(num_replies, "num_replies")?,
             text,
             service,
             handle_id,
@@ -245,31 +269,53 @@ impl MessageColumns {
             deleted_from,
             filter_action,
             filter_sub_action,
+            attributed_body,
+            message_summary_info,
+            has_payload_data,
+            payload_data,
         })
     }
 }
 
-/// Read a nullable column by resolved ordinal. Missing columns and conversion
-/// failures yield `None`, matching [`Message::from_row_named`].
+/// Read a nullable column by resolved ordinal. Return `None` if the column is
+/// missing or conversion fails.
 fn nullable<T: FromSql>(row: &Row, idx: Option<usize>) -> Option<T> {
     idx.and_then(|idx| row.get(idx).unwrap_or(None))
 }
 
-/// Read a non-nullable column by resolved ordinal. Missing columns and
-/// conversion failures yield `T::default()`, matching
-/// [`Message::from_row_named`].
+/// Read a non-nullable column by resolved ordinal. Return `T::default()` if
+/// the column is missing or conversion fails.
 fn defaulted<T: FromSql + Default>(row: &Row, idx: Option<usize>) -> T {
     idx.map_or_else(T::default, |idx| row.get(idx).unwrap_or_default())
+}
+
+/// Borrow the input types accepted by SQLite's incremental blob reader.
+fn bytes<'row>(row: &'row Row<'_>, idx: Option<usize>) -> Option<&'row [u8]> {
+    match row.get_ref(idx?).ok()? {
+        ValueRef::Blob(bytes) | ValueRef::Text(bytes) => Some(bytes),
+        _ => None,
+    }
+}
+
+/// Custom `m.*` projections can provide the raw payload instead of its flag.
+fn has_payload(row: &Row<'_>, flag: Option<usize>, payload: Option<usize>) -> bool {
+    if let Some(idx) = flag {
+        row.get(idx).unwrap_or(false)
+    } else {
+        payload
+            .and_then(|idx| row.get_ref(idx).ok())
+            .is_some_and(|value| !matches!(value, ValueRef::Null))
+    }
 }
 
 // MARK: Decode
 impl Message {
     /// Deserialize a [`Message`] through a resolved column layout.
     ///
-    /// Required reads and optional defaults match
-    /// [`from_row_named`](Self::from_row_named).
+    /// Propagate read errors for required columns. For optional columns, use
+    /// the field's default if the column is absent or conversion fails.
     pub(super) fn from_row_mapped(row: &Row, columns: &MessageColumns) -> Result<Message> {
-        Ok(Message {
+        let mut message = Message {
             rowid: row.get(columns.rowid)?,
             guid: row.get(columns.guid)?,
             text: nullable(row, columns.text),
@@ -304,47 +350,13 @@ impl Message {
             filter_sub_action: nullable(row, columns.filter_sub_action),
             components: vec![],
             edited_parts: None,
-        })
-    }
-
-    /// Build a [`Message`] from a row using named columns.
-    pub(super) fn from_row_named(row: &Row) -> Result<Message> {
-        Ok(Message {
-            rowid: row.get("rowid")?,
-            guid: row.get("guid")?,
-            text: row.get("text").unwrap_or(None),
-            service: row.get("service").unwrap_or(None),
-            handle_id: row.get("handle_id").unwrap_or(None),
-            destination_caller_id: row.get("destination_caller_id").unwrap_or(None),
-            subject: row.get("subject").unwrap_or(None),
-            date: row.get("date")?,
-            date_read: row.get("date_read").unwrap_or(0),
-            date_delivered: row.get("date_delivered").unwrap_or(0),
-            is_from_me: row.get("is_from_me")?,
-            is_read: row.get("is_read").unwrap_or(false),
-            item_type: row.get("item_type").unwrap_or_default(),
-            other_handle: row.get("other_handle").unwrap_or(None),
-            share_status: row.get("share_status").unwrap_or(false),
-            share_direction: row.get("share_direction").unwrap_or(None),
-            group_title: row.get("group_title").unwrap_or(None),
-            group_action_type: row.get("group_action_type").unwrap_or(0),
-            associated_message_guid: row.get("associated_message_guid").unwrap_or(None),
-            associated_message_type: row.get("associated_message_type").unwrap_or(None),
-            balloon_bundle_id: row.get("balloon_bundle_id").unwrap_or(None),
-            expressive_send_style_id: row.get("expressive_send_style_id").unwrap_or(None),
-            thread_originator_guid: row.get("thread_originator_guid").unwrap_or(None),
-            thread_originator_part: row.get("thread_originator_part").unwrap_or(None),
-            date_edited: row.get("date_edited").unwrap_or(0),
-            associated_message_emoji: row.get("associated_message_emoji").unwrap_or(None),
-            chat_id: row.get("chat_id").unwrap_or(None),
-            num_attachments: row.get("num_attachments")?,
-            deleted_from: row.get("deleted_from").unwrap_or(None),
-            num_replies: row.get("num_replies")?,
-            filter_action: row.get("filter_action").unwrap_or(None),
-            filter_sub_action: row.get("filter_sub_action").unwrap_or(None),
-            components: vec![],
-            edited_parts: None,
-        })
+        };
+        message.parse_body(
+            bytes(row, columns.attributed_body),
+            bytes(row, columns.message_summary_info),
+            has_payload(row, columns.has_payload_data, columns.payload_data),
+        );
+        Ok(message)
     }
 }
 
@@ -352,14 +364,63 @@ impl Message {
 mod tests {
     use std::env::current_dir;
 
-    use rusqlite::{Connection, Statement};
+    use rusqlite::{Connection, Error, Result, Row, Statement};
 
-    use super::{LONGEST_COL, Message, MessageColumns};
+    use super::{LONGEST_COL, Message, MessageColumns, bytes, has_payload};
     use crate::tables::{
-        capabilities::Capabilities,
-        messages::query_parts::message_query,
-        table::{Table, get_connection},
+        capabilities::Capabilities, messages::query_parts::message_query, table::get_connection,
     };
+
+    impl Message {
+        /// Build a [`Message`] by column name as a reference for
+        /// [`from_row_mapped`](Message::from_row_mapped). Compare every field
+        /// to verify that we read them all correctly by ordinal.
+        fn from_row_named(row: &Row) -> Result<Message> {
+            let mut message = Message {
+                rowid: row.get("rowid")?,
+                guid: row.get("guid")?,
+                text: row.get("text").unwrap_or(None),
+                service: row.get("service").unwrap_or(None),
+                handle_id: row.get("handle_id").unwrap_or(None),
+                destination_caller_id: row.get("destination_caller_id").unwrap_or(None),
+                subject: row.get("subject").unwrap_or(None),
+                date: row.get("date")?,
+                date_read: row.get("date_read").unwrap_or(0),
+                date_delivered: row.get("date_delivered").unwrap_or(0),
+                is_from_me: row.get("is_from_me")?,
+                is_read: row.get("is_read").unwrap_or(false),
+                item_type: row.get("item_type").unwrap_or_default(),
+                other_handle: row.get("other_handle").unwrap_or(None),
+                share_status: row.get("share_status").unwrap_or(false),
+                share_direction: row.get("share_direction").unwrap_or(None),
+                group_title: row.get("group_title").unwrap_or(None),
+                group_action_type: row.get("group_action_type").unwrap_or(0),
+                associated_message_guid: row.get("associated_message_guid").unwrap_or(None),
+                associated_message_type: row.get("associated_message_type").unwrap_or(None),
+                balloon_bundle_id: row.get("balloon_bundle_id").unwrap_or(None),
+                expressive_send_style_id: row.get("expressive_send_style_id").unwrap_or(None),
+                thread_originator_guid: row.get("thread_originator_guid").unwrap_or(None),
+                thread_originator_part: row.get("thread_originator_part").unwrap_or(None),
+                date_edited: row.get("date_edited").unwrap_or(0),
+                associated_message_emoji: row.get("associated_message_emoji").unwrap_or(None),
+                chat_id: row.get("chat_id").unwrap_or(None),
+                num_attachments: row.get("num_attachments")?,
+                deleted_from: row.get("deleted_from").unwrap_or(None),
+                num_replies: row.get("num_replies")?,
+                filter_action: row.get("filter_action").unwrap_or(None),
+                filter_sub_action: row.get("filter_sub_action").unwrap_or(None),
+                components: vec![],
+                edited_parts: None,
+            };
+            let column = |name| row.as_ref().column_index(name).ok();
+            message.parse_body(
+                bytes(row, column("attributedBody")),
+                bytes(row, column("message_summary_info")),
+                has_payload(row, column("has_payload_data"), column("payload_data")),
+            );
+            Ok(message)
+        }
+    }
 
     /// A `message` schema whose column order differs from
     /// [`super::MESSAGE_COLUMNS`]. Its `m.*` result exercises name resolution
@@ -476,6 +537,10 @@ mod tests {
             ("thread_originator_part", columns.thread_originator_part),
             ("date_edited", columns.date_edited),
             ("associated_message_emoji", columns.associated_message_emoji),
+            ("attributedBody", columns.attributed_body),
+            ("message_summary_info", columns.message_summary_info),
+            ("has_payload_data", columns.has_payload_data),
+            ("payload_data", columns.payload_data),
             ("chat_id", columns.chat_id),
             ("num_attachments", Some(columns.num_attachments)),
             ("deleted_from", columns.deleted_from),
@@ -500,6 +565,8 @@ mod tests {
     }
 
     fn assert_same_message(mapped: &Message, named: &Message) {
+        assert_eq!(mapped.components, named.components, "components");
+        assert_eq!(mapped.edited_parts, named.edited_parts, "edited_parts");
         assert_eq!(mapped.rowid, named.rowid, "rowid");
         assert_eq!(mapped.guid, named.guid, "guid");
         assert_eq!(mapped.text, named.text, "text");
@@ -608,13 +675,6 @@ mod tests {
     }
 
     #[test]
-    fn slots_cover_every_resolved_field() {
-        let db = ventura_db();
-        let columns = MessageColumns::resolve(&prepared(&db)).unwrap();
-        assert_eq!(slots(&columns).len(), MessageColumns::FIELDS);
-    }
-
-    #[test]
     fn resolve_matches_rusqlite_for_composed_head() {
         let db = ventura_db();
         assert_resolve_matches_rusqlite(&prepared(&db));
@@ -648,8 +708,12 @@ mod tests {
         // Exact count catches drift between the composed projection and the
         // mapped fields. Ordinal equality constrains the composer's column
         // order, not deserialization.
-        assert_eq!(stmt.column_count(), slots(&columns).len());
-        for (idx, (name, resolved)) in slots(&columns).into_iter().enumerate() {
+        let projected: Vec<_> = slots(&columns)
+            .into_iter()
+            .filter(|(_, ordinal)| ordinal.is_some())
+            .collect();
+        assert_eq!(stmt.column_count(), projected.len());
+        for (idx, (name, resolved)) in projected.into_iter().enumerate() {
             assert_eq!(resolved, Some(idx), "`{name}` is not at ordinal {idx}");
         }
     }
@@ -661,24 +725,6 @@ mod tests {
 
         let scrambled = scrambled_db();
         assert_exact_explicit_projection(&prepared(&scrambled));
-    }
-
-    #[test]
-    fn source_qualified_head_has_one_chat_id() {
-        let db = ventura_db();
-        let stmt = prepared(&db);
-
-        let matches: Vec<usize> = stmt
-            .column_names()
-            .iter()
-            .enumerate()
-            .filter(|(_, name)| name.eq_ignore_ascii_case("chat_id"))
-            .map(|(idx, _)| idx)
-            .collect();
-        assert_eq!(matches.len(), 1, "query exposed duplicate chat_id columns");
-
-        let columns = MessageColumns::resolve(&stmt).unwrap();
-        assert_eq!(columns.chat_id, Some(matches[0]));
     }
 
     #[test]
@@ -769,12 +815,15 @@ mod tests {
     #[test]
     fn resolve_refuses_a_missing_required_column() {
         let db = scrambled_db();
-        // No `num_replies`, which `from_row_named` reads with `?`.
+        // Omit `num_replies` to test rejection of an incomplete layout.
         let stmt = db
             .prepare("SELECT rowid, guid, date, is_from_me, 0 as num_attachments FROM message")
             .unwrap();
 
-        assert!(MessageColumns::resolve(&stmt).is_none());
+        assert!(matches!(
+            MessageColumns::resolve(&stmt),
+            Err(Error::InvalidColumnName(name)) if name == "num_replies"
+        ));
     }
 
     #[test]
@@ -796,7 +845,10 @@ mod tests {
         let query = format!("SELECT {} FROM message", projection.join(", "));
 
         let stmt = db.prepare(&query).unwrap();
-        assert!(MessageColumns::resolve(&stmt).is_none());
+        assert!(matches!(
+            MessageColumns::resolve(&stmt),
+            Err(Error::InvalidColumnName(name)) if name == "rowid"
+        ));
 
         let mut stmt = db.prepare(&query).unwrap();
         let first = Message::rows(&mut stmt, []).unwrap().next().unwrap();

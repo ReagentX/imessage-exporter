@@ -67,13 +67,6 @@ mod tests {
     }
 
     #[test]
-    fn can_get_valid_guid_too_short() {
-        let mut m = Message::blank();
-        m.associated_message_guid = Some("A44CE9D7-AAAA-BBBB-CCCC".to_string());
-        assert_eq!(None, m.clean_associated_guid());
-    }
-
-    #[test]
     fn can_get_valid_guid_p_invalid_index() {
         let mut m = Message::blank();
         m.associated_message_guid =

@@ -3,18 +3,16 @@ authors = ["Christopher Sardegna <imessage@reagentx.net>"]
 categories = ["command-line-utilities"]
 description = "Export iMessage data and run iMessage diagnostics"
 edition = "2024"
-exclude = [".github", "docs", "build.sh"]
 license = "GPL-3.0-or-later"
 name = "imessage-exporter"
 repository = "https://github.com/ReagentX/imessage-exporter"
 version = "0.0.0"
 
 [dependencies]
-askama = "=0.16.0"
-clap = { version = "=4.6.6", features = ["cargo"] }
+askama = "=0.16.1"
+clap = { version = "=4.6.7", features = ["cargo"] }
 fdlimit = "=0.3.0"
 fs2 = "=0.4.3"
 imessage-database = { path = "../imessage-database" }
 rpassword = "=7.5.4"
-rusqlite = { version = "=0.40.2", features = ["blob", "bundled"] }
 crabapple = { version = "=0.4.7" }

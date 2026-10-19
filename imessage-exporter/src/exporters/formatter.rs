@@ -34,7 +34,9 @@ use imessage_database::{
 
 use crate::{
     app::{error::RuntimeError, runtime::Config},
-    exporters::shared::{balloon::rewrite_fitness_receiver, part::AttachmentResolver},
+    exporters::shared::{
+        attachment::AttachmentFailure, balloon::rewrite_fitness_receiver, part::AttachmentResolver,
+    },
 };
 
 /// Where a message sits in the rendered conversation hierarchy. Each exporter
@@ -66,6 +68,15 @@ pub(crate) enum AttachmentRender {
     NamedFile(String),
 }
 
+impl From<AttachmentFailure> for AttachmentRender {
+    fn from(failure: AttachmentFailure) -> Self {
+        match failure {
+            AttachmentFailure::MissingFilename => AttachmentRender::MissingFilename,
+            AttachmentFailure::NamedFile(name) => AttachmentRender::NamedFile(name),
+        }
+    }
+}
+
 // MARK: Message
 /// Formatting hooks used by each exporter to render a message.
 pub(crate) trait MessageFormatter<'a> {
@@ -73,17 +84,17 @@ pub(crate) trait MessageFormatter<'a> {
     /// [`AttachmentRender`] tells the caller which body hook to invoke.
     fn format_attachment(
         &self,
-        attachment: &'a mut Attachment,
+        attachment: &'a Attachment,
         msg: &'a Message,
         metadata: &AttachmentMeta,
     ) -> AttachmentRender;
     /// Format a sticker, possibly by reading the disk.
-    fn format_sticker(&self, attachment: &'a mut Attachment, msg: &'a Message) -> String;
+    fn format_sticker(&self, attachment: &'a Attachment, msg: &'a Message) -> String;
     /// Format an app message from its payload and attachments.
     fn format_app(
         &self,
         msg: &'a Message,
-        attachments: &mut Vec<Attachment>,
+        attachments: &[Attachment],
     ) -> Result<String, RuntimeError>;
     /// Format a tapback displayed under a message.
     fn format_tapback(&self, msg: &Message) -> Result<String, RuntimeError>;
@@ -104,7 +115,7 @@ pub(crate) trait MessageFormatter<'a> {
         msg: &'a Message,
         edited_message: &'a EditedMessage,
         message_part_idx: usize,
-        attachments: &'a mut Vec<Attachment>,
+        attachments: &'a [Attachment],
         resolver: &mut AttachmentResolver,
     ) -> Option<String>;
     /// Format the text of a set of [`AttributedRange`]s applied to `text`.
@@ -120,7 +131,7 @@ pub(crate) trait MessageFormatter<'a> {
         &'a self,
         message: &'a Message,
         ranges: &'a [AttributedRange],
-        attachments: &'a mut Vec<Attachment>,
+        attachments: &'a [Attachment],
         resolver: &mut AttachmentResolver,
     ) -> <Self as PartBodyBuilder>::Body
     where
@@ -172,7 +183,7 @@ pub(crate) trait BalloonFormatter {
         &self,
         balloon: &AppMessage,
         bundle_id: &str,
-        attachments: &mut Vec<Attachment>,
+        attachments: &[Attachment],
         msg: &Message,
     ) -> String;
 }

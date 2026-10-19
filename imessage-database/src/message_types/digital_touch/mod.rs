@@ -15,7 +15,7 @@ pub mod fireball;
 pub mod heartbeat;
 pub mod kiss;
 pub mod media;
-pub mod models;
+mod models;
 pub mod sketch;
 mod svg;
 pub mod tap;

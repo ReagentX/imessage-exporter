@@ -10,7 +10,7 @@ use crate::tables::messages::models::attributed_range::AttributedRange;
 ///
 /// A single iMessage contains data that may be represented across multiple bubbles.
 /// Each bubble corresponds to one `__kIMMessagePartAttributeName` index in the
-/// underlying [`NSAttributedString`](crate::util::typedstream); the
+/// underlying [`NSAttributedString`](https://github.com/ReagentX/crabstep); the
 /// [`Run`](Self::Run) groups every attributed range that shares that part index.
 #[derive(Debug, PartialEq, Clone)]
 pub enum BubbleComponent {

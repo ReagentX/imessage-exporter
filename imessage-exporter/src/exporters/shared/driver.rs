@@ -8,14 +8,14 @@ use std::{
     path::PathBuf,
 };
 
-use imessage_database::tables::{
-    messages::Message,
-    table::{ORPHANED, Table},
-};
-use rusqlite::Connection;
+use imessage_database::tables::messages::Message;
 
 use crate::{
-    app::{error::RuntimeError, progress::ExportProgress, runtime::Config},
+    app::{
+        error::RuntimeError,
+        progress::ExportProgress,
+        runtime::{Config, ORPHANED},
+    },
     exporters::{
         formatter::{MessageFormatter, RenderContext},
         shared::date_span::{DateSpan, Timestamp},
@@ -123,8 +123,8 @@ impl ExportState {
 /// Convert the message date into a file-span timestamp.
 ///
 /// A date that [`Message::date`] cannot convert contributes nothing to the span.
-fn message_timestamp(config: &Config, message: &Message) -> Option<Timestamp> {
-    let date = message.date(config.offset).ok()?;
+fn message_timestamp(message: &Message) -> Option<Timestamp> {
+    let date = message.date().ok()?;
     Some((date.timestamp(), date.timestamp_subsec_nanos()))
 }
 
@@ -141,16 +141,6 @@ fn orphaned_writer(state: &mut ExportState) -> Result<&mut BufWriter<File>, Runt
         }
     };
     Ok(state.orphaned.insert(writer))
-}
-
-/// Decode the message's body via [`Message::parse_body`] and apply it.
-/// `parse_body` failures are non-fatal: they leave the message's
-/// `components` empty, which downstream formatters already treat as
-/// "nothing to render".
-pub fn apply_body(msg: &mut Message, db: &Connection) {
-    if let Ok(body) = msg.parse_body(db) {
-        msg.apply_body(body);
-    }
 }
 
 /// Format-specific hooks consumed by [`run_export`] and
@@ -206,7 +196,7 @@ where
     let at = config
         .options
         .use_message_times
-        .then(|| message_timestamp(config, message))
+        .then(|| message_timestamp(message))
         .flatten();
     match config.conversation(message) {
         Some((chatroom, _)) => {
@@ -312,7 +302,7 @@ where
     // and `clear()` retains it.
     let mut msg_buf = String::with_capacity(W::BUFFER_CAPACITY);
     for message in Message::rows(&mut statement, [])? {
-        let mut msg = message?;
+        let msg = message?;
 
         // Early escape if we try and render the same message GUID twice
         // See https://github.com/ReagentX/imessage-exporter/issues/135
@@ -328,8 +318,6 @@ where
             advance_progress(&writer.state().pb, &mut current_message);
             continue;
         }
-
-        apply_body(&mut msg, writer.config().data_source.db());
 
         if msg.is_announcement() {
             msg_buf.clear();
@@ -392,13 +380,11 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use imessage_database::tables::{
-        messages::Message,
-        table::{ORPHANED, Table},
-    };
+    use imessage_database::tables::messages::Message;
 
     use crate::{
-        Config, HTML, Options, TXT, app::export_type::ExportType,
+        Config, HTML, Options, TXT,
+        app::{export_type::ExportType, runtime::ORPHANED},
         exporters::shared::driver::run_export,
     };
 
@@ -421,7 +407,7 @@ mod tests {
         .unwrap();
         let dates: Vec<i64> = Message::rows(&mut statement, [])
             .unwrap()
-            .map(|message| message.unwrap().date(config.offset).unwrap().timestamp())
+            .map(|message| message.unwrap().date().unwrap().timestamp())
             .collect();
         (
             *dates.iter().min().expect("fixture has messages"),
@@ -518,7 +504,10 @@ mod tests {
         let mut options = Options::fake_options(ExportType::Txt);
         options.use_message_times = true;
         // Exclude every fixture message; the orphaned file is still created.
-        options.query_context.set_start("2100-01-01").unwrap();
+        options
+            .query_context
+            .set_start("2100-01-01", &options.timezone)
+            .unwrap();
         let config = Config::fake_app(options);
 
         let before = seconds(SystemTime::now());

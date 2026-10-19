@@ -12,6 +12,7 @@ use std::{
 use crabapple::error::BackupError;
 use imessage_database::{
     error::{message::MessageError, plist::PlistParseError, table::TableError},
+    rusqlite,
     util::size::format_file_size,
 };
 

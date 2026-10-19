@@ -30,7 +30,8 @@ use crate::{
 ///
 /// ## Technical detail
 ///
-/// The index specified by the prefix maps to the index of the body part given by [`Message::parse_body()`](crate::tables::messages::Message::parse_body).
+/// The index specified by the prefix identifies a parsed message body part;
+/// see [`Message::components`](crate::tables::messages::Message::components).
 ///
 /// - `bp:` GUID prefix for bubble message tapbacks (url previews, apps, etc).
 /// - `p:0/` GUID prefix for normal messages (body text, attachments).
@@ -134,8 +135,6 @@ pub enum Announcement<'a> {
     GroupAction(GroupAction<'a>),
     /// User kept an audio message.
     AudioMessageKept,
-    /// Unmapped `item_type`.
-    Unknown(&'a i32),
 }
 
 /// Whether a tapback was added or removed.

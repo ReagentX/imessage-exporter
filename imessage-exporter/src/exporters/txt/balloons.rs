@@ -146,7 +146,7 @@ impl BalloonFormatter for TXT<'_> {
     fn format_check_in(&self, balloon: &AppMessage) -> String {
         render_balloon(&CheckInVM {
             caption: balloon.caption.unwrap_or("Check In"),
-            footer: resolve_check_in_footer(balloon),
+            footer: resolve_check_in_footer(balloon, &self.config.options.timezone),
         })
     }
 
@@ -222,7 +222,7 @@ impl BalloonFormatter for TXT<'_> {
         &self,
         balloon: &AppMessage,
         bundle_id: &str,
-        _: &mut Vec<Attachment>,
+        _: &[Attachment],
         _: &Message,
     ) -> String {
         render_balloon(&GenericAppVM {

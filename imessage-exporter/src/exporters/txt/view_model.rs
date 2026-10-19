@@ -191,7 +191,8 @@ pub(super) struct StickerVM<'a> {
     /// `None` for the other variants.
     pub effect_prefix: Option<String>,
     pub who: &'a str,
-    /// Path returned by `format_attachment` (or its error string on failure).
+    /// Rendered path from `render_attachment`, or the display name on
+    /// preparation failure. Empty without filename metadata on the row.
     pub path: String,
     /// Pre-formatted parenthesized suffix like `" (App: Memoji)"`. `None` for
     /// `UserGenerated` (which uses `effect_prefix`) and on attachment errors.
