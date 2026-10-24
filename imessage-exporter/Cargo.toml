@@ -16,3 +16,6 @@ fs2 = "=0.4.3"
 imessage-database = { path = "../imessage-database" }
 rpassword = "=7.5.4"
 crabapple = { version = "=0.4.7" }
+
+[dependencies.tempfile]
+version = "=3.27.0"

@@ -24,7 +24,7 @@ pub(crate) fn audio_copy_convert(
     to: &mut PathBuf,
     converter: &AudioConverter,
     mime_type: &MediaType,
-) -> Option<MediaType<'static>> {
+) -> std::io::Result<Option<MediaType<'static>>> {
     if matches!(
         mime_type,
         MediaType::Audio("caf" | "CAF" | "x-caf; codecs=opus" | "amr" | "AMR")
@@ -38,14 +38,14 @@ pub(crate) fn audio_copy_convert(
         if convert_caf(from, &converted_path, converter).is_some() {
             // If the conversion was successful, update the path
             *to = converted_path;
-            return Some(MediaType::Audio(output_type.to_str()));
+            return Ok(Some(MediaType::Audio(output_type.to_str())));
         }
         eprintln!("Unable to convert {}", from.display());
     }
 
     // Fallback
-    copy_raw(from, to);
-    None
+    copy_raw(from, to)?;
+    Ok(None)
 }
 
 fn convert_caf(from: &Path, to: &Path, converter: &AudioConverter) -> Option<()> {

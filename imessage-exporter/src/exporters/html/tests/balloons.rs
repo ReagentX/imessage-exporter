@@ -36,7 +36,7 @@ fn can_format_html_url() {
     };
 
     let actual = exporter.format_url(&Config::fake_message(), &balloon);
-    let expected = "<a href=\"url\"><div class=\"app_header\"><img src=\"images\" loading=\"lazy\" onerror=\"this.style.display='none'\"><div class=\"name\">site_name</div></div><div class=\"app_footer\"><div class=\"caption\">title</div><div class=\"subcaption\">summary</div></div></a>";
+    let expected = "<a href=\"url\"><div class=\"app_header\"><div class=\"name\">site_name</div></div><div class=\"app_footer\"><div class=\"caption\">title</div><div class=\"subcaption\">summary</div></div></a>";
 
     assert_eq!(actual, expected);
 }
@@ -61,7 +61,7 @@ fn can_format_html_url_no_lazy() {
     };
 
     let actual = exporter.format_url(&Config::fake_message(), &balloon);
-    let expected = "<a href=\"url\"><div class=\"app_header\"><img src=\"images\" onerror=\"this.style.display='none'\"><div class=\"name\">site_name</div></div><div class=\"app_footer\"><div class=\"caption\">title</div><div class=\"subcaption\">summary</div></div></a>";
+    let expected = "<a href=\"url\"><div class=\"app_header\"><div class=\"name\">site_name</div></div><div class=\"app_footer\"><div class=\"caption\">title</div><div class=\"subcaption\">summary</div></div></a>";
 
     assert_eq!(actual, expected);
 }
@@ -81,7 +81,7 @@ fn can_format_html_music() {
     };
 
     let actual = exporter.format_music(&balloon);
-    let expected = "<div class=\"app_header\"><div class=\"name\">track_name</div><audio controls src=\"preview\"> </audio></div><a href=\"url\"><div class=\"app_footer\"><div class=\"caption\">artist</div><div class=\"subcaption\">album</div></div></a>";
+    let expected = "<div class=\"app_header\"><div class=\"name\">track_name</div></div><a href=\"url\"><div class=\"app_footer\"><div class=\"caption\">artist</div><div class=\"subcaption\">album</div></div></a>";
 
     assert_eq!(actual, expected);
 }
@@ -216,7 +216,7 @@ fn can_format_html_fitness() {
     };
 
     let actual = exporter.format_fitness(&balloon);
-    let expected = "<a href=\"url\"><div class=\"app_header\"><img src=\"image\"><div class=\"name\">Fitness</div><div class=\"image_title\">title</div><div class=\"image_subtitle\">subtitle</div><div class=\"ldtext\">ldtext</div></div><div class=\"app_footer\"><div class=\"caption\">caption</div><div class=\"subcaption\">subcaption</div><div class=\"trailing_caption\">trailing_caption\n        </div><div class=\"trailing_subcaption\">trailing_subcaption</div></div></a>";
+    let expected = "<a href=\"url\"><div class=\"app_header\"><div class=\"name\">Fitness</div><div class=\"image_title\">title</div><div class=\"image_subtitle\">subtitle</div><div class=\"ldtext\">ldtext</div></div><div class=\"app_footer\"><div class=\"caption\">caption</div><div class=\"subcaption\">subcaption</div><div class=\"trailing_caption\">trailing_caption\n        </div><div class=\"trailing_subcaption\">trailing_subcaption</div></div></a>";
 
     assert_eq!(actual, expected);
 }
@@ -241,7 +241,7 @@ fn can_format_html_slideshow() {
     };
 
     let actual = exporter.format_slideshow(&balloon);
-    let expected = "<a href=\"url\"><div class=\"app_header\"><img src=\"image\"><div class=\"name\">Slideshow</div><div class=\"image_title\">title</div><div class=\"image_subtitle\">subtitle</div><div class=\"ldtext\">ldtext</div></div><div class=\"app_footer\"><div class=\"caption\">caption</div><div class=\"subcaption\">subcaption</div><div class=\"trailing_caption\">trailing_caption\n        </div><div class=\"trailing_subcaption\">trailing_subcaption</div></div></a>";
+    let expected = "<a href=\"url\"><div class=\"app_header\"><div class=\"name\">Slideshow</div><div class=\"image_title\">title</div><div class=\"image_subtitle\">subtitle</div><div class=\"ldtext\">ldtext</div></div><div class=\"app_footer\"><div class=\"caption\">caption</div><div class=\"subcaption\">subcaption</div><div class=\"trailing_caption\">trailing_caption\n        </div><div class=\"trailing_subcaption\">trailing_subcaption</div></div></a>";
 
     assert_eq!(actual, expected);
 }
@@ -669,7 +669,7 @@ fn can_format_html_generic_app() {
     };
 
     let actual = exporter.format_generic_app(&balloon, "bundle_id", &[], &Config::fake_message());
-    let expected = "<a href=\"url\"><div class=\"app_header\"><img src=\"image\"><div class=\"name\">app_name</div><div class=\"image_title\">title</div><div class=\"image_subtitle\">subtitle</div><div class=\"ldtext\">ldtext</div></div><div class=\"app_footer\"><div class=\"caption\">caption</div><div class=\"subcaption\">subcaption</div><div class=\"trailing_caption\">trailing_caption\n        </div><div class=\"trailing_subcaption\">trailing_subcaption</div></div></a>";
+    let expected = "<a href=\"url\"><div class=\"app_header\"><div class=\"name\">app_name</div><div class=\"image_title\">title</div><div class=\"image_subtitle\">subtitle</div><div class=\"ldtext\">ldtext</div></div><div class=\"app_footer\"><div class=\"caption\">caption</div><div class=\"subcaption\">subcaption</div><div class=\"trailing_caption\">trailing_caption\n        </div><div class=\"trailing_subcaption\">trailing_subcaption</div></div></a>";
 
     assert_eq!(actual, expected);
 }

@@ -568,12 +568,13 @@ impl Options {
 
         use crate::app::test_dir::unique_test_dir;
 
+        let fixture_db = std::env::current_dir()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("imessage-database/test_data/db/test.db");
         Options {
-            db_path: std::env::current_dir()
-                .unwrap()
-                .parent()
-                .unwrap()
-                .join("imessage-database/test_data/db/test.db"),
+            db_path: fixture_db.clone(),
             attachment_root: None,
             attachment_manager: AttachmentManager::default(),
             diagnostic: false,
@@ -590,7 +591,7 @@ impl Options {
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: None,
-            contacts_path: None,
+            contacts_path: Some(fixture_db),
             // The harness leaves stderr as a TTY, so a true default draws `\r`
             // bars over test output.
             show_progress: false,

@@ -42,3 +42,6 @@ fn main() -> ExitCode {
         }
     }
 }
+
+#[cfg(test)]
+mod security_review;

@@ -1,7 +1,5 @@
-{%- if let Some(wrapper_url) = wrapper_url.get() -%}<a href="{{ wrapper_url }}">{%- endif -%}
+{%- if let Some(wrapper_url) = wrapper_url.get_url() -%}<a href="{{ wrapper_url }}">{%- endif -%}
     <div class="app_header">
-        {%- for image in images -%}<img src="{{ image }}" {% if lazy -%} loading="lazy" {% endif -%}
-            onerror="this.style.display='none'">{%- endfor -%}
         {%- if let Some(name) = name.get() -%}<div class="name">{{ name }}</div>{%- endif -%}
     </div>
     {%- if self.has_footer() -%}
@@ -10,5 +8,5 @@
         {%- if let Some(summary) = summary.get() -%}<div class="subcaption">{{ summary }}</div>{%- endif -%}
     </div>
     {%- endif -%}
-    {%- if wrapper_url.get().is_some() -%}
+    {%- if wrapper_url.get_url().is_some() -%}
 </a>{%- endif -%}

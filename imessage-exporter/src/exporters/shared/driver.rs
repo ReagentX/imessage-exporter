@@ -1,4 +1,5 @@
 use std::{
+    cell::Cell,
     collections::{
         HashMap,
         hash_map::Entry::{Occupied, Vacant},
@@ -31,6 +32,7 @@ const FILE_BUFFER_CAPACITY: usize = 64 * 1024;
 /// formatter struct adds only the `&'a Config` reference and the
 /// format-specific hooks declared on [`MessageWriter`].
 pub struct ExportState {
+    pub errors: Cell<u64>,
     /// One open [`BufWriter`] per resolved chat filename.
     pub files: HashMap<String, BufWriter<File>>,
     /// Cache each chat's resolved filename by chat rowid
@@ -67,6 +69,7 @@ impl ExportState {
         // so headless invocations (CI, redirects to logfiles) stay clean.
         let pb_enabled = config.options.show_progress && stderr().is_terminal();
         Ok(Self {
+            errors: Cell::new(0),
             files: HashMap::new(),
             route: HashMap::new(),
             orphaned: Some(BufWriter::with_capacity(FILE_BUFFER_CAPACITY, file)),
@@ -367,7 +370,10 @@ where
 
     // Stamp only after every footer write and checked flush succeeds.
     state.finish(config);
-
+    let failures = failures + state.errors.get();
+    if failures > 0 {
+        return Err(RuntimeError::IncompleteExport(failures));
+    }
     Ok(())
 }
 

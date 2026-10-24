@@ -1,7 +1,4 @@
-use std::{
-    fs::{create_dir_all, remove_file, write},
-    path::PathBuf,
-};
+use std::{io::Write, path::PathBuf};
 
 use imessage_database::{
     message_types::handwriting::HandwrittenMessage,
@@ -16,7 +13,7 @@ use crate::app::{
         backup::decrypt_file,
         converters::{
             audio::audio_copy_convert,
-            common::{copy_raw, update_file_metadata},
+            common::{copy_raw, output_directory, update_file_metadata},
             image::image_copy_convert,
             sticker::sticker_copy_convert,
             video::video_copy_convert,
@@ -85,43 +82,22 @@ impl AttachmentManager {
         message: &Message,
         handwriting: &HandwrittenMessage,
         config: &Config,
-    ) -> Option<PathBuf> {
-        if !matches!(self.mode, AttachmentManagerMode::Disabled) {
-            // Create a path to copy the file to
-            let mut to = config.attachment_path();
-
-            // Add the subdirectory
-            let sub_dir = config.conversation_attachment_path(message.chat_rowid());
-            to.push(sub_dir);
-
-            // Each handwriting payload has a unique ID.
-            to.push(&handwriting.id);
-
-            // Set the new file's extension to svg
-            to.set_extension("svg");
-            if to.exists() {
-                return Some(to);
-            }
-
-            // Ensure the directory tree exists
-            if let Some(folder) = to.parent()
-                && !folder.exists()
-                && let Err(why) = create_dir_all(folder)
-            {
-                eprintln!("Unable to create {}: {why}", folder.display());
-            }
-
-            // Attempt the svg render
-            if let Err(why) = write(&to, handwriting.render_svg()) {
-                eprintln!("Unable to write to {}: {why}", to.display());
-            }
-
-            // Update file metadata
-            update_file_metadata(&to, &to, message, config);
-
-            return Some(to);
+    ) -> std::io::Result<Option<PathBuf>> {
+        if matches!(self.mode, AttachmentManagerMode::Disabled) {
+            return Ok(None);
         }
-        None
+        let dir = config
+            .attachment_path()
+            .join(config.conversation_attachment_path(message.chat_rowid()));
+        output_directory(&config.options.export_path, &dir)?;
+        // The database row ID is numeric; payload IDs never enter filesystem paths.
+        let to = dir.join(format!("handwriting-{}.svg", message.rowid));
+        let mut file = tempfile::NamedTempFile::new_in(&dir)?;
+        file.write_all(handwriting.render_svg().as_bytes())?;
+        file.as_file().sync_all()?;
+        file.persist(&to).map_err(|e| e.error)?;
+        update_file_metadata(&to, &to, message, config);
+        Ok(Some(to))
     }
 
     // MARK: Files
@@ -146,9 +122,14 @@ impl AttachmentManager {
             });
         };
 
+        let output = target.raw_path(attachment);
+        output_directory(&config.options.export_path, output.parent().unwrap())?;
         // Check for output on disk because a fresh attachment row is loaded
         // for each reference.
-        if let Some(file) = target.existing_copy(attachment) {
+        if matches!(self.mode, AttachmentManagerMode::Clone)
+            && config.data_source.backup.is_none()
+            && let Some(file) = target.existing_copy(attachment)
+        {
             return Ok(Plan::Reuse(file));
         }
 
@@ -184,7 +165,7 @@ impl AttachmentManager {
     ) -> Result<ExportFile<'a>, ConversionError> {
         // The working source; `target.source()` is retained for metadata below
         let mut from = target.source().to_path_buf();
-        let mut is_temp = false;
+        let mut decrypted = None;
 
         // Handle encrypted files from iOS backups
         if let Some(backup) = &config.data_source.backup {
@@ -193,8 +174,8 @@ impl AttachmentManager {
                 match decrypt_file(backup, &from) {
                     Ok(decrypted_path) => {
                         // Use the decrypted file; it is temporary, so remove it later
-                        from = decrypted_path;
-                        is_temp = true;
+                        from = decrypted_path.path().to_path_buf();
+                        decrypted = Some(decrypted_path);
                     }
                     Err(why) => {
                         return Err(ConversionError::DecryptFailed {
@@ -213,7 +194,14 @@ impl AttachmentManager {
 
         // Target path with the source extension; the converters reassign this to
         // their output path on success and fall back to it on failure.
-        let mut to = target.raw_path(attachment);
+        let destination = target.raw_path(attachment);
+        let parent = destination
+            .parent()
+            .ok_or_else(|| std::io::Error::other("No output parent"))?;
+        output_directory(&config.options.export_path, parent)?;
+        // Converters only write into an exclusive per-attachment staging directory.
+        let stage = tempfile::tempdir_in(parent)?;
+        let mut to = stage.path().join(destination.file_name().unwrap());
 
         // If we convert the attachment, we need to update the media type
         let mut new_media_type: Option<MediaType> = None;
@@ -231,16 +219,16 @@ impl AttachmentManager {
                                     converter,
                                     self.video_converter.as_ref(),
                                     &mime_type,
-                                );
+                                )?;
                             } else {
                                 new_media_type =
-                                    image_copy_convert(&from, &mut to, converter, &mime_type);
+                                    image_copy_convert(&from, &mut to, converter, &mime_type)?;
                             }
                         }
-                        None => copy_raw(&from, &to),
+                        None => copy_raw(&from, &to)?,
                     }
                 }
-                AttachmentManagerMode::Clone => copy_raw(&from, &to),
+                AttachmentManagerMode::Clone => copy_raw(&from, &to)?,
                 AttachmentManagerMode::Disabled => unreachable!(),
             },
             MediaType::Video(_) => match self.mode {
@@ -252,48 +240,52 @@ impl AttachmentManager {
                             converter,
                             &self.hardware_encoder,
                             &mime_type,
-                        );
+                        )?;
                     }
-                    None => copy_raw(&from, &to),
+                    None => copy_raw(&from, &to)?,
                 },
                 AttachmentManagerMode::Clone | AttachmentManagerMode::Basic => {
-                    copy_raw(&from, &to);
+                    copy_raw(&from, &to)?;
                 }
                 AttachmentManagerMode::Disabled => unreachable!(),
             },
             MediaType::Audio(_) => match self.mode {
                 AttachmentManagerMode::Full => match &self.audio_converter {
                     Some(converter) => {
-                        new_media_type = audio_copy_convert(&from, &mut to, converter, &mime_type);
+                        new_media_type = audio_copy_convert(&from, &mut to, converter, &mime_type)?;
                     }
-                    None => copy_raw(&from, &to),
+                    None => copy_raw(&from, &to)?,
                 },
                 AttachmentManagerMode::Clone | AttachmentManagerMode::Basic => {
-                    copy_raw(&from, &to);
+                    copy_raw(&from, &to)?;
                 }
                 AttachmentManagerMode::Disabled => unreachable!(),
             },
-            _ => copy_raw(&from, &to),
+            _ => copy_raw(&from, &to)?,
         }
 
-        // Update file metadata; a decrypted file takes the original's metadata
-        if is_temp {
-            update_file_metadata(target.source(), &to, message, config);
-        } else {
-            update_file_metadata(&from, &to, message, config);
+        // A converter exit code alone is not evidence that it wrote an output.
+        let info = std::fs::symlink_metadata(&to)?;
+        if info.file_type().is_symlink() || (!info.is_file() && !info.is_dir()) {
+            return Err(std::io::Error::other("Invalid attachment output").into());
         }
-
+        if new_media_type.is_some() && info.len() == 0 {
+            return Err(std::io::Error::other("Empty converted attachment").into());
+        }
+        let mut final_path = destination;
+        if let Some(ext) = to.extension() {
+            final_path.set_extension(ext);
+        }
+        // rename replaces an existing file/symlink without following it. Directory
+        // collisions fail closed instead of merging potentially stale trees.
+        std::fs::rename(&to, &final_path)?;
+        update_file_metadata(target.source(), &final_path, message, config);
+        drop(decrypted);
         let file = ExportFile {
-            path: to,
+            path: final_path,
             media_type: new_media_type.unwrap_or(mime_type),
             name: target.name(),
         };
-
-        // Remove the temporary file used for decryption, if it exists
-        if is_temp && let Err(why) = remove_file(&from) {
-            eprintln!("Unable to remove encrypted file {}: {why}", from.display());
-        }
-
         Ok(file)
     }
 }

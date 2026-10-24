@@ -9,3 +9,7 @@ lto = true
 codegen-units = 1
 # Do not unwind stack on crash
 panic = "abort"
+
+[patch.crates-io]
+# Local plaintext temporary-file hardening; see vendor/crabapple/SECURITY_PATCH.md.
+crabapple = { path = "vendor/crabapple" }

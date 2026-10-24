@@ -24,7 +24,7 @@ pub(crate) fn video_copy_convert(
     converter: &VideoConverter,
     hardware_encoder: &Option<HardwareEncoder>,
     mime_type: &MediaType,
-) -> Option<MediaType<'static>> {
+) -> std::io::Result<Option<MediaType<'static>>> {
     if matches!(mime_type, MediaType::Video("mov" | "MOV" | "quicktime")) {
         let output_type = VideoType::Mp4;
 
@@ -34,14 +34,14 @@ pub(crate) fn video_copy_convert(
 
         if convert_mov(from, &converted_path, converter, hardware_encoder.as_ref()).is_some() {
             *to = converted_path;
-            return Some(MediaType::Video(output_type.to_str()));
+            return Ok(Some(MediaType::Video(output_type.to_str())));
         }
         eprintln!("Unable to convert {from:?}");
     }
 
     // Fallback
-    copy_raw(from, to);
-    None
+    copy_raw(from, to)?;
+    Ok(None)
 }
 
 /// Build ffmpeg arguments for remuxing without re-encoding.

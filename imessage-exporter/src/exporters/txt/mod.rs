@@ -368,6 +368,7 @@ impl PartBodyBuilder for TXT<'_> {
     }
 
     fn body_attachment_error(&self, error: &str) -> Self::Body {
+        self.state.errors.set(self.state.errors.get() + 1);
         PartBody::Line {
             text: error.to_string(),
         }
@@ -388,6 +389,7 @@ impl PartBodyBuilder for TXT<'_> {
     }
 
     fn body_app_error(&self, _message: &Message, why: String) -> Self::Body {
+        self.state.errors.set(self.state.errors.get() + 1);
         PartBody::Line {
             text: format!("Unable to format app message: {why}"),
         }

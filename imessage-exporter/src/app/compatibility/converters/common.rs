@@ -3,7 +3,7 @@
 */
 use std::{
     ffi::OsStr,
-    fs::{copy, create_dir_all, metadata, read_dir},
+    fs::{File, create_dir_all, metadata, read_dir},
     path::Path,
     process::{Command, Stdio},
 };
@@ -60,51 +60,102 @@ pub(super) fn ensure_output_dir(to: &Path) -> Option<()> {
 }
 
 /// Copy a file or directory without altering it.
-pub(crate) fn copy_raw(from: &Path, to: &Path) {
-    if from.is_dir() {
-        if let Err(why) = create_dir_all(to) {
-            eprintln!("Unable to create directory {}: {why}", to.display());
-            return;
+pub(crate) fn copy_raw(from: &Path, to: &Path) -> std::io::Result<()> {
+    let info = std::fs::symlink_metadata(from)?;
+    if info.file_type().is_symlink() {
+        return Err(std::io::Error::other("Refusing a symlink attachment"));
+    }
+    if info.is_dir() {
+        create_dir_all(to)?;
+        for entry in read_dir(from)? {
+            let entry = entry?;
+            copy_raw(&entry.path(), &to.join(entry.file_name()))?;
         }
-
-        // Iterate over the directory entries and copy them recursively
-        match read_dir(from) {
-            Ok(entries) => {
-                for entry_result in entries {
-                    match entry_result {
-                        Ok(entry) => {
-                            let from_path = entry.path();
-                            let to_path = to.join(entry.file_name());
-                            copy_raw(&from_path, &to_path);
-                        }
-                        Err(why) => {
-                            eprintln!("Failed to read item in {}: {why}", from.display());
-                        }
-                    }
-                }
-            }
-            Err(why) => {
-                eprintln!("Failed to read directory {}: {why}", from.display());
-            }
+    } else if info.is_file() {
+        if let Some(parent) = to.parent() {
+            create_dir_all(parent)?;
+        }
+        let mut source = File::open(from)?;
+        let mut output = tempfile::NamedTempFile::new_in(to.parent().unwrap())?;
+        std::io::copy(&mut source, &mut output)?;
+        output.as_file().sync_all()?;
+        output.persist(to).map_err(|e| e.error)?;
+        if !files_equal(from, to)? {
+            return Err(std::io::Error::other("Attachment verification failed"));
         }
     } else {
-        // Ensure the directory tree exists
-        if let Some(folder) = to.parent()
-            && !folder.exists()
-            && let Err(why) = create_dir_all(folder)
-        {
-            eprintln!("Unable to create {}: {why}", folder.display());
-            return;
-        }
+        return Err(std::io::Error::other(
+            "Attachment is not a regular file or directory",
+        ));
+    }
+    Ok(())
+}
 
-        if let Err(why) = copy(from, to) {
-            eprintln!(
-                "Unable to copy {} to {}: {why}",
-                from.display(),
-                to.display()
-            );
+/// Compare complete content (including directory trees), not only length. Reject symlinks.
+pub(crate) fn files_equal(a: &Path, b: &Path) -> std::io::Result<bool> {
+    use std::io::Read;
+    let am = std::fs::symlink_metadata(a)?;
+    let bm = std::fs::symlink_metadata(b)?;
+    if am.is_dir() && bm.is_dir() {
+        let names =
+            |path: &Path| -> std::io::Result<std::collections::BTreeSet<std::ffi::OsString>> {
+                read_dir(path)?
+                    .map(|entry| entry.map(|entry| entry.file_name()))
+                    .collect()
+            };
+        let left = names(a)?;
+        if left != names(b)? {
+            return Ok(false);
+        }
+        for name in left {
+            if !files_equal(&a.join(&name), &b.join(name))? {
+                return Ok(false);
+            }
+        }
+        return Ok(true);
+    }
+    if !am.is_file() || !bm.is_file() || am.len() != bm.len() {
+        return Ok(false);
+    }
+    let mut a = std::io::BufReader::new(File::open(a)?);
+    let mut b = std::io::BufReader::new(File::open(b)?);
+    let mut left = [0u8; 65536];
+    let mut right = [0u8; 65536];
+    let mut remaining = am.len();
+    while remaining > 0 {
+        let n = remaining.min(left.len() as u64) as usize;
+        a.read_exact(&mut left[..n])?;
+        b.read_exact(&mut right[..n])?;
+        if left[..n] != right[..n] {
+            return Ok(false);
+        }
+        remaining -= n as u64;
+    }
+    Ok(a.read(&mut left[..1])? == 0 && b.read(&mut right[..1])? == 0)
+}
+
+/// Reject symlinks and non-directories below the user-selected output root.
+pub(crate) fn output_directory(root: &Path, dir: &Path) -> std::io::Result<()> {
+    let relative = dir.strip_prefix(root).map_err(std::io::Error::other)?;
+    create_dir_all(root)?;
+    let mut current = root.to_path_buf();
+    for part in relative.components() {
+        let std::path::Component::Normal(part) = part else {
+            return Err(std::io::Error::other("Invalid output path component"));
+        };
+        current.push(part);
+        match std::fs::symlink_metadata(&current) {
+            Ok(m) if m.is_dir() && !m.file_type().is_symlink() => {}
+            Ok(_) => {
+                return Err(std::io::Error::other(
+                    "Output directory is not a real directory",
+                ));
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => std::fs::create_dir(&current)?,
+            Err(e) => return Err(e),
         }
     }
+    Ok(())
 }
 
 /// Update an attachment output's access and modification times.

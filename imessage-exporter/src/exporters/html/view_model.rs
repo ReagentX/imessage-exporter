@@ -31,7 +31,6 @@ pub(super) struct ApplePayVM<'a> {
 #[template(path = "balloons/app_card.html")]
 pub(super) struct AppCardVM<'a> {
     pub url: OptionalText<'a>,
-    pub image: OptionalText<'a>,
     /// Pre-rendered HTML for an attachment, used when `image` is `None` and an
     /// attachment is present.
     pub attachment_html: Option<Html>,
@@ -62,8 +61,6 @@ pub(super) struct UrlVM<'a> {
     pub wrapper_url: OptionalText<'a>,
     /// Resolved label: `site_name` falling back to URL then `msg.text`.
     pub name: OptionalText<'a>,
-    pub images: &'a [&'a str],
-    pub lazy: bool,
     pub title: OptionalText<'a>,
     pub summary: OptionalText<'a>,
 }
@@ -78,7 +75,6 @@ impl UrlVM<'_> {
 #[template(path = "balloons/music.html")]
 pub(super) struct MusicVM<'a> {
     pub track_name: OptionalText<'a>,
-    pub preview: OptionalText<'a>,
     pub lyrics: Option<&'a [&'a str]>,
     pub url: OptionalText<'a>,
     pub artist: OptionalText<'a>,

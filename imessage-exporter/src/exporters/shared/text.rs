@@ -10,6 +10,11 @@
 pub struct OptionalText<'a>(Option<&'a str>);
 
 impl<'a> OptionalText<'a> {
+    /// A link target with dangerous schemes and control characters rejected.
+    pub fn get_url(&self) -> Option<&'a str> {
+        self.0.and_then(crate::app::sanitizers::safe_link)
+    }
+
     /// The wrapped value with empty strings filtered out.
     pub fn get(&self) -> Option<&'a str> {
         self.0

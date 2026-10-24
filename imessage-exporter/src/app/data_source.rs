@@ -1,7 +1,4 @@
-use std::{
-    fs::remove_file,
-    path::{Path, PathBuf},
-};
+use std::path::Path;
 
 use crabapple::Backup;
 use imessage_database::{
@@ -18,27 +15,6 @@ use crate::app::{
     error::RuntimeError,
     options::Options,
 };
-
-/// A decrypted temporary database file, removed from disk when dropped.
-struct TempDatabase(PathBuf);
-
-impl TempDatabase {
-    /// Borrow the path, e.g. to open a connection to it.
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TempDatabase {
-    fn drop(&mut self) {
-        if let Err(why) = remove_file(&self.0) {
-            eprintln!(
-                "warning: failed to remove temporary messages database at {}: {why}",
-                self.0.display(),
-            );
-        }
-    }
-}
 
 pub struct DataSource {
     /// Messages database connection.
@@ -57,7 +33,7 @@ pub struct DataSource {
     /// A temporary decrypted messages database this `DataSource` owns; its own
     /// [`Drop`] removes the file. `None` when the messages database is a real
     /// on-disk file (macOS, or iOS with an unencrypted backup).
-    temp_messages_db: Option<TempDatabase>,
+    temp_messages_db: Option<tempfile::NamedTempFile>,
 }
 
 impl DataSource {
@@ -78,7 +54,7 @@ impl DataSource {
             ),
             Platform::iOS => match decrypt_backup(options)? {
                 Some(backup) => {
-                    let messages_db = TempDatabase(get_decrypted_message_database(&backup)?);
+                    let messages_db = get_decrypted_message_database(&backup)?;
 
                     // Use a user-supplied Contacts database instead of decrypting the backup's
                     // copy.
@@ -86,14 +62,7 @@ impl DataSource {
                         Some(custom) => Self::get_contacts_index(Some(custom)),
                         None => {
                             let contacts_path = get_decrypted_contacts_database(&backup)?;
-                            let index = Self::get_contacts_index(Some(&contacts_path));
-                            if let Err(e) = remove_file(&contacts_path) {
-                                eprintln!(
-                                    "warning: failed to remove temporary contacts database at {}: {e}",
-                                    contacts_path.display()
-                                );
-                            }
-                            index
+                            Self::get_contacts_index(Some(contacts_path.path()))
                         }
                     }
                     .unwrap_or_default();
@@ -118,7 +87,7 @@ impl DataSource {
                         .unwrap_or_else(|| options.db_path.join(DEFAULT_PATH_IOS));
                     (
                         options.get_db_path(),
-                        Self::get_contacts_index(Some(&contacts_path)).unwrap_or_default(),
+                        Self::get_contacts_index(Some(contacts_path.as_path())).unwrap_or_default(),
                         None,
                         None,
                     )
@@ -170,7 +139,7 @@ impl DataSource {
 impl Drop for DataSource {
     fn drop(&mut self) {
         // Close the connection before the temp database is removed, so the OS isn't
-        // holding it open on Windows; `TempDatabase`'s own `Drop` does the removal.
+        // holding it open on Windows; `NamedTempFile`'s own `Drop` does the removal.
         if let Some(conn) = self.messages_connection.take() {
             conn.close().ok();
         }

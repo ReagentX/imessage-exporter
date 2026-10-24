@@ -101,13 +101,19 @@ impl BalloonFormatter for TXT<'_> {
     fn format_handwriting(&self, msg: &Message, balloon: &HandwrittenMessage) -> String {
         match self.config.options.attachment_manager.mode {
             AttachmentManagerMode::Disabled => balloon.render_ascii(40),
-            _ => self
-                .config
-                .options
-                .attachment_manager
-                .handle_handwriting(msg, balloon, self.config)
-                .map(|filepath| self.config.relative_path(&filepath))
-                .unwrap_or_else(|| balloon.render_ascii(40)),
+            _ => match self.config.options.attachment_manager.handle_handwriting(
+                msg,
+                balloon,
+                self.config,
+            ) {
+                Ok(Some(path)) => self.config.relative_path(&path),
+                Ok(None) => balloon.render_ascii(40),
+                Err(e) => {
+                    self.state.errors.set(self.state.errors.get() + 1);
+                    eprintln!("Unable to save handwriting: {e}");
+                    balloon.render_ascii(40)
+                }
+            },
         }
     }
 

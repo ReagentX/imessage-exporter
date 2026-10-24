@@ -485,6 +485,7 @@ impl PartBodyBuilder for HTML<'_> {
     }
 
     fn body_attachment_error(&self, error: &str) -> Self::Body {
+        self.state.errors.set(self.state.errors.get() + 1);
         PartBody::AttachmentError {
             error: Html::trust(sanitize_html(error).into_owned()),
         }
@@ -507,6 +508,7 @@ impl PartBodyBuilder for HTML<'_> {
     }
 
     fn body_app_error(&self, message: &Message, why: String) -> Self::Body {
+        self.state.errors.set(self.state.errors.get() + 1);
         PartBody::AppError {
             html: Html::trust(
                 sanitize_html(&format!(
@@ -815,6 +817,7 @@ impl HTML<'_> {
 
     fn write_headers(file: &mut BufWriter<File>) -> Result<(), RuntimeError> {
         file.write_all(HEADER.as_bytes())?;
+        file.write_all(br#"<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'self' file: data:; media-src 'self' file:; style-src 'self' 'unsafe-inline'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'">"#)?;
         file.write_all(b"<style>\n")?;
         file.write_all(STYLE.as_bytes())?;
         file.write_all(b"\n</style>")?;

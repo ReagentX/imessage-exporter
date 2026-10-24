@@ -1,7 +1,6 @@
-{%- if let Some(url) = url.get() -%}<a href="{{ url }}">{%- endif -%}
+{%- if let Some(url) = url.get_url() -%}<a href="{{ url }}">{%- endif -%}
     <div class="app_header">
-        {%- if let Some(image) = image.get() -%}<img src="{{ image }}">
-        {%- else if let Some(attachment_html) = attachment_html -%}{{ attachment_html|safe }}
+        {%- if let Some(attachment_html) = attachment_html -%}{{ attachment_html|safe }}
         {%- endif -%}
         <div class="name">{{ name }}</div>
         {%- if let Some(title) = title.get() -%}<div class="image_title">{{ title }}</div>{%- endif -%}
@@ -19,5 +18,5 @@
             trailing_subcaption }}</div>{%- endif -%}
     </div>
     {%- endif -%}
-    {%- if url.get().is_some() -%}
+    {%- if url.get_url().is_some() -%}
 </a>{%- endif -%}

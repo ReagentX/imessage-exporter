@@ -41,6 +41,15 @@ pub struct Point {
     pub width: u16,
 }
 
+fn xml_text(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
 impl HandwrittenMessage {
     /// Converts a raw byte payload from the database into a [`HandwrittenMessage`].
     pub fn from_payload(payload: &[u8]) -> Result<Self, HandwritingError> {
@@ -73,9 +82,9 @@ impl HandwrittenMessage {
         svg.push('\n');
         svg.push_str(format!(r#"<svg viewBox="0 0 {} {}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">"#, self.width, self.height).as_str());
         svg.push('\n');
-        svg.push_str(&format!("<title>{}</title>\n", self.id));
+        svg.push_str(&format!("<title>{}</title>\n", xml_text(&self.id)));
         svg.push_str("<metadata>\n");
-        svg.push_str(&format!("<id>{}</id>\n", self.id));
+        svg.push_str(&format!("<id>{}</id>\n", xml_text(&self.id)));
         svg.push_str(&format!("<createdAt>{}</createdAt>\n", self.created_at));
         svg.push_str("</metadata>\n");
         svg.push_str("<style>\n");

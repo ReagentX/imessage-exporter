@@ -1,9 +1,8 @@
 use std::{
-    env::temp_dir,
-    fs::File,
-    io::{BufWriter, IsTerminal, Write, copy, stdin},
-    path::{Path, PathBuf},
+    io::{IsTerminal, Read, copy, stdin},
+    path::Path,
 };
+use tempfile::NamedTempFile;
 
 use crabapple::{
     Authentication, Backup, backup::models::manifest::manifest_plist::ManifestData,
@@ -17,7 +16,13 @@ use crate::app::{
     options::{OPTION_CLEARTEXT_PASSWORD, Options},
 };
 
-const MAX_IN_MEMORY_DECRYPT: u64 = 25 * 1024 * 1024;
+/// Own the temporary file before any plaintext is written, including on errors.
+fn private_temp(reader: &mut impl Read, directory: &Path) -> std::io::Result<NamedTempFile> {
+    let mut file = NamedTempFile::new_in(directory)?;
+    copy(reader, &mut file)?;
+    file.as_file().sync_all()?;
+    Ok(file)
+}
 
 /// Open the iOS backup, prompting for a password if it is encrypted and one was not provided.
 ///
@@ -79,44 +84,34 @@ fn prompt_for_password() -> Result<String, RuntimeError> {
 /// Write the decrypted Messages database from the iOS backup to a temp file.
 ///
 /// The real name is `Library/SMS/sms.db`
-pub fn get_decrypted_message_database(backup: &Backup) -> Result<PathBuf, RuntimeError> {
+pub fn get_decrypted_message_database(backup: &Backup) -> Result<NamedTempFile, RuntimeError> {
     let (_, file_id) = DEFAULT_PATH_IOS.split_at(3);
     eprintln!("  [2/5] Resolving messages database...");
     let file = backup.get_file(file_id)?;
     let mut decrypted_chat_db = backup.decrypt_entry_stream(&file)?;
 
-    // Write decrypted sms.db into a platform-specific temporary directory
-    let tmp_path = temp_dir().join("crabapple-sms.db");
-    let mut file = File::create(&tmp_path)?;
-
-    // Stream-decrypt directly into the temp file
     eprintln!("  [3/5] Decrypting messages database...");
-    copy(&mut decrypted_chat_db, &mut file)?;
-    Ok(tmp_path)
+    Ok(private_temp(&mut decrypted_chat_db, &std::env::temp_dir())?)
 }
 
 /// Write the decrypted Contacts database from the iOS backup to a temp file.
 ///
 /// The real name is `Library/AddressBook/AddressBook.sqlitedb`
-pub fn get_decrypted_contacts_database(backup: &Backup) -> Result<PathBuf, RuntimeError> {
+pub fn get_decrypted_contacts_database(backup: &Backup) -> Result<NamedTempFile, RuntimeError> {
     let (_, file_id) = contacts::DEFAULT_PATH_IOS.split_at(3);
     eprintln!("  [4/5] Resolving contacts database...");
     let file = backup.get_file(file_id)?;
     let mut decrypted_contacts_db = backup.decrypt_entry_stream(&file)?;
 
-    // Write decrypted contacts.db into a platform-specific temporary directory
-    let tmp_path = temp_dir().join("crabapple-contacts.db");
-    let mut file = File::create(&tmp_path)?;
-
-    // Stream-decrypt directly into the temp file
     eprintln!("  [5/5] Decrypting contacts database...");
-    copy(&mut decrypted_contacts_db, &mut file)?;
-
-    Ok(tmp_path)
+    Ok(private_temp(
+        &mut decrypted_contacts_db,
+        &std::env::temp_dir(),
+    )?)
 }
 
 /// Decrypt one iOS backup file into a temporary file.
-pub fn decrypt_file(backup: &Backup, from: &Path) -> Result<PathBuf, RuntimeError> {
+pub fn decrypt_file(backup: &Backup, from: &Path) -> Result<NamedTempFile, RuntimeError> {
     match backup.get_file(
         from.file_name()
             .ok_or_else(|| RuntimeError::FileNameError {
@@ -130,31 +125,50 @@ pub fn decrypt_file(backup: &Backup, from: &Path) -> Result<PathBuf, RuntimeErro
             })?,
     ) {
         Ok(file) => {
-            let temp_dir = temp_dir().join(&file.file_id);
-            let mut temp_file = File::create(&temp_dir)?;
-
-            // Get the size of the file
-            let file_size = file.metadata.size;
-            // Stream larger files to avoid holding them in memory.
-            if file_size > MAX_IN_MEMORY_DECRYPT {
-                // Copy via disk
-                let mut decryption_stream = backup.decrypt_entry_stream(&file)?;
-                let mut writer = BufWriter::new(temp_file);
-
-                // Copy all data from reader to writer
-                copy(&mut decryption_stream, &mut writer)?;
-
-                // Ensure all buffered data is flushed to disk
-                writer.flush()?;
-            } else {
-                // Copy via memory
-                let decrypted_bytes = backup.decrypt_entry(&file)?;
-                temp_file.write_all(&decrypted_bytes)?;
-            }
-
-            // Ensure we remove the temporary file later
-            Ok(temp_dir)
+            let mut plaintext = backup.decrypt_entry_stream(&file)?;
+            Ok(private_temp(&mut plaintext, &std::env::temp_dir())?)
         }
         Err(why) => Err(why.into()),
+    }
+}
+
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+    #[test]
+    fn private_plaintext_is_unique_and_removed() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = private_temp(&mut &b"one"[..], dir.path()).unwrap();
+        let b = private_temp(&mut &b"two"[..], dir.path()).unwrap();
+        assert_ne!(a.path(), b.path());
+        assert_eq!(std::fs::read(a.path()).unwrap(), b"one");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                a.as_file().metadata().unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        let path = a.path().to_path_buf();
+        drop(a);
+        assert!(!path.exists());
+    }
+    #[test]
+    fn failed_plaintext_stream_is_removed() {
+        struct Broken(bool);
+        impl Read for Broken {
+            fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+                if self.0 {
+                    return Err(std::io::Error::other("synthetic decryption failure"));
+                }
+                self.0 = true;
+                out[0] = 42;
+                Ok(1)
+            }
+        }
+        let dir = tempfile::tempdir().unwrap();
+        assert!(private_temp(&mut Broken(false), dir.path()).is_err());
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
     }
 }

@@ -1,7 +1,7 @@
 <div class="app_header">
     {%- if let Some(app_name) = app_name.get() -%}<div class="name">{{ app_name }}</div>{%- endif -%}
 </div>
-{%- if let Some(url) = url.get() -%}<a href="{{ url }}">{%- endif -%}
+{%- if let Some(url) = url.get_url() -%}<a href="{{ url }}">{%- endif -%}
     {%- if self.has_footer() -%}
     <div class="app_footer">
         {%- if let Some(description) = description.get() -%}<div class="caption">{{ description }}</div>{%- endif -%}
@@ -9,5 +9,5 @@
         {%- if let Some(genre) = genre.get() -%}<div class="trailing_subcaption">{{ genre }}</div>{%- endif -%}
     </div>
     {%- endif -%}
-    {%- if url.get().is_some() -%}
+    {%- if url.get_url().is_some() -%}
 </a>{%- endif -%}

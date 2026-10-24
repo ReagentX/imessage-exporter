@@ -23,7 +23,7 @@ pub(crate) fn image_copy_convert(
     to: &mut PathBuf,
     converter: &ImageConverter,
     mime_type: &MediaType,
-) -> Option<MediaType<'static>> {
+) -> std::io::Result<Option<MediaType<'static>>> {
     if matches!(mime_type, MediaType::Image("heic" | "HEIC")) {
         let output_type = ImageType::Jpeg;
 
@@ -34,14 +34,14 @@ pub(crate) fn image_copy_convert(
         if convert_heic(from, &converted_path, converter, &output_type).is_some() {
             // If the conversion was successful, update the path
             *to = converted_path;
-            return Some(MediaType::Image(output_type.to_str()));
+            return Ok(Some(MediaType::Image(output_type.to_str())));
         }
         eprintln!("Unable to convert {}", from.display());
     }
 
     // Fallback
-    copy_raw(from, to);
-    None
+    copy_raw(from, to)?;
+    Ok(None)
 }
 
 /// Convert a HEIC image file to the provided format

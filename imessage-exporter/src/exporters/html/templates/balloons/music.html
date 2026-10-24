@@ -1,15 +1,14 @@
 <div class="app_header">
     {%- if let Some(track_name) = track_name.get() -%}<div class="name">{{ track_name }}</div>{%- endif -%}
-    {%- if let Some(preview) = preview.get() -%}<audio controls src="{{ preview }}"> </audio>{%- endif -%}
     {%- if let Some(lyrics) = lyrics -%}<div class="ldtext">{%- for line in lyrics -%}<p>{{ line }}</p>{%- endfor -%}
     </div>{%- endif -%}
 </div>
-{%- if let Some(url) = url.get() -%}<a href="{{ url }}">{%- endif -%}
+{%- if let Some(url) = url.get_url() -%}<a href="{{ url }}">{%- endif -%}
     {%- if artist.get().is_some() || album.get().is_some() -%}
     <div class="app_footer">
         {%- if let Some(artist) = artist.get() -%}<div class="caption">{{ artist }}</div>{%- endif -%}
         {%- if let Some(album) = album.get() -%}<div class="subcaption">{{ album }}</div>{%- endif -%}
     </div>
     {%- endif -%}
-    {%- if url.get().is_some() -%}
+    {%- if url.get_url().is_some() -%}
 </a>{%- endif -%}

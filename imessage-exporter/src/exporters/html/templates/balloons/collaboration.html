@@ -1,12 +1,12 @@
 <div class="app_header">
     {%- if let Some(name) = name.get() -%}<div class="name">{{ name }}</div>{%- endif -%}
 </div>
-{%- if let Some(wrapper_url) = wrapper_url.get() -%}<a href="{{ wrapper_url }}">{%- endif -%}
+{%- if let Some(wrapper_url) = wrapper_url.get_url() -%}<a href="{{ wrapper_url }}">{%- endif -%}
     {%- if self.has_footer() -%}
     <div class="app_footer">
         {%- if let Some(title) = title.get() -%}<div class="caption">{{ title }}</div>{%- endif -%}
-        {%- if let Some(footer_url) = footer_url.get() -%}<div class="subcaption">{{ footer_url }}</div>{%- endif -%}
+        {%- if let Some(footer_url) = footer_url.get_url() -%}<div class="subcaption">{{ footer_url }}</div>{%- endif -%}
     </div>
     {%- endif -%}
-    {%- if wrapper_url.get().is_some() -%}
+    {%- if wrapper_url.get_url().is_some() -%}
 </a>{%- endif -%}

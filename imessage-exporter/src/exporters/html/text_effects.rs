@@ -41,7 +41,10 @@ impl<'a> TextEffectFormatter<'a> for HTML<'a> {
     }
 
     fn format_link(&self, text: &str, url: &str) -> String {
-        format!("<a href=\"{}\">{text}</a>", sanitize_html(url))
+        match crate::app::sanitizers::safe_link(url) {
+            Some(url) => format!("<a href=\"{}\">{text}</a>", sanitize_html(url)),
+            None => text.to_string(),
+        }
     }
 
     fn format_otp(&self, text: &str) -> String {

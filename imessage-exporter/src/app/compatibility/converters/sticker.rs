@@ -29,7 +29,7 @@ pub(crate) fn sticker_copy_convert(
     image_converter: &ImageConverter,
     video_converter: Option<&VideoConverter>,
     mime_type: &MediaType,
-) -> Option<MediaType<'static>> {
+) -> std::io::Result<Option<MediaType<'static>>> {
     // Determine the output type of the sticker
     let output_type: Option<ImageType> = match mime_type {
         // Static stickers convert to PNG; animated sticker sequences convert to GIF.
@@ -49,7 +49,7 @@ pub(crate) fn sticker_copy_convert(
         {
             if convert_heics(from, &converted_path, video_converter).is_some() {
                 *to = converted_path;
-                return Some(MediaType::Image(output_type.to_str()));
+                return Ok(Some(MediaType::Image(output_type.to_str())));
             }
             eprintln!("Unable to convert {}", from.display());
         }
@@ -57,14 +57,14 @@ pub(crate) fn sticker_copy_convert(
         // Static conversion also handles animated stickers when ffmpeg is unavailable.
         if convert_heic(from, &converted_path, image_converter, &output_type).is_some() {
             *to = converted_path;
-            return Some(MediaType::Image(output_type.to_str()));
+            return Ok(Some(MediaType::Image(output_type.to_str())));
         }
         eprintln!("Unable to convert {}", from.display());
     }
 
     // Fallback
-    copy_raw(from, to);
-    None
+    copy_raw(from, to)?;
+    Ok(None)
 }
 
 /// Convert a HEIC sticker file to the provided format.

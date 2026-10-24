@@ -59,8 +59,6 @@ impl BalloonFormatter for HTML<'_> {
         render_template(&UrlVM {
             wrapper_url: balloon_url.or(msg_text).into(),
             name: balloon.site_name.or(balloon_url).or(msg_text).into(),
-            images: &balloon.images,
-            lazy: !self.config.options.no_lazy,
             title: balloon.title.into(),
             summary: balloon.summary.into(),
         })
@@ -69,7 +67,6 @@ impl BalloonFormatter for HTML<'_> {
     fn format_music(&self, balloon: &MusicMessage) -> String {
         render_template(&MusicVM {
             track_name: balloon.track_name.into(),
-            preview: balloon.preview.into(),
             lyrics: balloon.lyrics.as_deref(),
             url: balloon.url.into(),
             artist: balloon.artist.into(),
@@ -309,7 +306,6 @@ impl HTML<'_> {
     ) -> String {
         render_template(&AppCardVM {
             url: balloon.url.into(),
-            image: balloon.image.into(),
             attachment_html,
             name: balloon.app_name.unwrap_or(bundle_id),
             title: balloon.title.into(),

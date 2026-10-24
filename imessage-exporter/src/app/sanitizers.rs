@@ -324,3 +324,32 @@ mod html_sanitization_tests {
         );
     }
 }
+
+/// Permit ordinary links, never executable or local-file URL schemes.
+pub(crate) fn safe_link(value: &str) -> Option<&str> {
+    if value.is_empty()
+        || value.chars().any(|c| c.is_control())
+        || value.trim() != value
+        || value.starts_with(['/', '\\'])
+        || value.contains('\\')
+        || value.starts_with(".")
+    {
+        return None;
+    }
+    if let Some((scheme, _)) = value.split_once(':')
+        && ![
+            "https",
+            "http",
+            "mailto",
+            "tel",
+            "sms",
+            "facetime",
+            "facetime-audio",
+        ]
+        .iter()
+        .any(|allowed| scheme.eq_ignore_ascii_case(allowed))
+    {
+        return None;
+    }
+    Some(value)
+}

@@ -91,11 +91,13 @@ pub(crate) fn prepare_attachment<'a>(
     }
 
     let Some(name) = attachment.filename() else {
+        state.errors.set(state.errors.get() + 1);
         return Err(AttachmentFailure::MissingFilename);
     };
     let file = match handle_result {
         Ok(file) => file,
         Err(why) => {
+            state.errors.set(state.errors.get() + 1);
             state.pb.println(why);
             return Err(AttachmentFailure::NamedFile(name.to_string()));
         }
