@@ -15,4 +15,4 @@ fdlimit = "=0.3.0"
 fs2 = "=0.4.3"
 imessage-database = { path = "../imessage-database" }
 rpassword = "=7.5.4"
-crabapple = { version = "=0.4.7" }
+crabapple = { version = "=0.4.8" }
