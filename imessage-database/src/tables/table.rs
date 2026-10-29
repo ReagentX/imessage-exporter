@@ -134,6 +134,12 @@ pub fn get_connection(path: &Path) -> Result<Connection, TableError> {
                     // Read pages from the mapped region where SQLite supports it.
                     let _ = connection.pragma_update(None, "mmap_size", 8_589_934_592_i64); // up to 8 GiB
                     let _ = connection.pragma_update(None, "cache_size", -65_536_i64); // ~64 MiB
+                    // Since SQLite 3.54, clearing the bindings of a cached statement with a
+                    // `col = ?` term expires the cache
+                    let _ = connection.set_db_config(
+                        rusqlite::config::DbConfig::SQLITE_DBCONFIG_ENABLE_QPSG,
+                        true,
+                    );
                     Ok(connection)
                 }
                 Err(why) => Err(TableError::CannotConnect(TableConnectError::Permissions(
