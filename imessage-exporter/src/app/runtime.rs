@@ -16,13 +16,13 @@ use imessage_database::{
     tables::{
         attachment::Attachment,
         chat::Chat,
-        chat_handle::ChatToHandle,
-        handle::Handle,
+        chat_handle::{ChatToHandle, Participant},
+        handle::{Handle, HandleGroups},
         messages::Message,
-        table::{ATTACHMENTS_DIR, Cacheable, ME, ORPHANED, UNKNOWN, get_db_size},
+        table::{ME, get_db_size},
     },
     util::{
-        dates::{format as format_date, get_local_time, get_offset, readable_diff},
+        dates::{format as format_date, readable_diff, to_utc},
         size::format_file_size,
     },
 };
@@ -39,6 +39,14 @@ use crate::{
 
 // Maximum filename length before accounting for the export path.
 const MAX_LENGTH: usize = 235;
+/// Separator between participant names in a generated filename.
+const SEPARATOR: &str = ", ";
+/// Display name used when a contact or chat name is unavailable.
+pub(crate) const UNKNOWN: &str = "Unknown";
+/// Transcript and attachment directory name for messages that do not belong to a chat row.
+pub(crate) const ORPHANED: &str = "orphaned";
+/// Attachments directory name under the export root.
+pub(crate) const ATTACHMENTS_DIR: &str = "attachments";
 
 // MARK: Config
 /// Cached application state used during export.
@@ -47,6 +55,11 @@ pub struct Config {
     pub chatrooms: HashMap<i32, Chat>,
     /// Deduplicated chat IDs keyed by chat row ID.
     pub real_chatrooms: HashMap<i32, i32>,
+    /// Representative chat row IDs keyed by chat row ID.
+    ///
+    /// Names can differ among rows in one deduplicated conversation. Use one
+    /// representative row to build each conversation's filename.
+    pub chat_representatives: HashMap<i32, i32>,
     /// Participant handle IDs keyed by chat row ID.
     pub chatroom_participants: HashMap<i32, BTreeSet<i32>>,
     /// Contact names keyed by deduplicated participant ID.
@@ -59,8 +72,6 @@ pub struct Config {
     pub translated_messages: HashSet<String>,
     /// Parsed application options.
     pub options: Options,
-    /// Unix timestamp offset for the Messages epoch.
-    pub offset: i64,
     /// Database and contact data source.
     pub data_source: DataSource,
 }
@@ -68,7 +79,7 @@ pub struct Config {
 impl Config {
     /// Return the chat and deduplicated chat ID for a message.
     pub fn conversation(&self, message: &Message) -> Option<(&Chat, &i32)> {
-        match message.chat_id.or(message.deleted_from) {
+        match message.chat_rowid() {
             Some(chat_id) => {
                 if let Some(chatroom) = self.chatrooms.get(&chat_id) {
                     self.real_chatrooms.get(&chat_id).map(|id| (chatroom, id))
@@ -118,34 +129,7 @@ impl Config {
         String::from(ORPHANED)
     }
 
-    /// Return the export-relative path for an attachment.
-    ///
-    /// Copied attachments resolve relative to the export root; uncopied
-    /// attachments resolve to their source path or stored filename.
-    pub fn message_attachment_path(&self, attachment: &Attachment) -> String {
-        match &attachment.copied_path {
-            Some(path) => {
-                if let Ok(relative_path) = path.strip_prefix(&self.options.export_path) {
-                    return relative_path.display().to_string();
-                }
-                path.display().to_string()
-            }
-            None => attachment
-                .resolved_attachment_path(
-                    &self.options.platform,
-                    &self.options.db_path,
-                    self.options.attachment_root.as_deref(),
-                )
-                .unwrap_or_else(|| {
-                    attachment
-                        .filename()
-                        .unwrap_or("Attachment missing name metadata!")
-                        .to_string()
-                }),
-        }
-    }
-
-    /// Return an export-relative path when possible.
+    /// Return the displayed `path` with the export-root prefix removed, if present.
     pub fn relative_path(&self, path: &Path) -> String {
         if let Ok(relative_path) = path.strip_prefix(&self.options.export_path) {
             return relative_path.display().to_string();
@@ -161,6 +145,14 @@ impl Config {
     /// If it does not, use participant names. Failing that, use the chat
     /// identifier.
     pub fn filename(&self, chatroom: &Chat) -> String {
+        // Use the same representative row for every filename in a merged
+        // conversation, even when the current row has no display name.
+        let chatroom = self
+            .chat_representatives
+            .get(&chatroom.rowid)
+            .and_then(|representative| self.chatrooms.get(representative))
+            .unwrap_or(chatroom);
+
         // Account for the export path so the full output path stays under the limit.
         let export_path_len = self.options.export_path.as_os_str().len();
         let max_len = MAX_LENGTH.saturating_sub(export_path_len + 1);
@@ -202,6 +194,11 @@ impl Config {
 
     /// Build a filename from participant names, truncating when needed.
     ///
+    /// Pass participant handle row IDs. We map them to handle groups before
+    /// resolving names, so we list a person once even when they use several handles.
+    /// Chats merged by [`ChatToHandle::dedupe`] have the same participant
+    /// groups, so we build the same filename for each one.
+    ///
     /// - All names:
     ///   - Contact 1, Contact 2
     /// - Truncated Names
@@ -211,36 +208,69 @@ impl Config {
         let export_path_len = self.options.export_path.as_os_str().len();
         let max_len = MAX_LENGTH.saturating_sub(export_path_len + 1);
 
-        let mut added = 0;
-        let mut out_s = String::with_capacity(max_len);
-        for participant_id in participants {
-            let participant_details = match self.resolve_participant(*participant_id) {
-                Some(name) => name.details.as_str(),
-                None => UNKNOWN,
-            };
+        // Groups sort before unmapped handles; each unmapped handle counts
+        // as its own participant and shows as `UNKNOWN`.
+        let groups: BTreeSet<Participant> = participants
+            .iter()
+            .map(|handle_id| match self.real_participants.get(handle_id) {
+                Some(group) => Participant::Group(*group),
+                None => Participant::Handle(*handle_id),
+            })
+            .collect();
+        let all: Vec<&str> = groups
+            .iter()
+            .map(|participant| match participant {
+                Participant::Group(group) => self
+                    .participants
+                    .get(group)
+                    .map_or(UNKNOWN, |name| name.details.as_str()),
+                Participant::Handle(_) => UNKNOWN,
+            })
+            .collect();
 
-            let separator = if out_s.is_empty() { "" } else { ", " };
-            if participant_details.len() + separator.len() + out_s.len() <= max_len {
-                out_s.push_str(separator);
-                out_s.push_str(participant_details);
-                added += 1;
-            } else {
-                let extra = format!(", and {} others", participants.len() - added);
-                let space_remaining = extra.len() + out_s.len();
-                if space_remaining >= max_len {
-                    let start = out_s.floor_char_boundary(max_len.saturating_sub(extra.len()));
-                    out_s.replace_range(start.., &extra);
-                } else if out_s.is_empty() {
-                    let truncated_len = participant_details
-                        .floor_char_boundary(min(max_len, participant_details.len()));
-                    out_s.push_str(&participant_details[..truncated_len]);
-                } else {
-                    out_s.push_str(&extra);
-                }
+        // Add only whole names while they fit. Keep each separator whole too;
+        // avoid blank entries such as (", , and 2 others").
+        let mut kept = 0;
+        let mut used = 0;
+        for details in &all {
+            let separator = if kept == 0 { 0 } else { SEPARATOR.len() };
+            if used + separator + details.len() > max_len {
                 break;
             }
+            kept += 1;
+            used += separator + details.len();
         }
-        out_s
+
+        if kept == all.len() {
+            return all.join(SEPARATOR);
+        }
+
+        if kept == 0 {
+            // If the first name does not fit, keep as much as the limit allows.
+            // Omit the count; without a name, we cannot identify anyone.
+            let first = all[0];
+            let truncated = first.floor_char_boundary(min(max_len, first.len()));
+            return first[..truncated].to_string();
+        }
+
+        // When space is tight, drop a name and increase the suffix count by one.
+        let mut names = &all[..kept];
+        loop {
+            let extra = format!("{SEPARATOR}and {} others", all.len() - names.len());
+            if used + extra.len() <= max_len {
+                return names.join(SEPARATOR) + &extra;
+            }
+            if let [name] = names {
+                // If one name plus the count exceeds the limit, shorten the
+                // name to preserve the count.
+                let room = max_len.saturating_sub(extra.len());
+                let truncated = name.floor_char_boundary(min(room, name.len()));
+                return name[..truncated].to_string() + &extra;
+            }
+            let last = names.len() - 1;
+            used -= names[last].len() + SEPARATOR.len();
+            names = &names[..last];
+        }
     }
 
     // MARK: Init
@@ -250,22 +280,41 @@ impl Config {
 
         eprintln!("Building cache...");
         eprintln!("  [1/5] Caching chats...");
-        let chatrooms = Chat::cache(data_source.db())?;
+        let chatrooms = Chat::by_rowid(data_source.db())?;
 
-        eprintln!("  [2/5] Caching chatrooms...");
-        let chatroom_participants = ChatToHandle::cache(data_source.db())?;
-        let chat_handle_lookup = ChatToHandle::get_chat_lookup_map(data_source.db())?;
-        let real_chatrooms = ChatToHandle::dedupe(&chatroom_participants, &chat_handle_lookup)?;
-
-        eprintln!("  [3/5] Caching participants...");
-        let participants = Handle::cache(data_source.db())?;
-        let real_participants = Handle::dedupe(&participants);
+        // Group handles before deduplicating chats. Compare chats by handle
+        // groups, not by raw handle rows.
+        eprintln!("  [2/5] Caching participants...");
+        let handles = Handle::load(data_source.db())?;
+        let mut handle_groups = HandleGroups::from_rows(&handles);
+        let participants = Handle::ids_by_rowid(handles);
+        data_source
+            .contacts_index
+            .link_handles(&participants, &mut handle_groups);
+        let real_participants = handle_groups.finalize();
         let participants_map = data_source
             .contacts_index
             .build_participants_map(&participants, &real_participants);
 
+        eprintln!("  [3/5] Caching chatrooms...");
+        let chatroom_participants = ChatToHandle::participants_by_chat(data_source.db())?;
+        let chat_handle_lookup = ChatToHandle::get_chat_lookup_map(data_source.db())?;
+        let real_chatrooms = ChatToHandle::dedupe(
+            &chatroom_participants,
+            &chat_handle_lookup,
+            &real_participants,
+            &chatrooms,
+        );
+        let last_activity = ChatToHandle::get_last_activity(data_source.db())?;
+        let chat_representatives = ChatToHandle::representatives(
+            &real_chatrooms,
+            &chatrooms,
+            &last_activity,
+            &chatroom_participants,
+        );
+
         eprintln!("  [4/5] Caching tapbacks...");
-        let tapbacks = Message::cache(data_source.db())?;
+        let tapbacks = Message::tapbacks_by_target(data_source.db(), &data_source.capabilities)?;
 
         eprintln!("  [5/5] Caching translations...");
         // Missing translation metadata means no messages need translation lookup.
@@ -275,13 +324,13 @@ impl Config {
         Ok(Config {
             chatrooms,
             real_chatrooms,
+            chat_representatives,
             chatroom_participants,
             real_participants,
             participants: participants_map,
             tapbacks,
             translated_messages,
             options,
-            offset: get_offset(),
             data_source,
         })
     }
@@ -417,18 +466,22 @@ impl Config {
         let handle_diag = Handle::run_diagnostic(self.data_source.db())?;
         println!("Handle diagnostic data:");
         println!("    Total handles: {}", handle_diag.total_handles);
-        if let Some(handles_with_multiple_ids) = handle_diag.handles_with_multiple_ids
-            && handles_with_multiple_ids > 0
+        if let Some(person_centric_ids) = handle_diag.person_centric_ids
+            && person_centric_ids > 0
         {
             println!(
-                "    Handles with more than one ID: {}",
-                handles_with_multiple_ids
+                "    Distinct person_centric_id values: {}",
+                person_centric_ids
             );
         }
-        if handle_diag.total_duplicated > 0 {
+        if handle_diag.merged_handles > 0 {
             println!(
-                "    Total duplicated handles: {}",
-                handle_diag.total_duplicated
+                "    Handles merged into another handle: {}",
+                handle_diag.merged_handles
+            );
+            println!(
+                "    Participants with more than one handle: {}",
+                handle_diag.multi_handle_groups
             );
         }
 
@@ -455,8 +508,8 @@ impl Config {
             message_diag.first_message_date,
             message_diag.last_message_date,
         ) && let (Ok(first_date), Ok(last_date)) = (
-            get_local_time(first, self.offset),
-            get_local_time(last, self.offset),
+            to_utc(first).map(|date| date.with_timezone(&self.options.timezone)),
+            to_utc(last).map(|date| date.with_timezone(&self.options.timezone)),
         ) {
             println!(
                 "    Date range: {} to {}\n                {}",
@@ -538,6 +591,24 @@ impl Config {
             self.participants.len(),
         );
 
+        // Regroup without the contact edges to count the merges Contacts added.
+        let db_only_groups = HandleGroups::from_db(self.data_source.db())?.finalize();
+        let db_only_participants = distinct(db_only_groups.values());
+        let contact_merged_handles = db_only_participants.saturating_sub(self.participants.len());
+        if contact_merged_handles > 0 {
+            println!("    Handles merged by Contacts: {contact_merged_handles}");
+            let chat_lookup = ChatToHandle::get_chat_lookup_map(self.data_source.db())?;
+            let db_only_chats = ChatToHandle::dedupe(
+                &self.chatroom_participants,
+                &chat_lookup,
+                &db_only_groups,
+                &self.chatrooms,
+            );
+            let contact_merged_chats = distinct(db_only_chats.values())
+                .saturating_sub(distinct(self.real_chatrooms.values()));
+            println!("    Chats merged by Contacts: {contact_merged_chats}");
+        }
+
         println!("    Schema capabilities:");
         let capabilities = &self.data_source.capabilities;
         println!(
@@ -586,7 +657,8 @@ impl Config {
             self.run_diagnostic()?;
         } else if let Some(export_type) = &self.options.export_type {
             if let Some(filters) = &self.options.conversation_filter
-                && !self.options.query_context.has_filters()
+                && self.options.query_context.selected_chat_ids.is_none()
+                && self.options.query_context.selected_handle_ids.is_none()
             {
                 return Err(RuntimeError::InvalidOptions(format!(
                     "Selected filter `{filters}` does not match any participants!"
@@ -656,6 +728,11 @@ impl Config {
     }
 }
 
+/// Number of distinct values in `values`.
+fn distinct<'a>(values: impl Iterator<Item = &'a i32>) -> usize {
+    values.collect::<HashSet<_>>().len()
+}
+
 // MARK: Test Config
 #[cfg(test)]
 impl Config {
@@ -665,13 +742,13 @@ impl Config {
         Config {
             chatrooms: HashMap::new(),
             real_chatrooms: HashMap::new(),
+            chat_representatives: HashMap::new(),
             chatroom_participants: HashMap::new(),
             participants: HashMap::new(),
             real_participants: HashMap::new(),
             tapbacks: HashMap::new(),
             translated_messages: HashSet::new(),
             options,
-            offset: get_offset(),
             data_source,
         }
     }
@@ -715,6 +792,25 @@ impl Config {
         }
     }
 
+    /// Build a test message with one plain-text body component.
+    pub fn fake_message_with_text(text: impl Into<String>) -> Message {
+        use imessage_database::{
+            message_types::text_effects::text_effect::TextEffect,
+            tables::messages::models::{AttributedRange, BubbleComponent},
+        };
+
+        let text = text.into();
+        Message {
+            components: vec![BubbleComponent::Run(vec![AttributedRange::text(
+                0,
+                text.len(),
+                vec![TextEffect::Default],
+            )])],
+            text: Some(text),
+            ..Self::fake_message()
+        }
+    }
+
     pub(crate) fn fake_attachment() -> Attachment {
         Attachment {
             rowid: 0,
@@ -727,7 +823,6 @@ impl Config {
             is_sticker: false,
             hide_attachment: 0,
             emoji_description: None,
-            copied_path: None,
         }
     }
 }
@@ -737,12 +832,15 @@ impl Config {
 mod filename_tests {
     use crate::{
         Config, Options,
-        app::{contacts::Name, runtime::MAX_LENGTH},
+        app::{contacts::Name, export_type::ExportType::Html, runtime::MAX_LENGTH},
     };
 
-    use imessage_database::tables::chat::Chat;
+    use imessage_database::tables::{chat::Chat, chat_handle::ChatToHandle};
 
-    use std::{collections::BTreeSet, path::PathBuf};
+    use std::{
+        collections::{BTreeSet, HashMap},
+        path::PathBuf,
+    };
 
     pub fn fake_chat() -> Chat {
         Chat {
@@ -758,7 +856,7 @@ mod filename_tests {
 
     #[test]
     fn can_create() {
-        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let mut options = Options::fake_options(Html);
         // Disable the export
         options.export_type = None;
         let app = Config::fake_app(options);
@@ -767,18 +865,15 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_good() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
 
         app.participants.insert(10, Name::fake_name("Person 10"));
         app.participants.insert(11, Name::fake_name("Person 11"));
-        app.real_participants.insert(10, 10);
-        app.real_participants.insert(11, 11);
+        app.real_participants.extend([(10, 10), (11, 11)]);
 
         // Add participants
-        let mut people = BTreeSet::new();
-        people.insert(10);
-        people.insert(11);
+        let people = BTreeSet::from([10, 11]);
 
         let filename = app.filename_from_participants(&people);
         assert_eq!(filename, "Person 10, Person 11".to_string());
@@ -786,8 +881,269 @@ mod filename_tests {
     }
 
     #[test]
+    fn filename_names_a_grouped_person_once() {
+        let options = Options::fake_options(Html);
+        let mut app = Config::fake_app(options);
+
+        // Handles 10 and 11 belong to Person A (group 0); handle 12 belongs to
+        // Person B (group 1).
+        app.participants.insert(0, Name::fake_name("Person A"));
+        app.participants.insert(1, Name::fake_name("Person B"));
+        app.real_participants.extend([(10, 0), (11, 0), (12, 1)]);
+
+        let people = BTreeSet::from([10, 11, 12]);
+
+        assert_eq!(
+            app.filename_from_participants(&people),
+            "Person A, Person B"
+        );
+    }
+
+    #[test]
+    fn filename_counts_groups_when_truncating() {
+        let options = Options::fake_options(Html);
+        let mut app = Config::fake_app(options);
+        app.options.export_path = PathBuf::from("/tmp");
+
+        // Give three people long names but four handles; only one name should
+        // fit before the count.
+        app.participants
+            .insert(0, Name::fake_name(&"A".repeat(200)));
+        app.participants
+            .insert(1, Name::fake_name(&"B".repeat(200)));
+        app.participants
+            .insert(2, Name::fake_name(&"C".repeat(200)));
+        app.real_participants
+            .extend([(10, 0), (11, 0), (12, 1), (13, 2)]);
+
+        let people = BTreeSet::from([10, 11, 12, 13]);
+        let filename = app.filename_from_participants(&people);
+
+        assert!(
+            filename.ends_with(", and 2 others"),
+            "others are counted by person, not handle row: {filename}"
+        );
+    }
+
+    #[test]
+    fn merged_chats_share_filename_and_attachment_directory() {
+        let options = Options::fake_options(Html);
+        let mut app = Config::fake_app(options);
+
+        // Create two chat rows with the same other participant; use a different
+        // handle for Person A in each row.
+        app.participants.insert(0, Name::fake_name("Person A"));
+        app.participants.insert(1, Name::fake_name("Person B"));
+        app.real_participants.extend([(10, 0), (11, 0), (12, 1)]);
+        app.chatroom_participants
+            .insert(100, BTreeSet::from([10, 12]));
+        app.chatroom_participants
+            .insert(200, BTreeSet::from([11, 12]));
+        app.real_chatrooms = ChatToHandle::dedupe(
+            &app.chatroom_participants,
+            &HashMap::new(),
+            &app.real_participants,
+            &app.chatrooms,
+        );
+
+        let mut first = fake_chat();
+        first.rowid = 100;
+        let mut second = fake_chat();
+        second.rowid = 200;
+
+        assert_eq!(app.filename(&first), app.filename(&second));
+        assert_eq!(
+            app.conversation_attachment_path(Some(100)),
+            app.conversation_attachment_path(Some(200))
+        );
+    }
+
+    #[test]
+    fn filename_truncation_keeps_whole_names_and_counts_the_rest() {
+        let options = Options::fake_options(Html);
+        let mut app = Config::fake_app(options);
+        app.options.export_path = PathBuf::from("/tmp");
+        let max_len = MAX_LENGTH - app.options.export_path.as_os_str().len() - 1;
+
+        // Vary sixty names until the suffix boundary falls inside a name or
+        // separator for at least one prefix.
+        let total: i32 = 60;
+        let mut people = BTreeSet::new();
+        for i in 0..total {
+            let name = format!("Participant Number {i} {}", "x".repeat(i as usize % 7));
+            app.participants.insert(i, Name::fake_name(&name));
+            app.real_participants.insert(i, i);
+            people.insert(i);
+        }
+
+        let filename = app.filename_from_participants(&people);
+        assert!(filename.len() <= max_len, "{filename}");
+
+        let (names, suffix) = filename
+            .rsplit_once(", and ")
+            .expect("a truncated filename ends with a count");
+        let kept: Vec<&str> = names.split(", ").collect();
+        for name in &kept {
+            assert!(
+                name.starts_with("Participant Number "),
+                "every listed participant is a whole name: {name:?}"
+            );
+            assert!(!name.is_empty());
+        }
+        let others: usize = suffix
+            .strip_suffix(" others")
+            .and_then(|n| n.parse().ok())
+            .expect("suffix is `N others`");
+        assert_eq!(kept.len() + others, total as usize);
+    }
+
+    #[test]
+    fn filename_truncation_never_yields_a_blank_entry() {
+        let options = Options::fake_options(Html);
+        let mut app = Config::fake_app(options);
+        app.options.export_path = PathBuf::from("/tmp");
+        let max_len = MAX_LENGTH - app.options.export_path.as_os_str().len() - 1;
+
+        // Sweep name lengths across every offset within a separator.
+        for width in 1..40 {
+            let mut app_people = BTreeSet::new();
+            for i in 0..30 {
+                app.participants
+                    .insert(i, Name::fake_name(&format!("{i}{}", "n".repeat(width))));
+                app.real_participants.insert(i, i);
+                app_people.insert(i);
+            }
+            let filename = app.filename_from_participants(&app_people);
+            assert!(filename.len() <= max_len, "{filename}");
+            assert!(
+                !filename.contains(", , "),
+                "blank entry at width {width}: {filename}"
+            );
+            assert!(!filename.contains(",,"), "{filename}");
+        }
+    }
+
+    #[test]
+    fn named_and_unnamed_rows_of_one_conversation_share_a_filename() {
+        let options = Options::fake_options(Html);
+        let mut app = Config::fake_app(options);
+
+        app.participants.insert(0, Name::fake_name("Person A"));
+        app.participants.insert(1, Name::fake_name("Person B"));
+        app.real_participants.extend([(10, 0), (11, 0), (12, 1)]);
+        app.chatroom_participants
+            .insert(100, BTreeSet::from([10, 12]));
+        app.chatroom_participants
+            .insert(200, BTreeSet::from([11, 12]));
+        app.real_chatrooms = ChatToHandle::dedupe(
+            &app.chatroom_participants,
+            &HashMap::new(),
+            &app.real_participants,
+            &app.chatrooms,
+        );
+
+        let make = |rowid: i32, name: Option<&str>| {
+            let mut chat = fake_chat();
+            chat.rowid = rowid;
+            chat.display_name = name.map(str::to_string);
+            chat
+        };
+        let named = make(100, Some("Sardegnas"));
+        let unnamed = make(200, None);
+        app.chatrooms.insert(100, make(100, Some("Sardegnas")));
+        app.chatrooms.insert(200, make(200, None));
+        // The unnamed row has the latest activity.
+        app.chat_representatives = ChatToHandle::representatives(
+            &app.real_chatrooms,
+            &app.chatrooms,
+            &HashMap::from([(100, 10), (200, 20)]),
+            &app.chatroom_participants,
+        );
+
+        assert_eq!(app.filename(&named), app.filename(&unnamed));
+        assert!(app.filename(&unnamed).starts_with("Sardegnas - "));
+    }
+
+    #[test]
+    fn differently_named_rows_use_the_most_recently_active_name() {
+        let options = Options::fake_options(Html);
+        let mut app = Config::fake_app(options);
+
+        app.real_chatrooms = HashMap::from([(100, 0), (200, 0)]);
+        let make = |rowid: i32, name: &str| {
+            let mut chat = fake_chat();
+            chat.rowid = rowid;
+            chat.display_name = Some(name.to_string());
+            chat
+        };
+        let old = make(100, "Old Name");
+        let new = make(200, "New Name");
+        app.chatrooms.insert(100, make(100, "Old Name"));
+        app.chatrooms.insert(200, make(200, "New Name"));
+        app.chat_representatives = ChatToHandle::representatives(
+            &app.real_chatrooms,
+            &app.chatrooms,
+            &HashMap::from([(100, 50), (200, 10)]),
+            &app.chatroom_participants,
+        );
+
+        // Row 100 has the latest activity; use its name for both rows.
+        assert!(app.filename(&old).starts_with("Old Name - "));
+        assert_eq!(app.filename(&old), app.filename(&new));
+    }
+
+    #[test]
+    fn lookup_only_names_keep_guarded_conversations_in_separate_files() {
+        let options = Options::fake_options(Html);
+        let mut app = Config::fake_app(options);
+
+        let make = |rowid: i32, name: Option<&str>| {
+            let mut chat = fake_chat();
+            chat.rowid = rowid;
+            chat.display_name = name.map(str::to_string);
+            chat
+        };
+        for (rowid, name) in [
+            (10, None),
+            (20, None),
+            (88, Some("Alpha")),
+            (99, Some("Beta")),
+        ] {
+            app.chatrooms.insert(rowid, make(rowid, name));
+        }
+        app.chatroom_participants.insert(10, BTreeSet::from([1]));
+        app.chatroom_participants.insert(20, BTreeSet::from([1]));
+        app.real_chatrooms = HashMap::from([(10, 0), (88, 0), (20, 1), (99, 1)]);
+        app.chat_representatives = ChatToHandle::representatives(
+            &app.real_chatrooms,
+            &app.chatrooms,
+            &HashMap::new(),
+            &app.chatroom_participants,
+        );
+
+        let first = app.filename(&app.chatrooms[&10]);
+        let second = app.filename(&app.chatrooms[&20]);
+        assert!(first.starts_with("Alpha - 0"), "{first}");
+        assert!(second.starts_with("Beta - 1"), "{second}");
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn filename_without_representatives_names_the_row_itself() {
+        let options = Options::fake_options(Html);
+        let mut app = Config::fake_app(options);
+        let mut named = fake_chat();
+        named.rowid = 100;
+        named.display_name = Some("Solo".to_string());
+
+        assert!(app.filename(&named).starts_with("Solo - "));
+        app.real_chatrooms.insert(100, 7);
+        assert!(app.filename(&named).starts_with("Solo - 7"));
+    }
+
+    #[test]
     fn can_get_filename_long_multiple() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
         app.options.export_path = PathBuf::from("/tmp");
 
@@ -823,34 +1179,19 @@ mod filename_tests {
             17,
             Name::fake_name("Person With An Extremely and Excessively Long Name 17"),
         );
-        app.real_participants.insert(10, 10);
-        app.real_participants.insert(11, 11);
-        app.real_participants.insert(12, 12);
-        app.real_participants.insert(13, 13);
-        app.real_participants.insert(14, 14);
-        app.real_participants.insert(15, 15);
-        app.real_participants.insert(16, 16);
-        app.real_participants.insert(17, 17);
+        app.real_participants.extend((10..=17).map(|id| (id, id)));
 
         // Add participants
-        let mut people = BTreeSet::new();
-        people.insert(10);
-        people.insert(11);
-        people.insert(12);
-        people.insert(13);
-        people.insert(14);
-        people.insert(15);
-        people.insert(16);
-        people.insert(17);
+        let people = BTreeSet::from([10, 11, 12, 13, 14, 15, 16, 17]);
 
         let filename = app.filename_from_participants(&people);
-        assert_eq!(filename, "Person With An Extremely and Excessively Long Name 10, Person With An Extremely and Excessively Long Name 11, Person With An Extremely and Excessively Long Name 12, Person With An Extremely and Excessively Long Name , and 4 others".to_string());
+        assert_eq!(filename, "Person With An Extremely and Excessively Long Name 10, Person With An Extremely and Excessively Long Name 11, Person With An Extremely and Excessively Long Name 12, and 5 others".to_string());
         assert!(filename.len() <= MAX_LENGTH);
     }
 
     #[test]
     fn can_get_filename_single_long() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
         app.options.export_path = PathBuf::from("/tmp");
 
@@ -858,8 +1199,7 @@ mod filename_tests {
         app.real_participants.insert(10, 10);
 
         // Add 1 person
-        let mut people = BTreeSet::new();
-        people.insert(10);
+        let people = BTreeSet::from([10]);
 
         let filename = app.filename_from_participants(&people);
         assert_eq!(filename, "He slipped his key into the lock, and we all very quietly entered the cell. The sleeper half turned, and then settled down once more into a deep slumber. Holmes stooped to the water-jug, moistened his sponge, and then rubbed it tw".to_string());
@@ -868,7 +1208,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_respects_separator_length() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
 
         let export_path_len = app.options.export_path.as_os_str().len();
@@ -882,12 +1222,9 @@ mod filename_tests {
 
         app.participants.insert(10, Name::fake_name(&first));
         app.participants.insert(11, Name::fake_name(&second));
-        app.real_participants.insert(10, 10);
-        app.real_participants.insert(11, 11);
+        app.real_participants.extend([(10, 10), (11, 11)]);
 
-        let mut people = BTreeSet::new();
-        people.insert(10);
-        people.insert(11);
+        let people = BTreeSet::from([10, 11]);
 
         let actual = app.filename_from_participants(&people);
         assert!(actual.len() <= max_len);
@@ -895,7 +1232,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_chat_display_name_long() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
         app.options.export_path = PathBuf::from("/tmp");
 
@@ -911,7 +1248,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_chat_display_name_normal() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let app = Config::fake_app(options);
 
         let mut chat = fake_chat();
@@ -923,7 +1260,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_chat_display_name_short() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let app = Config::fake_app(options);
 
         let mut chat = fake_chat();
@@ -935,20 +1272,17 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_chat_participants() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
 
         let chat = fake_chat();
 
         app.participants.insert(10, Name::fake_name("Person 10"));
         app.participants.insert(11, Name::fake_name("Person 11"));
-        app.real_participants.insert(10, 10);
-        app.real_participants.insert(11, 11);
+        app.real_participants.extend([(10, 10), (11, 11)]);
 
         // Add participants
-        let mut people = BTreeSet::new();
-        people.insert(10);
-        people.insert(11);
+        let people = BTreeSet::from([10, 11]);
         app.chatroom_participants.insert(chat.rowid, people);
 
         let filename = app.filename(&chat);
@@ -957,7 +1291,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_chat_no_participants() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let app = Config::fake_app(options);
 
         let chat = fake_chat();
@@ -968,7 +1302,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_chat_display_name_truncated_emoji() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let app = Config::fake_app(options);
 
         // Boundary case: a display name exactly at the limit with a multi-byte emoji.
@@ -986,7 +1320,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_single_long_emoji() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
 
         // Boundary case: participant names made of 4-byte emoji.
@@ -994,8 +1328,7 @@ mod filename_tests {
         app.participants.insert(10, Name::fake_name(&emoji_name));
         app.real_participants.insert(10, 10);
 
-        let mut people = BTreeSet::new();
-        people.insert(10);
+        let people = BTreeSet::from([10]);
 
         // Should not panic and should produce valid UTF-8
         let filename = app.filename_from_participants(&people);
@@ -1008,7 +1341,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_multiple_long_emoji() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
 
         // Boundary case: emoji names long enough to trigger "and N others".
@@ -1018,10 +1351,7 @@ mod filename_tests {
             app.real_participants.insert(i, i);
         }
 
-        let mut people = BTreeSet::new();
-        for i in 10..18 {
-            people.insert(i);
-        }
+        let people: BTreeSet<i32> = (10..18).collect();
 
         // Should not panic and should produce valid UTF-8 within the length limit
         let filename = app.filename_from_participants(&people);
@@ -1030,7 +1360,7 @@ mod filename_tests {
 
     #[test]
     fn can_get_filename_cjk_truncation() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let options = Options::fake_options(Html);
         let mut app = Config::fake_app(options);
 
         // CJK characters are 3 bytes each; test truncation mid-character
@@ -1038,8 +1368,7 @@ mod filename_tests {
         app.participants.insert(10, Name::fake_name(&cjk_name));
         app.real_participants.insert(10, 10);
 
-        let mut people = BTreeSet::new();
-        people.insert(10);
+        let people = BTreeSet::from([10]);
 
         let filename = app.filename_from_participants(&people);
         assert!(filename.len() <= MAX_LENGTH);
@@ -1106,26 +1435,6 @@ mod who_tests {
 
         let who = app.who(Some(0), true, &None);
         assert_eq!(who, "Name".to_string());
-    }
-
-    #[test]
-    fn can_get_who_none_me() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
-        let app = Config::fake_app(options);
-
-        let who = app.who(None, true, &None);
-        assert_eq!(who, "Me".to_string());
-    }
-
-    #[test]
-    fn can_get_who_me_none_caller_id() {
-        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
-        options.use_caller_id = true;
-        let app = Config::fake_app(options);
-
-        let caller_id = Some("test".to_string());
-        let who = app.who(None, true, &caller_id);
-        assert_eq!(who, "test".to_string());
     }
 
     #[test]
@@ -1207,7 +1516,7 @@ mod who_tests {
 #[cfg(test)]
 mod directory_tests {
     use crate::{Config, Options};
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn can_get_valid_attachment_sub_dir() {
@@ -1232,6 +1541,28 @@ mod directory_tests {
     }
 
     #[test]
+    fn recovered_message_attachments_follow_its_transcript() {
+        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        let mut app = Config::fake_app(options);
+        app.real_chatrooms.insert(100, 7);
+
+        // A recovered deleted message has no chat_id; deleted_from names its chat.
+        let mut message = Config::fake_message();
+        message.chat_id = None;
+        message.deleted_from = Some(100);
+
+        assert_eq!(message.chat_rowid(), Some(100));
+        assert_eq!(
+            app.conversation_attachment_path(message.chat_rowid()),
+            String::from("7")
+        );
+        assert_eq!(
+            app.conversation_attachment_path(message.chat_id),
+            String::from("orphaned")
+        );
+    }
+
+    #[test]
     fn can_get_missing_attachment_sub_dir() {
         let options = Options::fake_options(crate::app::export_type::ExportType::Html);
         let mut app = Config::fake_app(options);
@@ -1243,49 +1574,25 @@ mod directory_tests {
     }
 
     #[test]
-    fn can_get_path_not_copied() {
-        let options = Options::fake_options(crate::app::export_type::ExportType::Html);
-        let app = Config::fake_app(options);
-
-        let attachment = Config::fake_attachment();
-
-        let result = app.message_attachment_path(&attachment);
-        let expected = String::from("a/b/c/d.jpg");
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn can_get_path_copied() {
+    fn relative_path_strips_export_root() {
         let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
-        // Set an export path
         options.export_path = PathBuf::from("/Users/ReagentX/exports");
 
         let app = Config::fake_app(options);
 
-        let mut attachment = Config::fake_attachment();
-        let mut full_path = PathBuf::from("/Users/ReagentX/exports/attachments");
-        full_path.push(attachment.filename().unwrap());
-        attachment.copied_path = Some(full_path);
-
-        let result = app.message_attachment_path(&attachment);
-        let expected = String::from("attachments/d.jpg");
-        assert_eq!(result, expected);
+        let result = app.relative_path(Path::new("/Users/ReagentX/exports/attachments/d.jpg"));
+        assert_eq!(result, "attachments/d.jpg");
     }
 
     #[test]
-    fn can_get_path_copied_bad() {
+    fn relative_path_keeps_path_outside_export_root() {
         let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
-        // Set an export path
         options.export_path = PathBuf::from("/Users/ReagentX/exports");
 
         let app = Config::fake_app(options);
 
-        let mut attachment = Config::fake_attachment();
-        attachment.copied_path = Some(PathBuf::from(attachment.filename.as_ref().unwrap()));
-
-        let result = app.message_attachment_path(&attachment);
-        let expected = String::from("a/b/c/d.jpg");
-        assert_eq!(result, expected);
+        let result = app.relative_path(Path::new("a/b/c/d.jpg"));
+        assert_eq!(result, "a/b/c/d.jpg");
     }
 }
 
@@ -1295,7 +1602,7 @@ mod chat_filter_tests {
 
     use crate::{
         Config, Options,
-        app::{contacts::Name, export_type::ExportType},
+        app::{contacts::Name, error::RuntimeError, export_type::ExportType},
     };
 
     #[test]
@@ -1317,35 +1624,24 @@ mod chat_filter_tests {
         }
 
         // Chatroom 1: Included
-        let mut chatroom_1 = BTreeSet::new();
-        chatroom_1.insert(10);
-        app.chatroom_participants.insert(1, chatroom_1);
+        app.chatroom_participants.insert(1, BTreeSet::from([10]));
 
         // Chatroom 2: Included
-        let mut chatroom_2 = BTreeSet::new();
-        chatroom_2.insert(11);
-        app.chatroom_participants.insert(2, chatroom_2);
+        app.chatroom_participants.insert(2, BTreeSet::from([11]));
 
         // Chatroom 3: Included
-        let mut chatroom_3 = BTreeSet::new();
-        chatroom_3.insert(12);
-        app.chatroom_participants.insert(3, chatroom_3);
+        app.chatroom_participants.insert(3, BTreeSet::from([12]));
 
         // Chatroom 4: Excluded
-        let mut chatroom_4 = BTreeSet::new();
-        chatroom_4.insert(13);
-        app.chatroom_participants.insert(4, chatroom_4);
+        app.chatroom_participants.insert(4, BTreeSet::from([13]));
 
         // Chatroom 5: Included
-        let mut chatroom_5 = BTreeSet::new();
-        chatroom_5.insert(10);
-        chatroom_5.insert(11);
+        let chatroom_5 = BTreeSet::from([10, 11]);
         app.chatroom_participants.insert(5, chatroom_5);
 
         // Chatroom 6: Included
-        let mut chatroom_6 = BTreeSet::new();
-        chatroom_6.insert(12);
-        chatroom_6.insert(13); // Even though this person is excluded, the above person is
+        // Even though this person is excluded, the above person is
+        let chatroom_6 = BTreeSet::from([12, 13]);
         app.chatroom_participants.insert(6, chatroom_6);
 
         app.resolve_filtered_handles();
@@ -1380,35 +1676,24 @@ mod chat_filter_tests {
         }
 
         // Chatroom 1: Excluded
-        let mut chatroom_1 = BTreeSet::new();
-        chatroom_1.insert(10);
-        app.chatroom_participants.insert(1, chatroom_1);
+        app.chatroom_participants.insert(1, BTreeSet::from([10]));
 
         // Chatroom 2: Excluded
-        let mut chatroom_2 = BTreeSet::new();
-        chatroom_2.insert(11);
-        app.chatroom_participants.insert(2, chatroom_2);
+        app.chatroom_participants.insert(2, BTreeSet::from([11]));
 
         // Chatroom 3: Excluded
-        let mut chatroom_3 = BTreeSet::new();
-        chatroom_3.insert(12);
-        app.chatroom_participants.insert(3, chatroom_3);
+        app.chatroom_participants.insert(3, BTreeSet::from([12]));
 
         // Chatroom 4: Included
-        let mut chatroom_4 = BTreeSet::new();
-        chatroom_4.insert(13);
-        app.chatroom_participants.insert(4, chatroom_4);
+        app.chatroom_participants.insert(4, BTreeSet::from([13]));
 
         // Chatroom 5: Excluded
-        let mut chatroom_5 = BTreeSet::new();
-        chatroom_5.insert(10);
-        chatroom_5.insert(11);
+        let chatroom_5 = BTreeSet::from([10, 11]);
         app.chatroom_participants.insert(5, chatroom_5);
 
         // Chatroom 6: Included
-        let mut chatroom_6 = BTreeSet::new();
-        chatroom_6.insert(12);
-        chatroom_6.insert(13); // Even though this person is excluded, the above person is
+        // Even though this person is excluded, the above person is
+        let chatroom_6 = BTreeSet::from([12, 13]);
         app.chatroom_participants.insert(6, chatroom_6);
 
         app.resolve_filtered_handles();
@@ -1422,5 +1707,56 @@ mod chat_filter_tests {
             app.options.query_context.selected_chat_ids,
             Some(BTreeSet::from([4, 6]))
         );
+    }
+
+    #[test]
+    fn filter_matches_any_address_of_a_merged_participant() {
+        let mut options = Options::fake_options(ExportType::Html);
+        options.conversation_filter = Some(String::from("alice@example.com"));
+
+        let mut app = Config::fake_app(options);
+
+        // One person: phone handle 10 carries the display address, email handle 11 does not.
+        let mut alice = Name::fake_name("+15551234567");
+        alice.handle_ids.extend([10, 11]);
+        alice
+            .addresses
+            .extend(["+15551234567".to_string(), "alice@example.com".to_string()]);
+        app.participants.insert(10, alice);
+
+        let mut bob = Name::fake_name("+15559876543");
+        bob.handle_ids.insert(12);
+        bob.addresses.insert("+15559876543".to_string());
+        app.participants.insert(12, bob);
+
+        app.chatroom_participants.insert(1, BTreeSet::from([10]));
+        app.chatroom_participants.insert(2, BTreeSet::from([11]));
+        app.chatroom_participants.insert(3, BTreeSet::from([12]));
+
+        app.resolve_filtered_handles();
+
+        assert_eq!(
+            app.options.query_context.selected_handle_ids,
+            Some(BTreeSet::from([10, 11]))
+        );
+        assert_eq!(
+            app.options.query_context.selected_chat_ids,
+            Some(BTreeSet::from([1, 2]))
+        );
+    }
+
+    #[test]
+    fn unmatched_filter_errors_even_with_a_date_filter() {
+        let mut options = Options::fake_options(ExportType::Html);
+        options.conversation_filter = Some(String::from("nobody@example.com"));
+        options
+            .query_context
+            .set_start("2020-01-01", &options.timezone)
+            .unwrap();
+
+        let mut app = Config::fake_app(options);
+        app.resolve_filtered_handles();
+
+        assert!(matches!(app.start(), Err(RuntimeError::InvalidOptions(_))));
     }
 }

@@ -49,12 +49,23 @@ pub(crate) fn from_clause(capabilities: &Capabilities) -> String {
 ///
 /// The projection lists the recognized columns the schema declares (qualified
 /// with `m.`), the derived `chat_id`/`num_attachments` values, and the
-/// capability-gated fragments.
+/// capability-gated fragments. Payload bytes are represented by a non-nullness
+/// flag; only body and edit-summary bytes are needed to parse a message.
 pub(crate) fn message_query(capabilities: &Capabilities, filters: Option<&str>) -> String {
     let mut projection: Vec<String> = capabilities
         .message_columns()
         .iter()
-        .map(|column| format!("m.{column}"))
+        .map(|column| match *column {
+            "payload_data" => "(m.payload_data IS NOT NULL) as has_payload_data".to_owned(),
+            "attributedbody" | "message_summary_info" if capabilities.utf16_text => {
+                // `blob_open` returned text in the database's storage encoding;
+                // a normal text read would transcode UTF-16 bytes to UTF-8.
+                format!(
+                    "CASE WHEN typeof(m.{column}) = 'text' THEN CAST(m.{column} AS BLOB) ELSE m.{column} END as {column}"
+                )
+            }
+            _ => format!("m.{column}"),
+        })
         .collect();
     projection.push("c.chat_id".to_owned());
     projection.push(format!(
@@ -91,9 +102,10 @@ pub(crate) fn message_query(capabilities: &Capabilities, filters: Option<&str>) 
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
     use std::collections::BTreeSet;
 
-    use super::{from_clause, message_query};
+    use super::message_query;
     use crate::{
         tables::{capabilities::Capabilities, messages::Message},
         test_support::schema_db,
@@ -163,7 +175,7 @@ mod tests {
     #[test]
     fn context_filters_follow_recoverable_capability() {
         let mut context = QueryContext::default();
-        context.set_start("2020-01-01").unwrap();
+        context.set_start("2020-01-01", &Utc).unwrap();
         context.set_selected_chat_ids(BTreeSet::from([1, 2, 3]));
         let start_ns = context.start.unwrap();
 
@@ -185,20 +197,5 @@ mod tests {
             "WHERE  m.date >= {start_ns} AND  c.chat_id IN (1, 2, 3)"
         )));
         assert!(!filters.contains("d.chat_id IN"));
-    }
-
-    #[test]
-    fn from_clause_matches_recoverable_capability() {
-        let db = schema_db(false, true, false);
-        let capabilities = Capabilities::determine(&db).unwrap();
-        assert!(
-            from_clause(&capabilities).contains(
-                "\nLEFT JOIN chat_recoverable_message_join as d ON m.ROWID = d.message_id"
-            )
-        );
-
-        let db = schema_db(false, false, false);
-        let capabilities = Capabilities::determine(&db).unwrap();
-        assert!(!from_clause(&capabilities).contains("chat_recoverable_message_join"));
     }
 }

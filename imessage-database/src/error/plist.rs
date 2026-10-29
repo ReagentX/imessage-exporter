@@ -6,7 +6,6 @@ use crabstep::error::TypedStreamError;
 
 use crate::error::digital_touch::DigitalTouchError;
 use crate::error::handwriting::HandwritingError;
-use crate::error::streamtyped::StreamTypedError;
 use std::fmt::{Display, Formatter, Result};
 
 /// Errors that can happen when parsing the plist data stored in the `payload_data` field
@@ -30,8 +29,6 @@ pub enum PlistParseError {
     WrongMessageType,
     /// Could not parse an edited message
     InvalidEditedMessage(String),
-    /// Error from stream typed parsing
-    StreamTypedError(StreamTypedError),
     /// Error from typedstream parsing
     TypedStreamError(TypedStreamError),
     /// Error from handwriting data parsing
@@ -72,7 +69,6 @@ impl Display for PlistParseError {
             PlistParseError::InvalidEditedMessage(message) => {
                 write!(fmt, "Unable to parse message from binary data: {message}")
             }
-            PlistParseError::StreamTypedError(why) => write!(fmt, "{why}"),
             PlistParseError::HandwritingError(why) => write!(fmt, "{why}"),
             PlistParseError::DigitalTouchError(why) => write!(fmt, "{why}"),
             PlistParseError::TypedStreamError(typed_stream_error) => {
@@ -90,7 +86,6 @@ impl Display for PlistParseError {
 impl std::error::Error for PlistParseError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            PlistParseError::StreamTypedError(e) => Some(e),
             PlistParseError::TypedStreamError(e) => Some(e),
             PlistParseError::HandwritingError(e) => Some(e),
             PlistParseError::DigitalTouchError(e) => Some(e),
@@ -102,11 +97,5 @@ impl std::error::Error for PlistParseError {
 impl From<TypedStreamError> for PlistParseError {
     fn from(error: TypedStreamError) -> Self {
         PlistParseError::TypedStreamError(error)
-    }
-}
-
-impl From<StreamTypedError> for PlistParseError {
-    fn from(error: StreamTypedError) -> Self {
-        PlistParseError::StreamTypedError(error)
     }
 }

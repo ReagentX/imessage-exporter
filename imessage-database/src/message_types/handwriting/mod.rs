@@ -4,7 +4,7 @@
 A writeup about the reverse engineering of this data can be found [here](https://github.com/trymoose/handwriting2svg/blob/0eb56cf458207bb1c2ceea48cf4b6b6510fa7b13/DISCOVERY.md).
 */
 
-pub use models::HandwrittenMessage;
+pub use models::{HandwrittenMessage, Point};
 
 pub(crate) mod handwriting_proto;
-pub mod models;
+mod models;

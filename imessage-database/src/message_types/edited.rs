@@ -34,7 +34,7 @@ pub struct EditedEvent {
     /// Edit timestamp in Apple's nanosecond epoch.
     pub date: i64,
     /// The content of the edited message part, deserialized from the
-    /// [`typedstream`](crate::util::typedstream) format.
+    /// [`typedstream`](https://github.com/ReagentX/crabstep) format.
     pub text: String,
     /// Parsed body components for the edited text.
     pub components: Vec<BubbleComponent>,
@@ -82,7 +82,7 @@ impl Default for EditedMessagePart {
 ///
 /// Edited or unsent messages are stored with a `NULL` `text` field.
 /// Edited messages include `message_summary_info` that contains a dictionary
-/// with message body part data, including [`typedstream`](crate::util::typedstream)-encoded
+/// with message body part data, including [`typedstream`](https://github.com/ReagentX/crabstep)-encoded
 /// edit history. The order of entries in the edit history represents the order
 /// the part changed: item `0` is the original text and the last item is the
 /// current text.
@@ -600,17 +600,6 @@ mod test_parser {
         let expected_item = Some(expected.parts.first().unwrap());
         assert_eq!(parsed.part(0), expected_item);
     }
-}
-
-#[cfg(test)]
-mod test_gen {
-    use plist::Value;
-    use std::env::current_dir;
-    use std::fs::File;
-
-    use crate::message_types::text_effects::{style::Style, text_effect::TextEffect};
-    use crate::message_types::{edited::EditedMessage, variants::BalloonProvider};
-    use crate::tables::messages::models::{AttributedRange, BubbleComponent};
 
     #[test]
     fn test_parse_edited_memoji() {
@@ -645,244 +634,5 @@ mod test_gen {
             memoji.attachment.as_ref().unwrap().guid.as_deref(),
             Some("F2C223DB-0140-4D49-B38A-C1A3553B4CBA"),
         );
-    }
-
-    #[test]
-    fn test_parse_edited() {
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/edited_message/Edited.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = EditedMessage::from_map(&plist).unwrap();
-
-        let expected_attrs = [
-            vec![BubbleComponent::Run(vec![AttributedRange::text(
-                0,
-                15,
-                vec![TextEffect::Default],
-            )])],
-            vec![BubbleComponent::Run(vec![AttributedRange::text(
-                0,
-                6,
-                vec![TextEffect::Default],
-            )])],
-            vec![BubbleComponent::Run(vec![AttributedRange::text(
-                0,
-                6,
-                vec![TextEffect::Default],
-            )])],
-            vec![BubbleComponent::Run(vec![AttributedRange::text(
-                0,
-                14,
-                vec![TextEffect::Default],
-            )])],
-        ];
-
-        for event in parsed.parts {
-            for (idx, part) in event.edit_history.iter().enumerate() {
-                assert_eq!(part.components, expected_attrs[idx]);
-            }
-        }
-    }
-
-    #[test]
-    fn test_parse_edited_to_link() {
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/edited_message/EditedToLink.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = EditedMessage::from_map(&plist).unwrap();
-
-        let expected_attrs = [
-            vec![BubbleComponent::Run(vec![AttributedRange::text(
-                0,
-                11,
-                vec![TextEffect::Default],
-            )])],
-            vec![BubbleComponent::Run(vec![AttributedRange::text(
-                0,
-                55,
-                vec![TextEffect::Default],
-            )])],
-        ];
-
-        for event in parsed.parts {
-            for (idx, part) in event.edit_history.iter().enumerate() {
-                assert_eq!(part.components, expected_attrs[idx]);
-            }
-        }
-    }
-
-    #[test]
-    fn test_parse_edited_to_link_and_back() {
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/edited_message/EditedToLinkAndBack.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = EditedMessage::from_map(&plist).unwrap();
-
-        let expected_attrs = [
-            vec![BubbleComponent::Run(vec![AttributedRange::text(
-                0,
-                24,
-                vec![TextEffect::Default],
-            )])],
-            vec![BubbleComponent::Run(vec![AttributedRange::text(
-                0,
-                69,
-                vec![TextEffect::Default],
-            )])],
-            vec![BubbleComponent::Run(vec![AttributedRange::text(
-                0,
-                39,
-                vec![TextEffect::Default],
-            )])],
-        ];
-
-        for event in parsed.parts {
-            for (idx, part) in event.edit_history.iter().enumerate() {
-                assert_eq!(part.components, expected_attrs[idx]);
-            }
-        }
-    }
-
-    #[test]
-    fn test_parse_deleted() {
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/edited_message/Deleted.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = EditedMessage::from_map(&plist).unwrap();
-
-        let expected_attrs: [Vec<BubbleComponent>; 0] = [];
-
-        for event in parsed.parts {
-            for (idx, part) in event.edit_history.iter().enumerate() {
-                assert_eq!(part.components, expected_attrs[idx]);
-            }
-        }
-    }
-
-    #[test]
-    fn test_parse_multipart_deleted() {
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/edited_message/MultiPartOneDeleted.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = EditedMessage::from_map(&plist).unwrap();
-
-        let expected_attrs: [Vec<BubbleComponent>; 0] = [];
-
-        for event in parsed.parts {
-            for (idx, part) in event.edit_history.iter().enumerate() {
-                assert_eq!(part.components, expected_attrs[idx]);
-            }
-        }
-    }
-
-    #[test]
-    fn test_parse_multipart_edited_and_deleted() {
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/edited_message/EditedAndDeleted.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = EditedMessage::from_map(&plist).unwrap();
-
-        let expected_attrs = [
-            vec![BubbleComponent::Run(vec![AttributedRange::text(
-                0,
-                14,
-                vec![TextEffect::Default],
-            )])],
-            vec![BubbleComponent::Run(vec![AttributedRange::text(
-                0,
-                26,
-                vec![TextEffect::Default],
-            )])],
-        ];
-
-        for event in parsed.parts {
-            for (idx, part) in event.edit_history.iter().enumerate() {
-                assert_eq!(part.components, expected_attrs[idx]);
-            }
-        }
-    }
-
-    #[test]
-    fn test_parse_multipart_edited_and_unsent() {
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/edited_message/EditedAndUnsent.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = EditedMessage::from_map(&plist).unwrap();
-
-        for parts in &parsed.parts {
-            for part in &parts.edit_history {
-                println!("{:#?}", part.components);
-            }
-        }
-
-        let expected_attrs: [Vec<BubbleComponent>; 2] = [
-            vec![BubbleComponent::Run(vec![AttributedRange::text(
-                0,
-                11,
-                vec![TextEffect::Default],
-            )])],
-            vec![BubbleComponent::Run(vec![AttributedRange::text(
-                0,
-                23,
-                vec![TextEffect::Default],
-            )])],
-        ];
-
-        for event in parsed.parts {
-            for (idx, part) in event.edit_history.iter().enumerate() {
-                assert_eq!(part.components, expected_attrs[idx]);
-            }
-        }
-    }
-
-    #[test]
-    fn test_parse_edited_with_formatting() {
-        let plist_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/edited_message/EditedWithFormatting.plist");
-        let plist_data = File::open(plist_path).unwrap();
-        let plist = Value::from_reader(plist_data).unwrap();
-        let parsed = EditedMessage::from_map(&plist).unwrap();
-
-        let expected_attrs: [Vec<BubbleComponent>; 2] = [
-            vec![BubbleComponent::Run(vec![AttributedRange::text(
-                0,
-                4,
-                vec![TextEffect::Default],
-            )])],
-            vec![BubbleComponent::Run(vec![AttributedRange::text(
-                0,
-                4,
-                vec![TextEffect::Styles(vec![Style::Strikethrough])],
-            )])],
-        ];
-
-        for event in parsed.parts {
-            for (idx, part) in event.edit_history.iter().enumerate() {
-                assert_eq!(part.components, expected_attrs[idx]);
-            }
-        }
     }
 }

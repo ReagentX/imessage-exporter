@@ -12,7 +12,7 @@ use crate::{
     error::{plist::PlistParseError, table::TableError},
     tables::{
         messages::models::Service,
-        table::{CHAT, Cacheable, PROPERTIES, Table},
+        table::{CHAT, PROPERTIES, Table, open_blob},
     },
     util::plist::{
         extract_dictionary, extract_string_key, get_bool_from_dict, get_owned_string_from_dict,
@@ -137,33 +137,33 @@ impl Table for Chat {
             is_pending_review: row.get("is_pending_review").unwrap_or(None),
         })
     }
-
-    fn get(db: &'_ Connection) -> Result<CachedStatement<'_>, TableError> {
-        Ok(db.prepare_cached(&format!("SELECT * from {CHAT}"))?)
-    }
 }
 
-// MARK: Cache
-impl Cacheable for Chat {
-    type K = i32;
-    type V = Chat;
-    /// Cache chat rows by row ID.
+// MARK: Rows
+impl Chat {
+    /// Prepare the `SELECT *` statement for the `chat` table.
+    pub fn get(db: &'_ Connection) -> Result<CachedStatement<'_>, TableError> {
+        Ok(db.prepare_cached(&format!("SELECT * from {CHAT}"))?)
+    }
+
+    /// Map chat rows by row ID.
     ///
-    /// Chat row IDs can represent duplicate conversations; deduplication happens
-    /// after participant handles are loaded.
+    /// One conversation may have several chat row IDs. Call
+    /// [`crate::tables::chat_handle::ChatToHandle::dedupe`] after caching the
+    /// participant sets and handle groups.
     ///
     /// # Example:
     ///
     /// ```no_run
     /// use imessage_database::util::dirs::default_db_path;
-    /// use imessage_database::tables::table::{Cacheable, get_connection};
+    /// use imessage_database::tables::table::get_connection;
     /// use imessage_database::tables::chat::Chat;
     ///
-    /// let db_path = default_db_path();
+    /// let db_path = default_db_path().unwrap();
     /// let conn = get_connection(&db_path).unwrap();
-    /// let chatrooms = Chat::cache(&conn);
+    /// let chatrooms = Chat::by_rowid(&conn);
     /// ```
-    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
+    pub fn by_rowid(db: &Connection) -> Result<HashMap<i32, Chat>, TableError> {
         let mut map = HashMap::new();
 
         let mut statement = Chat::get(db)?;
@@ -220,7 +220,7 @@ impl Chat {
     /// Calling this reads a BLOB from the database.
     #[must_use]
     pub fn properties(&self, db: &Connection) -> Option<Properties> {
-        match Value::from_reader(self.get_blob(db, CHAT, PROPERTIES, self.rowid.into())?) {
+        match Value::from_reader(open_blob(db, CHAT, PROPERTIES, self.rowid.into())?) {
             Ok(plist) => Properties::from_plist(&plist).ok(),
             Err(_) => None,
         }

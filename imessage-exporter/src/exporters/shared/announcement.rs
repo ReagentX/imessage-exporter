@@ -11,6 +11,8 @@ use crate::{app::runtime::Config, exporters::shared::time::format_message_date};
 /// Display name used in `ParticipantAdded` / `ParticipantRemoved`
 /// announcements when the handle can't be resolved.
 pub const UNKNOWN_PARTICIPANT: &str = "someone";
+/// Second-person display name for the database owner.
+pub(crate) const YOU: &str = "You";
 
 /// A format-agnostic view of an announcement message. `who` has had the
 /// `ME` → `self_name` (caller-supplied) substitution applied; `timestamp` is
@@ -74,7 +76,7 @@ pub fn resolve_announcement<'a>(
         who = config.options.custom_name.as_deref().unwrap_or(self_name);
     }
 
-    let timestamp = format_message_date(msg, config.offset);
+    let timestamp = format_message_date(msg, &config.options.timezone);
 
     let participant_name = match &announcement {
         Announcement::GroupAction(

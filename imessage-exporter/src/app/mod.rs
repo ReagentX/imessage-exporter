@@ -9,6 +9,7 @@ pub mod options;
 pub mod progress;
 pub mod runtime;
 pub mod sanitizers;
+pub mod zone;
 
 #[cfg(test)]
 pub mod test_dir;

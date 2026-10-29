@@ -159,8 +159,9 @@ mod tests {
 
     #[test]
     fn unique_test_dir_is_unique_per_call() {
-        let a = unique_test_dir("uniq-a");
-        let b = unique_test_dir("uniq-b");
+        // Same label, so only the timestamp and counter can separate the two.
+        let a = unique_test_dir("uniq");
+        let b = unique_test_dir("uniq");
         assert_ne!(a, b);
         assert!(a.is_dir());
         assert!(b.is_dir());

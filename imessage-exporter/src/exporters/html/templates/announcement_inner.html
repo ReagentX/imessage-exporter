@@ -4,7 +4,6 @@
     <p><span class="timestamp">{{ timestamp }}</span> {{ who }} {% match announcement -%}
         {%- when Announcement::AudioMessageKept -%}kept an audio message.
         {%- when Announcement::FullyUnsent -%}unsent a message.
-        {%- when Announcement::Unknown(num) -%}performed unknown action {{ num }}.
         {%- when Announcement::GroupAction(group) -%}
         {%- match group -%}
         {%- when GroupAction::ParticipantAdded(_) -%}

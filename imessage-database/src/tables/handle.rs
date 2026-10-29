@@ -1,16 +1,17 @@
 /*!
- Handle table rows and handle deduplication helpers.
+ Handle table rows and handle grouping helpers.
 */
 
 use rusqlite::{CachedStatement, Connection, Result, Row};
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::{
     error::table::TableError,
     tables::{
         diagnostic::{HandleDiagnostic, column_exists, count_query},
-        table::{Cacheable, HANDLE, ME, Table},
+        table::{HANDLE, ME, Table},
     },
+    util::union_find::UnionFind,
 };
 
 // MARK: Handle
@@ -21,7 +22,8 @@ pub struct Handle {
     pub rowid: i32,
     /// Phone number, email address, or service identifier.
     pub id: String,
-    /// Contact identity used by Messages to group related handles.
+    /// Legacy merge ID that the iMessage server used to identify handles for
+    /// one sender account.
     pub person_centric_id: Option<String>,
 }
 
@@ -34,110 +36,42 @@ impl Table for Handle {
             person_centric_id: row.get("person_centric_id").unwrap_or(None),
         })
     }
+}
 
-    fn get(db: &'_ Connection) -> Result<CachedStatement<'_>, TableError> {
+// MARK: Rows
+impl Handle {
+    /// Prepare the `SELECT *` statement for the `handle` table.
+    pub fn get(db: &'_ Connection) -> Result<CachedStatement<'_>, TableError> {
         Ok(db.prepare_cached(&format!("SELECT * from {HANDLE}"))?)
     }
-}
 
-// MARK: Cache
-impl Cacheable for Handle {
-    type K = i32;
-    type V = String;
-    /// Cache handle display strings by row ID.
+    /// Load every row of the `handle` table in query order.
     ///
-    /// Handles that share `person_centric_id` map to the same combined string.
+    /// Load once and share the rows: borrow them with [`HandleGroups::from_rows`]
+    /// before consuming them with [`Handle::ids_by_rowid`].
     ///
     /// # Example:
     ///
     /// ```no_run
     /// use imessage_database::util::dirs::default_db_path;
-    /// use imessage_database::tables::table::{Cacheable, get_connection};
-    /// use imessage_database::tables::handle::Handle;
+    /// use imessage_database::tables::table::get_connection;
+    /// use imessage_database::tables::handle::{Handle, HandleGroups};
     ///
-    /// let db_path = default_db_path();
+    /// let db_path = default_db_path().unwrap();
     /// let conn = get_connection(&db_path).unwrap();
-    /// let chatrooms = Handle::cache(&conn);
+    /// let handles = Handle::load(&conn).unwrap();
+    /// let groups = HandleGroups::from_rows(&handles);
+    /// let ids = Handle::ids_by_rowid(handles);
     /// ```
-    fn cache(db: &Connection) -> Result<HashMap<Self::K, Self::V>, TableError> {
-        let mut map = HashMap::new();
-        // Handle ID 0 is self in group chats.
-        map.insert(0, ME.to_string());
-
-        // Create query
+    pub fn load(db: &Connection) -> Result<Vec<Handle>, TableError> {
         let mut statement = Handle::get(db)?;
-
-        // Iterate over the handles and update the map
-        for handle in Handle::rows(&mut statement, [])? {
-            let contact = handle?;
-            map.insert(contact.rowid, contact.id);
-        }
-
-        // Condense contacts that share person_centric_id so their IDs map to the same strings
-        let dupe_contacts = Handle::get_person_id_map(db)?;
-        for contact in dupe_contacts {
-            let (id, new) = contact;
-            map.insert(id, new);
-        }
-
-        Ok(map)
+        Handle::rows(&mut statement, [])?.collect()
     }
-}
 
-// MARK: Dedupe
-impl Handle {
-    /// Assign stable deduplicated IDs to handle display strings.
+    /// Map handle identifiers by row ID.
     ///
-    /// Returns a map from real handle row ID to a sequential participant ID.
-    ///
-    /// Assuming no new handles have been written to the database, deduplicated data is deterministic across runs.
-    ///
-    /// # Example:
-    ///
-    /// ```no_run
-    /// use imessage_database::util::dirs::default_db_path;
-    /// use imessage_database::tables::table::{Cacheable, get_connection};
-    /// use imessage_database::tables::handle::Handle;
-    ///
-    /// let db_path = default_db_path();
-    /// let conn = get_connection(&db_path).unwrap();
-    /// let handles = Handle::cache(&conn).unwrap();
-    /// let deduped_handles = Handle::dedupe(&handles);
-    /// ```
-    pub fn dedupe(duplicated_data: &HashMap<i32, String>) -> HashMap<i32, i32> {
-        let mut deduplicated_participants: HashMap<i32, i32> = HashMap::new();
-        let mut participant_to_unique_participant_id: HashMap<String, i32> = HashMap::new();
-
-        // Build cache of each unique set of participants to a new identifier:
-        let mut unique_participant_identifier = 0;
-
-        // Deterministic iteration keeps deduplicated IDs stable across runs.
-        let mut sorted_dupes: Vec<(&i32, &String)> = duplicated_data.iter().collect();
-        sorted_dupes.sort_by_key(|(a, _)| *a);
-
-        for (participant_id, participant) in sorted_dupes {
-            if let Some(id) = participant_to_unique_participant_id.get(participant) {
-                deduplicated_participants.insert(*participant_id, *id);
-            } else {
-                participant_to_unique_participant_id
-                    .insert(participant.to_owned(), unique_participant_identifier);
-                deduplicated_participants.insert(*participant_id, unique_participant_identifier);
-                unique_participant_identifier += 1;
-            }
-        }
-        deduplicated_participants
-    }
-}
-
-// MARK: Diagnostic
-impl Handle {
-    /// Compute diagnostic data for the `handle` table.
-    ///
-    /// Counts the number of handles that are duplicated. The `person_centric_id`
-    /// is used to map handles that represent the same contact across ids (numbers,
-    /// emails, etc) and across services (iMessage, Jabber, iChat, SMS, etc).
-    ///
-    /// In some databases, `person_centric_id` may not be available.
+    /// In group chats, treat row ID `0` as the local user and map it to [`ME`].
+    /// Use [`HandleGroups`] to group rows that belong to one person.
     ///
     /// # Example:
     ///
@@ -146,7 +80,142 @@ impl Handle {
     /// use imessage_database::tables::table::get_connection;
     /// use imessage_database::tables::handle::Handle;
     ///
-    /// let db_path = default_db_path();
+    /// let db_path = default_db_path().unwrap();
+    /// let conn = get_connection(&db_path).unwrap();
+    /// let handles = Handle::ids_by_rowid(Handle::load(&conn).unwrap());
+    /// ```
+    #[must_use]
+    pub fn ids_by_rowid(handles: Vec<Handle>) -> HashMap<i32, String> {
+        let mut map = HashMap::with_capacity(handles.len() + 1);
+        map.insert(0, ME.to_string());
+
+        for handle in handles {
+            map.insert(handle.rowid, handle.id);
+        }
+
+        map
+    }
+}
+
+// MARK: Groups
+/// Groups of `handle` rows that belong to one person.
+///
+/// We group rows when their `id` values match byte-for-byte (one address
+/// registered on several services) or their `person_centric_id` values match.
+/// Call [`HandleGroups::union`] to add relationships from outside the database,
+/// such as contact matches. Call [`HandleGroups::finalize`] to assign one
+/// sequential group ID to each class.
+///
+/// Compare stored `id` values without normalization. Messages lowercases email
+/// addresses and canonicalizes phone numbers before storing them. Do not match
+/// phone numbers on digits alone; you could combine a short code with a full
+/// number that shares its suffix.
+///
+/// The iMessage server attached `person_centric_id` to incoming messages as a
+/// merge ID, but stopped issuing it for new senders long ago. Current databases
+/// retain this field only for the oldest handles. Keep a present ID as a
+/// grouping edge; it remains reliable even though current databases rarely
+/// include it.
+///
+/// # Example:
+///
+/// ```no_run
+/// use imessage_database::util::dirs::default_db_path;
+/// use imessage_database::tables::table::get_connection;
+/// use imessage_database::tables::handle::HandleGroups;
+///
+/// let db_path = default_db_path().unwrap();
+/// let conn = get_connection(&db_path).unwrap();
+/// let mut groups = HandleGroups::from_db(&conn).unwrap();
+/// groups.union(3, 7);
+/// let group_by_handle = groups.finalize();
+/// ```
+#[derive(Debug)]
+pub struct HandleGroups {
+    sets: UnionFind,
+}
+
+impl HandleGroups {
+    /// Seed groups from every row of the `handle` table.
+    ///
+    /// Load the table through [`Handle::load`], then seed the groups with
+    /// [`HandleGroups::from_rows`].
+    pub fn from_db(db: &Connection) -> Result<Self, TableError> {
+        Ok(Self::from_rows(&Handle::load(db)?))
+    }
+
+    /// Seed groups from loaded `handle` rows.
+    ///
+    /// Include row ID `0` as its own group. Chat participant lists can use it
+    /// for the local user.
+    #[must_use]
+    pub fn from_rows(handles: &[Handle]) -> Self {
+        let mut sets = UnionFind::new();
+        sets.make_set(0);
+
+        let mut first_by_id: HashMap<&str, i32> = HashMap::new();
+        let mut first_by_person: HashMap<&str, i32> = HashMap::new();
+
+        for handle in handles {
+            sets.make_set(handle.rowid);
+
+            if !handle.id.is_empty() {
+                let first = *first_by_id
+                    .entry(handle.id.as_str())
+                    .or_insert(handle.rowid);
+                sets.union(handle.rowid, first);
+            }
+
+            if let Some(person) = handle
+                .person_centric_id
+                .as_deref()
+                .filter(|p| !p.is_empty())
+            {
+                let first = *first_by_person.entry(person).or_insert(handle.rowid);
+                sets.union(handle.rowid, first);
+            }
+        }
+
+        Self { sets }
+    }
+
+    /// Merge the groups containing two handle row IDs.
+    ///
+    /// Pass row IDs from the table. Unknown IDs have no effect, so an external
+    /// source cannot create a phantom group with a stale ID.
+    pub fn union(&mut self, a: i32, b: i32) {
+        if self.sets.contains(a) && self.sets.contains(b) {
+            self.sets.union(a, b);
+        }
+    }
+
+    /// Assign a sequential group ID to each class and return it keyed by handle row ID.
+    ///
+    /// Order classes by their smallest row ID before assigning sequential IDs.
+    /// This keeps results stable for an unchanged table, even when union-find
+    /// picks a different representative.
+    pub fn finalize(mut self) -> HashMap<i32, i32> {
+        let ids: Vec<i32> = self.sets.ids().collect();
+        self.sets.label(ids)
+    }
+}
+
+// MARK: Diagnostic
+impl Handle {
+    /// Compute diagnostic data for the `handle` table.
+    ///
+    /// Group rows with [`HandleGroups`], then report the extra rows absorbed
+    /// into groups and the number of groups with multiple rows. Count
+    /// `person_centric_id` values separately when the column exists.
+    ///
+    /// # Example:
+    ///
+    /// ```no_run
+    /// use imessage_database::util::dirs::default_db_path;
+    /// use imessage_database::tables::table::get_connection;
+    /// use imessage_database::tables::handle::Handle;
+    ///
+    /// let db_path = default_db_path().unwrap();
     /// let conn = get_connection(&db_path).unwrap();
     /// Handle::run_diagnostic(&conn);
     /// ```
@@ -154,157 +223,221 @@ impl Handle {
         let query = concat!(
             "SELECT COUNT(DISTINCT person_centric_id) ",
             "FROM handle ",
-            "WHERE person_centric_id NOT NULL"
+            "WHERE person_centric_id NOT NULL AND person_centric_id != ''"
         );
 
-        let handles_with_multiple_ids = if column_exists(db, HANDLE, "person_centric_id")? {
+        let person_centric_ids = if column_exists(db, HANDLE, "person_centric_id")? {
             Some(count_query(db, query)?)
         } else {
             None
         };
 
-        // Cache all handles
-        let all_handles = Self::cache(db)?;
+        // Row 0 is synthetic; it has no handle row, so exclude it from the
+        // total and from group sizes.
+        let group_by_handle = HandleGroups::from_db(db)?.finalize();
+        let total_handles = group_by_handle.len() - 1;
 
-        // Deduplicate handles
-        let unique_handles = Self::dedupe(&all_handles);
-
-        // Calculate total duplicated handles
-        let total_duplicated =
-            all_handles.len() - HashSet::<&i32>::from_iter(unique_handles.values()).len();
-
-        Ok(HandleDiagnostic {
-            total_handles: all_handles.len(),
-            handles_with_multiple_ids,
-            total_duplicated,
-        })
-    }
-}
-
-// MARK: Impl
-impl Handle {
-    /// Map handles sharing `person_centric_id` to a combined display string.
-    fn get_person_id_map(db: &Connection) -> Result<HashMap<i32, String>, TableError> {
-        let mut person_to_id: HashMap<String, BTreeSet<String>> = HashMap::new();
-        let mut row_to_id: HashMap<i32, String> = HashMap::new();
-        let mut row_data: Vec<(String, i32, String)> = vec![];
-
-        // Build query
-        let query = concat!(
-            "SELECT DISTINCT A.person_centric_id, A.rowid, A.id ",
-            "FROM handle A ",
-            "INNER JOIN handle B ON B.id = A.id ",
-            "WHERE A.person_centric_id NOT NULL ",
-            "ORDER BY A.person_centric_id",
-        );
-        let statement = db.prepare(query);
-
-        if let Ok(mut statement) = statement {
-            // Cache the results of the query in memory
-            let contacts = statement.query_map([], |row| {
-                let person_centric_id: String = row.get(0)?;
-                let rowid: i32 = row.get(1)?;
-                let id: String = row.get(2)?;
-                Ok((person_centric_id, rowid, id))
-            })?;
-
-            for contact in contacts {
-                row_data.push(contact?);
-            }
-
-            // First pass: group handle strings by `person_centric_id`.
-            for contact in &row_data {
-                let (person_centric_id, _, id) = contact;
-                if let Some(set) = person_to_id.get_mut(person_centric_id) {
-                    set.insert(id.to_owned());
-                } else {
-                    let mut set = BTreeSet::new();
-                    set.insert(id.to_owned());
-                    person_to_id.insert(person_centric_id.to_owned(), set);
-                }
-            }
-
-            // Second pass: map each row ID to its combined display string.
-            for contact in &row_data {
-                let (person_centric_id, rowid, _) = contact;
-                let data_to_insert = match person_to_id.get_mut(person_centric_id) {
-                    Some(person) => person.iter().cloned().collect::<Vec<String>>().join(" "),
-                    None => continue,
-                };
-                row_to_id.insert(rowid.to_owned(), data_to_insert);
+        let mut rows_per_group: HashMap<i32, usize> = HashMap::new();
+        for (rowid, group) in group_by_handle {
+            if rowid != 0 {
+                *rows_per_group.entry(group).or_insert(0) += 1;
             }
         }
 
-        Ok(row_to_id)
+        Ok(HandleDiagnostic {
+            total_handles,
+            person_centric_ids,
+            multi_handle_groups: rows_per_group.values().filter(|rows| **rows > 1).count(),
+            merged_handles: total_handles - rows_per_group.len(),
+        })
     }
 }
 
 // MARK: Tests
 #[cfg(test)]
 mod tests {
-    use crate::tables::handle::Handle;
+    use crate::tables::handle::{Handle, HandleGroups};
     use rusqlite::Connection;
     use std::collections::{HashMap, HashSet};
 
-    #[test]
-    fn test_can_dedupe() {
-        let mut input: HashMap<i32, String> = HashMap::new();
-        input.insert(1, String::from("A")); // 0
-        input.insert(2, String::from("A")); // 0
-        input.insert(3, String::from("A")); // 0
-        input.insert(4, String::from("B")); // 1
-        input.insert(5, String::from("B")); // 1
-        input.insert(6, String::from("C")); // 2
+    /// Build an in-memory `handle` table from `(rowid, id, service, person_centric_id)` rows.
+    fn db_with(rows: &[(i32, &str, &str, Option<&str>)]) -> Connection {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute(
+            "CREATE TABLE handle (
+                ROWID INTEGER PRIMARY KEY,
+                id TEXT NOT NULL,
+                service TEXT NOT NULL,
+                person_centric_id TEXT
+            )",
+            [],
+        )
+        .unwrap();
+        for (rowid, id, service, person) in rows {
+            db.execute(
+                "INSERT INTO handle (ROWID, id, service, person_centric_id) VALUES (?1, ?2, ?3, ?4)",
+                (rowid, id, service, person),
+            )
+            .unwrap();
+        }
+        db
+    }
 
-        let output = Handle::dedupe(&input);
-        let expected_deduped_ids: HashSet<i32> = output.values().copied().collect();
-        assert_eq!(expected_deduped_ids.len(), 3);
+    fn groups_of(map: &HashMap<i32, i32>, rowids: &[i32]) -> HashSet<i32> {
+        rowids.iter().map(|r| map[r]).collect()
     }
 
     #[test]
-    // Simulate 3 runs of the program and ensure that the order of the deduplicated contacts is stable
-    fn test_same_values() {
-        let mut input_1: HashMap<i32, String> = HashMap::new();
-        input_1.insert(1, String::from("A"));
-        input_1.insert(2, String::from("A"));
-        input_1.insert(3, String::from("A"));
-        input_1.insert(4, String::from("B"));
-        input_1.insert(5, String::from("B"));
-        input_1.insert(6, String::from("C"));
+    fn load_returns_every_row() {
+        let db = db_with(&[
+            (1, "+15551234567", "iMessage", Some("p1")),
+            (2, "a@example.com", "SMS", None),
+            (3, "b@example.com", "iMessage", Some("")),
+        ]);
 
-        let mut input_2: HashMap<i32, String> = HashMap::new();
-        input_2.insert(1, String::from("A"));
-        input_2.insert(2, String::from("A"));
-        input_2.insert(3, String::from("A"));
-        input_2.insert(4, String::from("B"));
-        input_2.insert(5, String::from("B"));
-        input_2.insert(6, String::from("C"));
+        let handles = Handle::load(&db).unwrap();
 
-        let mut input_3: HashMap<i32, String> = HashMap::new();
-        input_3.insert(1, String::from("A"));
-        input_3.insert(2, String::from("A"));
-        input_3.insert(3, String::from("A"));
-        input_3.insert(4, String::from("B"));
-        input_3.insert(5, String::from("B"));
-        input_3.insert(6, String::from("C"));
+        let rows: Vec<(i32, &str, Option<&str>)> = handles
+            .iter()
+            .map(|h| (h.rowid, h.id.as_str(), h.person_centric_id.as_deref()))
+            .collect();
+        assert_eq!(
+            rows,
+            vec![
+                (1, "+15551234567", Some("p1")),
+                (2, "a@example.com", None),
+                (3, "b@example.com", Some("")),
+            ]
+        );
+    }
 
-        let mut output_1 = Handle::dedupe(&input_1)
-            .into_iter()
-            .collect::<Vec<(i32, i32)>>();
-        let mut output_2 = Handle::dedupe(&input_2)
-            .into_iter()
-            .collect::<Vec<(i32, i32)>>();
-        let mut output_3 = Handle::dedupe(&input_3)
-            .into_iter()
-            .collect::<Vec<(i32, i32)>>();
+    #[test]
+    fn ids_by_rowid_includes_me_and_every_row() {
+        let db = db_with(&[
+            (1, "+15551234567", "iMessage", None),
+            (2, "a@example.com", "SMS", None),
+        ]);
 
-        output_1.sort_unstable();
-        output_2.sort_unstable();
-        output_3.sort_unstable();
+        let ids = Handle::ids_by_rowid(Handle::load(&db).unwrap());
 
-        assert_eq!(output_1, output_2);
-        assert_eq!(output_1, output_3);
-        assert_eq!(output_2, output_3);
+        assert_eq!(ids.len(), 3);
+        assert_eq!(ids[&0], "Me");
+        assert_eq!(ids[&1], "+15551234567");
+        assert_eq!(ids[&2], "a@example.com");
+    }
+
+    #[test]
+    fn identical_ids_across_services_share_a_group() {
+        let db = db_with(&[
+            (1, "+15551234567", "iMessage", None),
+            (2, "+15551234567", "SMS", None),
+            (3, "+15551234567", "RCS", None),
+            (4, "a@example.com", "iMessage", None),
+        ]);
+        let map = HandleGroups::from_db(&db).unwrap().finalize();
+
+        assert_eq!(groups_of(&map, &[1, 2, 3]).len(), 1);
+        assert_ne!(map[&1], map[&4]);
+        assert_eq!(map[&0], 0, "the local user is group 0");
+        assert_eq!(map.len(), 5);
+    }
+
+    #[test]
+    fn ids_are_not_normalized() {
+        let db = db_with(&[
+            (1, "+15551234567", "iMessage", None),
+            (2, "15551234567", "SMS", None),
+            (3, "A@example.com", "iMessage", None),
+            (4, "a@example.com", "iMessage", None),
+        ]);
+        let map = HandleGroups::from_db(&db).unwrap().finalize();
+
+        assert_ne!(map[&1], map[&2]);
+        assert_ne!(map[&3], map[&4]);
+    }
+
+    #[test]
+    fn person_centric_id_joins_different_ids() {
+        let db = db_with(&[
+            (1, "+15551234567", "iMessage", Some("p1")),
+            (2, "a@example.com", "iMessage", Some("p1")),
+            (3, "b@example.com", "iMessage", Some("p2")),
+            (4, "+15559876543", "iMessage", None),
+        ]);
+        let map = HandleGroups::from_db(&db).unwrap().finalize();
+
+        assert_eq!(map[&1], map[&2]);
+        assert_ne!(map[&1], map[&3]);
+        assert_ne!(map[&1], map[&4]);
+    }
+
+    #[test]
+    fn edges_are_transitive() {
+        // Group rows 1, 2, and 3: connect 1 to 2 by person_centric_id, then 2
+        // to 3 by id.
+        let db = db_with(&[
+            (1, "+15551234567", "iMessage", Some("p1")),
+            (2, "a@example.com", "iMessage", Some("p1")),
+            (3, "a@example.com", "SMS", None),
+        ]);
+        let map = HandleGroups::from_db(&db).unwrap().finalize();
+
+        assert_eq!(groups_of(&map, &[1, 2, 3]).len(), 1);
+    }
+
+    #[test]
+    fn empty_person_centric_id_is_not_an_edge() {
+        let db = db_with(&[
+            (1, "+15551234567", "iMessage", Some("")),
+            (2, "a@example.com", "iMessage", Some("")),
+        ]);
+        let map = HandleGroups::from_db(&db).unwrap().finalize();
+
+        assert_ne!(map[&1], map[&2]);
+    }
+
+    #[test]
+    fn external_union_merges_groups() {
+        let db = db_with(&[
+            (1, "+15551234567", "iMessage", None),
+            (2, "a@example.com", "iMessage", None),
+            (3, "b@example.com", "iMessage", None),
+        ]);
+        let mut groups = HandleGroups::from_db(&db).unwrap();
+        groups.union(1, 2);
+        let map = groups.finalize();
+
+        assert_eq!(map[&1], map[&2]);
+        assert_ne!(map[&1], map[&3]);
+    }
+
+    #[test]
+    fn external_union_ignores_unknown_rowids() {
+        let db = db_with(&[(1, "+15551234567", "iMessage", None)]);
+        let mut groups = HandleGroups::from_db(&db).unwrap();
+        groups.union(1, 99);
+        groups.union(98, 99);
+        let map = groups.finalize();
+
+        assert_eq!(map.len(), 2);
+        assert!(!map.contains_key(&99));
+    }
+
+    #[test]
+    fn group_ids_are_sequential_in_rowid_order() {
+        let db = db_with(&[
+            (5, "c", "iMessage", None),
+            (3, "b", "iMessage", None),
+            (9, "b", "SMS", None),
+            (1, "a", "iMessage", None),
+        ]);
+        let map = HandleGroups::from_db(&db).unwrap().finalize();
+
+        assert_eq!(map[&0], 0);
+        assert_eq!(map[&1], 1);
+        assert_eq!(map[&3], 2);
+        assert_eq!(map[&5], 3);
+        assert_eq!(map[&9], 2);
     }
 
     #[test]
@@ -323,33 +456,43 @@ mod tests {
 
         let diagnostic = Handle::run_diagnostic(&db).unwrap();
 
-        assert_eq!(diagnostic.total_handles, 3);
-        assert_eq!(diagnostic.handles_with_multiple_ids, None);
+        assert_eq!(diagnostic.total_handles, 2);
+        assert_eq!(diagnostic.person_centric_ids, None);
+        assert_eq!(diagnostic.multi_handle_groups, 0);
+        assert_eq!(diagnostic.merged_handles, 0);
     }
 
     #[test]
-    fn diagnostic_counts_person_centric_ids_when_column_exists() {
-        let db = Connection::open_in_memory().unwrap();
-        db.execute(
-            "CREATE TABLE handle (
-                ROWID INTEGER PRIMARY KEY,
-                id TEXT NOT NULL,
-                person_centric_id TEXT
-            )",
-            [],
-        )
-        .unwrap();
-        db.execute(
-            "INSERT INTO handle (ROWID, id, person_centric_id)
-             VALUES (1, 'first', 'person-1'),
-                    (2, 'second', 'person-1'),
-                    (3, 'third', 'person-2')",
-            [],
-        )
-        .unwrap();
+    fn diagnostic_counts_groups_and_merged_rows() {
+        let db = db_with(&[
+            (1, "+15551234567", "iMessage", Some("p1")),
+            (2, "+15551234567", "SMS", Some("p1")),
+            (3, "a@example.com", "iMessage", Some("p1")),
+            (4, "b@example.com", "iMessage", None),
+            (5, "b@example.com", "SMS", None),
+            (6, "+15559876543", "iMessage", Some("p2")),
+        ]);
 
         let diagnostic = Handle::run_diagnostic(&db).unwrap();
 
-        assert_eq!(diagnostic.handles_with_multiple_ids, Some(2));
+        assert_eq!(diagnostic.total_handles, 6);
+        assert_eq!(diagnostic.person_centric_ids, Some(2));
+        // {1,2,3}, {4,5}, {6}
+        assert_eq!(diagnostic.multi_handle_groups, 2);
+        assert_eq!(diagnostic.merged_handles, 3);
+    }
+
+    #[test]
+    fn diagnostic_ignores_empty_person_centric_ids() {
+        let db = db_with(&[
+            (1, "a@example.com", "iMessage", Some("")),
+            (2, "b@example.com", "iMessage", Some("")),
+        ]);
+
+        let diagnostic = Handle::run_diagnostic(&db).unwrap();
+
+        assert_eq!(diagnostic.person_centric_ids, Some(0));
+        assert_eq!(diagnostic.multi_handle_groups, 0);
+        assert_eq!(diagnostic.merged_handles, 0);
     }
 }

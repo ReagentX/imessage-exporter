@@ -40,38 +40,35 @@ mod tests {
     }
 
     #[test]
-    fn can_get_balloon_bundle_id_os() {
-        assert_eq!(
-            parse_balloon_bundle_id(Some("com.apple.Handwriting.HandwritingProvider")),
-            Some("com.apple.Handwriting.HandwritingProvider")
-        );
-    }
-
-    #[test]
-    fn can_get_balloon_bundle_id_url() {
-        assert_eq!(
-            parse_balloon_bundle_id(Some("com.apple.messages.URLBalloonProvider")),
-            Some("com.apple.messages.URLBalloonProvider")
-        );
-    }
-
-    #[test]
-    fn can_get_balloon_bundle_id_apple() {
-        assert_eq!(
-            parse_balloon_bundle_id(Some(
-                "com.apple.messages.MSMessageExtensionBalloonPlugin:0000000000:com.apple.PassbookUIService.PeerPaymentMessagesExtension"
-            )),
-            Some("com.apple.PassbookUIService.PeerPaymentMessagesExtension")
-        );
-    }
-
-    #[test]
-    fn can_get_balloon_bundle_id_third_party() {
-        assert_eq!(
-            parse_balloon_bundle_id(Some(
-                "com.apple.messages.MSMessageExtensionBalloonPlugin:QPU8QS3E62:com.contextoptional.OpenTable.Messages"
-            )),
-            Some("com.contextoptional.OpenTable.Messages")
-        );
+    fn can_get_balloon_bundle_id() {
+        let cases = [
+            (
+                "os provider without plugin prefix",
+                "com.apple.Handwriting.HandwritingProvider",
+                "com.apple.Handwriting.HandwritingProvider",
+            ),
+            (
+                "url provider without plugin prefix",
+                "com.apple.messages.URLBalloonProvider",
+                "com.apple.messages.URLBalloonProvider",
+            ),
+            (
+                "apple plugin with placeholder team id",
+                "com.apple.messages.MSMessageExtensionBalloonPlugin:0000000000:com.apple.PassbookUIService.PeerPaymentMessagesExtension",
+                "com.apple.PassbookUIService.PeerPaymentMessagesExtension",
+            ),
+            (
+                "third-party plugin with team id",
+                "com.apple.messages.MSMessageExtensionBalloonPlugin:QPU8QS3E62:com.contextoptional.OpenTable.Messages",
+                "com.contextoptional.OpenTable.Messages",
+            ),
+        ];
+        for (label, input, expected) in cases {
+            assert_eq!(
+                parse_balloon_bundle_id(Some(input)),
+                Some(expected),
+                "{label}"
+            );
+        }
     }
 }

@@ -7,10 +7,12 @@ probes the live schema once; query composition then includes exactly what the
 database supports.
 */
 
+use std::path::PathBuf;
+
 use rusqlite::Connection;
 
 use crate::{
-    error::table::TableError,
+    error::table::{TableConnectError, TableError},
     tables::{
         attachment::ATTACHMENT_COLUMNS,
         diagnostic::{column_names, table_exists},
@@ -18,6 +20,9 @@ use crate::{
         table::{ATTACHMENT, MESSAGE, RECENTLY_DELETED},
     },
 };
+
+/// `message` columns that exist only to feed body parsing during row decoding.
+const BODY_INPUT_COLUMNS: [&str; 3] = ["attributedbody", "message_summary_info", "payload_data"];
 
 /// Features of a Messages database schema, probed from the live database.
 ///
@@ -32,6 +37,8 @@ pub struct Capabilities {
     /// Recognized `attachment` columns this schema declares, in canonical
     /// ([`ATTACHMENT_COLUMNS`]) order.
     attachment_columns: Vec<&'static str>,
+    /// Text values need a blob cast to preserve their UTF-16 storage bytes.
+    pub(crate) utf16_text: bool,
     /// Both `filter_action` and `filter_sub_action` exist on `message`.
     ///
     /// The pair is one feature: queries project either both real columns or
@@ -53,6 +60,13 @@ pub struct Capabilities {
 impl Capabilities {
     /// Probe the schema of the supplied database.
     pub fn determine(db: &Connection) -> Result<Self, TableError> {
+        if !table_exists(db, MESSAGE)? {
+            return Err(TableError::CannotConnect(
+                TableConnectError::NotMessagesDatabase(PathBuf::from(
+                    db.path().unwrap_or_default(),
+                )),
+            ));
+        }
         let message_names = column_names(db, MESSAGE)?;
         let attachment_names = column_names(db, ATTACHMENT)?;
 
@@ -65,6 +79,9 @@ impl Capabilities {
                 .into_iter()
                 .filter(|column| attachment_names.contains(*column))
                 .collect(),
+            utf16_text: db
+                .query_row("PRAGMA encoding", [], |row| row.get::<_, String>(0))?
+                .starts_with("UTF-16"),
             filter_actions: message_names.contains("filter_action")
                 && message_names.contains("filter_sub_action"),
             recoverable_messages: table_exists(db, RECENTLY_DELETED)?,
@@ -89,6 +106,25 @@ impl Capabilities {
         }
     }
 
+    /// Return a copy whose message projection omits the body-parser inputs:
+    /// `attributedBody`, `message_summary_info`, and `payload_data`.
+    ///
+    /// Row decoding parses a body only from projected bytes, so a scan that
+    /// never renders its rows uses this to skip the blob reads and the
+    /// typedstream decode for every row.
+    #[must_use]
+    pub fn without_body_inputs(&self) -> Self {
+        Self {
+            message_columns: self
+                .message_columns
+                .iter()
+                .copied()
+                .filter(|column| !BODY_INPUT_COLUMNS.contains(column))
+                .collect(),
+            ..self.clone()
+        }
+    }
+
     /// Recognized `message` columns this schema declares, in canonical order.
     pub fn message_columns(&self) -> &[&'static str] {
         &self.message_columns
@@ -102,8 +138,27 @@ impl Capabilities {
 
 #[cfg(test)]
 mod tests {
+    use rusqlite::Connection;
+
     use super::Capabilities;
-    use crate::test_support::schema_db;
+    use crate::{
+        error::table::{TableConnectError, TableError},
+        test_support::schema_db,
+    };
+
+    #[test]
+    fn rejects_database_without_message_table() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch("CREATE TABLE Files (fileID TEXT)")
+            .unwrap();
+
+        assert!(matches!(
+            Capabilities::determine(&db),
+            Err(TableError::CannotConnect(
+                TableConnectError::NotMessagesDatabase(_)
+            ))
+        ));
+    }
 
     #[test]
     fn detects_present_features() {
@@ -176,5 +231,36 @@ mod tests {
                 .attachment_columns()
                 .contains(&"emoji_image_short_description")
         );
+    }
+
+    #[test]
+    fn without_body_inputs_drops_only_the_parser_columns() {
+        let db = schema_db(true, true, true);
+        db.execute_batch(
+            "ALTER TABLE message ADD COLUMN attributedBody BLOB;
+             ALTER TABLE message ADD COLUMN message_summary_info BLOB;
+             ALTER TABLE message ADD COLUMN payload_data BLOB;",
+        )
+        .unwrap();
+        let capabilities = Capabilities::determine(&db).unwrap();
+        assert_eq!(capabilities.message_columns().len(), 29);
+
+        let lean = capabilities.without_body_inputs();
+        let expected: Vec<&str> = capabilities
+            .message_columns()
+            .iter()
+            .copied()
+            .filter(|column| {
+                !matches!(
+                    *column,
+                    "attributedbody" | "message_summary_info" | "payload_data"
+                )
+            })
+            .collect();
+        assert_eq!(lean.message_columns(), expected.as_slice());
+        assert_eq!(lean.message_columns().len(), 26);
+        assert!(lean.filter_actions);
+        assert!(lean.recoverable_messages);
+        assert!(lean.replies);
     }
 }

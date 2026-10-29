@@ -193,12 +193,15 @@ mod tests {
     }
 
     #[test]
-    fn empty_request_does_not_panic() {
+    fn empty_request_leaves_times_unchanged() {
         let dir = unique_test_dir("file-times-empty");
         let path = dir.join("stamped.txt");
         File::create(&path).unwrap();
+        let before = metadata(&path).unwrap().modified().unwrap();
 
         set_file_times(&path, None, None, None);
+
+        assert_eq!(metadata(&path).unwrap().modified().unwrap(), before);
     }
 
     #[test]

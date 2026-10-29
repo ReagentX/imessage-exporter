@@ -98,7 +98,7 @@ pub(crate) fn dispatch_part_body<'a, F>(
     message: &'a Message,
     idx: usize,
     message_part: &'a BubbleComponent,
-    attachments: &'a mut Vec<Attachment>,
+    attachments: &'a [Attachment],
     resolver: &mut AttachmentResolver,
 ) -> F::Body
 where

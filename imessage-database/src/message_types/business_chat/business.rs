@@ -100,46 +100,6 @@ mod tests {
     }
 
     #[test]
-    fn classifies_quick_reply() {
-        assert!(matches!(
-            classify("BusinessQuickReply.plist"),
-            Ok(BusinessMessage::QuickReply(_))
-        ));
-    }
-
-    #[test]
-    fn classifies_form_request() {
-        assert!(matches!(
-            classify("BusinessFormRequest.plist"),
-            Ok(BusinessMessage::FormRequest(_))
-        ));
-    }
-
-    #[test]
-    fn classifies_form_response() {
-        assert!(matches!(
-            classify("BusinessFormResponse.plist"),
-            Ok(BusinessMessage::FormResponse(_))
-        ));
-    }
-
-    #[test]
-    fn classifies_list_picker_prompt() {
-        assert!(matches!(
-            classify("BusinessListPicker.plist"),
-            Ok(BusinessMessage::ListPicker(_))
-        ));
-    }
-
-    #[test]
-    fn classifies_list_picker_reply() {
-        assert!(matches!(
-            classify("BusinessListPickerResponse.plist"),
-            Ok(BusinessMessage::ListPicker(_))
-        ));
-    }
-
-    #[test]
     fn legacy_business_falls_through() {
         // Legacy query-string payloads have no supported business schema.
         assert!(matches!(

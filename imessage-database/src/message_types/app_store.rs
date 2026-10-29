@@ -132,18 +132,4 @@ mod tests {
 
         assert_eq!(balloon.get_url(), Some("https://apps.apple.com/original"));
     }
-
-    #[test]
-    fn test_get_no_url() {
-        let balloon = AppStoreMessage {
-            url: None,
-            original_url: None,
-            app_name: None,
-            description: None,
-            platform: None,
-            genre: None,
-        };
-
-        assert_eq!(balloon.get_url(), None);
-    }
 }

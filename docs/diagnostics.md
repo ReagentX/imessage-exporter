@@ -6,30 +6,32 @@ Diagnostic output from `imessage-exporter` looks like:
 iMessage Database Diagnostics
 
 Handle diagnostic data:
-    Total handles: 552
-    Handles with more than one ID: 2
-    Total duplicated handles: 100
+    Total handles: 609
+    Distinct person_centric_id values: 2
+    Handles merged into another handle: 104
+    Participants with more than one handle: 88
 Message diagnostic data:
-    Total messages: 183453
-    Messages not associated with a chat: 43210
-    Messages belonging to more than one chat: 36
-    Recoverable messages: 1
-    Date range: Sep 20, 2019  1:53:14 PM to Mar 09, 2026  5:03:14 PM
-                6 years, 170 days, 4 hours, 58 minutes, 24 seconds
+    Total messages: 270778
+    Messages not associated with a chat: 45778
+    Messages belonging to more than one chat: 16
+    Recoverable messages: 5
+    Date range: Sep 20, 2019  1:53:14 PM to Oct 16, 2026  5:04:25 PM
+                7 years, 26 days, 3 hours, 11 minutes, 11 seconds
 Attachment diagnostic data:
-    Total attachments: 49422
-        Data referenced in table: 44.13 GB
-        Data present on disk: 31.31 GB
-    Missing files: 15037 (30%)
-        No path provided: 14929
-        No file located: 108
+    Total attachments: 75919
+        Data referenced in table: 71.77 GB
+        Data present on disk: 54.18 GB
+    Missing files: 15668 (21%)
+        No path provided: 15205
+        No file located: 463
 Thread diagnostic data:
-    Total chats: 432
-    Total duplicated chats: 11
-    Chats with no handles: 2
+    Total chats: 469
+    Total duplicated chats: 20
 Global diagnostic data:
-    Total database size: 339.88 MB
-    Handles with resolved names: 231/452 (51%)
+    Total database size: 604.10 MB
+    Handles with resolved names: 133/486 (27%)
+    Handles merged by Contacts: 20
+    Chats merged by Contacts: 20
     Schema capabilities:
         Recoverable deleted messages: Detected
         Reply threads: Detected
@@ -50,59 +52,63 @@ Detected converters:
 
 The total number of handles present in the provided iMessage database.
 
-### Handles with more than one ID
+### Distinct `person_centric_id` values
 
-The number of contacts that have multiple entries in the `handle` table, deduplicated by matching their `person_centric_id` across rows. The `person_centric_id` is a field used by Apple to disambiguate contacts. Further deduplication also happens, as noted in the next line.
+The number of distinct `person_centric_id` values in the `handle` table. The iMessage server attached this merge ID to some incoming messages. It stopped issuing the ID for new senders long ago, so current databases include it only for the oldest contacts. We omit this line when the column is absent or empty.
 
-### Total duplicated handles
+### Handles merged into another handle
 
-In addition to the foregoing `person_centric_id`, other deduplication steps map identical handles across services, number formats, and email formats to the same handle ID. The value reflects the number of handles that had multiple entries in the iMessage database coalesed into a single handle.
+The number of `handle` rows absorbed into another row's group. We group rows when their `id` is byte-identical across services (the same phone number on iMessage, SMS, and RCS) or when they share a `person_centric_id`. During export, we count each group as one participant. We show this line and the next only when at least one handle merged.
+
+### Participants with more than one handle
+
+The number of groups that contain more than one `handle` row after grouping.
 
 ## Message diagnostic data
 
 ### Total messages
 
-The total number of rows in the `messages` table.
+The total number of rows in the `message` table.
 
 ### Messages not associated with a chat
 
-If a message exists in the `messages` table but does not have an entry in the `chat_message_join` table, it is considered orphaned and will be listed in either the `Orphaned.html` or `Orphaned.txt` file in the export directory. Likely, these come from messages that were deleted and the chat removed from the `chat_message_join` table, but the corresponding messages were not removed from the `messages` table.
+If a message exists in the `message` table but does not have an entry in the `chat_message_join` table, it is considered orphaned and will be listed in either the `Orphaned.html` or `Orphaned.txt` file in the export directory. Likely, these come from messages that were deleted and the chat removed from the `chat_message_join` table, but the corresponding messages were not removed from the `message` table. We omit this line when the count is zero.
 
 ### Messages belonging to more than one chat
 
-If a message exists in the `messages` table and maps to multiple chats in `chat_message_join`, the message will exist in all of those chats when exported.
+If a message exists in the `message` table and maps to multiple chats in `chat_message_join`, the message will exist in all of those chats when exported. We omit this line when the count is zero.
 
-## Recoverable messages
+### Recoverable messages
 
-The number of messages that were marked as deleted from conversations but are recoverable and will be rendered in-line in exports.
+The number of messages that were marked as deleted from conversations but are recoverable and will be rendered in-line in exports. We omit this line when the `chat_recoverable_message_join` table is absent; a count of zero still prints.
 
-## Date range
+### Date range
 
-The range of total available messages in the database in both exact and relative format.
+The range of total available messages in the database in both exact and relative format. We omit this line when the `message` table is empty.
 
 ## Attachment diagnostic data
 
 ### Total attachments
 
-The total number of rows in the `attachments` table
+The total number of rows in the `attachment` table.
 
 #### Data referenced in table
 
-The sum of the `total_bytes` column in the `attachments` table. I don't know why they are different, but the former is the actual storage taken up by iMessage attachments.
+The sum of the `total_bytes` column in the `attachment` table: the size every row claims, whether or not its file exists.
 
 #### Data present on disk
 
-Represents the total size of the attachments listed in the `attachments` when following the listed path to the respective file. Missing files may have been removed by the user or not properly downloaded from iCloud.
+The total size on disk of the files found by following each row's path. Missing files account for the gap between this figure and the one above; they may have been removed by the user or not downloaded from iCloud.
 
 ### Missing files
 
-The first line shows the count and the percentage of files missing. In the example above, `15037 (30%)` means that `15,037` files (`30%` of the total number of attachments) are referenced in the table but do not exist.
+The first line shows the count and the percentage of files missing. In the example above, `15668 (21%)` means that `15,668` files (`21%` of the total number of attachments) are referenced in the table but do not exist. We omit this section when no files are missing.
 
 There are two different types of missing files:
 
 #### No path provided
 
-This means there was a row in the `attachments` table that did not contain a path to a file.
+This means there was a row in the `attachment` table that did not contain a path to a file.
 
 #### No file located
 
@@ -112,15 +118,15 @@ This means there was a path provided, but there was no file at the specified loc
 
 ### Total chats
 
-The total number of chats present in the table.
+The number of chats with at least one row in `chat_handle_join`. Chats without participants are excluded here and counted below.
 
 ### Total duplicated chats
 
-The number of split group chats that have been coalesced together.
+The number of chat rows removed by deduplication. We group each chat's handles as described in [the duplicate problem](tables/duplicates.md), then merge chats that `chat_lookup` links, named chats whose participant groups and names match, and unnamed chats whose participant groups match. This count groups handles from Messages data alone; merges that depend on Contacts appear under [Chats merged by Contacts](#chats-merged-by-contacts). We omit this line when the count is zero.
 
 ### Chats with no handles
 
-Emits the count of chats that contain no chat participants.
+The number of chats referenced in `chat_message_join` that have no rows in `chat_handle_join`. We omit this line when the count is zero.
 
 ## Global diagnostic data
 
@@ -130,7 +136,15 @@ The total size of the database file on the disk.
 
 ### Handles with resolved names
 
-The number of handles in the database that were successfully matched to contact names from the contacts index, out of the total number of handles found. This is followed by the match ratio as a percentage.
+We group `handle` rows that belong to one person (see [the duplicate problem](tables/duplicates.md)), then report how many participant groups match a contact name and the match percentage. This total counts one participant per group, so it is smaller than the raw handle count.
+
+### Handles merged by Contacts
+
+The number of participant groups we eliminate with the Contacts database: handles with different addresses that the Messages database cannot relate, but that appear on one Contacts card. We show this line only when at least one group merged. The Messages-only counts in the handle section above do not include these.
+
+### Chats merged by Contacts
+
+The number of chats we eliminate because, once we group their participants by Contacts card, they have the same participants as another chat. We show this line with the one above.
 
 ### Schema capabilities
 
@@ -154,7 +168,7 @@ Whether the `message.filter_action` and `message.filter_sub_action` columns exis
 
 ## Detected converters
 
-`imessage-exporter` uses third-party tools to convert images when using `--copy-method basic` or `--copy-method full`. This section shows what programs are detected on the current system.
+`imessage-exporter` uses external programs to convert attachments: `--copy-method basic` converts images, and `--copy-method full` also converts audio and video. This section shows which programs are present on the current system.
 
 ### Image converter
 

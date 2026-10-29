@@ -9,5 +9,7 @@ pub(crate) mod part;
 pub(crate) mod render;
 pub(crate) mod reply;
 pub(crate) mod tapback;
+#[cfg(test)]
+pub(crate) mod test_support;
 pub(crate) mod text;
 pub(crate) mod time;

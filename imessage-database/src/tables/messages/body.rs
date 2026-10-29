@@ -432,14 +432,13 @@ mod typedstream_tests {
         },
         tables::messages::{
             Message,
-            body::parse_body_typedstream,
+            body::{ParseResult, parse_body_typedstream},
             models::{AttachmentMeta, AttributedRange, BubbleComponent},
         },
     };
 
-    /// Parse a `test_data/typedstream/` body fixture, returning its
-    /// `(text, components)`. Shared by the inline-sticker fixture tests below.
-    fn parse_typedstream_fixture(name: &str) -> (Option<String>, Vec<BubbleComponent>) {
+    /// Parse a `test_data/typedstream/` body fixture against `edited_parts`.
+    fn parse_typedstream_fixture(name: &str, edited_parts: Option<&EditedMessage>) -> ParseResult {
         let typedstream_path = current_dir()
             .unwrap()
             .as_path()
@@ -450,8 +449,7 @@ mod typedstream_tests {
 
         let mut parser = TypedStreamDeserializer::new(&bytes);
         let iter = parser.iter_root().unwrap();
-        let parsed = parse_body_typedstream(Some(iter), None).unwrap();
-        (parsed.text, parsed.components)
+        parse_body_typedstream(Some(iter), edited_parts).unwrap()
     }
 
     /// Build an [`AttachmentMeta`] carrying only a file-transfer GUID.
@@ -466,7 +464,7 @@ mod typedstream_tests {
     fn can_get_message_body_memoji_only() {
         // A sticker-only message: a static Memoji with the `emoji_image` hint
         // parses as a single inline attachment.
-        let (text, components) = parse_typedstream_fixture("MemojiOnly");
+        let ParseResult { text, components } = parse_typedstream_fixture("MemojiOnly", None);
         assert_eq!(text.as_deref(), Some("\u{FFFC}"));
         assert_eq!(
             components,
@@ -482,7 +480,8 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_data_detected_conversions() {
-        let (text, components) = parse_typedstream_fixture("CurrencyTemperatureVolumeWeight");
+        let ParseResult { text, components } =
+            parse_typedstream_fixture("CurrencyTemperatureVolumeWeight", None);
         assert_eq!(
             text.as_deref(),
             Some("$100\n\n75℉\n\n1L of water\n\n225lbs")
@@ -502,7 +501,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_detected_address() {
-        let (text, components) = parse_typedstream_fixture("Address");
+        let ParseResult { text, components } = parse_typedstream_fixture("Address", None);
         assert_eq!(
             text.as_deref(),
             Some("1 Apple Park Way, Cupertino, CA 95014")
@@ -529,7 +528,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_detected_currency() {
-        let (text, components) = parse_typedstream_fixture("Currency");
+        let ParseResult { text, components } = parse_typedstream_fixture("Currency", None);
         assert_eq!(text.as_deref(), Some("My burrito was $16"));
         assert_eq!(
             components,
@@ -549,7 +548,8 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_detected_currency_money_amount() {
-        let (text, components) = parse_typedstream_fixture("CurrencyMoneyAmount");
+        let ParseResult { text, components } =
+            parse_typedstream_fixture("CurrencyMoneyAmount", None);
         assert_eq!(text.as_deref(), Some("$15/mo"));
         assert_eq!(
             components,
@@ -569,7 +569,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_detected_tracking() {
-        let (text, components) = parse_typedstream_fixture("Tracking");
+        let ParseResult { text, components } = parse_typedstream_fixture("Tracking", None);
         assert_eq!(text.as_deref(), Some("1Z999AA10123456784"));
         assert_eq!(
             components,
@@ -586,7 +586,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_detected_flight() {
-        let (text, components) = parse_typedstream_fixture("Flight");
+        let ParseResult { text, components } = parse_typedstream_fixture("Flight", None);
         assert_eq!(text.as_deref(), Some("AS 1111"));
         assert_eq!(
             components,
@@ -603,7 +603,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_all_unit_conversions() {
-        let (text, components) = parse_typedstream_fixture("AllUnits");
+        let ParseResult { text, components } = parse_typedstream_fixture("AllUnits", None);
         assert_eq!(
             text.as_deref(),
             Some(
@@ -647,7 +647,7 @@ mod typedstream_tests {
     #[test]
     fn can_get_message_body_memoji_with_text() {
         // Leading text followed by an inline Memoji at the end of the run.
-        let (text, components) = parse_typedstream_fixture("MemojiWithText");
+        let ParseResult { text, components } = parse_typedstream_fixture("MemojiWithText", None);
         assert_eq!(text.as_deref(), Some("Memoji: \u{FFFC}"));
         assert_eq!(
             components,
@@ -667,7 +667,8 @@ mod typedstream_tests {
         // The negative case: an animated balloon sticker has *no* `emoji_image`
         // hint, so it parses as a block attachment (`emoji_image == false`), which is the
         // distinction the inline-vs-block classification hinges on.
-        let (text, components) = parse_typedstream_fixture("AnimatedStickerOnly");
+        let ParseResult { text, components } =
+            parse_typedstream_fixture("AnimatedStickerOnly", None);
         assert_eq!(text.as_deref(), Some("\u{FFFC}"));
         assert_eq!(
             components,
@@ -683,7 +684,8 @@ mod typedstream_tests {
     fn can_get_message_body_static_animoji_regular_emoji() {
         // "Check this out: ￼ 😀" bold text, an inline Memoji, an animated
         // space, and a trailing emoji, all in one run.
-        let (text, components) = parse_typedstream_fixture("StaticAnimojiRegularEmoji");
+        let ParseResult { text, components } =
+            parse_typedstream_fixture("StaticAnimojiRegularEmoji", None);
         assert_eq!(text.as_deref(), Some("Check this out: \u{FFFC} 😀"));
         assert_eq!(
             components,
@@ -707,7 +709,8 @@ mod typedstream_tests {
         // Two text segments each followed by three inline stickers; every
         // placeholder keeps its own GUID in body order (guards the ordering fix
         // at the parse layer).
-        let (text, components) = parse_typedstream_fixture("MultipleTypesInline");
+        let ParseResult { text, components } =
+            parse_typedstream_fixture("MultipleTypesInline", None);
         assert_eq!(
             text.as_deref(),
             Some("Some Genmoji: \u{FFFC}\u{FFFC}\u{FFFC}\nSome stickers: \u{FFFC}\u{FFFC}\u{FFFC}")
@@ -757,7 +760,8 @@ mod typedstream_tests {
         // (a Memoji + a genmoji), and a trailing regular emoji. The body keeps its
         // stickers regardless of translation; the translation side (which can't
         // carry them) is covered by `translation::tests`.
-        let (text, components) = parse_typedstream_fixture("TranslatedWithInlineStickersAndEmoji");
+        let ParseResult { text, components } =
+            parse_typedstream_fixture("TranslatedWithInlineStickersAndEmoji", None);
         assert_eq!(text.as_deref(), Some("This is a test \u{FFFC}\u{FFFC}🫪"));
         assert_eq!(
             components,
@@ -782,7 +786,8 @@ mod typedstream_tests {
     fn can_get_message_body_formatted_inline_stickers() {
         // Inline stickers interleaved with formatted emoji ("￼🫪￼🙏"): the two
         // sticker ranges are inline, the emoji ranges carry their text effects.
-        let (text, components) = parse_typedstream_fixture("FormattedInlineStickers");
+        let ParseResult { text, components } =
+            parse_typedstream_fixture("FormattedInlineStickers", None);
         assert_eq!(text.as_deref(), Some("\u{FFFC}🫪\u{FFFC}🙏"));
         assert_eq!(
             components,
@@ -805,21 +810,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_simple() {
-        let mut m = Message::blank();
-        m.text = Some("Noter test".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/AttributedBodyTextOnly");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("AttributedBodyTextOnly", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![AttributedRange::text(
@@ -832,21 +823,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_app() {
-        let mut m = Message::blank();
-        m.text = Some("\u{FFFC}".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/AppMessage");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("AppMessage", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![AttributedRange::attachment(
@@ -865,21 +842,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_simple_two() {
-        let mut m = Message::blank();
-        m.text = Some("Test 3".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/AttributedBodyTextOnly2");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("AttributedBodyTextOnly2", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![AttributedRange::text(
@@ -892,21 +855,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_multi_part() {
-        let mut m = Message::blank();
-        m.text = Some("\u{FFFC}test 1\u{FFFC}test 2 \u{FFFC}test 3".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/MultiPart");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("MultiPart", None);
         assert_eq!(
             parsed.components,
             vec![
@@ -961,9 +910,6 @@ mod typedstream_tests {
     #[test]
     fn can_get_message_body_multi_part_deleted() {
         let mut m = Message::blank();
-        m.text = Some(
-            "From arbitrary byte stream:\r\u{FFFC}To native Rust data structures:\r".to_string(),
-        );
         m.edited_parts = Some(EditedMessage {
             parts: vec![
                 EditedMessagePart {
@@ -985,18 +931,7 @@ mod typedstream_tests {
             ],
         });
 
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/MultiPartWithDeleted");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("MultiPartWithDeleted", m.edited_parts.as_ref());
         assert_eq!(
             parsed.components,
             vec![
@@ -1029,21 +964,6 @@ mod typedstream_tests {
     #[test]
     fn can_get_message_body_multi_part_deleted_edited() {
         let mut m = Message::blank();
-        m.text = Some(
-            "From arbitrary byte stream:\r\u{FFFC}To native Rust data structures:\r".to_string(),
-        );
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/MultiPartWithDeleted");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
         m.edited_parts = Some(EditedMessage {
             parts: vec![
                 EditedMessagePart {
@@ -1078,7 +998,7 @@ mod typedstream_tests {
             ],
         });
 
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("MultiPartWithDeleted", m.edited_parts.as_ref());
         assert_eq!(
             parsed.components,
             vec![
@@ -1111,21 +1031,6 @@ mod typedstream_tests {
     #[test]
     fn can_get_message_body_fully_unsent() {
         let mut m = Message::blank();
-        m.text = Some(
-            "From arbitrary byte stream:\r\u{FFFC}To native Rust data structures:\r".to_string(),
-        );
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/Blank");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
         m.edited_parts = Some(EditedMessage {
             parts: vec![EditedMessagePart {
                 status: EditStatus::Unsent,
@@ -1133,28 +1038,13 @@ mod typedstream_tests {
             }],
         });
 
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("Blank", m.edited_parts.as_ref());
         assert_eq!(parsed.components, vec![BubbleComponent::Retracted,]);
     }
 
     #[test]
     fn can_get_message_body_edited_with_formatting() {
         let mut m = Message::blank();
-        m.text = Some(
-            "From arbitrary byte stream:\r\u{FFFC}To native Rust data structures:\r".to_string(),
-        );
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/EditedWithFormatting");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
         m.edited_parts = Some(EditedMessage {
             parts: vec![EditedMessagePart {
                 status: EditStatus::Edited,
@@ -1183,7 +1073,7 @@ mod typedstream_tests {
             }],
         });
 
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("EditedWithFormatting", m.edited_parts.as_ref());
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![AttributedRange::text(
@@ -1196,24 +1086,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_attachment() {
-        let mut m = Message::blank();
-        m.text = Some(
-            "\u{FFFC}This is how the notes look to me fyi, in case it helps make sense of anything"
-                .to_string(),
-        );
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/Attachment");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("Attachment", None);
         assert_eq!(
             parsed.components,
             vec![
@@ -1239,21 +1112,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_attachment_i16() {
-        let mut m = Message::blank();
-        m.text = Some("\u{FFFC}".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/AttachmentI16");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("AttachmentI16", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![AttributedRange::attachment(
@@ -1272,21 +1131,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_url() {
-        let mut m = Message::blank();
-        m.text = Some("https://twitter.com/xxxxxxxxx/status/0000223300009216128".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/URLMessage");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("URLMessage", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![AttributedRange::text(
@@ -1301,21 +1146,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_mention() {
-        let mut m = Message::blank();
-        m.text = Some("Test Dad ".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/Mention");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("Mention", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![
@@ -1328,21 +1159,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_code() {
-        let mut m = Message::blank();
-        m.text = Some("000123 is your security code. Don't share your code.".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/Code");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("Code", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![
@@ -1354,21 +1171,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_phone() {
-        let mut m = Message::blank();
-        m.text = Some("What about 0000000000".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/PhoneNumber");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("PhoneNumber", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![
@@ -1380,21 +1183,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_email() {
-        let mut m = Message::blank();
-        m.text = Some("asdfghjklq@gmail.com might work".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/Email");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("Email", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![
@@ -1410,21 +1199,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_date() {
-        let mut m = Message::blank();
-        m.text = Some("Hi. Right now or tomorrow?".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/Date");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("Date", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![
@@ -1437,21 +1212,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_custom_tapback() {
-        let mut m = Message::blank();
-        m.text = Some(String::new());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/CustomReaction");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("CustomReaction", None);
         assert_eq!(
             parsed.components,
             vec![
@@ -1495,21 +1256,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_text_styles() {
-        let mut m = Message::blank();
-        m.text = Some("Bold underline italic strikethrough all four".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/TextStyles");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("TextStyles", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![
@@ -1537,21 +1284,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_text_effects() {
-        let mut m = Message::blank();
-        m.text = Some("Big small shake nod explode ripple bloom jitter".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/TextEffects");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("TextEffects", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![
@@ -1574,21 +1307,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_text_effects_styles_mixed() {
-        let mut m = Message::blank();
-        m.text = Some("Underline normal jitter normal".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/TextStylesMixed");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("TextStylesMixed", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![
@@ -1602,21 +1321,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_text_effects_styles_single_range() {
-        let mut m = Message::blank();
-        m.text = Some("Everything".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/TextStylesSingleRange");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("TextStylesSingleRange", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![AttributedRange::text(
@@ -1634,21 +1339,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_audio_message() {
-        let mut m = Message::blank();
-        m.text = Some("\u{FFFC}".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/Transcription");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("Transcription", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![AttributedRange::attachment(
@@ -1667,21 +1358,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_apple_music_lyrics() {
-        let mut m = Message::blank();
-        m.text = Some("\u{FFFC}".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/AppleMusicLyrics");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("AppleMusicLyrics", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![AttributedRange::text(
@@ -1696,24 +1373,8 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_multiple_attachment() {
-        let mut m = Message::blank();
-        m.text = Some("\u{FFFC}\u{FFFC}\u{FFFC}\u{FFFC}\u{FFFC}\u{FFFC}\u{FFFC}\u{FFFC}\u{FFFC}\u{FFFC}\u{FFFC}\u{FFFC}\u{FFFC}\u{FFFC}\u{FFFC}\u{FFFC}\u{FFFC}\u{FFFC}\u{FFFC}".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/MultiAttachment");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
         assert_eq!(
-            parse_body_typedstream(Some(iter), m.edited_parts.as_ref())
-                .unwrap()
-                .components[..5],
+            parse_typedstream_fixture("MultiAttachment", None).components[..5],
             vec![
                 BubbleComponent::Run(vec![AttributedRange::attachment(
                     0,
@@ -1776,21 +1437,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_text_styled_plain_link() {
-        let mut m = Message::blank();
-        m.text = Some("https://github.com/ReagentX/imessage-exporter/discussions/553".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/StyledLink");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("StyledLink", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![AttributedRange::text(
@@ -1808,21 +1455,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_text_emoji() {
-        let mut m = Message::blank();
-        m.text = Some("🅱️Bold_Underline".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/EmojiBoldUnderline");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("EmojiBoldUnderline", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![
@@ -1836,21 +1469,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_text_overlapping_format_ranges() {
-        let mut m = Message::blank();
-        m.text = Some("8:00 pm".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/OverlappingFormat");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("OverlappingFormat", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![
@@ -1886,21 +1505,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_text_overlapping_format_ranges_short() {
-        let mut m = Message::blank();
-        m.text = Some("8:00 pm".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/0123456789");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("0123456789", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![
@@ -1926,21 +1531,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_text_overlapping_format_ranges_long() {
-        let mut m = Message::blank();
-        m.text = Some("8:00 pm".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/35123");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("35123", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![
@@ -2014,21 +1605,7 @@ mod typedstream_tests {
 
     #[test]
     fn can_get_message_body_text_single_link() {
-        let mut m = Message::blank();
-        m.text = Some("8:00 pm".to_string());
-
-        let typedstream_path = current_dir()
-            .unwrap()
-            .as_path()
-            .join("test_data/typedstream/SingleLink");
-        let mut file = File::open(typedstream_path).unwrap();
-        let mut bytes = vec![];
-        file.read_to_end(&mut bytes).unwrap();
-
-        let mut parser = TypedStreamDeserializer::new(&bytes);
-        let iter = parser.iter_root().unwrap();
-
-        let parsed = parse_body_typedstream(Some(iter), m.edited_parts.as_ref()).unwrap();
+        let parsed = parse_typedstream_fixture("SingleLink", None);
         assert_eq!(
             parsed.components,
             vec![BubbleComponent::Run(vec![

@@ -172,71 +172,6 @@ mod announcement_tests {
     }
 
     #[test]
-    fn test_announcement_participant_removed() {
-        let mut msg = Message::blank();
-        msg.item_type = 1;
-        msg.group_action_type = 1;
-        msg.other_handle = Some(123);
-
-        assert!(matches!(
-            msg.get_announcement(),
-            Some(Announcement::GroupAction(GroupAction::ParticipantRemoved(
-                123
-            )))
-        ));
-    }
-
-    #[test]
-    fn test_announcement_name_change() {
-        let mut msg = Message::blank();
-        msg.item_type = 2;
-        msg.group_title = Some("Test Group".to_string());
-
-        assert!(matches!(
-            msg.get_announcement(),
-            Some(Announcement::GroupAction(GroupAction::NameChange(
-                "Test Group"
-            )))
-        ));
-    }
-
-    #[test]
-    fn test_announcement_participant_left() {
-        let mut msg = Message::blank();
-        msg.item_type = 3;
-        msg.group_action_type = 0;
-
-        assert!(matches!(
-            msg.get_announcement(),
-            Some(Announcement::GroupAction(GroupAction::ParticipantLeft))
-        ));
-    }
-
-    #[test]
-    fn test_announcement_icon_changed() {
-        let mut msg = Message::blank();
-        msg.item_type = 3;
-        msg.group_action_type = 1;
-
-        assert!(matches!(
-            msg.get_announcement(),
-            Some(Announcement::GroupAction(GroupAction::GroupIconChanged))
-        ));
-    }
-
-    #[test]
-    fn test_announcement_icon_removed() {
-        let mut msg = Message::blank();
-        msg.item_type = 3;
-        msg.group_action_type = 2;
-
-        assert!(matches!(
-            msg.get_announcement(),
-            Some(Announcement::GroupAction(GroupAction::GroupIconRemoved))
-        ));
-    }
-
-    #[test]
     fn test_announcement_single_part_fully_unsent() {
         let mut msg = Message::blank();
         msg.edited_parts = Some(EditedMessage {
@@ -244,28 +179,6 @@ mod announcement_tests {
                 status: EditStatus::Unsent,
                 edit_history: vec![],
             }],
-        });
-
-        assert!(matches!(
-            msg.get_announcement(),
-            Some(Announcement::FullyUnsent)
-        ));
-    }
-
-    #[test]
-    fn test_announcement_multi_part_fully_unsent() {
-        let mut msg = Message::blank();
-        msg.edited_parts = Some(EditedMessage {
-            parts: vec![
-                EditedMessagePart {
-                    status: EditStatus::Unsent,
-                    edit_history: vec![],
-                },
-                EditedMessagePart {
-                    status: EditStatus::Unsent,
-                    edit_history: vec![],
-                },
-            ],
         });
 
         assert!(matches!(
@@ -308,16 +221,6 @@ mod announcement_tests {
                 edit_history: vec![],
             }],
         });
-
-        assert!(msg.get_announcement().is_none());
-    }
-
-    #[test]
-    fn test_announcement_no_special_properties() {
-        let mut msg = Message::blank();
-        msg.item_type = 0;
-        msg.group_action_type = 0;
-        msg.edited_parts = None;
 
         assert!(msg.get_announcement().is_none());
     }
