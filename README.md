@@ -30,7 +30,7 @@ Documentation for the library is located [here](imessage-database/README.md).
 
 ### Supported Features
 
-Support for every iMessage feature as of macOS Golden Gate 27.0.1 (26A434) and iOS 27.0.1 (24A446):
+Support for every iMessage feature as of macOS Golden Gate 27.2 (26B123) and iOS 27.2 (24B119):
 
 - iMessage, RCS, SMS, and MMS
 - Multi-part messages
