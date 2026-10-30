@@ -155,6 +155,30 @@ mod group_action_tests {
             Some(GroupAction::ChatBackgroundSensitive)
         ));
     }
+
+    #[test]
+    fn test_group_action_icon_changed_hidden() {
+        let mut msg = Message::blank();
+        msg.item_type = 3;
+        msg.group_action_type = 3;
+
+        assert!(matches!(
+            Message::group_action(&msg),
+            Some(GroupAction::GroupIconChangedHidden)
+        ));
+    }
+
+    #[test]
+    fn test_group_action_background_changed_hidden() {
+        let mut msg = Message::blank();
+        msg.item_type = 3;
+        msg.group_action_type = 7;
+
+        assert!(matches!(
+            Message::group_action(&msg),
+            Some(GroupAction::ChatBackgroundChangedHidden)
+        ));
+    }
 }
 
 #[cfg(test)]

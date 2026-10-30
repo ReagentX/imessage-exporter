@@ -308,6 +308,46 @@ fn can_format_html_chat_background_sensitive() {
 }
 
 #[test]
+fn can_format_html_group_icon_added_hidden() {
+    let mut config = config(ExportType::Html);
+    with_me(&mut config);
+
+    let exporter = HTML::new(&config).unwrap();
+
+    let mut message = Config::fake_message();
+    message.date = SAMPLE_DATE;
+    message.is_from_me = true;
+    message.item_type = 3;
+    message.group_action_type = 3;
+
+    let mut actual = String::new();
+    exporter.format_announcement(&message, &mut actual);
+    let expected = "\n<div class=\"announcement\">\n    <p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span> You changed the group photo.</p>\n</div>\n";
+
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn can_format_html_chat_background_added_hidden() {
+    let mut config = config(ExportType::Html);
+    with_me(&mut config);
+
+    let exporter = HTML::new(&config).unwrap();
+
+    let mut message = Config::fake_message();
+    message.date = SAMPLE_DATE;
+    message.is_from_me = true;
+    message.item_type = 3;
+    message.group_action_type = 7;
+
+    let mut actual = String::new();
+    exporter.format_announcement(&message, &mut actual);
+    let expected = "\n<div class=\"announcement\">\n    <p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span> You changed the chat background.</p>\n</div>\n";
+
+    assert_eq!(actual, expected);
+}
+
+#[test]
 fn can_format_html_audio_message_kept() {
     let mut config = config(ExportType::Html);
     with_me(&mut config);

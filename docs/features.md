@@ -148,7 +148,8 @@ This tool targets the current latest public release for Messages.app. It may wor
   - See [the duplicate problem](tables/duplicates.md) for the mechanism
 - Announcements
   - Handles all types of chatroom announcements
-    - Group photo changes
+    - Group photo changes, including changes Messages records but hides from the conversation
+      - A business's brand logo update names the business as the one who changed the photo
     - Chat participant modifications
     - Phone number changes
-    - Chat background settings, including backgrounds Messages marks as possibly sensitive
+    - Chat background settings, including backgrounds Messages marks as possibly sensitive and changes Messages records but hides from the conversation

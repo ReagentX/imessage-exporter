@@ -17,10 +17,14 @@ pub enum GroupAction<'a> {
     ParticipantLeft,
     /// Group icon/avatar changed.
     GroupIconChanged,
+    /// Group icon/avatar changed; Messages records the change but does not show it in the transcript.
+    GroupIconChangedHidden,
     /// Group icon/avatar was removed.
     GroupIconRemoved,
     /// Chat background changed.
     ChatBackgroundChanged,
+    /// Chat background changed; Messages records the change but does not show it in the transcript.
+    ChatBackgroundChangedHidden,
     /// Chat background was set to one Messages marks as possibly sensitive.
     ChatBackgroundSensitive,
     /// Chat background was removed.
@@ -49,9 +53,11 @@ impl<'a> GroupAction<'a> {
             (3, 0, _, _) => Some(Self::ParticipantLeft),
             (3, 1, _, _) => Some(Self::GroupIconChanged),
             (3, 2, _, _) => Some(Self::GroupIconRemoved),
+            (3, 3, _, _) => Some(Self::GroupIconChangedHidden),
             (3, 4, _, _) => Some(Self::ChatBackgroundChanged),
             (3, 5, _, _) => Some(Self::ChatBackgroundSensitive),
             (3, 6, _, _) => Some(Self::ChatBackgroundRemoved),
+            (3, 7, _, _) => Some(Self::ChatBackgroundChangedHidden),
             _ => None,
         }
     }
