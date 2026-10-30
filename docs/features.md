@@ -153,3 +153,4 @@ This tool targets the current latest public release for Messages.app. It may wor
     - Chat participant modifications
     - Phone number changes
     - Chat background settings, including backgrounds Messages marks as possibly sensitive and changes Messages records but hides from the conversation
+    - Group changes Messages records without an actor render without naming one

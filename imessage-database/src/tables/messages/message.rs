@@ -296,6 +296,10 @@ pub struct Message {
     pub components: Vec<BubbleComponent>,
     /// Parsed edit/unsent metadata from `message_summary_info`.
     pub edited_parts: Option<EditedMessage>,
+    /// `true` when `message_summary_info` marks a group event (`item_type` 1–3)
+    /// as unattributed: its `uat` key holds `true` or a nonzero integer.
+    /// `false` for every other `item_type`.
+    pub is_unattributed: bool,
 }
 
 // MARK: Rows
@@ -487,6 +491,16 @@ impl Message {
     }
 }
 
+/// `true` when a `message_summary_info` payload's `uat` key holds `true` or a
+/// nonzero integer.
+fn marks_unattributed(summary: &Value) -> bool {
+    match summary.as_dictionary().and_then(|dict| dict.get("uat")) {
+        Some(Value::Boolean(flag)) => *flag,
+        Some(Value::Integer(int)) => int.as_signed() != Some(0),
+        _ => false,
+    }
+}
+
 // MARK: Impl
 impl Message {
     // MARK: Text Gen
@@ -494,7 +508,9 @@ impl Message {
     ///
     /// `None` represents an absent or unreadable input. `has_payload` is the
     /// non-nullness of `payload_data`, including non-blob values.
-    /// Edit-summary bytes are parsed only when [`Self::is_edited`] is true.
+    /// Summary bytes are parsed only when [`Self::is_edited`] is true or
+    /// `item_type` is 1–3; they populate [`Self::edited_parts`] and
+    /// [`Self::is_unattributed`] respectively.
     ///
     /// Parsing is best effort: text recovery failures preserve parsed body
     /// components and edit metadata.
@@ -504,13 +520,20 @@ impl Message {
         message_summary_info: Option<&[u8]>,
         has_payload: bool,
     ) {
-        let edited_parts = self
-            .is_edited()
+        // Every row passes through here; the integer checks keep the plist
+        // parse off rows that read neither field.
+        let is_group_event = matches!(self.item_type, 1..=3);
+        let is_edited = self.is_edited();
+        let summary = (is_group_event || is_edited)
             .then_some(message_summary_info)
             .flatten()
-            .and_then(|bytes| Value::from_reader(Cursor::new(bytes)).ok())
+            .and_then(|bytes| Value::from_reader(Cursor::new(bytes)).ok());
+
+        let edited_parts = summary
             .as_ref()
+            .filter(|_| is_edited)
             .and_then(|payload| EditedMessage::from_map(payload).ok());
+        let is_unattributed = is_group_event && summary.as_ref().is_some_and(marks_unattributed);
 
         // Initialize variables for the text, components, and balloon bundle ID that will be parsed from the body
         let mut text = None;
@@ -576,6 +599,7 @@ impl Message {
         self.components = components;
         self.edited_parts = edited_parts;
         self.balloon_bundle_id = balloon_bundle_id;
+        self.is_unattributed = is_unattributed;
     }
 
     // MARK: Dates
@@ -1437,6 +1461,7 @@ impl Message {
             filter_sub_action: None,
             components: vec![],
             edited_parts: None,
+            is_unattributed: false,
         }
     }
 }

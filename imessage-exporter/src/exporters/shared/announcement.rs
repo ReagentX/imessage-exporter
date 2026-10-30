@@ -15,9 +15,11 @@ pub const UNKNOWN_PARTICIPANT: &str = "someone";
 /// Second-person display name for the database owner.
 pub(crate) const YOU: &str = "You";
 
-/// A format-agnostic view of an announcement message. `who` has had the
-/// `ME` → `self_name` (caller-supplied) substitution applied; `timestamp` is
-/// pre-formatted. `announcement` is the library's [`Announcement`] verbatim.
+/// A format-agnostic view of an announcement message. `who` is the actor
+/// [`resolve_announcement`] chose, after the `ME` → `self_name`
+/// (caller-supplied) substitution, or `None` for an event Messages shows
+/// without one; `timestamp` is pre-formatted. `announcement` is the library's
+/// [`Announcement`] verbatim.
 ///
 /// `participant_name` exists only because the library reports
 /// [`GroupAction::ParticipantAdded`] / [`GroupAction::ParticipantRemoved`] as
@@ -27,7 +29,7 @@ pub(crate) const YOU: &str = "You";
 /// non-participant variant (templates only read it on the participant arms).
 pub struct ResolvedAnnouncement<'a> {
     pub timestamp: String,
-    pub who: &'a str,
+    pub who: Option<&'a str>,
     pub announcement: Announcement<'a>,
     pub participant_name: &'a str,
 }
@@ -39,7 +41,9 @@ pub struct ResolvedAnnouncement<'a> {
 pub enum AnnouncementBody<'a> {
     Action {
         timestamp: String,
-        who: &'a str,
+        /// Display name of the actor; `None` for an event Messages shows
+        /// without one.
+        who: Option<&'a str>,
         announcement: Announcement<'a>,
         /// Resolved display name for the participant in `ParticipantAdded`
         /// / `ParticipantRemoved`. Defaults to [`UNKNOWN_PARTICIPANT`] for
@@ -66,8 +70,14 @@ impl<'a> From<ResolvedAnnouncement<'a>> for AnnouncementBody<'a> {
 /// `self_name` is the fallback when `who == ME` and `custom_name` is unset
 /// (`"You"` in both current callers).
 ///
-/// `who` names the message's sender, except for an RCS business's brand-logo
-/// update, where it names the business (see `brand_handle`).
+/// `who` is resolved in this order:
+///
+/// - `None` for an unattributed group event ([`Message::is_unattributed`]),
+///   which Messages shows with no actor. [`GroupAction::ParticipantLeft`] and
+///   [`GroupAction::PhoneNumberChanged`] ignore the flag: their actor is the
+///   event's subject;
+/// - the business for an RCS business's brand-logo update (see `brand_handle`);
+/// - the message's sender.
 pub fn resolve_announcement<'a>(
     msg: &'a Message,
     config: &'a Config,
@@ -75,13 +85,19 @@ pub fn resolve_announcement<'a>(
 ) -> Option<ResolvedAnnouncement<'a>> {
     let announcement = msg.get_announcement()?;
 
-    let mut who = match brand_handle(msg, &announcement, config) {
-        Some(handle) => config.who(Some(handle), false, &msg.destination_caller_id),
-        None => config.who(msg.handle_id, msg.is_from_me(), &msg.destination_caller_id),
+    let who = if is_unattributed(msg, &announcement) {
+        None
+    } else {
+        let who = match brand_handle(msg, &announcement, config) {
+            Some(handle) => config.who(Some(handle), false, &msg.destination_caller_id),
+            None => config.who(msg.handle_id, msg.is_from_me(), &msg.destination_caller_id),
+        };
+        Some(if who == ME {
+            config.options.custom_name.as_deref().unwrap_or(self_name)
+        } else {
+            who
+        })
     };
-    if who == ME {
-        who = config.options.custom_name.as_deref().unwrap_or(self_name);
-    }
 
     let timestamp = format_message_date(msg, &config.options.timezone);
 
@@ -98,6 +114,20 @@ pub fn resolve_announcement<'a>(
         announcement,
         participant_name,
     })
+}
+
+/// `true` when `announcement` is a group event `msg` marks as unattributed and
+/// that has a form without an actor.
+fn is_unattributed(msg: &Message, announcement: &Announcement) -> bool {
+    msg.is_unattributed
+        && matches!(
+            announcement,
+            Announcement::GroupAction(action)
+                if !matches!(
+                    action,
+                    GroupAction::ParticipantLeft | GroupAction::PhoneNumberChanged(_)
+                )
+        )
 }
 
 /// Handle of the RCS business whose brand logo `msg` sets, or `None` when `msg`
@@ -181,7 +211,7 @@ mod tests {
         msg.is_from_me = true;
         msg.item_type = 5;
         let resolved = resolve_announcement(&msg, &config, "You").unwrap();
-        assert_eq!(resolved.who, "You");
+        assert_eq!(resolved.who, Some("You"));
     }
 
     #[test]
@@ -191,7 +221,7 @@ mod tests {
         msg.is_from_me = true;
         msg.item_type = 5;
         let resolved = resolve_announcement(&msg, &config, "You").unwrap();
-        assert_eq!(resolved.who, "Chris");
+        assert_eq!(resolved.who, Some("Chris"));
     }
 
     #[test]
@@ -250,6 +280,78 @@ mod tests {
         assert_eq!(resolved.participant_name, super::UNKNOWN_PARTICIPANT);
     }
 
+    /// Group event that `message_summary_info` marks unattributed.
+    fn unattributed(item_type: i32, group_action_type: i32) -> Message {
+        let mut msg = Config::fake_message();
+        msg.item_type = item_type;
+        msg.group_action_type = group_action_type;
+        msg.handle_id = Some(0);
+        msg.other_handle = Some(7);
+        msg.group_title = Some("Trip 2026".to_string());
+        msg.is_unattributed = true;
+        msg
+    }
+
+    #[test]
+    fn unattributed_group_events_have_no_actor() {
+        let mut config = make_config();
+        config.participants.insert(7, Name::fake_name("Bob"));
+        config.real_participants.insert(7, 7);
+
+        for (item_type, action) in [
+            (1, 0),
+            (1, 1),
+            (2, 0),
+            (3, 1),
+            (3, 2),
+            (3, 3),
+            (3, 4),
+            (3, 5),
+            (3, 6),
+            (3, 7),
+        ] {
+            for is_from_me in [false, true] {
+                let mut msg = unattributed(item_type, action);
+                msg.is_from_me = is_from_me;
+                let resolved = resolve_announcement(&msg, &config, "You").unwrap();
+                assert_eq!(resolved.who, None, "({item_type}, {action})");
+            }
+        }
+
+        let msg = unattributed(1, 1);
+        let resolved = resolve_announcement(&msg, &config, "You").unwrap();
+        assert_eq!(resolved.participant_name, "Bob");
+    }
+
+    #[test]
+    fn unattributed_participant_left_keeps_actor() {
+        let config = make_config();
+        let mut msg = unattributed(3, 0);
+        msg.is_from_me = true;
+        let resolved = resolve_announcement(&msg, &config, "You").unwrap();
+        assert!(matches!(
+            resolved.announcement,
+            Announcement::GroupAction(GroupAction::ParticipantLeft)
+        ));
+        assert_eq!(resolved.who, Some("You"));
+    }
+
+    #[test]
+    fn unattributed_phone_number_change_keeps_actor() {
+        let mut config = make_config();
+        config.participants.insert(7, Name::fake_name("Bob"));
+        config.real_participants.insert(7, 7);
+
+        let mut msg = unattributed(1, 0);
+        msg.handle_id = Some(7);
+        let resolved = resolve_announcement(&msg, &config, "You").unwrap();
+        assert!(matches!(
+            resolved.announcement,
+            Announcement::GroupAction(GroupAction::PhoneNumberChanged(7))
+        ));
+        assert_eq!(resolved.who, Some("Bob"));
+    }
+
     /// Config whose chat 761 has one participant, handle 5 (`Brand`), plus a
     /// non-participant handle 6 (`Alice`). TEMP tables shadow the read-only
     /// fixture's attachment tables to give message `rowid` 0 a
@@ -293,7 +395,7 @@ mod tests {
         let config = brand_logo_config();
         let msg = hidden_group_photo(0);
         let resolved = resolve_announcement(&msg, &config, "You").unwrap();
-        assert_eq!(resolved.who, "Brand");
+        assert_eq!(resolved.who, Some("Brand"));
     }
 
     #[test]
@@ -301,6 +403,6 @@ mod tests {
         let config = brand_logo_config();
         let msg = hidden_group_photo(6);
         let resolved = resolve_announcement(&msg, &config, "You").unwrap();
-        assert_eq!(resolved.who, "Alice");
+        assert_eq!(resolved.who, Some("Alice"));
     }
 }

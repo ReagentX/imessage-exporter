@@ -1,7 +1,7 @@
 {%- match kind -%}
 {%- when AnnouncementBody::Action { timestamp, who, announcement, participant_name } -%}
 <div class="announcement">
-    <p><span class="timestamp">{{ timestamp }}</span> {{ who }} {% match announcement -%}
+    <p><span class="timestamp">{{ timestamp }}</span> {% if let Some(who) = who %}{{ who }} {% match announcement -%}
         {%- when Announcement::AudioMessageKept -%}kept an audio message.
         {%- when Announcement::FullyUnsent -%}unsent a message.
         {%- when Announcement::GroupAction(group) -%}
@@ -19,7 +19,26 @@
         {%- when GroupAction::ChatBackgroundRemoved -%}removed the chat background.
         {%- when GroupAction::PhoneNumberChanged(_) -%}changed their phone number.
         {%- endmatch -%}
-        {%- endmatch %}</p>
+        {%- endmatch -%}
+        {%- else -%}
+        {%- match announcement -%}
+        {%- when Announcement::GroupAction(group) -%}
+        {%- match group -%}
+        {%- when GroupAction::ParticipantAdded(_) -%}
+        {{ participant_name }} was added to the conversation.
+        {%- when GroupAction::ParticipantRemoved(_) -%}
+        {{ participant_name }} was removed from the conversation.
+        {%- when GroupAction::NameChange(name) -%}The conversation was named <b>{{ name }}</b>
+        {%- when GroupAction::GroupIconChanged | GroupAction::GroupIconChangedHidden -%}The group photo was changed.
+        {%- when GroupAction::GroupIconRemoved -%}The group photo was removed.
+        {%- when GroupAction::ChatBackgroundChanged | GroupAction::ChatBackgroundChangedHidden -%}The chat background was changed.
+        {%- when GroupAction::ChatBackgroundSensitive -%}A chat background was set which may be sensitive.
+        {%- when GroupAction::ChatBackgroundRemoved -%}The chat background was removed.
+        {%- else -%}Unable to format announcement!
+        {%- endmatch -%}
+        {%- else -%}Unable to format announcement!
+        {%- endmatch -%}
+        {%- endif %}</p>
 </div>
 {%- when AnnouncementBody::Unknown -%}<div class="announcement">
     <p>Unable to format announcement!</p>

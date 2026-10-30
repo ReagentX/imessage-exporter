@@ -789,6 +789,7 @@ impl Config {
             filter_sub_action: None,
             components: vec![],
             edited_parts: None,
+            is_unattributed: false,
         }
     }
 

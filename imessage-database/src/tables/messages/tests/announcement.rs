@@ -272,3 +272,76 @@ mod announcement_tests {
         ));
     }
 }
+
+#[cfg(test)]
+mod unattributed_tests {
+    use plist::{Dictionary, Value};
+
+    use crate::tables::messages::message::Message;
+
+    /// Binary plist `message_summary_info` holding `uat` set to `value`, or
+    /// lacking the key for `None`.
+    fn summary(value: Option<Value>) -> Vec<u8> {
+        let mut dict = Dictionary::new();
+        dict.insert("ams".to_string(), Value::String("Sender".to_string()));
+        if let Some(value) = value {
+            dict.insert("uat".to_string(), value);
+        }
+        let mut bytes = vec![];
+        Value::Dictionary(dict)
+            .to_writer_binary(&mut bytes)
+            .unwrap();
+        bytes
+    }
+
+    fn parsed(item_type: i32, summary: Option<&[u8]>) -> Message {
+        let mut msg = Message::blank();
+        msg.item_type = item_type;
+        msg.parse_body(None, summary, false);
+        msg
+    }
+
+    #[test]
+    fn group_events_read_uat_true() {
+        let bytes = summary(Some(Value::Boolean(true)));
+        for item_type in 1..=3 {
+            assert!(
+                parsed(item_type, Some(&bytes)).is_unattributed,
+                "{item_type}"
+            );
+        }
+    }
+
+    #[test]
+    fn group_events_read_nonzero_integer_uat() {
+        let bytes = summary(Some(Value::Integer(1.into())));
+        assert!(parsed(1, Some(&bytes)).is_unattributed);
+    }
+
+    #[test]
+    fn group_events_reject_false_and_zero_uat() {
+        for value in [Value::Boolean(false), Value::Integer(0.into())] {
+            let bytes = summary(Some(value));
+            assert!(!parsed(1, Some(&bytes)).is_unattributed);
+        }
+    }
+
+    #[test]
+    fn group_events_without_uat_are_attributed() {
+        let bytes = summary(None);
+        assert!(!parsed(1, Some(&bytes)).is_unattributed);
+        assert!(!parsed(1, None).is_unattributed);
+        assert!(!parsed(1, Some(&[0, 1, 2])).is_unattributed);
+    }
+
+    #[test]
+    fn other_item_types_ignore_uat() {
+        let bytes = summary(Some(Value::Boolean(true)));
+        for item_type in [0, 4, 5, 6] {
+            assert!(
+                !parsed(item_type, Some(&bytes)).is_unattributed,
+                "{item_type}"
+            );
+        }
+    }
+}

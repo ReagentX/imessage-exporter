@@ -350,6 +350,7 @@ impl Message {
             filter_sub_action: nullable(row, columns.filter_sub_action),
             components: vec![],
             edited_parts: None,
+            is_unattributed: false,
         };
         message.parse_body(
             bytes(row, columns.attributed_body),
@@ -411,6 +412,7 @@ mod tests {
                 filter_sub_action: row.get("filter_sub_action").unwrap_or(None),
                 components: vec![],
                 edited_parts: None,
+                is_unattributed: false,
             };
             let column = |name| row.as_ref().column_index(name).ok();
             message.parse_body(
@@ -567,6 +569,10 @@ mod tests {
     fn assert_same_message(mapped: &Message, named: &Message) {
         assert_eq!(mapped.components, named.components, "components");
         assert_eq!(mapped.edited_parts, named.edited_parts, "edited_parts");
+        assert_eq!(
+            mapped.is_unattributed, named.is_unattributed,
+            "is_unattributed"
+        );
         assert_eq!(mapped.rowid, named.rowid, "rowid");
         assert_eq!(mapped.guid, named.guid, "guid");
         assert_eq!(mapped.text, named.text, "text");
