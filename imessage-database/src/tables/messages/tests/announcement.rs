@@ -143,6 +143,18 @@ mod group_action_tests {
             Some(GroupAction::ChatBackgroundRemoved)
         ));
     }
+
+    #[test]
+    fn test_group_action_background_sensitive() {
+        let mut msg = Message::blank();
+        msg.item_type = 3;
+        msg.group_action_type = 5;
+
+        assert!(matches!(
+            Message::group_action(&msg),
+            Some(GroupAction::ChatBackgroundSensitive)
+        ));
+    }
 }
 
 #[cfg(test)]

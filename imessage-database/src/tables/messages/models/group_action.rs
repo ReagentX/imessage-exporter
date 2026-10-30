@@ -21,6 +21,8 @@ pub enum GroupAction<'a> {
     GroupIconRemoved,
     /// Chat background changed.
     ChatBackgroundChanged,
+    /// Chat background was set to one Messages marks as possibly sensitive.
+    ChatBackgroundSensitive,
     /// Chat background was removed.
     ChatBackgroundRemoved,
     /// Participant changed their phone number.
@@ -48,6 +50,7 @@ impl<'a> GroupAction<'a> {
             (3, 1, _, _) => Some(Self::GroupIconChanged),
             (3, 2, _, _) => Some(Self::GroupIconRemoved),
             (3, 4, _, _) => Some(Self::ChatBackgroundChanged),
+            (3, 5, _, _) => Some(Self::ChatBackgroundSensitive),
             (3, 6, _, _) => Some(Self::ChatBackgroundRemoved),
             _ => None,
         }

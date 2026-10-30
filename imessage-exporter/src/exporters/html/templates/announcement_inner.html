@@ -15,6 +15,7 @@
         {%- when GroupAction::GroupIconChanged -%}changed the group photo.
         {%- when GroupAction::GroupIconRemoved -%}removed the group photo.
         {%- when GroupAction::ChatBackgroundChanged -%}changed the chat background.
+        {%- when GroupAction::ChatBackgroundSensitive -%}set a chat background which may be sensitive.
         {%- when GroupAction::ChatBackgroundRemoved -%}removed the chat background.
         {%- when GroupAction::PhoneNumberChanged(_) -%}changed their phone number.
         {%- endmatch -%}

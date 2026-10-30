@@ -265,6 +265,26 @@ fn can_format_txt_chat_background_added() {
 }
 
 #[test]
+fn can_format_txt_chat_background_sensitive() {
+    let mut config = config(ExportType::Txt);
+    with_me(&mut config);
+
+    let exporter = TXT::new(&config).unwrap();
+
+    let mut message = Config::fake_message();
+    message.date = SAMPLE_DATE;
+    message.is_from_me = true;
+    message.item_type = 3;
+    message.group_action_type = 5;
+
+    let mut actual = String::new();
+    exporter.format_announcement(&message, &mut actual);
+    let expected = "May 17, 2022  5:29:42 PM You set a chat background which may be sensitive.\n\n";
+
+    assert_eq!(actual, expected);
+}
+
+#[test]
 fn can_format_txt_audio_message_kept() {
     let mut config = config(ExportType::Txt);
     with_me(&mut config);
