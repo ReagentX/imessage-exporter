@@ -1322,6 +1322,7 @@ impl Message {
                 share_status: self.share_status,
                 share_direction: self.share_direction,
             },
+            7 => return Some(Announcement::TranscriptSharingStopped),
             0..=6 => return None,
             other => UnknownEvent::ItemType(other),
         };

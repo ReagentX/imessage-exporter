@@ -3,6 +3,7 @@
 {%- when Announcement::MessageKept(KeptMessage::Video) -%}kept a video message.
 {%- when Announcement::MessageKept(KeptMessage::App) | Announcement::MessageKept(KeptMessage::Unknown(_)) -%}kept a message.
 {%- when Announcement::FullyUnsent -%}unsent a message!
+{%- when Announcement::TranscriptSharingStopped -%}stopped sharing Emergency SOS transcript of this conversation with you.
 {%- when Announcement::GroupAction(group) -%}
 {%- match group -%}
 {%- when GroupAction::ParticipantAdded(_) -%}added {{ participant_name }} to the conversation.

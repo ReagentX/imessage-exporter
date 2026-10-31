@@ -135,6 +135,9 @@ pub enum Announcement<'a> {
     GroupAction(GroupAction<'a>),
     /// User kept a message (`item_type` 5).
     MessageKept(KeptMessage),
+    /// Emergency SOS transcript sharing session closed (`item_type` 7). The
+    /// sender is the participant who was sharing; the row carries no payload.
+    TranscriptSharingStopped,
     /// Event row with no text displayed in Messages.
     UnknownEvent(UnknownEvent),
 }
@@ -158,7 +161,7 @@ pub enum UnknownEvent {
         /// `share_direction` of the row; `None` for `NULL`.
         share_direction: Option<i32>,
     },
-    /// Row whose `item_type` is outside 0–6.
+    /// Row whose `item_type` is outside 0–7.
     ItemType(i32),
 }
 

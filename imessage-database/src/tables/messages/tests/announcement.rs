@@ -336,8 +336,20 @@ mod announcement_tests {
     }
 
     #[test]
+    fn test_announcement_transcript_sharing_stopped() {
+        let mut msg = Message::blank();
+        msg.item_type = 7;
+        msg.handle_id = Some(1);
+
+        assert_eq!(
+            msg.get_announcement(),
+            Some(Announcement::TranscriptSharingStopped)
+        );
+    }
+
+    #[test]
     fn test_announcement_unknown_item_type() {
-        for item_type in [7, 8, 9, -1] {
+        for item_type in [8, 9, -1] {
             let mut msg = Message::blank();
             msg.item_type = item_type;
 

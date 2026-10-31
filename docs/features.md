@@ -155,6 +155,7 @@ This tool targets the current latest public release for Messages.app. It may wor
     - Chat participant modifications
     - Phone number changes
     - Kept audio, video, and app messages
+    - Emergency SOS transcript sharing stops
     - Chat background settings, including backgrounds marked as possibly sensitive in Messages and changes recorded but hidden from the conversation
     - No actor attribution for group changes recorded without an actor in Messages
     - Unknown group, location sharing, and other events, with raw codes for rows displayed without text in Messages

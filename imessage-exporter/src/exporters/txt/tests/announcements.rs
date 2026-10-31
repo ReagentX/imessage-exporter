@@ -388,6 +388,26 @@ fn can_format_txt_other_kept_messages() {
     }
 }
 
+#[test]
+fn can_format_txt_transcript_sharing_stopped() {
+    let mut config = config(ExportType::Txt);
+    with_me(&mut config);
+    with_contact(&mut config, 1, "Other");
+
+    let exporter = TXT::new(&config).unwrap();
+
+    let mut message = Config::fake_message();
+    message.date = SAMPLE_DATE;
+    message.handle_id = Some(1);
+    message.item_type = 7;
+
+    let mut actual = String::new();
+    exporter.format_announcement(&message, &mut actual);
+    let expected = "May 17, 2022  5:29:42 PM Other stopped sharing Emergency SOS transcript of this conversation with you.\n\n";
+
+    assert_eq!(actual, expected);
+}
+
 /// Group events with actorless forms and nil senders in Messages, paired
 /// with the expected text for each event.
 const UNATTRIBUTED: [(i32, i32, &str); 10] = [
