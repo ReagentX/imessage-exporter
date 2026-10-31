@@ -15,18 +15,19 @@ pub const UNKNOWN_PARTICIPANT: &str = "someone";
 /// Second-person display name for the database owner.
 pub(crate) const YOU: &str = "You";
 
-/// A format-agnostic view of an announcement message. `who` is the actor
-/// [`resolve_announcement`] chose, after the `ME` → `self_name`
-/// (caller-supplied) substitution, or `None` for an event Messages shows
-/// without one; `timestamp` is pre-formatted. `announcement` is the library's
-/// [`Announcement`] verbatim.
+/// Format-agnostic announcement data from [`resolve_announcement`]:
 ///
-/// `participant_name` exists only because the library reports
-/// [`GroupAction::ParticipantAdded`] / [`GroupAction::ParticipantRemoved`] as
-/// a `handle_id` (`i32`), and resolving that to a display name requires the
-/// binary's [`Config`]. Pre-resolving here keeps the lookup out of the
-/// per-format templates. Defaults to [`UNKNOWN_PARTICIPANT`] for every
-/// non-participant variant (templates only read it on the participant arms).
+/// - `who`: the actor's display name after the `ME` → caller-supplied
+///   `self_name` substitution, or `None` for an event displayed without an
+///   actor in Messages;
+/// - `timestamp`: the formatted timestamp;
+/// - `announcement`: the library's [`Announcement`], unchanged.
+///
+/// For [`GroupAction::ParticipantAdded`] / [`GroupAction::ParticipantRemoved`],
+/// resolve the `handle_id` (`i32`) to a display name using the binary's
+/// [`Config`] before formatting to avoid lookups in per-format templates.
+/// Use [`UNKNOWN_PARTICIPANT`] for every other variant; read `participant_name`
+/// only in the participant template arms.
 pub struct ResolvedAnnouncement<'a> {
     pub timestamp: String,
     pub who: Option<&'a str>,
@@ -41,8 +42,8 @@ pub struct ResolvedAnnouncement<'a> {
 pub enum AnnouncementBody<'a> {
     Action {
         timestamp: String,
-        /// Display name of the actor; `None` for an event Messages shows
-        /// without one.
+        /// Actor's display name; `None` for an event displayed without an
+        /// actor in Messages.
         who: Option<&'a str>,
         announcement: Announcement<'a>,
         /// Resolved display name for the participant in `ParticipantAdded`
@@ -66,18 +67,18 @@ impl<'a> From<ResolvedAnnouncement<'a>> for AnnouncementBody<'a> {
 }
 
 /// Resolve a message's announcement into a [`ResolvedAnnouncement`].
-/// Returns `None` when the message has no recognizable announcement.
+/// Return `None` for a message with no recognizable announcement.
 /// `self_name` is the fallback when `who == ME` and `custom_name` is unset
 /// (`"You"` in both current callers).
 ///
-/// `who` is resolved in this order:
+/// Resolve `who` in this order:
 ///
-/// - `None` for an [`Announcement::UnknownEvent`]: no known producer writes
-///   its codes, so nothing establishes an actor;
+/// - `None` for an [`Announcement::UnknownEvent`]: the actor is unknown
+///   because no producer is known for these codes;
 /// - `None` for an unattributed group event ([`Message::is_unattributed`]),
-///   which Messages shows with no actor. [`GroupAction::ParticipantLeft`] and
-///   [`GroupAction::PhoneNumberChanged`] ignore the flag: their actor is the
-///   event's subject;
+///   displayed with no actor in Messages. For [`GroupAction::ParticipantLeft`]
+///   and [`GroupAction::PhoneNumberChanged`], use the event's subject as its
+///   actor regardless of the flag;
 /// - the business for an RCS business's brand-logo update (see `brand_handle`);
 /// - the message's sender.
 pub fn resolve_announcement<'a>(
@@ -120,8 +121,8 @@ pub fn resolve_announcement<'a>(
     })
 }
 
-/// `true` when `announcement` is a group event `msg` marks as unattributed and
-/// that has a form without an actor.
+/// `true` for a group event marked as unattributed in `msg` and displayable
+/// without an actor.
 fn is_unattributed(msg: &Message, announcement: &Announcement) -> bool {
     msg.is_unattributed
         && matches!(
@@ -134,13 +135,13 @@ fn is_unattributed(msg: &Message, announcement: &Announcement) -> bool {
         )
 }
 
-/// Handle of the RCS business whose brand logo `msg` sets, or `None` when `msg`
-/// is not a brand-logo update.
+/// Return the RCS business's handle for a brand-logo update in `msg`, or
+/// `None` for other messages.
 ///
-/// Messages stores a brand logo as a [`GroupAction::GroupIconChangedHidden`]
-/// with no sender (`handle_id` `0` or `NULL`) and an [`Attachment::is_brand_logo`]
-/// attachment; only the chat, whose sole participant is the business, names it.
-/// The attachment query runs last; a query error yields `None`.
+/// In Messages, brand logos are stored as [`GroupAction::GroupIconChangedHidden`]
+/// events with no sender (`handle_id` `0` or `NULL`) and an
+/// [`Attachment::is_brand_logo`] attachment. Identify the business from the
+/// chat's sole participant. Query attachments last; return `None` on query errors.
 fn brand_handle(msg: &Message, announcement: &Announcement, config: &Config) -> Option<i32> {
     if !matches!(
         announcement,
@@ -284,7 +285,7 @@ mod tests {
         assert_eq!(resolved.participant_name, super::UNKNOWN_PARTICIPANT);
     }
 
-    /// Group event that `message_summary_info` marks unattributed.
+    /// Group event marked as unattributed in `message_summary_info`.
     fn unattributed(item_type: i32, group_action_type: i32) -> Message {
         let mut msg = Config::fake_message();
         msg.item_type = item_type;
@@ -356,10 +357,10 @@ mod tests {
         assert_eq!(resolved.who, Some("Bob"));
     }
 
-    /// Config whose chat 761 has one participant, handle 5 (`Brand`), plus a
-    /// non-participant handle 6 (`Alice`). TEMP tables shadow the read-only
-    /// fixture's attachment tables to give message `rowid` 0 a
-    /// `BrandLogoImage` attachment.
+    /// Config with handle 5 (`Brand`) as chat 761's sole participant and
+    /// handle 6 (`Alice`) as a non-participant. Use TEMP tables in place of
+    /// the read-only fixture's attachment tables to associate a
+    /// `BrandLogoImage` attachment with message `rowid` 0.
     fn brand_logo_config() -> Config {
         let mut config = make_config();
         config

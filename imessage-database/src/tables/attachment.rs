@@ -42,7 +42,7 @@ pub const DEFAULT_SMS_ROOT: &str = "~/Library/SMS";
 pub const DEFAULT_ATTACHMENT_ROOT: &str = "~/Library/Messages/Attachments";
 /// Default macOS sticker cache root.
 pub const DEFAULT_STICKER_CACHE_ROOT: &str = "~/Library/Messages/StickerCache";
-/// Transfer name Messages assigns to an RCS business's brand logo (`IMFileTransferBrandLogoName`).
+/// Transfer name for an RCS business's brand logo in Messages (`IMFileTransferBrandLogoName`).
 const BRAND_LOGO_TRANSFER_NAME: &str = "BrandLogoImage";
 /// Recognized `attachment` columns in canonical projection order.
 pub(crate) const ATTACHMENT_COLUMNS: [&str; 10] = [
@@ -279,12 +279,12 @@ impl Attachment {
             )
     }
 
-    /// `true` when this attachment is an RCS business's brand logo: its
-    /// [`transfer_name`](Self::transfer_name) is `BrandLogoImage`
+    /// `true` for an RCS business's brand-logo attachment with
+    /// [`transfer_name`](Self::transfer_name) `BrandLogoImage`
     /// (`IMFileTransferBrandLogoName`).
     ///
-    /// Messages assigns that name only on its brand-logo update path; sync
-    /// restores the same file under the same name.
+    /// In Messages, this name is used only for brand-logo updates. During
+    /// sync, the same file is restored under the same name.
     #[must_use]
     pub fn is_brand_logo(&self) -> bool {
         self.transfer_name.as_deref() == Some(BRAND_LOGO_TRANSFER_NAME)

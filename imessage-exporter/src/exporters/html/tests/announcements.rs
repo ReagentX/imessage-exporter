@@ -415,8 +415,8 @@ fn can_format_html_other_kept_messages() {
     }
 }
 
-/// Every group event with a form without an actor, as Messages writes it with
-/// a nil sender, paired with its rendered text.
+/// Group events with actorless forms and nil senders in Messages, paired
+/// with the expected text for each event.
 const UNATTRIBUTED: [(i32, i32, &str); 10] = [
     (1, 0, "Other was added to the conversation."),
     (1, 1, "Other was removed from the conversation."),
@@ -430,7 +430,7 @@ const UNATTRIBUTED: [(i32, i32, &str); 10] = [
     (3, 7, "The chat background was changed."),
 ];
 
-/// Group event at `SAMPLE_DATE` that `message_summary_info` marks unattributed.
+/// Group event at `SAMPLE_DATE`, marked as unattributed in `message_summary_info`.
 fn unattributed(item_type: i32, group_action_type: i32) -> Message {
     let mut message = Config::fake_message();
     message.date = SAMPLE_DATE;

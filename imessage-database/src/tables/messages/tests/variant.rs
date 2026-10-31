@@ -225,8 +225,8 @@ mod conversation_av_mode_tests {
 
     use crate::tables::messages::{Message, models::ConversationAVMode};
 
-    /// `message_summary_info` of a FaceTime video call, as Messages writes it:
-    /// a binary plist holding only `conversationAVMode` = 2.
+    /// `message_summary_info` of a FaceTime video call in Messages:
+    /// a binary plist with only `conversationAVMode` = 2.
     const VIDEO_SUMMARY: &[u8] = &[
         0x62, 0x70, 0x6C, 0x69, 0x73, 0x74, 0x30, 0x30, 0xD1, 0x01, 0x02, 0x5F, 0x10, 0x12, 0x63,
         0x6F, 0x6E, 0x76, 0x65, 0x72, 0x73, 0x61, 0x74, 0x69, 0x6F, 0x6E, 0x41, 0x56, 0x4D, 0x6F,
@@ -235,8 +235,8 @@ mod conversation_av_mode_tests {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x22,
     ];
 
-    /// Binary plist `message_summary_info` holding `conversationAVMode` set to
-    /// `value`.
+    /// Build a binary `message_summary_info` plist with `conversationAVMode`
+    /// set to `value`.
     fn summary(value: Value) -> Vec<u8> {
         let mut dict = Dictionary::new();
         dict.insert("conversationAVMode".to_string(), value);

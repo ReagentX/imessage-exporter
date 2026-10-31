@@ -102,11 +102,11 @@ pub(crate) trait MessageFormatter<'a> {
     /// the same buffer that [`format_message_into`](Self::format_message_into)
     /// uses, so the per-message hot path doesn't allocate per call.
     fn format_announcement(&self, msg: &Message, out: &mut String);
-    /// Format a FaceTime or SharePlay row ([`Message::is_shareplay`]). Messages
-    /// titles it SharePlay only when its
-    /// [`conversation_av_mode`](Message::conversation_av_mode) is
+    /// Format a FaceTime or SharePlay row ([`Message::is_shareplay`]). Use
+    /// SharePlay only when [`conversation_av_mode`](Message::conversation_av_mode) is
     /// [`AVLess`](imessage_database::tables::messages::models::ConversationAVMode::AVLess),
-    /// and FaceTime otherwise, including when the mode is absent.
+    /// and FaceTime otherwise, including when the mode is absent, to match
+    /// the labels in Messages.
     fn format_shareplay(&self, msg: &Message) -> &'static str;
     /// Format a legacy shared-location message.
     fn format_shared_location(&self, kind: SharedLocation) -> &'static str;

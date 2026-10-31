@@ -305,14 +305,14 @@ pub struct Message {
     pub components: Vec<BubbleComponent>,
     /// Parsed edit/unsent metadata from `message_summary_info`.
     pub edited_parts: Option<EditedMessage>,
-    /// `true` when `message_summary_info` marks a group event (`item_type` 1–3)
-    /// as unattributed: its `uat` key holds `true` or a nonzero integer.
+    /// `true` for a group event (`item_type` 1–3) with `true` or a nonzero
+    /// integer under `uat` in `message_summary_info`.
     /// `false` for every other `item_type`.
     pub is_unattributed: bool,
     /// `conversationAVMode` from `message_summary_info` on a FaceTime or
     /// SharePlay row (`item_type` 6). `None` for every other `item_type`, and
-    /// when the key is absent or not an unsigned integer; Messages reads an
-    /// absent key as [`ConversationAVMode::Video`].
+    /// when the key is absent or not an unsigned integer. The default mode
+    /// in Messages for an absent key is [`ConversationAVMode::Video`].
     pub conversation_av_mode: Option<ConversationAVMode>,
 }
 
@@ -505,8 +505,7 @@ impl Message {
     }
 }
 
-/// `conversationAVMode` of a `message_summary_info` payload, when it holds an
-/// unsigned integer.
+/// Decode an unsigned `conversationAVMode` integer from `message_summary_info`.
 fn read_av_mode(summary: &Value) -> Option<ConversationAVMode> {
     ConversationAVMode::from_code(
         summary
@@ -516,8 +515,7 @@ fn read_av_mode(summary: &Value) -> Option<ConversationAVMode> {
     )
 }
 
-/// `true` when a `message_summary_info` payload's `uat` key holds `true` or a
-/// nonzero integer.
+/// `true` for `true` or a nonzero integer under `uat` in `message_summary_info`.
 fn marks_unattributed(summary: &Value) -> bool {
     match summary.as_dictionary().and_then(|dict| dict.get("uat")) {
         Some(Value::Boolean(flag)) => *flag,
@@ -531,23 +529,23 @@ impl Message {
     // MARK: Text Gen
     /// Populate body fields from supplied bytes without reading the database.
     ///
-    /// `None` represents an absent or unreadable input. `has_payload` is the
+    /// Use `None` for an absent or unreadable input. `has_payload` is the
     /// non-nullness of `payload_data`, including non-blob values.
-    /// Summary bytes are parsed only when [`Self::is_edited`] is true or
-    /// `item_type` is 1–3 or 6; they populate [`Self::edited_parts`],
-    /// [`Self::is_unattributed`], and [`Self::conversation_av_mode`]
-    /// respectively.
+    /// Parse summary bytes only for:
     ///
-    /// Parsing is best effort: text recovery failures preserve parsed body
-    /// components and edit metadata.
+    /// - edited messages ([`Self::is_edited`]), to populate [`Self::edited_parts`];
+    /// - group events (`item_type` 1–3), to populate [`Self::is_unattributed`];
+    /// - FaceTime or SharePlay rows (`item_type` 6), to populate [`Self::conversation_av_mode`].
+    ///
+    /// Parsing is best effort: preserve parsed body components and edit
+    /// metadata if text cannot be recovered.
     pub(super) fn parse_body(
         &mut self,
         attributed_body: Option<&[u8]>,
         message_summary_info: Option<&[u8]>,
         has_payload: bool,
     ) {
-        // Every row passes through here; the integer checks keep the plist
-        // parse off rows that read none of its fields.
+        // Check whether summary fields are needed before parsing the plist: we decode every row here.
         let is_group_event = matches!(self.item_type, 1..=3);
         let is_shareplay = self.is_shareplay();
         let is_edited = self.is_edited();
@@ -804,7 +802,7 @@ impl Message {
         self.num_replies > 0
     }
 
-    /// `true` when the message indicates another message was kept.
+    /// `true` for kept-message rows (`item_type` 5).
     #[must_use]
     pub fn is_kept_message(&self) -> bool {
         self.item_type == 5
@@ -831,13 +829,12 @@ impl Message {
         }
     }
 
-    /// Returns the [`SharedLocation`] when the message is a legacy
-    /// shared-location event.
+    /// Return the [`SharedLocation`] for a legacy shared-location event.
     ///
-    /// Returns `None` unless [`share_status`](Self::share_status) and
+    /// Return `None` unless [`share_status`](Self::share_status) and
     /// [`share_direction`](Self::share_direction) are both `0` or `1`: those
-    /// are the only pairs Messages renders as started or stopped text. A `NULL`
-    /// direction counts as `0`, as an integer read of `NULL` does.
+    /// are the only pairs with started or stopped text in Messages. Treat a
+    /// `NULL` direction as `0`, matching an integer read of `NULL`.
     #[must_use]
     pub fn shared_location_kind(&self) -> Option<SharedLocation> {
         if self.item_type != 4 || !matches!(self.share_direction, None | Some(0 | 1)) {
@@ -1315,8 +1312,8 @@ impl Message {
         }
 
         let unknown = match self.item_type {
-            // `group_action` maps every type-2 row, so a type 1 or 3 row reaching here has
-            // codes it does not map
+            // All type-2 rows are handled in `group_action`; only unmapped type-1 and type-3
+            // group events remain here.
             1 | 3 => UnknownEvent::Group {
                 item_type: self.item_type,
                 group_action_type: self.group_action_type,

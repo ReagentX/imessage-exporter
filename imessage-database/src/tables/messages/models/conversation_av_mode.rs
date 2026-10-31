@@ -6,14 +6,14 @@
 /// `message_summary_info`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConversationAVMode {
-    /// Value `0`, which `+[IMFaceTimeUtilities conversationIsAVLessSharePlay:]`
-    /// tests for: a SharePlay session without audio or video.
+    /// Value `0`: a SharePlay session without audio or video, as checked in
+    /// `+[IMFaceTimeUtilities conversationIsAVLessSharePlay:]`.
     AVLess,
-    /// Value `1`, the mode between none (`0`) and video (`2`) that
-    /// `-[TUConversationProvider supportsAVMode:]` accepts: an audio-only call.
+    /// Value `1`: an audio-only call, between none (`0`) and video (`2`),
+    /// accepted in `-[TUConversationProvider supportsAVMode:]`.
     Audio,
-    /// Value `2`, which `+[IMFaceTimeUtilities conversationIsVideoCall:]` tests
-    /// for: a video call.
+    /// Value `2`: a video call, as checked in
+    /// `+[IMFaceTimeUtilities conversationIsVideoCall:]`.
     Video,
     /// Unrecognized raw code.
     Unknown(u64),

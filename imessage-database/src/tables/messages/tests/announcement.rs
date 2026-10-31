@@ -371,8 +371,8 @@ mod unattributed_tests {
 
     use crate::tables::messages::message::Message;
 
-    /// Binary plist `message_summary_info` holding `uat` set to `value`, or
-    /// lacking the key for `None`.
+    /// Build a binary `message_summary_info` plist with `uat` set to `value`;
+    /// omit the key for `None`.
     fn summary(value: Option<Value>) -> Vec<u8> {
         let mut dict = Dictionary::new();
         dict.insert("ams".to_string(), Value::String("Sender".to_string()));

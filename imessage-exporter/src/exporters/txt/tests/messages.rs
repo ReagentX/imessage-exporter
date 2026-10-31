@@ -174,7 +174,7 @@ fn can_format_txt_from_them_custom_name_read() {
     assert_eq!(actual, expected);
 }
 
-/// FaceTime or SharePlay row at `SAMPLE_DATE` carrying `mode`.
+/// FaceTime or SharePlay row at `SAMPLE_DATE` with `mode`.
 fn conversation(mode: Option<ConversationAVMode>) -> Message {
     let mut message = Config::fake_message();
     message.date = SAMPLE_DATE;

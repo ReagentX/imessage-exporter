@@ -19,15 +19,15 @@ pub enum GroupAction<'a> {
     ParticipantLeft,
     /// Group icon/avatar changed.
     GroupIconChanged,
-    /// Group icon/avatar changed; Messages records the change but does not show it in the transcript.
+    /// Group icon/avatar change recorded in Messages but hidden from the transcript.
     GroupIconChangedHidden,
     /// Group icon/avatar was removed.
     GroupIconRemoved,
     /// Chat background changed.
     ChatBackgroundChanged,
-    /// Chat background changed; Messages records the change but does not show it in the transcript.
+    /// Chat background change recorded in Messages but hidden from the transcript.
     ChatBackgroundChangedHidden,
-    /// Chat background was set to one Messages marks as possibly sensitive.
+    /// Chat background set to an image marked as possibly sensitive in Messages.
     ChatBackgroundSensitive,
     /// Chat background was removed.
     ChatBackgroundRemoved,
@@ -51,7 +51,7 @@ impl<'a> GroupAction<'a> {
             }
             (1, 0, Some(who), _) => Some(Self::ParticipantAdded(who)),
             (1, 1, Some(who), _) => Some(Self::ParticipantRemoved(who)),
-            // Messages checks the title's length: a nil or empty title is a removal
+            // Treat a nil or empty title as a name removal, matching the length check in Messages.
             (2, _, _, Some(name)) if !name.is_empty() => Some(Self::NameChange(name)),
             (2, _, _, _) => Some(Self::NameRemoved),
             (3, 0, _, _) => Some(Self::ParticipantLeft),
