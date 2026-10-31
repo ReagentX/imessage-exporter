@@ -129,6 +129,9 @@ pub enum URLOverride<'a> {
 /// unsent messages.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Announcement<'a> {
+    /// Location sent to emergency services (`item_type` 8). The row carries
+    /// no payload.
+    EmergencyLocationSent,
     /// All parts of the message were unsent.
     FullyUnsent,
     /// Group action.
@@ -161,7 +164,7 @@ pub enum UnknownEvent {
         /// `share_direction` of the row; `None` for `NULL`.
         share_direction: Option<i32>,
     },
-    /// Row whose `item_type` is outside 0–7.
+    /// Row whose `item_type` is outside 0–8.
     ItemType(i32),
 }
 

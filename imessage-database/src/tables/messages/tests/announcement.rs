@@ -348,8 +348,20 @@ mod announcement_tests {
     }
 
     #[test]
+    fn test_announcement_emergency_location_sent() {
+        let mut msg = Message::blank();
+        msg.item_type = 8;
+        msg.handle_id = Some(1);
+
+        assert_eq!(
+            msg.get_announcement(),
+            Some(Announcement::EmergencyLocationSent)
+        );
+    }
+
+    #[test]
     fn test_announcement_unknown_item_type() {
-        for item_type in [8, 9, -1] {
+        for item_type in [9, -1] {
             let mut msg = Message::blank();
             msg.item_type = item_type;
 

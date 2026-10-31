@@ -75,6 +75,8 @@ impl<'a> From<ResolvedAnnouncement<'a>> for AnnouncementBody<'a> {
 ///
 /// - `None` for an [`Announcement::UnknownEvent`]: the actor is unknown
 ///   because no producer is known for these codes;
+/// - `None` for [`Announcement::EmergencyLocationSent`]: Apple's only wording
+///   for it names no actor;
 /// - `None` for an unattributed group event ([`Message::is_unattributed`]),
 ///   displayed with no actor in Messages. For [`GroupAction::ParticipantLeft`]
 ///   and [`GroupAction::PhoneNumberChanged`], use the event's subject as its
@@ -88,8 +90,10 @@ pub fn resolve_announcement<'a>(
 ) -> Option<ResolvedAnnouncement<'a>> {
     let announcement = msg.get_announcement()?;
 
-    let who = if matches!(announcement, Announcement::UnknownEvent(_))
-        || is_unattributed(msg, &announcement)
+    let who = if matches!(
+        announcement,
+        Announcement::UnknownEvent(_) | Announcement::EmergencyLocationSent
+    ) || is_unattributed(msg, &announcement)
     {
         None
     } else {

@@ -1323,6 +1323,7 @@ impl Message {
                 share_direction: self.share_direction,
             },
             7 => return Some(Announcement::TranscriptSharingStopped),
+            8 => return Some(Announcement::EmergencyLocationSent),
             0..=6 => return None,
             other => UnknownEvent::ItemType(other),
         };

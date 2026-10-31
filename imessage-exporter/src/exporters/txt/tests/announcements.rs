@@ -408,6 +408,29 @@ fn can_format_txt_transcript_sharing_stopped() {
     assert_eq!(actual, expected);
 }
 
+#[test]
+fn can_format_txt_emergency_location_sent() {
+    let mut config = config(ExportType::Txt);
+    with_me(&mut config);
+    with_contact(&mut config, 1, "Other");
+
+    let exporter = TXT::new(&config).unwrap();
+
+    for is_from_me in [false, true] {
+        let mut message = Config::fake_message();
+        message.date = SAMPLE_DATE;
+        message.handle_id = Some(1);
+        message.is_from_me = is_from_me;
+        message.item_type = 8;
+
+        let mut actual = String::new();
+        exporter.format_announcement(&message, &mut actual);
+        let expected = "May 17, 2022  5:29:42 PM Location sent to emergency services.\n\n";
+
+        assert_eq!(actual, expected, "{is_from_me}");
+    }
+}
+
 /// Group events with actorless forms and nil senders in Messages, paired
 /// with the expected text for each event.
 const UNATTRIBUTED: [(i32, i32, &str); 10] = [

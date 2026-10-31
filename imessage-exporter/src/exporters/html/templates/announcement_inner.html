@@ -23,7 +23,7 @@
         {%- when GroupAction::ChatBackgroundRemoved -%}removed the chat background.
         {%- when GroupAction::PhoneNumberChanged(_) -%}changed their phone number.
         {%- endmatch -%}
-        {%- when Announcement::UnknownEvent(_) -%}Unable to format announcement!
+        {%- when Announcement::EmergencyLocationSent | Announcement::UnknownEvent(_) -%}Unable to format announcement!
         {%- endmatch -%}
         {%- else -%}
         {%- match announcement -%}
@@ -42,6 +42,7 @@
         {%- when GroupAction::ChatBackgroundRemoved -%}The chat background was removed.
         {%- else -%}Unable to format announcement!
         {%- endmatch -%}
+        {%- when Announcement::EmergencyLocationSent -%}Location sent to emergency services.
         {%- when Announcement::UnknownEvent(event) -%}
         {%- match event -%}
         {%- when UnknownEvent::Group { item_type, group_action_type } -%}Unknown group event (item_type {{ item_type }}, group_action_type {{ group_action_type }}).
