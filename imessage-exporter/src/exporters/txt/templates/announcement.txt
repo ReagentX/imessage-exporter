@@ -17,6 +17,7 @@
 {%- when GroupAction::ChatBackgroundRemoved -%}removed the chat background.
 {%- when GroupAction::PhoneNumberChanged(_) -%}changed their phone number.
 {%- endmatch -%}
+{%- when Announcement::UnknownEvent(_) -%}Unable to format announcement!
 {%- endmatch -%}
 {%- else -%}
 {%- match announcement -%}
@@ -32,6 +33,12 @@
 {%- when GroupAction::ChatBackgroundSensitive -%}A chat background was set which may be sensitive.
 {%- when GroupAction::ChatBackgroundRemoved -%}The chat background was removed.
 {%- else -%}Unable to format announcement!
+{%- endmatch -%}
+{%- when Announcement::UnknownEvent(event) -%}
+{%- match event -%}
+{%- when UnknownEvent::Group { item_type, group_action_type } -%}Unknown group event (item_type {{ item_type }}, group_action_type {{ group_action_type }}).
+{%- when UnknownEvent::Location { share_status, share_direction } -%}Unknown location sharing event (share_status {{ share_status }}, share_direction {% if let Some(direction) = share_direction %}{{ direction }}{% else %}NULL{% endif %}).
+{%- when UnknownEvent::ItemType(item_type) -%}Unknown event (item_type {{ item_type }}).
 {%- endmatch -%}
 {%- else -%}Unable to format announcement!
 {%- endmatch -%}

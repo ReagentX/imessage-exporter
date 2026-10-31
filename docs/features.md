@@ -157,3 +157,4 @@ This tool targets the current latest public release for Messages.app. It may wor
     - Kept audio, video, and app messages
     - Chat background settings, including backgrounds Messages marks as possibly sensitive and changes Messages records but hides from the conversation
     - Group changes Messages records without an actor render without naming one
+    - Group, location sharing, and other event rows whose codes Messages shows no text for render as unknown events with their raw codes

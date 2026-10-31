@@ -3,7 +3,7 @@ use askama::Template;
 use imessage_database::{
     message_types::{
         expressives::Expressive,
-        variants::{Announcement, KeptMessage},
+        variants::{Announcement, KeptMessage, UnknownEvent},
     },
     tables::messages::models::GroupAction,
 };

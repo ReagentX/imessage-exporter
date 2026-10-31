@@ -201,7 +201,7 @@ mod announcement_tests {
     use crate::{
         message_types::{
             edited::{EditStatus, EditedMessage, EditedMessagePart},
-            variants::{Announcement, KeptMessage},
+            variants::{Announcement, KeptMessage, UnknownEvent},
         },
         tables::messages::{message::Message, models::GroupAction},
     };
@@ -295,6 +295,73 @@ mod announcement_tests {
                 "{code}"
             );
         }
+    }
+
+    #[test]
+    fn test_announcement_unknown_group_event() {
+        for (item_type, action, other_handle) in [(1, 2, Some(7)), (3, 8, None), (1, 0, None)] {
+            let mut msg = Message::blank();
+            msg.item_type = item_type;
+            msg.group_action_type = action;
+            msg.other_handle = other_handle;
+
+            assert_eq!(
+                msg.get_announcement(),
+                Some(Announcement::UnknownEvent(UnknownEvent::Group {
+                    item_type,
+                    group_action_type: action,
+                })),
+                "({item_type}, {action})"
+            );
+        }
+    }
+
+    #[test]
+    fn test_announcement_unknown_location_event() {
+        for (status, direction) in [(2, None), (0, Some(2))] {
+            let mut msg = Message::blank();
+            msg.item_type = 4;
+            msg.share_status = status;
+            msg.share_direction = direction;
+
+            assert_eq!(
+                msg.get_announcement(),
+                Some(Announcement::UnknownEvent(UnknownEvent::Location {
+                    share_status: status,
+                    share_direction: direction,
+                })),
+                "({status}, {direction:?})"
+            );
+        }
+    }
+
+    #[test]
+    fn test_announcement_unknown_item_type() {
+        for item_type in [7, 8, 9, -1] {
+            let mut msg = Message::blank();
+            msg.item_type = item_type;
+
+            assert_eq!(
+                msg.get_announcement(),
+                Some(Announcement::UnknownEvent(UnknownEvent::ItemType(
+                    item_type
+                ))),
+                "{item_type}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_announcement_mapped_location_and_shareplay_are_not_events() {
+        let mut location = Message::blank();
+        location.item_type = 4;
+        location.share_status = 1;
+        location.share_direction = Some(0);
+        assert!(location.get_announcement().is_none());
+
+        let mut shareplay = Message::blank();
+        shareplay.item_type = 6;
+        assert!(shareplay.get_announcement().is_none());
     }
 }
 

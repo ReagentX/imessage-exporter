@@ -198,7 +198,7 @@ use crate::{
         translation::Translation,
         variants::{
             Announcement, BalloonProvider, CustomBalloon, KeptMessage, Tapback, TapbackAction,
-            Variant,
+            UnknownEvent, Variant,
         },
     },
     tables::{
@@ -1314,7 +1314,21 @@ impl Message {
             )));
         }
 
-        None
+        let unknown = match self.item_type {
+            // `group_action` maps every type-2 row, so a type 1 or 3 row reaching here has
+            // codes it does not map
+            1 | 3 => UnknownEvent::Group {
+                item_type: self.item_type,
+                group_action_type: self.group_action_type,
+            },
+            4 if self.shared_location_kind().is_none() => UnknownEvent::Location {
+                share_status: self.share_status,
+                share_direction: self.share_direction,
+            },
+            0..=6 => return None,
+            other => UnknownEvent::ItemType(other),
+        };
+        Some(Announcement::UnknownEvent(unknown))
     }
 
     /// Parse the message service.

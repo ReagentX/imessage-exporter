@@ -135,6 +135,31 @@ pub enum Announcement<'a> {
     GroupAction(GroupAction<'a>),
     /// User kept a message (`item_type` 5).
     MessageKept(KeptMessage),
+    /// Event row whose codes Messages renders no text for.
+    UnknownEvent(UnknownEvent),
+}
+
+/// Raw codes of an event row Messages renders no text for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnknownEvent {
+    /// Group event (`item_type` 1 or 3) whose `group_action_type`, with
+    /// `other_handle`, maps to no [`GroupAction`].
+    Group {
+        /// `item_type` of the row.
+        item_type: i32,
+        /// `group_action_type` of the row.
+        group_action_type: i32,
+    },
+    /// Shared-location row (`item_type` 4) whose codes map to no
+    /// [`SharedLocation`](crate::tables::messages::models::SharedLocation).
+    Location {
+        /// `share_status` of the row.
+        share_status: i32,
+        /// `share_direction` of the row; `None` for `NULL`.
+        share_direction: Option<i32>,
+    },
+    /// Row whose `item_type` is outside 0–6.
+    ItemType(i32),
 }
 
 /// Kind of message a kept-message row (`item_type` 5) refers to, stored in

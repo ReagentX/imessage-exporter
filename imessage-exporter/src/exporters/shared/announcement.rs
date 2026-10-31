@@ -72,6 +72,8 @@ impl<'a> From<ResolvedAnnouncement<'a>> for AnnouncementBody<'a> {
 ///
 /// `who` is resolved in this order:
 ///
+/// - `None` for an [`Announcement::UnknownEvent`]: no known producer writes
+///   its codes, so nothing establishes an actor;
 /// - `None` for an unattributed group event ([`Message::is_unattributed`]),
 ///   which Messages shows with no actor. [`GroupAction::ParticipantLeft`] and
 ///   [`GroupAction::PhoneNumberChanged`] ignore the flag: their actor is the
@@ -85,7 +87,9 @@ pub fn resolve_announcement<'a>(
 ) -> Option<ResolvedAnnouncement<'a>> {
     let announcement = msg.get_announcement()?;
 
-    let who = if is_unattributed(msg, &announcement) {
+    let who = if matches!(announcement, Announcement::UnknownEvent(_))
+        || is_unattributed(msg, &announcement)
+    {
         None
     } else {
         let who = match brand_handle(msg, &announcement, config) {

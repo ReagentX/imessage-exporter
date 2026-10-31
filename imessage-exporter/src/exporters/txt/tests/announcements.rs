@@ -464,3 +464,68 @@ fn can_format_txt_unattributed_name_removed() {
 
     assert_eq!(actual, expected);
 }
+
+#[test]
+fn can_format_txt_unknown_group_event() {
+    let mut config = config(ExportType::Txt);
+    with_me(&mut config);
+
+    let exporter = TXT::new(&config).unwrap();
+
+    let mut message = Config::fake_message();
+    message.date = SAMPLE_DATE;
+    message.is_from_me = true;
+    message.item_type = 3;
+    message.group_action_type = 8;
+
+    let mut actual = String::new();
+    exporter.format_announcement(&message, &mut actual);
+    let expected =
+        "May 17, 2022  5:29:42 PM Unknown group event (item_type 3, group_action_type 8).\n\n";
+
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn can_format_txt_unknown_location_event() {
+    let mut config = config(ExportType::Txt);
+    with_me(&mut config);
+
+    let exporter = TXT::new(&config).unwrap();
+
+    for (status, direction, shown) in [(2, None, "NULL"), (0, Some(2), "2")] {
+        let mut message = Config::fake_message();
+        message.date = SAMPLE_DATE;
+        message.is_from_me = true;
+        message.item_type = 4;
+        message.share_status = status;
+        message.share_direction = direction;
+
+        let mut actual = String::new();
+        exporter.format_announcement(&message, &mut actual);
+        let expected = format!(
+            "May 17, 2022  5:29:42 PM Unknown location sharing event (share_status {status}, share_direction {shown}).\n\n"
+        );
+
+        assert_eq!(actual, expected, "({status}, {direction:?})");
+    }
+}
+
+#[test]
+fn can_format_txt_unknown_item_type() {
+    let mut config = config(ExportType::Txt);
+    with_me(&mut config);
+
+    let exporter = TXT::new(&config).unwrap();
+
+    let mut message = Config::fake_message();
+    message.date = SAMPLE_DATE;
+    message.is_from_me = true;
+    message.item_type = 9;
+
+    let mut actual = String::new();
+    exporter.format_announcement(&message, &mut actual);
+    let expected = "May 17, 2022  5:29:42 PM Unknown event (item_type 9).\n\n";
+
+    assert_eq!(actual, expected);
+}
