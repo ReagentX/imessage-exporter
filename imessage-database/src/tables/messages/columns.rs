@@ -1,7 +1,7 @@
 /*!
  Column layout resolution and row decoding for the `message` table.
 
- To decode a [`Message`], read 36 columns whose ordinals differ per schema.
+ To decode a [`Message`], read 37 columns whose ordinals differ per schema.
  In the composed query, the recognized columns are projected contiguously;
  in custom queries (such as `m.*` projections), derived columns may appear
  after every `message` column. To decode by name, we must scan the result-column
@@ -23,7 +23,7 @@ use crate::tables::messages::Message;
 /// [`Capabilities`](crate::tables::capabilities::Capabilities) probes these
 /// names against the live schema; query composition projects exactly the
 /// subset that exists, qualified with `m.`.
-pub(crate) const MESSAGE_COLUMNS: [&str; 29] = [
+pub(crate) const MESSAGE_COLUMNS: [&str; 30] = [
     "rowid",
     "guid",
     "text",
@@ -42,6 +42,7 @@ pub(crate) const MESSAGE_COLUMNS: [&str; 29] = [
     "share_direction",
     "group_title",
     "group_action_type",
+    "message_action_type",
     "associated_message_guid",
     "associated_message_type",
     "balloon_bundle_id",
@@ -96,6 +97,7 @@ pub(super) struct MessageColumns {
     share_direction: Option<usize>,
     group_title: Option<usize>,
     group_action_type: Option<usize>,
+    message_action_type: Option<usize>,
     associated_message_guid: Option<usize>,
     associated_message_type: Option<usize>,
     balloon_bundle_id: Option<usize>,
@@ -118,7 +120,7 @@ impl MessageColumns {
     /// Number of mapped fields. Tests size unrecognized projections with it;
     /// resolution scans the complete result set independently.
     #[cfg(test)]
-    const FIELDS: usize = 36;
+    const FIELDS: usize = 37;
 
     /// Map every recognized column name to its ordinal. If a required column
     /// is absent, return [`Error::InvalidColumnName`] with the first missing
@@ -153,6 +155,7 @@ impl MessageColumns {
         let mut share_direction = None;
         let mut group_title = None;
         let mut group_action_type = None;
+        let mut message_action_type = None;
         let mut associated_message_guid = None;
         let mut associated_message_type = None;
         let mut balloon_bundle_id = None;
@@ -207,6 +210,7 @@ impl MessageColumns {
                 b"share_direction" => &mut share_direction,
                 b"group_title" => &mut group_title,
                 b"group_action_type" => &mut group_action_type,
+                b"message_action_type" => &mut message_action_type,
                 b"associated_message_guid" => &mut associated_message_guid,
                 b"associated_message_type" => &mut associated_message_type,
                 b"balloon_bundle_id" => &mut balloon_bundle_id,
@@ -257,6 +261,7 @@ impl MessageColumns {
             share_direction,
             group_title,
             group_action_type,
+            message_action_type,
             associated_message_guid,
             associated_message_type,
             balloon_bundle_id,
@@ -334,6 +339,7 @@ impl Message {
             share_direction: nullable(row, columns.share_direction),
             group_title: nullable(row, columns.group_title),
             group_action_type: defaulted(row, columns.group_action_type),
+            message_action_type: defaulted(row, columns.message_action_type),
             associated_message_guid: nullable(row, columns.associated_message_guid),
             associated_message_type: nullable(row, columns.associated_message_type),
             balloon_bundle_id: nullable(row, columns.balloon_bundle_id),
@@ -350,6 +356,8 @@ impl Message {
             filter_sub_action: nullable(row, columns.filter_sub_action),
             components: vec![],
             edited_parts: None,
+            is_unattributed: false,
+            conversation_av_mode: None,
         };
         message.parse_body(
             bytes(row, columns.attributed_body),
@@ -391,10 +399,11 @@ mod tests {
                 is_read: row.get("is_read").unwrap_or(false),
                 item_type: row.get("item_type").unwrap_or_default(),
                 other_handle: row.get("other_handle").unwrap_or(None),
-                share_status: row.get("share_status").unwrap_or(false),
+                share_status: row.get("share_status").unwrap_or(0),
                 share_direction: row.get("share_direction").unwrap_or(None),
                 group_title: row.get("group_title").unwrap_or(None),
                 group_action_type: row.get("group_action_type").unwrap_or(0),
+                message_action_type: row.get("message_action_type").unwrap_or(0),
                 associated_message_guid: row.get("associated_message_guid").unwrap_or(None),
                 associated_message_type: row.get("associated_message_type").unwrap_or(None),
                 balloon_bundle_id: row.get("balloon_bundle_id").unwrap_or(None),
@@ -411,6 +420,8 @@ mod tests {
                 filter_sub_action: row.get("filter_sub_action").unwrap_or(None),
                 components: vec![],
                 edited_parts: None,
+                is_unattributed: false,
+                conversation_av_mode: None,
             };
             let column = |name| row.as_ref().column_index(name).ok();
             message.parse_body(
@@ -529,6 +540,7 @@ mod tests {
             ("share_direction", columns.share_direction),
             ("group_title", columns.group_title),
             ("group_action_type", columns.group_action_type),
+            ("message_action_type", columns.message_action_type),
             ("associated_message_guid", columns.associated_message_guid),
             ("associated_message_type", columns.associated_message_type),
             ("balloon_bundle_id", columns.balloon_bundle_id),
@@ -567,6 +579,14 @@ mod tests {
     fn assert_same_message(mapped: &Message, named: &Message) {
         assert_eq!(mapped.components, named.components, "components");
         assert_eq!(mapped.edited_parts, named.edited_parts, "edited_parts");
+        assert_eq!(
+            mapped.is_unattributed, named.is_unattributed,
+            "is_unattributed"
+        );
+        assert_eq!(
+            mapped.conversation_av_mode, named.conversation_av_mode,
+            "conversation_av_mode"
+        );
         assert_eq!(mapped.rowid, named.rowid, "rowid");
         assert_eq!(mapped.guid, named.guid, "guid");
         assert_eq!(mapped.text, named.text, "text");
@@ -596,6 +616,10 @@ mod tests {
         assert_eq!(
             mapped.group_action_type, named.group_action_type,
             "group_action_type"
+        );
+        assert_eq!(
+            mapped.message_action_type, named.message_action_type,
+            "message_action_type"
         );
         assert_eq!(
             mapped.associated_message_guid, named.associated_message_guid,
@@ -809,6 +833,7 @@ mod tests {
         assert_eq!(first.date_edited, 0);
         assert_eq!(first.filter_action, None);
         assert_eq!(first.item_type, 0);
+        assert_eq!(first.message_action_type, 0);
         assert!(!first.is_read);
     }
 

@@ -76,12 +76,27 @@ mod group_action_tests {
     }
 
     #[test]
-    fn test_group_action_name_change_missing_title() {
+    fn test_group_action_name_removed_null_title() {
         let mut msg = Message::blank();
         msg.item_type = 2;
         msg.group_title = None;
 
-        assert!(Message::group_action(&msg).is_none());
+        assert!(matches!(
+            Message::group_action(&msg),
+            Some(GroupAction::NameRemoved)
+        ));
+    }
+
+    #[test]
+    fn test_group_action_name_removed_empty_title() {
+        let mut msg = Message::blank();
+        msg.item_type = 2;
+        msg.group_title = Some(String::new());
+
+        assert!(matches!(
+            Message::group_action(&msg),
+            Some(GroupAction::NameRemoved)
+        ));
     }
 
     #[test]
@@ -143,6 +158,42 @@ mod group_action_tests {
             Some(GroupAction::ChatBackgroundRemoved)
         ));
     }
+
+    #[test]
+    fn test_group_action_background_sensitive() {
+        let mut msg = Message::blank();
+        msg.item_type = 3;
+        msg.group_action_type = 5;
+
+        assert!(matches!(
+            Message::group_action(&msg),
+            Some(GroupAction::ChatBackgroundSensitive)
+        ));
+    }
+
+    #[test]
+    fn test_group_action_icon_changed_hidden() {
+        let mut msg = Message::blank();
+        msg.item_type = 3;
+        msg.group_action_type = 3;
+
+        assert!(matches!(
+            Message::group_action(&msg),
+            Some(GroupAction::GroupIconChangedHidden)
+        ));
+    }
+
+    #[test]
+    fn test_group_action_background_changed_hidden() {
+        let mut msg = Message::blank();
+        msg.item_type = 3;
+        msg.group_action_type = 7;
+
+        assert!(matches!(
+            Message::group_action(&msg),
+            Some(GroupAction::ChatBackgroundChangedHidden)
+        ));
+    }
 }
 
 #[cfg(test)]
@@ -150,7 +201,7 @@ mod announcement_tests {
     use crate::{
         message_types::{
             edited::{EditStatus, EditedMessage, EditedMessagePart},
-            variants::Announcement,
+            variants::{Announcement, KeptMessage, UnknownEvent},
         },
         tables::messages::{message::Message, models::GroupAction},
     };
@@ -226,13 +277,163 @@ mod announcement_tests {
     }
 
     #[test]
-    fn test_announcement_kept_audio_message() {
-        let mut msg = Message::blank();
-        msg.item_type = 5;
+    fn test_announcement_kept_message_kinds() {
+        for (code, kind) in [
+            (0, KeptMessage::Audio),
+            (1, KeptMessage::Video),
+            (2, KeptMessage::App),
+            (3, KeptMessage::Unknown(3)),
+            (-1, KeptMessage::Unknown(-1)),
+        ] {
+            let mut msg = Message::blank();
+            msg.item_type = 5;
+            msg.message_action_type = code;
 
-        assert!(matches!(
-            msg.get_announcement(),
-            Some(Announcement::AudioMessageKept)
-        ));
+            assert_eq!(
+                msg.get_announcement(),
+                Some(Announcement::MessageKept(kind)),
+                "{code}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_announcement_unknown_group_event() {
+        for (item_type, action, other_handle) in [(1, 2, Some(7)), (3, 8, None), (1, 0, None)] {
+            let mut msg = Message::blank();
+            msg.item_type = item_type;
+            msg.group_action_type = action;
+            msg.other_handle = other_handle;
+
+            assert_eq!(
+                msg.get_announcement(),
+                Some(Announcement::UnknownEvent(UnknownEvent::Group {
+                    item_type,
+                    group_action_type: action,
+                })),
+                "({item_type}, {action})"
+            );
+        }
+    }
+
+    #[test]
+    fn test_announcement_unknown_location_event() {
+        for (status, direction) in [(2, None), (0, Some(2))] {
+            let mut msg = Message::blank();
+            msg.item_type = 4;
+            msg.share_status = status;
+            msg.share_direction = direction;
+
+            assert_eq!(
+                msg.get_announcement(),
+                Some(Announcement::UnknownEvent(UnknownEvent::Location {
+                    share_status: status,
+                    share_direction: direction,
+                })),
+                "({status}, {direction:?})"
+            );
+        }
+    }
+
+    #[test]
+    fn test_announcement_unknown_item_type() {
+        for item_type in [7, 8, 9, -1] {
+            let mut msg = Message::blank();
+            msg.item_type = item_type;
+
+            assert_eq!(
+                msg.get_announcement(),
+                Some(Announcement::UnknownEvent(UnknownEvent::ItemType(
+                    item_type
+                ))),
+                "{item_type}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_announcement_mapped_location_and_shareplay_are_not_events() {
+        let mut location = Message::blank();
+        location.item_type = 4;
+        location.share_status = 1;
+        location.share_direction = Some(0);
+        assert!(location.get_announcement().is_none());
+
+        let mut shareplay = Message::blank();
+        shareplay.item_type = 6;
+        assert!(shareplay.get_announcement().is_none());
+    }
+}
+
+#[cfg(test)]
+mod unattributed_tests {
+    use plist::{Dictionary, Value};
+
+    use crate::tables::messages::message::Message;
+
+    /// Build a binary `message_summary_info` plist with `uat` set to `value`;
+    /// omit the key for `None`.
+    fn summary(value: Option<Value>) -> Vec<u8> {
+        let mut dict = Dictionary::new();
+        dict.insert("ams".to_string(), Value::String("Sender".to_string()));
+        if let Some(value) = value {
+            dict.insert("uat".to_string(), value);
+        }
+        let mut bytes = vec![];
+        Value::Dictionary(dict)
+            .to_writer_binary(&mut bytes)
+            .unwrap();
+        bytes
+    }
+
+    fn parsed(item_type: i32, summary: Option<&[u8]>) -> Message {
+        let mut msg = Message::blank();
+        msg.item_type = item_type;
+        msg.parse_body(None, summary, false);
+        msg
+    }
+
+    #[test]
+    fn group_events_read_uat_true() {
+        let bytes = summary(Some(Value::Boolean(true)));
+        for item_type in 1..=3 {
+            assert!(
+                parsed(item_type, Some(&bytes)).is_unattributed,
+                "{item_type}"
+            );
+        }
+    }
+
+    #[test]
+    fn group_events_read_nonzero_integer_uat() {
+        let bytes = summary(Some(Value::Integer(1.into())));
+        assert!(parsed(1, Some(&bytes)).is_unattributed);
+    }
+
+    #[test]
+    fn group_events_reject_false_and_zero_uat() {
+        for value in [Value::Boolean(false), Value::Integer(0.into())] {
+            let bytes = summary(Some(value));
+            assert!(!parsed(1, Some(&bytes)).is_unattributed);
+        }
+    }
+
+    #[test]
+    fn group_events_without_uat_are_attributed() {
+        let bytes = summary(None);
+        assert!(!parsed(1, Some(&bytes)).is_unattributed);
+        assert!(!parsed(1, None).is_unattributed);
+        assert!(!parsed(1, Some(&[0, 1, 2])).is_unattributed);
+    }
+
+    #[test]
+    fn other_item_types_ignore_uat() {
+        let bytes = summary(Some(Value::Boolean(true)));
+        for item_type in [0, 4, 5, 6] {
+            assert!(
+                !parsed(item_type, Some(&bytes)).is_unattributed,
+                "{item_type}"
+            );
+        }
     }
 }

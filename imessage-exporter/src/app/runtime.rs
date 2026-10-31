@@ -769,10 +769,11 @@ impl Config {
             is_read: false,
             item_type: 0,
             other_handle: None,
-            share_status: false,
+            share_status: 0,
             share_direction: None,
             group_title: None,
             group_action_type: 0,
+            message_action_type: 0,
             associated_message_guid: None,
             associated_message_type: Some(i32::default()),
             balloon_bundle_id: None,
@@ -789,6 +790,8 @@ impl Config {
             filter_sub_action: None,
             components: vec![],
             edited_parts: None,
+            is_unattributed: false,
+            conversation_av_mode: None,
         }
     }
 

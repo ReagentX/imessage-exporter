@@ -42,6 +42,8 @@ pub const DEFAULT_SMS_ROOT: &str = "~/Library/SMS";
 pub const DEFAULT_ATTACHMENT_ROOT: &str = "~/Library/Messages/Attachments";
 /// Default macOS sticker cache root.
 pub const DEFAULT_STICKER_CACHE_ROOT: &str = "~/Library/Messages/StickerCache";
+/// Transfer name for an RCS business's brand logo in Messages (`IMFileTransferBrandLogoName`).
+const BRAND_LOGO_TRANSFER_NAME: &str = "BrandLogoImage";
 /// Recognized `attachment` columns in canonical projection order.
 pub(crate) const ATTACHMENT_COLUMNS: [&str; 10] = [
     "rowid",
@@ -275,6 +277,17 @@ impl Attachment {
                 self.mime_type(),
                 MediaType::Image("heics" | "HEICS" | "heic-sequence") | MediaType::Video(_),
             )
+    }
+
+    /// `true` for an RCS business's brand-logo attachment with
+    /// [`transfer_name`](Self::transfer_name) `BrandLogoImage`
+    /// (`IMFileTransferBrandLogoName`).
+    ///
+    /// In Messages, this name is used only for brand-logo updates. During
+    /// sync, the same file is restored under the same name.
+    #[must_use]
+    pub fn is_brand_logo(&self) -> bool {
+        self.transfer_name.as_deref() == Some(BRAND_LOGO_TRANSFER_NAME)
     }
 
     /// Read the attachment file into memory.
@@ -697,6 +710,19 @@ mod tests {
             hide_attachment: 0,
             emoji_description: None,
         }
+    }
+
+    #[test]
+    fn can_identify_brand_logo() {
+        let mut attachment = sample_attachment();
+        attachment.transfer_name = Some("BrandLogoImage".to_string());
+        assert!(attachment.is_brand_logo());
+    }
+
+    #[test]
+    fn cant_identify_brand_logo_other_transfer_name() {
+        let attachment = sample_attachment();
+        assert!(!attachment.is_brand_logo());
     }
 
     #[test]

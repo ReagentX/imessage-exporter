@@ -196,7 +196,10 @@ use crate::{
         polls::Poll,
         text_effects::text_effect::TextEffect,
         translation::Translation,
-        variants::{Announcement, BalloonProvider, CustomBalloon, Tapback, TapbackAction, Variant},
+        variants::{
+            Announcement, BalloonProvider, CustomBalloon, KeptMessage, Tapback, TapbackAction,
+            UnknownEvent, Variant,
+        },
     },
     tables::{
         capabilities::Capabilities,
@@ -204,7 +207,10 @@ use crate::{
         messages::{
             body::{parse_body_legacy, parse_body_typedstream},
             columns::MessageColumns,
-            models::{BubbleComponent, FilterAction, GroupAction, Service, SharedLocation},
+            models::{
+                BubbleComponent, ConversationAVMode, FilterAction, GroupAction, Service,
+                SharedLocation,
+            },
             query_parts::{from_clause, message_query, prepare_message_query},
         },
         table::{
@@ -251,14 +257,17 @@ pub struct Message {
     pub item_type: i32,
     /// Additional handle used by shared-location and group-action messages.
     pub other_handle: Option<i32>,
-    /// Shared-location active/inactive flag.
-    pub share_status: bool,
-    /// Shared-location direction flag.
-    pub share_direction: Option<bool>,
+    /// Shared-location status code: `0` when sharing started, `1` when it stopped.
+    pub share_status: i32,
+    /// Shared-location direction code.
+    pub share_direction: Option<i32>,
     /// Group title carried by group-name-change messages.
     pub group_title: Option<String>,
     /// Group action code.
     pub group_action_type: i32,
+    /// Message action code; on a kept-message row (`item_type` 5), the kind
+    /// of message kept ([`KeptMessage`]).
+    pub message_action_type: i32,
     /// GUID of the message this row references.
     pub associated_message_guid: Option<String>,
     /// Type code for the associated message, used by [`variant`](Self::variant).
@@ -296,6 +305,15 @@ pub struct Message {
     pub components: Vec<BubbleComponent>,
     /// Parsed edit/unsent metadata from `message_summary_info`.
     pub edited_parts: Option<EditedMessage>,
+    /// `true` for a group event (`item_type` 1–3) with `true` or a nonzero
+    /// integer under `uat` in `message_summary_info`.
+    /// `false` for every other `item_type`.
+    pub is_unattributed: bool,
+    /// `conversationAVMode` from `message_summary_info` on a FaceTime or
+    /// SharePlay row (`item_type` 6). `None` for every other `item_type`, and
+    /// when the key is absent or not an unsigned integer. The default mode
+    /// in Messages for an absent key is [`ConversationAVMode::Video`].
+    pub conversation_av_mode: Option<ConversationAVMode>,
 }
 
 // MARK: Rows
@@ -487,30 +505,64 @@ impl Message {
     }
 }
 
+/// Decode an unsigned `conversationAVMode` integer from `message_summary_info`.
+fn read_av_mode(summary: &Value) -> Option<ConversationAVMode> {
+    ConversationAVMode::from_code(
+        summary
+            .as_dictionary()?
+            .get("conversationAVMode")?
+            .as_unsigned_integer(),
+    )
+}
+
+/// `true` for `true` or a nonzero integer under `uat` in `message_summary_info`.
+fn marks_unattributed(summary: &Value) -> bool {
+    match summary.as_dictionary().and_then(|dict| dict.get("uat")) {
+        Some(Value::Boolean(flag)) => *flag,
+        Some(Value::Integer(int)) => int.as_signed() != Some(0),
+        _ => false,
+    }
+}
+
 // MARK: Impl
 impl Message {
     // MARK: Text Gen
     /// Populate body fields from supplied bytes without reading the database.
     ///
-    /// `None` represents an absent or unreadable input. `has_payload` is the
+    /// Use `None` for an absent or unreadable input. `has_payload` is the
     /// non-nullness of `payload_data`, including non-blob values.
-    /// Edit-summary bytes are parsed only when [`Self::is_edited`] is true.
+    /// Parse summary bytes only for:
     ///
-    /// Parsing is best effort: text recovery failures preserve parsed body
-    /// components and edit metadata.
+    /// - edited messages ([`Self::is_edited`]), to populate [`Self::edited_parts`];
+    /// - group events (`item_type` 1–3), to populate [`Self::is_unattributed`];
+    /// - FaceTime or SharePlay rows (`item_type` 6), to populate [`Self::conversation_av_mode`].
+    ///
+    /// Parsing is best effort: preserve parsed body components and edit
+    /// metadata if text cannot be recovered.
     pub(super) fn parse_body(
         &mut self,
         attributed_body: Option<&[u8]>,
         message_summary_info: Option<&[u8]>,
         has_payload: bool,
     ) {
-        let edited_parts = self
-            .is_edited()
+        // Check whether summary fields are needed before parsing the plist: we decode every row here.
+        let is_group_event = matches!(self.item_type, 1..=3);
+        let is_shareplay = self.is_shareplay();
+        let is_edited = self.is_edited();
+        let summary = (is_group_event || is_shareplay || is_edited)
             .then_some(message_summary_info)
             .flatten()
-            .and_then(|bytes| Value::from_reader(Cursor::new(bytes)).ok())
+            .and_then(|bytes| Value::from_reader(Cursor::new(bytes)).ok());
+
+        let edited_parts = summary
             .as_ref()
+            .filter(|_| is_edited)
             .and_then(|payload| EditedMessage::from_map(payload).ok());
+        let is_unattributed = is_group_event && summary.as_ref().is_some_and(marks_unattributed);
+        let conversation_av_mode = summary
+            .as_ref()
+            .filter(|_| is_shareplay)
+            .and_then(read_av_mode);
 
         // Initialize variables for the text, components, and balloon bundle ID that will be parsed from the body
         let mut text = None;
@@ -576,6 +628,8 @@ impl Message {
         self.components = components;
         self.edited_parts = edited_parts;
         self.balloon_bundle_id = balloon_bundle_id;
+        self.is_unattributed = is_unattributed;
+        self.conversation_av_mode = conversation_av_mode;
     }
 
     // MARK: Dates
@@ -748,9 +802,9 @@ impl Message {
         self.num_replies > 0
     }
 
-    /// `true` when the message indicates a sent audio message was kept.
+    /// `true` for kept-message rows (`item_type` 5).
     #[must_use]
-    pub fn is_kept_audio_message(&self) -> bool {
+    pub fn is_kept_message(&self) -> bool {
         self.item_type == 5
     }
 
@@ -769,24 +823,27 @@ impl Message {
             && let (Some(other_handle), Some(share_direction)) =
                 (self.other_handle, self.share_direction)
         {
-            self.is_from_me || other_handle != 0 && !share_direction
+            self.is_from_me || other_handle != 0 && share_direction == 0
         } else {
             self.is_from_me
         }
     }
 
-    /// Returns the [`SharedLocation`] when the message is a legacy
-    /// shared-location event.
+    /// Return the [`SharedLocation`] for a legacy shared-location event.
+    ///
+    /// Return `None` unless [`share_status`](Self::share_status) and
+    /// [`share_direction`](Self::share_direction) are both `0` or `1`: those
+    /// are the only pairs with started or stopped text in Messages. Treat a
+    /// `NULL` direction as `0`, matching an integer read of `NULL`.
     #[must_use]
     pub fn shared_location_kind(&self) -> Option<SharedLocation> {
-        if self.item_type == 4 && self.group_action_type == 0 {
-            Some(if self.share_status {
-                SharedLocation::Stopped
-            } else {
-                SharedLocation::Started
-            })
-        } else {
-            None
+        if self.item_type != 4 || !matches!(self.share_direction, None | Some(0 | 1)) {
+            return None;
+        }
+        match self.share_status {
+            0 => Some(SharedLocation::Started),
+            1 => Some(SharedLocation::Stopped),
+            _ => None,
         }
     }
 
@@ -1248,11 +1305,27 @@ impl Message {
             return Some(Announcement::FullyUnsent);
         }
 
-        if self.is_kept_audio_message() {
-            return Some(Announcement::AudioMessageKept);
+        if self.is_kept_message() {
+            return Some(Announcement::MessageKept(KeptMessage::from_code(
+                self.message_action_type,
+            )));
         }
 
-        None
+        let unknown = match self.item_type {
+            // All type-2 rows are handled in `group_action`; only unmapped type-1 and type-3
+            // group events remain here.
+            1 | 3 => UnknownEvent::Group {
+                item_type: self.item_type,
+                group_action_type: self.group_action_type,
+            },
+            4 if self.shared_location_kind().is_none() => UnknownEvent::Location {
+                share_status: self.share_status,
+                share_direction: self.share_direction,
+            },
+            0..=6 => return None,
+            other => UnknownEvent::ItemType(other),
+        };
+        Some(Announcement::UnknownEvent(unknown))
     }
 
     /// Parse the message service.
@@ -1417,10 +1490,11 @@ impl Message {
             is_read: false,
             item_type: 0,
             other_handle: None,
-            share_status: false,
+            share_status: 0,
             share_direction: None,
             group_title: None,
             group_action_type: 0,
+            message_action_type: 0,
             associated_message_guid: None,
             associated_message_type: None,
             balloon_bundle_id: None,
@@ -1437,6 +1511,8 @@ impl Message {
             filter_sub_action: None,
             components: vec![],
             edited_parts: None,
+            is_unattributed: false,
+            conversation_av_mode: None,
         }
     }
 }
@@ -1495,5 +1571,56 @@ mod diagnostic_tests {
         let diagnostic = Message::run_diagnostic(&db).unwrap();
 
         assert_eq!(diagnostic.recoverable_messages, Some(1));
+    }
+}
+
+#[cfg(test)]
+mod shared_location_tests {
+    use crate::tables::messages::{Message, models::SharedLocation};
+
+    fn location(status: i32, direction: Option<i32>) -> Message {
+        let mut message = Message::blank();
+        message.item_type = 4;
+        message.share_status = status;
+        message.share_direction = direction;
+        message
+    }
+
+    #[test]
+    fn maps_status_and_direction_zero_or_one() {
+        for direction in [0, 1] {
+            assert_eq!(
+                location(0, Some(direction)).shared_location_kind(),
+                Some(SharedLocation::Started)
+            );
+            assert_eq!(
+                location(1, Some(direction)).shared_location_kind(),
+                Some(SharedLocation::Stopped)
+            );
+        }
+    }
+
+    #[test]
+    fn maps_null_direction_as_zero() {
+        assert_eq!(
+            location(1, None).shared_location_kind(),
+            Some(SharedLocation::Stopped)
+        );
+    }
+
+    #[test]
+    fn maps_regardless_of_group_action_type() {
+        let mut message = location(1, Some(0));
+        message.group_action_type = 1;
+        assert_eq!(
+            message.shared_location_kind(),
+            Some(SharedLocation::Stopped)
+        );
+    }
+
+    #[test]
+    fn leaves_other_status_or_direction_unmapped() {
+        assert_eq!(location(2, Some(0)).shared_location_kind(), None);
+        assert_eq!(location(0, Some(2)).shared_location_kind(), None);
     }
 }

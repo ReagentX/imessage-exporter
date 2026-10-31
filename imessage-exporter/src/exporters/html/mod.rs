@@ -39,7 +39,10 @@ use imessage_database::{
         attachment::{Attachment, MediaType},
         messages::{
             Message,
-            models::{AttachmentMeta, AttributedRange, BubbleComponent, SharedLocation},
+            models::{
+                AttachmentMeta, AttributedRange, BubbleComponent, ConversationAVMode,
+                SharedLocation,
+            },
         },
     },
 };
@@ -182,8 +185,11 @@ impl<'a> MessageFormatter<'a> for HTML<'a> {
         }
     }
 
-    fn format_shareplay(&self) -> &'static str {
-        "<hr>SharePlay Message Ended"
+    fn format_shareplay(&self, msg: &Message) -> &'static str {
+        match msg.conversation_av_mode {
+            Some(ConversationAVMode::AVLess) => "<hr>SharePlay Message Ended",
+            _ => "<hr>FaceTime Call Ended",
+        }
     }
 
     fn format_shared_location(&self, kind: SharedLocation) -> &'static str {
@@ -438,7 +444,7 @@ impl<'a> MessageFormatter<'a> for HTML<'a> {
             subject: message.subject.as_deref(),
             shareplay: message
                 .is_shareplay()
-                .then(|| Html::trust(self.format_shareplay())),
+                .then(|| Html::trust(self.format_shareplay(message))),
             shared_location: message
                 .shared_location_kind()
                 .map(|kind| Html::trust(self.format_shared_location(kind))),

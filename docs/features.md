@@ -112,7 +112,8 @@ This tool targets the current latest public release for Messages.app. It may wor
   - Supports system message types as well as third party [applications](https://support.apple.com/en-us/104969)
     - Apple Fitness messages
     - Photo Slideshow messages
-    - SharePlay/Facetime messages
+    - FaceTime and SharePlay messages
+      - FaceTime or SharePlay labels based on the call's audio and video mode, matching the labels in Messages
     - Check In messages
     - Find My messages
     - Polls and Votes
@@ -148,7 +149,12 @@ This tool targets the current latest public release for Messages.app. It may wor
   - See [the duplicate problem](tables/duplicates.md) for the mechanism
 - Announcements
   - Handles all types of chatroom announcements
-    - Group photo changes
+    - Group photo changes, including changes recorded in Messages but hidden from the conversation
+      - Business named as the actor for brand logo updates
+    - Group name changes, including removing the name
     - Chat participant modifications
     - Phone number changes
-    - Chat background settings
+    - Kept audio, video, and app messages
+    - Chat background settings, including backgrounds marked as possibly sensitive in Messages and changes recorded but hidden from the conversation
+    - No actor attribution for group changes recorded without an actor in Messages
+    - Unknown group, location sharing, and other events, with raw codes for rows displayed without text in Messages

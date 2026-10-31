@@ -1,7 +1,10 @@
 use askama::Template;
 
 use imessage_database::{
-    message_types::{expressives::Expressive, variants::Announcement},
+    message_types::{
+        expressives::Expressive,
+        variants::{Announcement, KeptMessage, UnknownEvent},
+    },
     tables::messages::models::{GroupAction, Service},
 };
 
@@ -318,7 +321,7 @@ pub(super) struct MessageVM<'a> {
     pub sender: &'a str,
     pub is_deleted: bool,
     pub subject: Option<&'a str>,
-    /// SharePlay marker
+    /// FaceTime or SharePlay marker
     pub shareplay: Option<Html<&'static str>>,
     /// Shared-location marker
     pub shared_location: Option<Html<&'static str>>,
