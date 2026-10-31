@@ -16,7 +16,7 @@ use imessage_database::{
     tables::{
         messages::{
             Message,
-            models::{AttachmentMeta, AttributedRange, BubbleComponent},
+            models::{AttachmentMeta, AttributedRange, BubbleComponent, ConversationAVMode},
         },
         table::FITNESS_RECEIVER,
     },
@@ -143,6 +143,22 @@ fn can_format_html_from_them_custom_name_read() {
     assert_eq!(actual, expected);
 }
 
+/// FaceTime or SharePlay row at `SAMPLE_DATE` carrying `mode`.
+fn conversation(mode: Option<ConversationAVMode>) -> Message {
+    let mut message = Config::fake_message();
+    message.date = SAMPLE_DATE;
+    message.item_type = 6;
+    message.conversation_av_mode = mode;
+    message
+}
+
+/// Rendered HTML for a FaceTime or SharePlay row whose marker is `marker`.
+fn conversation_html(marker: &str) -> String {
+    format!(
+        "<div class=\"message\">\n    <div class=\"received\">\n        <p>\n            <span class=\"timestamp\">\n                <a title=\"Reveal in Messages app\" href=\"sms://open?message-guid=\">May 17, 2022  5:29:42 PM</a>\n                \n            </span>\n            \n            <span class=\"sender\">Me</span>\n        </p>\n        \n        \n        \n        <span class=\"shareplay\">{marker}</span>\n        \n        \n        \n        \n    </div>\n</div>\n"
+    )
+}
+
 #[test]
 fn can_format_html_shareplay() {
     let mut config = config(ExportType::Html);
@@ -150,14 +166,30 @@ fn can_format_html_shareplay() {
 
     let exporter = HTML::new(&config).unwrap();
 
-    let mut message = Config::fake_message();
-    message.date = SAMPLE_DATE;
-    message.item_type = 6;
+    let message = conversation(Some(ConversationAVMode::AVLess));
 
     let actual = render(&exporter, &message);
-    let expected = "<div class=\"message\">\n    <div class=\"received\">\n        <p>\n            <span class=\"timestamp\">\n                <a title=\"Reveal in Messages app\" href=\"sms://open?message-guid=\">May 17, 2022  5:29:42 PM</a>\n                \n            </span>\n            \n            <span class=\"sender\">Me</span>\n        </p>\n        \n        \n        \n        <span class=\"shareplay\"><hr>SharePlay Message Ended</span>\n        \n        \n        \n        \n    </div>\n</div>\n";
+    let expected = conversation_html("<hr>SharePlay Message Ended");
 
     assert_eq!(actual, expected);
+}
+
+#[test]
+fn can_format_html_facetime() {
+    let mut config = config(ExportType::Html);
+    with_me(&mut config);
+
+    let exporter = HTML::new(&config).unwrap();
+
+    let expected = conversation_html("<hr>FaceTime Call Ended");
+    for mode in [
+        Some(ConversationAVMode::Audio),
+        Some(ConversationAVMode::Video),
+        Some(ConversationAVMode::Unknown(3)),
+        None,
+    ] {
+        assert_eq!(render(&exporter, &conversation(mode)), expected, "{mode:?}");
+    }
 }
 
 #[test]

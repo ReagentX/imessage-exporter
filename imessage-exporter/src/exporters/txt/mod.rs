@@ -26,7 +26,7 @@ use imessage_database::{
         attachment::Attachment,
         messages::{
             Message,
-            models::{AttachmentMeta, AttributedRange, SharedLocation},
+            models::{AttachmentMeta, AttributedRange, ConversationAVMode, SharedLocation},
         },
     },
 };
@@ -150,8 +150,11 @@ impl<'a> MessageFormatter<'a> for TXT<'a> {
         render_template_into(&AnnouncementVM { kind }, out);
     }
 
-    fn format_shareplay(&self) -> &'static str {
-        "SharePlay Message\nEnded"
+    fn format_shareplay(&self, msg: &Message) -> &'static str {
+        match msg.conversation_av_mode {
+            Some(ConversationAVMode::AVLess) => "SharePlay Message\nEnded",
+            _ => "FaceTime\nCall Ended",
+        }
     }
 
     fn format_shared_location(&self, kind: SharedLocation) -> &'static str {
@@ -315,7 +318,9 @@ impl<'a> MessageFormatter<'a> for TXT<'a> {
             ),
             is_deleted: message.is_deleted(),
             subject: message.subject.as_deref(),
-            shareplay: message.is_shareplay().then(|| self.format_shareplay()),
+            shareplay: message
+                .is_shareplay()
+                .then(|| self.format_shareplay(message)),
             shared_location: message
                 .shared_location_kind()
                 .map(|kind| self.format_shared_location(kind)),

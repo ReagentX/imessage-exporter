@@ -351,6 +351,7 @@ impl Message {
             components: vec![],
             edited_parts: None,
             is_unattributed: false,
+            conversation_av_mode: None,
         };
         message.parse_body(
             bytes(row, columns.attributed_body),
@@ -413,6 +414,7 @@ mod tests {
                 components: vec![],
                 edited_parts: None,
                 is_unattributed: false,
+                conversation_av_mode: None,
             };
             let column = |name| row.as_ref().column_index(name).ok();
             message.parse_body(
@@ -572,6 +574,10 @@ mod tests {
         assert_eq!(
             mapped.is_unattributed, named.is_unattributed,
             "is_unattributed"
+        );
+        assert_eq!(
+            mapped.conversation_av_mode, named.conversation_av_mode,
+            "conversation_av_mode"
         );
         assert_eq!(mapped.rowid, named.rowid, "rowid");
         assert_eq!(mapped.guid, named.guid, "guid");

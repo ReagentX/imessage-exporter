@@ -318,7 +318,7 @@ pub(super) struct MessageVM<'a> {
     pub sender: &'a str,
     pub is_deleted: bool,
     pub subject: Option<&'a str>,
-    /// SharePlay marker
+    /// FaceTime or SharePlay marker
     pub shareplay: Option<Html<&'static str>>,
     /// Shared-location marker
     pub shared_location: Option<Html<&'static str>>,

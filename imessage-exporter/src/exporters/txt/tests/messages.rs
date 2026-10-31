@@ -10,7 +10,10 @@ use crate::{
 };
 
 use imessage_database::tables::{
-    messages::{Message, models::BubbleComponent},
+    messages::{
+        Message,
+        models::{BubbleComponent, ConversationAVMode},
+    },
     table::FITNESS_RECEIVER,
 };
 
@@ -171,6 +174,15 @@ fn can_format_txt_from_them_custom_name_read() {
     assert_eq!(actual, expected);
 }
 
+/// FaceTime or SharePlay row at `SAMPLE_DATE` carrying `mode`.
+fn conversation(mode: Option<ConversationAVMode>) -> Message {
+    let mut message = Config::fake_message();
+    message.date = SAMPLE_DATE;
+    message.item_type = 6;
+    message.conversation_av_mode = mode;
+    message
+}
+
 #[test]
 fn can_format_txt_shareplay() {
     let mut config = config(ExportType::Txt);
@@ -178,14 +190,30 @@ fn can_format_txt_shareplay() {
 
     let exporter = TXT::new(&config).unwrap();
 
-    let mut message = Config::fake_message();
-    message.date = SAMPLE_DATE;
-    message.item_type = 6;
+    let message = conversation(Some(ConversationAVMode::AVLess));
 
     let actual = render(&exporter, &message);
     let expected = "May 17, 2022  5:29:42 PM\nMe\nSharePlay Message\nEnded\n\n";
 
     assert_eq!(actual, expected);
+}
+
+#[test]
+fn can_format_txt_facetime() {
+    let mut config = config(ExportType::Txt);
+    with_me(&mut config);
+
+    let exporter = TXT::new(&config).unwrap();
+
+    let expected = "May 17, 2022  5:29:42 PM\nMe\nFaceTime\nCall Ended\n\n";
+    for mode in [
+        Some(ConversationAVMode::Audio),
+        Some(ConversationAVMode::Video),
+        Some(ConversationAVMode::Unknown(3)),
+        None,
+    ] {
+        assert_eq!(render(&exporter, &conversation(mode)), expected, "{mode:?}");
+    }
 }
 
 #[test]

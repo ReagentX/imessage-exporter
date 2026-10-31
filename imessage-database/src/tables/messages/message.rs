@@ -204,7 +204,10 @@ use crate::{
         messages::{
             body::{parse_body_legacy, parse_body_typedstream},
             columns::MessageColumns,
-            models::{BubbleComponent, FilterAction, GroupAction, Service, SharedLocation},
+            models::{
+                BubbleComponent, ConversationAVMode, FilterAction, GroupAction, Service,
+                SharedLocation,
+            },
             query_parts::{from_clause, message_query, prepare_message_query},
         },
         table::{
@@ -300,6 +303,11 @@ pub struct Message {
     /// as unattributed: its `uat` key holds `true` or a nonzero integer.
     /// `false` for every other `item_type`.
     pub is_unattributed: bool,
+    /// `conversationAVMode` from `message_summary_info` on a FaceTime or
+    /// SharePlay row (`item_type` 6). `None` for every other `item_type`, and
+    /// when the key is absent or not an unsigned integer; Messages reads an
+    /// absent key as [`ConversationAVMode::Video`].
+    pub conversation_av_mode: Option<ConversationAVMode>,
 }
 
 // MARK: Rows
@@ -491,6 +499,17 @@ impl Message {
     }
 }
 
+/// `conversationAVMode` of a `message_summary_info` payload, when it holds an
+/// unsigned integer.
+fn read_av_mode(summary: &Value) -> Option<ConversationAVMode> {
+    ConversationAVMode::from_code(
+        summary
+            .as_dictionary()?
+            .get("conversationAVMode")?
+            .as_unsigned_integer(),
+    )
+}
+
 /// `true` when a `message_summary_info` payload's `uat` key holds `true` or a
 /// nonzero integer.
 fn marks_unattributed(summary: &Value) -> bool {
@@ -509,8 +528,9 @@ impl Message {
     /// `None` represents an absent or unreadable input. `has_payload` is the
     /// non-nullness of `payload_data`, including non-blob values.
     /// Summary bytes are parsed only when [`Self::is_edited`] is true or
-    /// `item_type` is 1–3; they populate [`Self::edited_parts`] and
-    /// [`Self::is_unattributed`] respectively.
+    /// `item_type` is 1–3 or 6; they populate [`Self::edited_parts`],
+    /// [`Self::is_unattributed`], and [`Self::conversation_av_mode`]
+    /// respectively.
     ///
     /// Parsing is best effort: text recovery failures preserve parsed body
     /// components and edit metadata.
@@ -521,10 +541,11 @@ impl Message {
         has_payload: bool,
     ) {
         // Every row passes through here; the integer checks keep the plist
-        // parse off rows that read neither field.
+        // parse off rows that read none of its fields.
         let is_group_event = matches!(self.item_type, 1..=3);
+        let is_shareplay = self.is_shareplay();
         let is_edited = self.is_edited();
-        let summary = (is_group_event || is_edited)
+        let summary = (is_group_event || is_shareplay || is_edited)
             .then_some(message_summary_info)
             .flatten()
             .and_then(|bytes| Value::from_reader(Cursor::new(bytes)).ok());
@@ -534,6 +555,10 @@ impl Message {
             .filter(|_| is_edited)
             .and_then(|payload| EditedMessage::from_map(payload).ok());
         let is_unattributed = is_group_event && summary.as_ref().is_some_and(marks_unattributed);
+        let conversation_av_mode = summary
+            .as_ref()
+            .filter(|_| is_shareplay)
+            .and_then(read_av_mode);
 
         // Initialize variables for the text, components, and balloon bundle ID that will be parsed from the body
         let mut text = None;
@@ -600,6 +625,7 @@ impl Message {
         self.edited_parts = edited_parts;
         self.balloon_bundle_id = balloon_bundle_id;
         self.is_unattributed = is_unattributed;
+        self.conversation_av_mode = conversation_av_mode;
     }
 
     // MARK: Dates
@@ -1462,6 +1488,7 @@ impl Message {
             components: vec![],
             edited_parts: None,
             is_unattributed: false,
+            conversation_av_mode: None,
         }
     }
 }

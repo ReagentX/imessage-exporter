@@ -790,6 +790,7 @@ impl Config {
             components: vec![],
             edited_parts: None,
             is_unattributed: false,
+            conversation_av_mode: None,
         }
     }
 

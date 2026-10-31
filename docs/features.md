@@ -112,7 +112,8 @@ This tool targets the current latest public release for Messages.app. It may wor
   - Supports system message types as well as third party [applications](https://support.apple.com/en-us/104969)
     - Apple Fitness messages
     - Photo Slideshow messages
-    - SharePlay/Facetime messages
+    - FaceTime and SharePlay messages
+      - Labeled FaceTime or SharePlay from the call's audio and video mode, as in Messages
     - Check In messages
     - Find My messages
     - Polls and Votes
