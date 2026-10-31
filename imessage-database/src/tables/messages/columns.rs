@@ -1,13 +1,14 @@
 /*!
  Column layout resolution and row decoding for the `message` table.
 
- To decode a [`Message`], read 38 columns whose ordinals differ per schema.
- In the composed query, the recognized columns are projected contiguously;
- in custom queries (such as `m.*` projections), derived columns may appear
- after every `message` column. To decode by name, we must scan the result-column
- names for each field of every row. Resolve the mapping once per statement
- through [`MessageColumns`] to avoid these repeated scans, then decode by
- ordinal. Reject layouts with missing required columns before decoding any rows.
+ To decode a [`Message`], read 38 columns at schema-specific ordinals.
+ In the composed query, we project the recognized columns contiguously.
+ In custom queries (such as `m.*` projections), we may need to read derived
+ columns after all columns in `message`. To decode by name, we must scan the
+ result-column names for each field of every row. Resolve the mapping once
+ per statement through [`MessageColumns`] to avoid these repeated scans, then
+ decode by ordinal. Reject layouts with missing required columns before
+ decoding any rows.
 */
 
 use rusqlite::{

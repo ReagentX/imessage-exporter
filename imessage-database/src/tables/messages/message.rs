@@ -810,10 +810,10 @@ impl Message {
         self.item_type == 5
     }
 
-    /// `true` for a failed group event: `item_type` 1–3 with non-zero low 32
-    /// bits in [`error`](Self::error), the test Messages applies to these rows.
-    /// `false` for every other row: non-zero `error` values also occur on other
-    /// item types, but their meaning there is unverified.
+    /// `true` for a failed group event: `item_type` 1–3 with nonzero low 32
+    /// bits in [`error`](Self::error), matching the check in Messages.
+    /// `false` for every other row: we have not verified the meaning of
+    /// nonzero `error` values for other item types.
     #[must_use]
     pub fn is_failed(&self) -> bool {
         matches!(self.item_type, 1..=3) && self.error & 0xFFFF_FFFF != 0

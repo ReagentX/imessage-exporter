@@ -76,14 +76,14 @@ impl<'a> From<ResolvedAnnouncement<'a>> for AnnouncementBody<'a> {
 ///
 /// - `None` for an [`Announcement::UnknownEvent`]: the actor is unknown
 ///   because no producer is known for these codes;
-/// - `None` for [`Announcement::EmergencyLocationSent`]: Apple's only wording
-///   for it names no actor;
+/// - `None` for [`Announcement::EmergencyLocationSent`]: no actor in Apple's
+///   only wording for this event;
 /// - `None` for an unattributed group event ([`Message::is_unattributed`]),
 ///   displayed with no actor in Messages. For [`GroupAction::ParticipantLeft`]
 ///   and [`GroupAction::PhoneNumberChanged`], use the event's subject as its
 ///   actor regardless of the flag;
 /// - the business for an RCS business's brand-logo update (see `brand_handle`);
-/// - the database owner, as for a message from them, for a
+/// - the database owner, with their usual message display name, for a
 ///   [`GroupAction::ParticipantLeft`] sent by an Apple Messages for Business
 ///   handle (see `is_business_leave`);
 /// - the message's sender.
@@ -153,13 +153,14 @@ fn is_unattributed(msg: &Message, announcement: &Announcement) -> bool {
 /// `true` for a [`GroupAction::ParticipantLeft`] whose sender is an Apple
 /// Messages for Business handle.
 ///
-/// iMessage writes this row with the business conversation ID as its sender
-/// when a business chat session closes; Messages displays it as the database
-/// owner leaving. The sender is a business when every `handle.id` in its
-/// handle group passes [`is_business_id`]: [`Config`] keeps addresses per
-/// group, not per handle, so a business handle grouped with another kind of
-/// address stays the actor. Contacts never match a business ID, so only a
-/// shared `person_centric_id` can form such a group.
+/// For business chat session closures, the sender is the business conversation
+/// ID. Use the database owner as the actor to match Messages.
+///
+/// Require every `handle.id` in the sender's group to be a business ID
+/// ([`is_business_id`]). In [`Config`], we store addresses per group, so retain
+/// the sender as the actor when grouped with any other address type. Such
+/// mixed groups are possible only through a shared `person_centric_id`;
+/// business IDs cannot be matched through Contacts.
 fn is_business_leave(msg: &Message, announcement: &Announcement, config: &Config) -> bool {
     matches!(
         announcement,
@@ -172,9 +173,8 @@ fn is_business_leave(msg: &Message, announcement: &Announcement, config: &Config
         })
 }
 
-/// `true` when `id`, a `handle.id` value, starts with `urn:biz:` or `biz:`,
-/// ignoring ASCII case: the prefixes Messages uses to identify an Apple
-/// Messages for Business ID.
+/// `true` for an Apple Messages for Business ID: a `handle.id` value with an
+/// `urn:biz:` or `biz:` prefix, ignoring ASCII case.
 fn is_business_id(id: &str) -> bool {
     ["urn:biz:", "biz:"].iter().any(|prefix| {
         id.get(..prefix.len())

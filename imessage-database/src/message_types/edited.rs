@@ -65,8 +65,8 @@ pub struct EditedMessagePart {
     pub status: EditStatus,
     /// Historical edit entries for this part.
     pub edit_history: Vec<EditedEvent>,
-    /// `true` when this part's index is listed under `rdfp`, where Messages
-    /// stores the indexes of parts whose unsend failed to deliver.
+    /// `true` for a part whose index is listed under `rdfp`: an unsend
+    /// delivery failure.
     pub unsend_failed: bool,
 }
 
@@ -95,9 +95,9 @@ impl Default for EditedMessagePart {
 ///
 /// - `otr`: dictionary of message part indexes.
 /// - `rp`: list of unsent message part indexes.
-/// - `rdfp`: list of message part indexes whose unsend failed to deliver.
-/// - `euh`: list of handle IDs of recipients whose devices do not support
-///   edit and unsend; one list per message, shared by edits and unsends.
+/// - `rdfp`: list of indexes for parts with failed unsend delivery.
+/// - `euh`: list of handle IDs for recipients using devices without edit
+///   and unsend support; one list per message for both edits and unsends.
 /// - `ec`: dictionary of edited message part indexes to edit history arrays.
 /// - Each `ec` item stores `d` (edit timestamp) and `t` (edited
 ///   `attributedBody` typedstream).
@@ -109,9 +109,10 @@ impl Default for EditedMessagePart {
 pub struct EditedMessage {
     /// One entry per message body part.
     pub parts: Vec<EditedMessagePart>,
-    /// Handle IDs (the `handle.id` form: phone number or email address)
-    /// listed under `euh`, in stored order: recipients whose devices Messages
-    /// recorded as not supporting edit and unsend. Empty when the key is absent.
+    /// Recipient handle IDs (phone numbers or email addresses in `handle.id`
+    /// form) from `euh`, in stored order. These recipients are recorded in
+    /// Messages as using devices without edit and unsend support.
+    /// Empty when the key is absent.
     pub unsupported_handles: Vec<String>,
 }
 
@@ -200,8 +201,8 @@ impl<'a> BalloonProvider<'a> for EditedMessage {
             }
         }
 
-        // `rdfp` and `euh` are delivery metadata: skip malformed elements
-        // instead of failing, so they cannot discard the edit history above.
+        // Skip malformed elements in the `rdfp` and `euh` delivery metadata
+        // to preserve the edit history already parsed above.
         if let Ok(failed_message_indexes) = extract_array_key(plist_root, "rdfp") {
             for failed_message_idx in failed_message_indexes
                 .iter()
@@ -694,8 +695,8 @@ mod test_parser {
         );
     }
 
-    /// Build a `message_summary_info` payload with `parts` unchanged parts in
-    /// `otr` plus `extra` keys.
+    /// Build a `message_summary_info` payload with `parts` unchanged parts
+    /// under `otr` and the additional `extra` keys.
     fn summary(parts: usize, extra: Vec<(&str, Value)>) -> Value {
         let mut otr = Dictionary::new();
         for idx in 0..parts {
