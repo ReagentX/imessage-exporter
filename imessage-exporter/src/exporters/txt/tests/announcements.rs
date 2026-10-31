@@ -51,6 +51,25 @@ fn can_format_txt_announcement_custom_name() {
 }
 
 #[test]
+fn can_format_txt_group_name_removed() {
+    let mut config = config(ExportType::Txt);
+    with_me(&mut config);
+
+    let exporter = TXT::new(&config).unwrap();
+
+    let mut message = Config::fake_message();
+    message.date = SAMPLE_DATE;
+    message.is_from_me = true;
+    message.item_type = 2;
+
+    let mut actual = String::new();
+    exporter.format_announcement(&message, &mut actual);
+    let expected = "May 17, 2022  5:29:42 PM You removed the name from the conversation.\n\n";
+
+    assert_eq!(actual, expected);
+}
+
+#[test]
 fn can_format_txt_announcement_unknown() {
     let config = config(ExportType::Txt);
     let exporter = TXT::new(&config).unwrap();
@@ -401,6 +420,21 @@ fn can_format_txt_unattributed_participant_left() {
     let mut actual = String::new();
     exporter.format_announcement(&message, &mut actual);
     let expected = "May 17, 2022  5:29:42 PM You left the conversation.\n\n";
+
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn can_format_txt_unattributed_name_removed() {
+    let config = config(ExportType::Txt);
+    let exporter = TXT::new(&config).unwrap();
+
+    let mut message = unattributed(2, 0);
+    message.group_title = None;
+
+    let mut actual = String::new();
+    exporter.format_announcement(&message, &mut actual);
+    let expected = "May 17, 2022  5:29:42 PM The conversation name was removed.\n\n";
 
     assert_eq!(actual, expected);
 }

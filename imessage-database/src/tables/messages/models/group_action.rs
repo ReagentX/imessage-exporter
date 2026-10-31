@@ -13,6 +13,8 @@ pub enum GroupAction<'a> {
     ParticipantRemoved(i32),
     /// Group name changed.
     NameChange(&'a str),
+    /// Group name was removed.
+    NameRemoved,
     /// Participant left the group.
     ParticipantLeft,
     /// Group icon/avatar changed.
@@ -49,7 +51,9 @@ impl<'a> GroupAction<'a> {
             }
             (1, 0, Some(who), _) => Some(Self::ParticipantAdded(who)),
             (1, 1, Some(who), _) => Some(Self::ParticipantRemoved(who)),
-            (2, _, _, Some(name)) => Some(Self::NameChange(name)),
+            // Messages checks the title's length: a nil or empty title is a removal
+            (2, _, _, Some(name)) if !name.is_empty() => Some(Self::NameChange(name)),
+            (2, _, _, _) => Some(Self::NameRemoved),
             (3, 0, _, _) => Some(Self::ParticipantLeft),
             (3, 1, _, _) => Some(Self::GroupIconChanged),
             (3, 2, _, _) => Some(Self::GroupIconRemoved),

@@ -150,6 +150,7 @@ This tool targets the current latest public release for Messages.app. It may wor
   - Handles all types of chatroom announcements
     - Group photo changes, including changes Messages records but hides from the conversation
       - A business's brand logo update names the business as the one who changed the photo
+    - Group name changes, including removing the name
     - Chat participant modifications
     - Phone number changes
     - Chat background settings, including backgrounds Messages marks as possibly sensitive and changes Messages records but hides from the conversation

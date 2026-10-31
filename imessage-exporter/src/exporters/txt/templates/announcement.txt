@@ -6,6 +6,7 @@
 {%- when GroupAction::ParticipantAdded(_) -%}added {{ participant_name }} to the conversation.
 {%- when GroupAction::ParticipantRemoved(_) -%}removed {{ participant_name }} from the conversation.
 {%- when GroupAction::NameChange(name) -%}named the conversation {{ name }}
+{%- when GroupAction::NameRemoved -%}removed the name from the conversation.
 {%- when GroupAction::ParticipantLeft -%}left the conversation.
 {%- when GroupAction::GroupIconChanged | GroupAction::GroupIconChangedHidden -%}changed the group photo.
 {%- when GroupAction::GroupIconRemoved -%}removed the group photo.
@@ -22,6 +23,7 @@
 {%- when GroupAction::ParticipantAdded(_) -%}{{ participant_name }} was added to the conversation.
 {%- when GroupAction::ParticipantRemoved(_) -%}{{ participant_name }} was removed from the conversation.
 {%- when GroupAction::NameChange(name) -%}The conversation was named {{ name }}
+{%- when GroupAction::NameRemoved -%}The conversation name was removed.
 {%- when GroupAction::GroupIconChanged | GroupAction::GroupIconChangedHidden -%}The group photo was changed.
 {%- when GroupAction::GroupIconRemoved -%}The group photo was removed.
 {%- when GroupAction::ChatBackgroundChanged | GroupAction::ChatBackgroundChangedHidden -%}The chat background was changed.

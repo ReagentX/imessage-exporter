@@ -76,12 +76,27 @@ mod group_action_tests {
     }
 
     #[test]
-    fn test_group_action_name_change_missing_title() {
+    fn test_group_action_name_removed_null_title() {
         let mut msg = Message::blank();
         msg.item_type = 2;
         msg.group_title = None;
 
-        assert!(Message::group_action(&msg).is_none());
+        assert!(matches!(
+            Message::group_action(&msg),
+            Some(GroupAction::NameRemoved)
+        ));
+    }
+
+    #[test]
+    fn test_group_action_name_removed_empty_title() {
+        let mut msg = Message::blank();
+        msg.item_type = 2;
+        msg.group_title = Some(String::new());
+
+        assert!(matches!(
+            Message::group_action(&msg),
+            Some(GroupAction::NameRemoved)
+        ));
     }
 
     #[test]

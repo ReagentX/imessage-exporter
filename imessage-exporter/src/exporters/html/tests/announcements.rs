@@ -51,6 +51,25 @@ fn can_format_html_announcement_custom_name() {
 }
 
 #[test]
+fn can_format_html_group_name_removed() {
+    let mut config = config(ExportType::Html);
+    with_me(&mut config);
+
+    let exporter = HTML::new(&config).unwrap();
+
+    let mut message = Config::fake_message();
+    message.date = SAMPLE_DATE;
+    message.is_from_me = true;
+    message.item_type = 2;
+
+    let mut actual = String::new();
+    exporter.format_announcement(&message, &mut actual);
+    let expected = "\n<div class=\"announcement\">\n    <p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span> You removed the name from the conversation.</p>\n</div>\n";
+
+    assert_eq!(actual, expected);
+}
+
+#[test]
 fn html_announcement_who_is_escaped_once() {
     // Regression: `who` is rendered with the default escaper in the
     // template, so the formatter must not pre-escape it. Pre-escaping
@@ -428,6 +447,21 @@ fn can_format_html_unattributed_participant_left() {
     let mut actual = String::new();
     exporter.format_announcement(&message, &mut actual);
     let expected = "\n<div class=\"announcement\">\n    <p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span> You left the conversation.</p>\n</div>\n";
+
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn can_format_html_unattributed_name_removed() {
+    let config = config(ExportType::Html);
+    let exporter = HTML::new(&config).unwrap();
+
+    let mut message = unattributed(2, 0);
+    message.group_title = None;
+
+    let mut actual = String::new();
+    exporter.format_announcement(&message, &mut actual);
+    let expected = "\n<div class=\"announcement\">\n    <p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span> The conversation name was removed.</p>\n</div>\n";
 
     assert_eq!(actual, expected);
 }
