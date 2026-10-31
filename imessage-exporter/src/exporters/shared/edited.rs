@@ -185,7 +185,9 @@ mod tests {
             parts: vec![EditedMessagePart {
                 status: EditStatus::Original,
                 edit_history: vec![],
+                unsend_failed: false,
             }],
+            unsupported_handles: vec![],
         };
         assert!(normalize_edited(&msg, &edited, 0, &config, "You").is_none());
     }
@@ -194,7 +196,10 @@ mod tests {
     fn normalize_returns_none_for_out_of_range_part_index() {
         let config = make_config();
         let msg = Config::fake_message();
-        let edited = EditedMessage { parts: vec![] };
+        let edited = EditedMessage {
+            parts: vec![],
+            unsupported_handles: vec![],
+        };
         assert!(normalize_edited(&msg, &edited, 0, &config, "You").is_none());
     }
 
@@ -208,7 +213,9 @@ mod tests {
             parts: vec![EditedMessagePart {
                 status: EditStatus::Unsent,
                 edit_history: vec![],
+                unsend_failed: false,
             }],
+            unsupported_handles: vec![],
         };
         match normalize_edited(&msg, &edited, 0, &config, "You") {
             Some(Edit::Unsent {
@@ -235,7 +242,9 @@ mod tests {
             parts: vec![EditedMessagePart {
                 status: EditStatus::Unsent,
                 edit_history: vec![],
+                unsend_failed: false,
             }],
+            unsupported_handles: vec![],
         };
         assert!(matches!(
             normalize_edited(&msg, &edited, 0, &config, "You"),
@@ -251,7 +260,9 @@ mod tests {
             parts: vec![EditedMessagePart {
                 status: EditStatus::Edited,
                 edit_history: vec![event(DATE_A, "hi")],
+                unsend_failed: false,
             }],
+            unsupported_handles: vec![],
         };
         match normalize_edited(&msg, &edited, 0, &config, "You") {
             Some(Edit::Edited { rows }) => {
@@ -272,7 +283,9 @@ mod tests {
             parts: vec![EditedMessagePart {
                 status: EditStatus::Edited,
                 edit_history: vec![event(DATE_A, "first"), event(DATE_B, "second")],
+                unsend_failed: false,
             }],
+            unsupported_handles: vec![],
         };
         match normalize_edited(&msg, &edited, 0, &config, "You") {
             Some(Edit::Edited { rows }) => {

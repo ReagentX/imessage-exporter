@@ -229,7 +229,9 @@ mod announcement_tests {
             parts: vec![EditedMessagePart {
                 status: EditStatus::Unsent,
                 edit_history: vec![],
+                unsend_failed: false,
             }],
+            unsupported_handles: vec![],
         });
 
         assert!(matches!(
@@ -246,12 +248,15 @@ mod announcement_tests {
                 EditedMessagePart {
                     status: EditStatus::Unsent,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Edited,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
             ],
+            unsupported_handles: vec![],
         });
 
         assert!(msg.get_announcement().is_none());
@@ -270,7 +275,9 @@ mod announcement_tests {
             parts: vec![EditedMessagePart {
                 status: EditStatus::Edited,
                 edit_history: vec![],
+                unsend_failed: false,
             }],
+            unsupported_handles: vec![],
         });
 
         assert!(msg.get_announcement().is_none());

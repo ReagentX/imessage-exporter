@@ -82,20 +82,25 @@ fn can_format_txt_conversion_final_unsent() {
             EditedMessagePart {
                 status: EditStatus::Original,
                 edit_history: vec![],
+                unsend_failed: false,
             },
             EditedMessagePart {
                 status: EditStatus::Original,
                 edit_history: vec![],
+                unsend_failed: false,
             },
             EditedMessagePart {
                 status: EditStatus::Original,
                 edit_history: vec![],
+                unsend_failed: false,
             },
             EditedMessagePart {
                 status: EditStatus::Unsent,
                 edit_history: vec![],
+                unsend_failed: false,
             },
         ],
+        unsupported_handles: vec![],
     });
 
     message.components = vec![
@@ -144,7 +149,9 @@ fn can_format_txt_unsent_from_them_resolves_contact_name() {
         parts: vec![EditedMessagePart {
             status: EditStatus::Unsent,
             edit_history: vec![],
+            unsend_failed: false,
         }],
+        unsupported_handles: vec![],
     });
     message.components = vec![BubbleComponent::Retracted];
 
@@ -208,7 +215,9 @@ fn can_format_txt_conversion_fully_unsent() {
         parts: vec![EditedMessagePart {
             status: EditStatus::Unsent,
             edit_history: vec![],
+            unsend_failed: false,
         }],
+        unsupported_handles: vec![],
     });
 
     message.components = vec![BubbleComponent::Retracted];

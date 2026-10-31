@@ -799,7 +799,9 @@ fn edited_message_inlines_memoji_sticker() {
                     guid: None,
                 },
             ],
+            unsend_failed: false,
         }],
+        unsupported_handles: vec![],
     });
 
     let mut memoji = make_static_sticker();
@@ -1078,12 +1080,15 @@ fn edited_text_part_flushes_block_but_sibling_sticker_inlines() {
             EditedMessagePart {
                 status: EditStatus::Edited,
                 edit_history: vec![],
+                unsend_failed: false,
             },
             EditedMessagePart {
                 status: EditStatus::Original,
                 edit_history: vec![],
+                unsend_failed: false,
             },
         ],
+        unsupported_handles: vec![],
     });
     message.date_edited = SAMPLE_DATE;
 

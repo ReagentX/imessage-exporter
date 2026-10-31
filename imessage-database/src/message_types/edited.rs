@@ -65,6 +65,9 @@ pub struct EditedMessagePart {
     pub status: EditStatus,
     /// Historical edit entries for this part.
     pub edit_history: Vec<EditedEvent>,
+    /// `true` when this part's index is listed under `rdfp`, where Messages
+    /// stores the indexes of parts whose unsend failed to deliver.
+    pub unsend_failed: bool,
 }
 
 impl Default for EditedMessagePart {
@@ -72,6 +75,7 @@ impl Default for EditedMessagePart {
         Self {
             status: EditStatus::Original,
             edit_history: vec![],
+            unsend_failed: false,
         }
     }
 }
@@ -91,6 +95,9 @@ impl Default for EditedMessagePart {
 ///
 /// - `otr`: dictionary of message part indexes.
 /// - `rp`: list of unsent message part indexes.
+/// - `rdfp`: list of message part indexes whose unsend failed to deliver.
+/// - `euh`: list of handle IDs of recipients whose devices do not support
+///   edit and unsend; one list per message, shared by edits and unsends.
 /// - `ec`: dictionary of edited message part indexes to edit history arrays.
 /// - Each `ec` item stores `d` (edit timestamp) and `t` (edited
 ///   `attributedBody` typedstream).
@@ -102,6 +109,10 @@ impl Default for EditedMessagePart {
 pub struct EditedMessage {
     /// One entry per message body part.
     pub parts: Vec<EditedMessagePart>,
+    /// Handle IDs (the `handle.id` form: phone number or email address)
+    /// listed under `euh`, in stored order: recipients whose devices Messages
+    /// recorded as not supporting edit and unsend. Empty when the key is absent.
+    pub unsupported_handles: Vec<String>,
 }
 
 impl<'a> BalloonProvider<'a> for EditedMessage {
@@ -189,6 +200,27 @@ impl<'a> BalloonProvider<'a> for EditedMessage {
             }
         }
 
+        // `rdfp` and `euh` are delivery metadata: skip malformed elements
+        // instead of failing, so they cannot discard the edit history above.
+        if let Ok(failed_message_indexes) = extract_array_key(plist_root, "rdfp") {
+            for failed_message_idx in failed_message_indexes
+                .iter()
+                .filter_map(Value::as_signed_integer)
+            {
+                if let Some(item) = edited.parts.get_mut(failed_message_idx as usize) {
+                    item.unsend_failed = true;
+                }
+            }
+        }
+
+        if let Ok(handles) = extract_array_key(plist_root, "euh") {
+            edited.unsupported_handles = handles
+                .iter()
+                .filter_map(Value::as_string)
+                .map(Into::into)
+                .collect();
+        }
+
         Ok(edited)
     }
 }
@@ -198,6 +230,7 @@ impl EditedMessage {
     fn with_capacity(capacity: usize) -> Self {
         EditedMessage {
             parts: Vec::with_capacity(capacity),
+            unsupported_handles: vec![],
         }
     }
 
@@ -230,7 +263,7 @@ mod test_parser {
     use crate::message_types::{edited::EditedMessage, variants::BalloonProvider};
     use crate::tables::messages::models::{AttributedRange, BubbleComponent};
 
-    use plist::Value;
+    use plist::{Dictionary, Value};
     use std::env::current_dir;
     use std::fs::File;
 
@@ -289,7 +322,9 @@ mod test_parser {
                         None,
                     ),
                 ],
+                unsend_failed: false,
             }],
+            unsupported_handles: vec![],
         };
 
         assert_eq!(parsed, expected);
@@ -313,6 +348,7 @@ mod test_parser {
                 EditedMessagePart {
                     status: EditStatus::Original,
                     edit_history: vec![], // The first part of this is the URL preview
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Edited,
@@ -338,8 +374,10 @@ mod test_parser {
                             Some("292BF9C6-C9B8-4827-BE65-6EA1C9B5B384".to_string()),
                         ),
                     ],
+                    unsend_failed: false,
                 },
             ],
+            unsupported_handles: vec!["+0000000000".to_string()],
         };
 
         assert_eq!(parsed, expected);
@@ -391,7 +429,9 @@ mod test_parser {
                         Some("0D93DF88-05BA-4418-9B20-79918ADD9923".to_string()),
                     ),
                 ],
+                unsend_failed: false,
             }],
+            unsupported_handles: vec!["+0000000000".to_string()],
         };
 
         assert_eq!(parsed, expected);
@@ -411,7 +451,9 @@ mod test_parser {
             parts: vec![EditedMessagePart {
                 status: EditStatus::Unsent,
                 edit_history: vec![],
+                unsend_failed: false,
             }],
+            unsupported_handles: vec![],
         };
 
         assert_eq!(parsed, expected);
@@ -432,20 +474,25 @@ mod test_parser {
                 EditedMessagePart {
                     status: EditStatus::Original,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Original,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Original,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Unsent,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
             ],
+            unsupported_handles: vec!["+15558675309".to_string()],
         };
 
         assert_eq!(parsed, expected);
@@ -466,10 +513,12 @@ mod test_parser {
                 EditedMessagePart {
                     status: EditStatus::Original,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Original,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Edited,
@@ -495,8 +544,10 @@ mod test_parser {
                             None,
                         ),
                     ],
+                    unsend_failed: false,
                 },
             ],
+            unsupported_handles: vec![],
         };
 
         assert_eq!(parsed, expected);
@@ -517,10 +568,12 @@ mod test_parser {
                 EditedMessagePart {
                     status: EditStatus::Original,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Original,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Edited,
@@ -546,12 +599,15 @@ mod test_parser {
                             None,
                         ),
                     ],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Unsent,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
             ],
+            unsupported_handles: vec![],
         };
 
         assert_eq!(parsed, expected);
@@ -592,7 +648,9 @@ mod test_parser {
                         Some("76A466B8-D21E-4A20-AF62-FF2D3A20D31C".to_string()),
                     ),
                 ],
+                unsend_failed: false,
             }],
+            unsupported_handles: vec!["+5558675308".to_string()],
         };
 
         assert_eq!(parsed, expected);
@@ -634,5 +692,122 @@ mod test_parser {
             memoji.attachment.as_ref().unwrap().guid.as_deref(),
             Some("F2C223DB-0140-4D49-B38A-C1A3553B4CBA"),
         );
+    }
+
+    /// Build a `message_summary_info` payload with `parts` unchanged parts in
+    /// `otr` plus `extra` keys.
+    fn summary(parts: usize, extra: Vec<(&str, Value)>) -> Value {
+        let mut otr = Dictionary::new();
+        for idx in 0..parts {
+            let mut range = Dictionary::new();
+            range.insert("lo".to_string(), Value::Integer(0.into()));
+            range.insert("le".to_string(), Value::Integer(1.into()));
+            otr.insert(idx.to_string(), Value::Dictionary(range));
+        }
+        let mut root = Dictionary::new();
+        root.insert("otr".to_string(), Value::Dictionary(otr));
+        for (key, value) in extra {
+            root.insert(key.to_string(), value);
+        }
+        Value::Dictionary(root)
+    }
+
+    fn strings(items: &[&str]) -> Value {
+        Value::Array(
+            items
+                .iter()
+                .map(|s| Value::String((*s).to_string()))
+                .collect(),
+        )
+    }
+
+    fn ints(items: &[i64]) -> Value {
+        Value::Array(items.iter().map(|i| Value::Integer((*i).into())).collect())
+    }
+
+    #[test]
+    fn test_parse_unsupported_handles_in_stored_order() {
+        let handles = ["+15558675309", "person@example.com", "+15555550100"];
+        let plist = summary(1, vec![("euh", strings(&handles))]);
+        let parsed = EditedMessage::from_map(&plist).unwrap();
+
+        assert_eq!(parsed.unsupported_handles, handles);
+    }
+
+    #[test]
+    fn test_parse_absent_unsupported_handles() {
+        let parsed = EditedMessage::from_map(&summary(1, vec![])).unwrap();
+
+        assert!(parsed.unsupported_handles.is_empty());
+    }
+
+    #[test]
+    fn test_parse_unsupported_handles_skips_non_string() {
+        let plist = summary(
+            1,
+            vec![
+                ("rp", ints(&[0])),
+                (
+                    "euh",
+                    Value::Array(vec![
+                        Value::Integer(1.into()),
+                        Value::String("+15558675309".to_string()),
+                    ]),
+                ),
+            ],
+        );
+        let parsed = EditedMessage::from_map(&plist).unwrap();
+
+        assert_eq!(parsed.unsupported_handles, ["+15558675309"]);
+        assert_eq!(parsed.parts[0].status, EditStatus::Unsent);
+    }
+
+    #[test]
+    fn test_parse_unsend_failed_marks_listed_parts() {
+        let plist = summary(3, vec![("rp", ints(&[0, 2])), ("rdfp", ints(&[2]))]);
+        let parsed = EditedMessage::from_map(&plist).unwrap();
+
+        let failed: Vec<bool> = parsed.parts.iter().map(|part| part.unsend_failed).collect();
+        assert_eq!(failed, [false, false, true]);
+        assert_eq!(parsed.parts[0].status, EditStatus::Unsent);
+        assert_eq!(parsed.parts[2].status, EditStatus::Unsent);
+    }
+
+    #[test]
+    fn test_parse_unsend_failed_ignores_out_of_range_index() {
+        let plist = summary(2, vec![("rdfp", ints(&[5, -1]))]);
+        let parsed = EditedMessage::from_map(&plist).unwrap();
+
+        assert!(parsed.parts.iter().all(|part| !part.unsend_failed));
+        assert_eq!(parsed.items(), 2);
+    }
+
+    #[test]
+    fn test_parse_unsend_failed_skips_non_integer() {
+        let plist = summary(
+            2,
+            vec![
+                ("rp", ints(&[0, 1])),
+                (
+                    "rdfp",
+                    Value::Array(vec![
+                        Value::String("0".to_string()),
+                        Value::Integer(1.into()),
+                    ]),
+                ),
+            ],
+        );
+        let parsed = EditedMessage::from_map(&plist).unwrap();
+
+        let failed: Vec<bool> = parsed.parts.iter().map(|part| part.unsend_failed).collect();
+        assert_eq!(failed, [false, true]);
+        assert_eq!(parsed.parts[0].status, EditStatus::Unsent);
+    }
+
+    #[test]
+    fn test_parse_absent_unsend_failed() {
+        let parsed = EditedMessage::from_map(&summary(2, vec![])).unwrap();
+
+        assert!(parsed.parts.iter().all(|part| !part.unsend_failed));
     }
 }
