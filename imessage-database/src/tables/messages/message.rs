@@ -257,10 +257,10 @@ pub struct Message {
     pub item_type: i32,
     /// Additional handle used by shared-location and group-action messages.
     pub other_handle: Option<i32>,
-    /// Shared-location active/inactive flag.
-    pub share_status: bool,
-    /// Shared-location direction flag.
-    pub share_direction: Option<bool>,
+    /// Shared-location status code: `0` when sharing started, `1` when it stopped.
+    pub share_status: i32,
+    /// Shared-location direction code.
+    pub share_direction: Option<i32>,
     /// Group title carried by group-name-change messages.
     pub group_title: Option<String>,
     /// Group action code.
@@ -825,7 +825,7 @@ impl Message {
             && let (Some(other_handle), Some(share_direction)) =
                 (self.other_handle, self.share_direction)
         {
-            self.is_from_me || other_handle != 0 && !share_direction
+            self.is_from_me || other_handle != 0 && share_direction == 0
         } else {
             self.is_from_me
         }
@@ -833,16 +833,20 @@ impl Message {
 
     /// Returns the [`SharedLocation`] when the message is a legacy
     /// shared-location event.
+    ///
+    /// Returns `None` unless [`share_status`](Self::share_status) and
+    /// [`share_direction`](Self::share_direction) are both `0` or `1`: those
+    /// are the only pairs Messages renders as started or stopped text. A `NULL`
+    /// direction counts as `0`, as an integer read of `NULL` does.
     #[must_use]
     pub fn shared_location_kind(&self) -> Option<SharedLocation> {
-        if self.item_type == 4 && self.group_action_type == 0 {
-            Some(if self.share_status {
-                SharedLocation::Stopped
-            } else {
-                SharedLocation::Started
-            })
-        } else {
-            None
+        if self.item_type != 4 || !matches!(self.share_direction, None | Some(0 | 1)) {
+            return None;
+        }
+        match self.share_status {
+            0 => Some(SharedLocation::Started),
+            1 => Some(SharedLocation::Stopped),
+            _ => None,
         }
     }
 
@@ -1475,7 +1479,7 @@ impl Message {
             is_read: false,
             item_type: 0,
             other_handle: None,
-            share_status: false,
+            share_status: 0,
             share_direction: None,
             group_title: None,
             group_action_type: 0,
@@ -1556,5 +1560,56 @@ mod diagnostic_tests {
         let diagnostic = Message::run_diagnostic(&db).unwrap();
 
         assert_eq!(diagnostic.recoverable_messages, Some(1));
+    }
+}
+
+#[cfg(test)]
+mod shared_location_tests {
+    use crate::tables::messages::{Message, models::SharedLocation};
+
+    fn location(status: i32, direction: Option<i32>) -> Message {
+        let mut message = Message::blank();
+        message.item_type = 4;
+        message.share_status = status;
+        message.share_direction = direction;
+        message
+    }
+
+    #[test]
+    fn maps_status_and_direction_zero_or_one() {
+        for direction in [0, 1] {
+            assert_eq!(
+                location(0, Some(direction)).shared_location_kind(),
+                Some(SharedLocation::Started)
+            );
+            assert_eq!(
+                location(1, Some(direction)).shared_location_kind(),
+                Some(SharedLocation::Stopped)
+            );
+        }
+    }
+
+    #[test]
+    fn maps_null_direction_as_zero() {
+        assert_eq!(
+            location(1, None).shared_location_kind(),
+            Some(SharedLocation::Stopped)
+        );
+    }
+
+    #[test]
+    fn maps_regardless_of_group_action_type() {
+        let mut message = location(1, Some(0));
+        message.group_action_type = 1;
+        assert_eq!(
+            message.shared_location_kind(),
+            Some(SharedLocation::Stopped)
+        );
+    }
+
+    #[test]
+    fn leaves_other_status_or_direction_unmapped() {
+        assert_eq!(location(2, Some(0)).shared_location_kind(), None);
+        assert_eq!(location(0, Some(2)).shared_location_kind(), None);
     }
 }

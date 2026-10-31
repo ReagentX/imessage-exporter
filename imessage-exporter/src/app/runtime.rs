@@ -769,7 +769,7 @@ impl Config {
             is_read: false,
             item_type: 0,
             other_handle: None,
-            share_status: false,
+            share_status: 0,
             share_direction: None,
             group_title: None,
             group_action_type: 0,

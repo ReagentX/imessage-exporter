@@ -399,7 +399,7 @@ mod tests {
                 is_read: row.get("is_read").unwrap_or(false),
                 item_type: row.get("item_type").unwrap_or_default(),
                 other_handle: row.get("other_handle").unwrap_or(None),
-                share_status: row.get("share_status").unwrap_or(false),
+                share_status: row.get("share_status").unwrap_or(0),
                 share_direction: row.get("share_direction").unwrap_or(None),
                 group_title: row.get("group_title").unwrap_or(None),
                 group_action_type: row.get("group_action_type").unwrap_or(0),

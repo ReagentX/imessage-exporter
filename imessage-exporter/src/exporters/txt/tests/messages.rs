@@ -252,8 +252,8 @@ fn can_format_txt_started_sharing_location_me() {
     let mut message = Config::fake_message();
     message.is_from_me = false;
     message.other_handle = Some(2);
-    message.share_status = false;
-    message.share_direction = Some(false);
+    message.share_status = 0;
+    message.share_direction = Some(0);
     message.item_type = 4;
 
     let actual = render(&exporter, &message);
@@ -270,8 +270,8 @@ fn can_format_txt_stopped_sharing_location_me() {
     let mut message = Config::fake_message();
     message.is_from_me = false;
     message.other_handle = Some(2);
-    message.share_status = true;
-    message.share_direction = Some(false);
+    message.share_status = 1;
+    message.share_direction = Some(0);
     message.item_type = 4;
 
     let actual = render(&exporter, &message);
@@ -289,8 +289,8 @@ fn can_format_txt_started_sharing_location_them() {
     message.handle_id = None;
     message.is_from_me = false;
     message.other_handle = Some(0);
-    message.share_status = false;
-    message.share_direction = Some(false);
+    message.share_status = 0;
+    message.share_direction = Some(0);
     message.item_type = 4;
 
     let actual = render(&exporter, &message);
@@ -308,8 +308,8 @@ fn can_format_txt_stopped_sharing_location_them() {
     message.handle_id = None;
     message.is_from_me = false;
     message.other_handle = Some(0);
-    message.share_status = true;
-    message.share_direction = Some(false);
+    message.share_status = 1;
+    message.share_direction = Some(0);
     message.item_type = 4;
 
     let actual = render(&exporter, &message);
