@@ -720,7 +720,7 @@ impl Config {
     }
 
     /// Resolve a participant name from a handle ID.
-    fn resolve_participant(&self, handle_id: i32) -> Option<&Name> {
+    pub(crate) fn resolve_participant(&self, handle_id: i32) -> Option<&Name> {
         if let Some(internal_id) = self.real_participants.get(&handle_id) {
             return self.participants.get(internal_id);
         }

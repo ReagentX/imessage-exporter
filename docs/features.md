@@ -153,6 +153,7 @@ This tool targets the current latest public release for Messages.app. It may wor
       - Business named as the actor for brand logo updates
     - Group name changes, including removing the name
     - Chat participant modifications
+      - Database owner named as the actor for leaving an Apple Messages for Business conversation
     - Phone number changes
     - Kept audio, video, and app messages
     - Emergency SOS transcript sharing stops
