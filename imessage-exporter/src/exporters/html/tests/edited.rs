@@ -45,7 +45,9 @@ fn can_format_html_edited_with_formatting() {
                     guid: Some("76A466B8-D21E-4A20-AF62-FF2D3A20D31C".to_string()),
                 },
             ],
+            unsend_failed: false,
         }],
+        unsupported_handles: vec![],
     };
 
     let mut message = sent("Test");
@@ -77,20 +79,25 @@ fn can_format_html_conversion_final_unsent() {
             EditedMessagePart {
                 status: EditStatus::Original,
                 edit_history: vec![],
+                unsend_failed: false,
             },
             EditedMessagePart {
                 status: EditStatus::Original,
                 edit_history: vec![],
+                unsend_failed: false,
             },
             EditedMessagePart {
                 status: EditStatus::Original,
                 edit_history: vec![],
+                unsend_failed: false,
             },
             EditedMessagePart {
                 status: EditStatus::Unsent,
                 edit_history: vec![],
+                unsend_failed: false,
             },
         ],
+        unsupported_handles: vec![],
     });
 
     message.components = vec![
@@ -177,7 +184,9 @@ fn can_format_html_conversion_fully_unsent() {
         parts: vec![EditedMessagePart {
             status: EditStatus::Unsent,
             edit_history: vec![],
+            unsend_failed: false,
         }],
+        unsupported_handles: vec![],
     });
 
     message.components = vec![];

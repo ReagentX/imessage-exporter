@@ -20,7 +20,8 @@ pub(crate) const YOU: &str = "You";
 /// - `who`: the actor's display name after the `ME` → caller-supplied
 ///   `self_name` substitution, or `None` for an event displayed without an
 ///   actor in Messages;
-/// - `timestamp`: the formatted timestamp;
+/// - `timestamp`: the formatted timestamp, followed by ` (Failed)` for a
+///   failed group event ([`Message::is_failed`]);
 /// - `announcement`: the library's [`Announcement`], unchanged.
 ///
 /// For [`GroupAction::ParticipantAdded`] / [`GroupAction::ParticipantRemoved`],
@@ -75,11 +76,16 @@ impl<'a> From<ResolvedAnnouncement<'a>> for AnnouncementBody<'a> {
 ///
 /// - `None` for an [`Announcement::UnknownEvent`]: the actor is unknown
 ///   because no producer is known for these codes;
+/// - `None` for [`Announcement::EmergencyLocationSent`]: no actor in Apple's
+///   only wording for this event;
 /// - `None` for an unattributed group event ([`Message::is_unattributed`]),
 ///   displayed with no actor in Messages. For [`GroupAction::ParticipantLeft`]
 ///   and [`GroupAction::PhoneNumberChanged`], use the event's subject as its
 ///   actor regardless of the flag;
 /// - the business for an RCS business's brand-logo update (see `brand_handle`);
+/// - the database owner, with their usual message display name, for a
+///   [`GroupAction::ParticipantLeft`] sent by an Apple Messages for Business
+///   handle (see `is_business_leave`);
 /// - the message's sender.
 pub fn resolve_announcement<'a>(
     msg: &'a Message,
@@ -88,14 +94,20 @@ pub fn resolve_announcement<'a>(
 ) -> Option<ResolvedAnnouncement<'a>> {
     let announcement = msg.get_announcement()?;
 
-    let who = if matches!(announcement, Announcement::UnknownEvent(_))
-        || is_unattributed(msg, &announcement)
+    let who = if matches!(
+        announcement,
+        Announcement::UnknownEvent(_) | Announcement::EmergencyLocationSent
+    ) || is_unattributed(msg, &announcement)
     {
         None
     } else {
         let who = match brand_handle(msg, &announcement, config) {
             Some(handle) => config.who(Some(handle), false, &msg.destination_caller_id),
-            None => config.who(msg.handle_id, msg.is_from_me(), &msg.destination_caller_id),
+            None => config.who(
+                msg.handle_id,
+                msg.is_from_me() || is_business_leave(msg, &announcement, config),
+                &msg.destination_caller_id,
+            ),
         };
         Some(if who == ME {
             config.options.custom_name.as_deref().unwrap_or(self_name)
@@ -104,7 +116,10 @@ pub fn resolve_announcement<'a>(
         })
     };
 
-    let timestamp = format_message_date(msg, &config.options.timezone);
+    let mut timestamp = format_message_date(msg, &config.options.timezone);
+    if msg.is_failed() {
+        timestamp.push_str(" (Failed)");
+    }
 
     let participant_name = match &announcement {
         Announcement::GroupAction(
@@ -133,6 +148,38 @@ fn is_unattributed(msg: &Message, announcement: &Announcement) -> bool {
                     GroupAction::ParticipantLeft | GroupAction::PhoneNumberChanged(_)
                 )
         )
+}
+
+/// `true` for a [`GroupAction::ParticipantLeft`] whose sender is an Apple
+/// Messages for Business handle.
+///
+/// For business chat session closures, the sender is the business conversation
+/// ID. Use the database owner as the actor to match Messages.
+///
+/// Require every `handle.id` in the sender's group to be a business ID
+/// ([`is_business_id`]). In [`Config`], we store addresses per group, so retain
+/// the sender as the actor when grouped with any other address type. Such
+/// mixed groups are possible only through a shared `person_centric_id`;
+/// business IDs cannot be matched through Contacts.
+fn is_business_leave(msg: &Message, announcement: &Announcement, config: &Config) -> bool {
+    matches!(
+        announcement,
+        Announcement::GroupAction(GroupAction::ParticipantLeft)
+    ) && msg
+        .handle_id
+        .and_then(|handle_id| config.resolve_participant(handle_id))
+        .is_some_and(|name| {
+            !name.addresses.is_empty() && name.addresses.iter().all(|id| is_business_id(id))
+        })
+}
+
+/// `true` for an Apple Messages for Business ID: a `handle.id` value with an
+/// `urn:biz:` or `biz:` prefix, ignoring ASCII case.
+fn is_business_id(id: &str) -> bool {
+    ["urn:biz:", "biz:"].iter().any(|prefix| {
+        id.get(..prefix.len())
+            .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
+    })
 }
 
 /// Return the RCS business's handle for a brand-logo update in `msg`, or
@@ -171,7 +218,7 @@ mod tests {
         tables::messages::{Message, models::GroupAction},
     };
 
-    use super::resolve_announcement;
+    use super::{is_business_id, resolve_announcement};
     use crate::{
         Config, Options,
         app::{contacts::Name, export_type::ExportType},
@@ -409,5 +456,108 @@ mod tests {
         let msg = hidden_group_photo(6);
         let resolved = resolve_announcement(&msg, &config, "You").unwrap();
         assert_eq!(resolved.who, Some("Alice"));
+    }
+
+    #[test]
+    fn business_id_prefixes() {
+        for id in [
+            "urn:biz:0000",
+            "biz:0000",
+            "URN:BIZ:0000",
+            "Urn:Biz:0000",
+            "BIZ:0000",
+        ] {
+            assert!(is_business_id(id), "{id}");
+        }
+    }
+
+    #[test]
+    fn non_business_ids() {
+        for id in [
+            "",
+            "biz",
+            "urn:biz",
+            "+15555550100",
+            "person@biz:example.com",
+            "x-urn:biz:0000",
+            " biz:0000",
+            "urn:bi\u{0130}z:0000",
+        ] {
+            assert!(!is_business_id(id), "{id}");
+        }
+    }
+
+    /// Config with handle 5 as an Apple Messages for Business handle named
+    /// `Business` and handle 6 as `Alice`.
+    fn business_config(options: Options) -> Config {
+        let mut config = Config::fake_app(options);
+        let mut business = Name::fake_name("Business");
+        business.addresses = BTreeSet::from(["urn:biz:0000".to_string()]);
+        config.participants.insert(5, business);
+        config.real_participants.insert(5, 5);
+        let mut alice = Name::fake_name("Alice");
+        alice.addresses = BTreeSet::from(["+15555550100".to_string()]);
+        config.participants.insert(6, alice);
+        config.real_participants.insert(6, 6);
+        config
+    }
+
+    /// `ParticipantLeft` row sent by `handle_id`.
+    fn left(handle_id: i32) -> Message {
+        let mut msg = Config::fake_message();
+        msg.item_type = 3;
+        msg.group_action_type = 0;
+        msg.handle_id = Some(handle_id);
+        msg
+    }
+
+    #[test]
+    fn business_leave_resolves_to_database_owner() {
+        let config = business_config(Options::fake_options(ExportType::Txt));
+        let msg = left(5);
+        let resolved = resolve_announcement(&msg, &config, "You").unwrap();
+        assert_eq!(resolved.who, Some("You"));
+
+        let mut options = Options::fake_options(ExportType::Txt);
+        options.custom_name = Some("Chris".to_string());
+        let config = business_config(options);
+        let msg = left(5);
+        let resolved = resolve_announcement(&msg, &config, "You").unwrap();
+        assert_eq!(resolved.who, Some("Chris"));
+    }
+
+    #[test]
+    fn business_leave_needs_every_group_address_to_be_business() {
+        let mut config = business_config(Options::fake_options(ExportType::Txt));
+        config
+            .participants
+            .get_mut(&5)
+            .unwrap()
+            .addresses
+            .insert("+15555550101".to_string());
+        let msg = left(5);
+        let resolved = resolve_announcement(&msg, &config, "You").unwrap();
+        assert_eq!(resolved.who, Some("Business"));
+    }
+
+    #[test]
+    fn non_business_leave_keeps_sender() {
+        let config = business_config(Options::fake_options(ExportType::Txt));
+        let msg = left(6);
+        let resolved = resolve_announcement(&msg, &config, "You").unwrap();
+        assert_eq!(resolved.who, Some("Alice"));
+    }
+
+    #[test]
+    fn business_sender_on_other_group_action_keeps_sender() {
+        let config = business_config(Options::fake_options(ExportType::Txt));
+        let mut msg = left(5);
+        msg.group_action_type = 2;
+        let resolved = resolve_announcement(&msg, &config, "You").unwrap();
+        assert!(matches!(
+            resolved.announcement,
+            Announcement::GroupAction(GroupAction::GroupIconRemoved)
+        ));
+        assert_eq!(resolved.who, Some("Business"));
     }
 }

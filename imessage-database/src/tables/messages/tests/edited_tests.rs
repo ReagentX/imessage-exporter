@@ -12,7 +12,9 @@ mod tests {
             parts: vec![EditedMessagePart {
                 status: EditStatus::Unsent,
                 edit_history: vec![],
+                unsend_failed: false,
             }],
+            unsupported_handles: vec![],
         });
 
         assert!(m.is_fully_unsent());
@@ -26,12 +28,15 @@ mod tests {
                 EditedMessagePart {
                     status: EditStatus::Unsent,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Unsent,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
             ],
+            unsupported_handles: vec![],
         });
 
         assert!(m.is_fully_unsent());
@@ -44,7 +49,9 @@ mod tests {
             parts: vec![EditedMessagePart {
                 status: EditStatus::Original,
                 edit_history: vec![],
+                unsend_failed: false,
             }],
+            unsupported_handles: vec![],
         });
 
         assert!(!m.is_fully_unsent());
@@ -58,12 +65,15 @@ mod tests {
                 EditedMessagePart {
                     status: EditStatus::Unsent,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Original,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
             ],
+            unsupported_handles: vec![],
         });
 
         assert!(!m.is_fully_unsent());
@@ -77,12 +87,15 @@ mod tests {
                 EditedMessagePart {
                     status: EditStatus::Edited,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Original,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
             ],
+            unsupported_handles: vec![],
         });
 
         assert!(m.is_part_edited(0));
@@ -96,12 +109,15 @@ mod tests {
                 EditedMessagePart {
                     status: EditStatus::Edited,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Original,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
             ],
+            unsupported_handles: vec![],
         });
 
         assert!(!m.is_part_edited(1));
@@ -129,12 +145,15 @@ mod tests {
                 EditedMessagePart {
                     status: EditStatus::Edited,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Edited,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
             ],
+            unsupported_handles: vec![],
         });
 
         assert!(m.is_part_edited(0));

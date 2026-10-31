@@ -268,6 +268,8 @@ pub struct Message {
     /// Message action code; on a kept-message row (`item_type` 5), the kind
     /// of message kept ([`KeptMessage`]).
     pub message_action_type: i32,
+    /// Messages' error code for the row; `0` for none.
+    pub error: i64,
     /// GUID of the message this row references.
     pub associated_message_guid: Option<String>,
     /// Type code for the associated message, used by [`variant`](Self::variant).
@@ -808,6 +810,15 @@ impl Message {
         self.item_type == 5
     }
 
+    /// `true` for a failed group event: `item_type` 1–3 with nonzero low 32
+    /// bits in [`error`](Self::error), matching the check in Messages.
+    /// `false` for every other row: we have not verified the meaning of
+    /// nonzero `error` values for other item types.
+    #[must_use]
+    pub fn is_failed(&self) -> bool {
+        matches!(self.item_type, 1..=3) && self.error & 0xFFFF_FFFF != 0
+    }
+
     /// `true` when the message is a [SharePlay/FaceTime](crate::message_types::variants::Variant::SharePlay) message.
     #[must_use]
     pub fn is_shareplay(&self) -> bool {
@@ -1322,6 +1333,8 @@ impl Message {
                 share_status: self.share_status,
                 share_direction: self.share_direction,
             },
+            7 => return Some(Announcement::TranscriptSharingStopped),
+            8 => return Some(Announcement::EmergencyLocationSent),
             0..=6 => return None,
             other => UnknownEvent::ItemType(other),
         };
@@ -1495,6 +1508,7 @@ impl Message {
             group_title: None,
             group_action_type: 0,
             message_action_type: 0,
+            error: 0,
             associated_message_guid: None,
             associated_message_type: None,
             balloon_bundle_id: None,

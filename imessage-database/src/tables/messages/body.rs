@@ -915,20 +915,25 @@ mod typedstream_tests {
                 EditedMessagePart {
                     status: EditStatus::Original,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Original,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Original,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Unsent,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
             ],
+            unsupported_handles: vec![],
         });
 
         let parsed = parse_typedstream_fixture("MultiPartWithDeleted", m.edited_parts.as_ref());
@@ -969,10 +974,12 @@ mod typedstream_tests {
                 EditedMessagePart {
                     status: EditStatus::Original,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Original,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Edited,
@@ -990,12 +997,15 @@ mod typedstream_tests {
                             None,
                         ),
                     ],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Unsent,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
             ],
+            unsupported_handles: vec![],
         });
 
         let parsed = parse_typedstream_fixture("MultiPartWithDeleted", m.edited_parts.as_ref());
@@ -1035,7 +1045,9 @@ mod typedstream_tests {
             parts: vec![EditedMessagePart {
                 status: EditStatus::Unsent,
                 edit_history: vec![],
+                unsend_failed: false,
             }],
+            unsupported_handles: vec![],
         });
 
         let parsed = parse_typedstream_fixture("Blank", m.edited_parts.as_ref());
@@ -1070,7 +1082,9 @@ mod typedstream_tests {
                         guid: Some("76A466B8-D21E-4A20-AF62-FF2D3A20D31C".to_string()),
                     },
                 ],
+                unsend_failed: false,
             }],
+            unsupported_handles: vec![],
         });
 
         let parsed = parse_typedstream_fixture("EditedWithFormatting", m.edited_parts.as_ref());
@@ -1243,7 +1257,9 @@ mod typedstream_tests {
             parts: vec![EditedMessagePart {
                 status: EditStatus::Unsent,
                 edit_history: vec![],
+                unsend_failed: false,
             }],
+            unsupported_handles: vec![],
         });
 
         assert_eq!(

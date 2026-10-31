@@ -720,7 +720,7 @@ impl Config {
     }
 
     /// Resolve a participant name from a handle ID.
-    fn resolve_participant(&self, handle_id: i32) -> Option<&Name> {
+    pub(crate) fn resolve_participant(&self, handle_id: i32) -> Option<&Name> {
         if let Some(internal_id) = self.real_participants.get(&handle_id) {
             return self.participants.get(internal_id);
         }
@@ -774,6 +774,7 @@ impl Config {
             group_title: None,
             group_action_type: 0,
             message_action_type: 0,
+            error: 0,
             associated_message_guid: None,
             associated_message_type: Some(i32::default()),
             balloon_bundle_id: None,

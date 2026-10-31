@@ -129,12 +129,17 @@ pub enum URLOverride<'a> {
 /// unsent messages.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Announcement<'a> {
+    /// Location sent to emergency services (`item_type` 8), without a payload.
+    EmergencyLocationSent,
     /// All parts of the message were unsent.
     FullyUnsent,
     /// Group action.
     GroupAction(GroupAction<'a>),
     /// User kept a message (`item_type` 5).
     MessageKept(KeptMessage),
+    /// End of an Emergency SOS transcript sharing session (`item_type` 7),
+    /// without a payload. The sender is the participant who was sharing.
+    TranscriptSharingStopped,
     /// Event row with no text displayed in Messages.
     UnknownEvent(UnknownEvent),
 }
@@ -158,7 +163,7 @@ pub enum UnknownEvent {
         /// `share_direction` of the row; `None` for `NULL`.
         share_direction: Option<i32>,
     },
-    /// Row whose `item_type` is outside 0–6.
+    /// Row whose `item_type` is outside 0–8.
     ItemType(i32),
 }
 

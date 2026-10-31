@@ -229,7 +229,9 @@ mod announcement_tests {
             parts: vec![EditedMessagePart {
                 status: EditStatus::Unsent,
                 edit_history: vec![],
+                unsend_failed: false,
             }],
+            unsupported_handles: vec![],
         });
 
         assert!(matches!(
@@ -246,12 +248,15 @@ mod announcement_tests {
                 EditedMessagePart {
                     status: EditStatus::Unsent,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
                 EditedMessagePart {
                     status: EditStatus::Edited,
                     edit_history: vec![],
+                    unsend_failed: false,
                 },
             ],
+            unsupported_handles: vec![],
         });
 
         assert!(msg.get_announcement().is_none());
@@ -270,7 +275,9 @@ mod announcement_tests {
             parts: vec![EditedMessagePart {
                 status: EditStatus::Edited,
                 edit_history: vec![],
+                unsend_failed: false,
             }],
+            unsupported_handles: vec![],
         });
 
         assert!(msg.get_announcement().is_none());
@@ -336,8 +343,32 @@ mod announcement_tests {
     }
 
     #[test]
+    fn test_announcement_transcript_sharing_stopped() {
+        let mut msg = Message::blank();
+        msg.item_type = 7;
+        msg.handle_id = Some(1);
+
+        assert_eq!(
+            msg.get_announcement(),
+            Some(Announcement::TranscriptSharingStopped)
+        );
+    }
+
+    #[test]
+    fn test_announcement_emergency_location_sent() {
+        let mut msg = Message::blank();
+        msg.item_type = 8;
+        msg.handle_id = Some(1);
+
+        assert_eq!(
+            msg.get_announcement(),
+            Some(Announcement::EmergencyLocationSent)
+        );
+    }
+
+    #[test]
     fn test_announcement_unknown_item_type() {
-        for item_type in [7, 8, 9, -1] {
+        for item_type in [9, -1] {
             let mut msg = Message::blank();
             msg.item_type = item_type;
 
@@ -434,6 +465,44 @@ mod unattributed_tests {
                 !parsed(item_type, Some(&bytes)).is_unattributed,
                 "{item_type}"
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod failed_tests {
+    use crate::tables::messages::message::Message;
+
+    fn event(item_type: i32, error: i64) -> Message {
+        let mut msg = Message::blank();
+        msg.item_type = item_type;
+        msg.error = error;
+        msg
+    }
+
+    #[test]
+    fn group_events_fail_on_low_bits() {
+        for item_type in 1..=3 {
+            assert!(!event(item_type, 0).is_failed(), "({item_type}, 0)");
+            assert!(event(item_type, 1).is_failed(), "({item_type}, 1)");
+            assert!(
+                event(item_type, 0xFFFF_FFFF).is_failed(),
+                "({item_type}, 0xFFFF_FFFF)"
+            );
+        }
+    }
+
+    #[test]
+    fn group_events_ignore_high_bits() {
+        for item_type in 1..=3 {
+            assert!(!event(item_type, 1 << 32).is_failed(), "{item_type}");
+        }
+    }
+
+    #[test]
+    fn other_item_types_never_fail() {
+        for item_type in [0, 4, 5, 6, 7, 8] {
+            assert!(!event(item_type, 1).is_failed(), "{item_type}");
         }
     }
 }
