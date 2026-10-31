@@ -162,7 +162,7 @@ mod tests {
     use std::collections::BTreeSet;
 
     use imessage_database::{
-        message_types::variants::Announcement,
+        message_types::variants::{Announcement, KeptMessage},
         tables::messages::{Message, models::GroupAction},
     };
 
@@ -192,14 +192,14 @@ mod tests {
     }
 
     #[test]
-    fn audio_message_kept_has_no_participant_name() {
+    fn message_kept_has_no_participant_name() {
         let config = make_config();
         let mut msg = Config::fake_message();
         msg.item_type = 5;
         let resolved = resolve_announcement(&msg, &config, "You").unwrap();
         assert!(matches!(
             resolved.announcement,
-            Announcement::AudioMessageKept
+            Announcement::MessageKept(KeptMessage::Audio)
         ));
         assert_eq!(resolved.participant_name, super::UNKNOWN_PARTICIPANT);
     }

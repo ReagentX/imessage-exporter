@@ -201,7 +201,7 @@ mod announcement_tests {
     use crate::{
         message_types::{
             edited::{EditStatus, EditedMessage, EditedMessagePart},
-            variants::Announcement,
+            variants::{Announcement, KeptMessage},
         },
         tables::messages::{message::Message, models::GroupAction},
     };
@@ -277,14 +277,24 @@ mod announcement_tests {
     }
 
     #[test]
-    fn test_announcement_kept_audio_message() {
-        let mut msg = Message::blank();
-        msg.item_type = 5;
+    fn test_announcement_kept_message_kinds() {
+        for (code, kind) in [
+            (0, KeptMessage::Audio),
+            (1, KeptMessage::Video),
+            (2, KeptMessage::App),
+            (3, KeptMessage::Unknown(3)),
+            (-1, KeptMessage::Unknown(-1)),
+        ] {
+            let mut msg = Message::blank();
+            msg.item_type = 5;
+            msg.message_action_type = code;
 
-        assert!(matches!(
-            msg.get_announcement(),
-            Some(Announcement::AudioMessageKept)
-        ));
+            assert_eq!(
+                msg.get_announcement(),
+                Some(Announcement::MessageKept(kind)),
+                "{code}"
+            );
+        }
     }
 }
 

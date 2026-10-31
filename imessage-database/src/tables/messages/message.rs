@@ -196,7 +196,10 @@ use crate::{
         polls::Poll,
         text_effects::text_effect::TextEffect,
         translation::Translation,
-        variants::{Announcement, BalloonProvider, CustomBalloon, Tapback, TapbackAction, Variant},
+        variants::{
+            Announcement, BalloonProvider, CustomBalloon, KeptMessage, Tapback, TapbackAction,
+            Variant,
+        },
     },
     tables::{
         capabilities::Capabilities,
@@ -262,6 +265,9 @@ pub struct Message {
     pub group_title: Option<String>,
     /// Group action code.
     pub group_action_type: i32,
+    /// Message action code; on a kept-message row (`item_type` 5), the kind
+    /// of message kept ([`KeptMessage`]).
+    pub message_action_type: i32,
     /// GUID of the message this row references.
     pub associated_message_guid: Option<String>,
     /// Type code for the associated message, used by [`variant`](Self::variant).
@@ -798,9 +804,9 @@ impl Message {
         self.num_replies > 0
     }
 
-    /// `true` when the message indicates a sent audio message was kept.
+    /// `true` when the message indicates another message was kept.
     #[must_use]
-    pub fn is_kept_audio_message(&self) -> bool {
+    pub fn is_kept_message(&self) -> bool {
         self.item_type == 5
     }
 
@@ -1298,8 +1304,10 @@ impl Message {
             return Some(Announcement::FullyUnsent);
         }
 
-        if self.is_kept_audio_message() {
-            return Some(Announcement::AudioMessageKept);
+        if self.is_kept_message() {
+            return Some(Announcement::MessageKept(KeptMessage::from_code(
+                self.message_action_type,
+            )));
         }
 
         None
@@ -1471,6 +1479,7 @@ impl Message {
             share_direction: None,
             group_title: None,
             group_action_type: 0,
+            message_action_type: 0,
             associated_message_guid: None,
             associated_message_type: None,
             balloon_bundle_id: None,

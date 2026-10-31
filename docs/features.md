@@ -154,5 +154,6 @@ This tool targets the current latest public release for Messages.app. It may wor
     - Group name changes, including removing the name
     - Chat participant modifications
     - Phone number changes
+    - Kept audio, video, and app messages
     - Chat background settings, including backgrounds Messages marks as possibly sensitive and changes Messages records but hides from the conversation
     - Group changes Messages records without an actor render without naming one

@@ -133,8 +133,35 @@ pub enum Announcement<'a> {
     FullyUnsent,
     /// Group action.
     GroupAction(GroupAction<'a>),
-    /// User kept an audio message.
-    AudioMessageKept,
+    /// User kept a message (`item_type` 5).
+    MessageKept(KeptMessage),
+}
+
+/// Kind of message a kept-message row (`item_type` 5) refers to, stored in
+/// `message_action_type`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeptMessage {
+    /// Value `0`: an audio message.
+    Audio,
+    /// Value `1`: a video message.
+    Video,
+    /// Value `2`: a message from the iMessage app named by `balloon_bundle_id`.
+    App,
+    /// Unrecognized raw code.
+    Unknown(i32),
+}
+
+impl KeptMessage {
+    /// Convert a raw `message_action_type` code.
+    #[must_use]
+    pub fn from_code(code: i32) -> Self {
+        match code {
+            0 => Self::Audio,
+            1 => Self::Video,
+            2 => Self::App,
+            other => Self::Unknown(other),
+        }
+    }
 }
 
 /// Whether a tapback was added or removed.

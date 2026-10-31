@@ -387,6 +387,34 @@ fn can_format_html_audio_message_kept() {
     assert_eq!(actual, expected);
 }
 
+#[test]
+fn can_format_html_other_kept_messages() {
+    let mut config = config(ExportType::Html);
+    with_me(&mut config);
+
+    let exporter = HTML::new(&config).unwrap();
+
+    for (code, wording) in [
+        (1, "kept a video message."),
+        (2, "kept a message."),
+        (3, "kept a message."),
+    ] {
+        let mut message = Config::fake_message();
+        message.date = SAMPLE_DATE;
+        message.is_from_me = true;
+        message.item_type = 5;
+        message.message_action_type = code;
+
+        let mut actual = String::new();
+        exporter.format_announcement(&message, &mut actual);
+        let expected = format!(
+            "\n<div class=\"announcement\">\n    <p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span> You {wording}</p>\n</div>\n"
+        );
+
+        assert_eq!(actual, expected, "{code}");
+    }
+}
+
 /// Every group event with a form without an actor, as Messages writes it with
 /// a nil sender, paired with its rendered text.
 const UNATTRIBUTED: [(i32, i32, &str); 10] = [

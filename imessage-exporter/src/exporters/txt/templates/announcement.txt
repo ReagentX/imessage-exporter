@@ -1,5 +1,7 @@
 {% match kind %}{% when AnnouncementBody::Action { timestamp, who, announcement, participant_name } %}{{ timestamp }} {% if let Some(who) = who %}{{ who }} {% match announcement -%}
-{%- when Announcement::AudioMessageKept -%}kept an audio message.
+{%- when Announcement::MessageKept(KeptMessage::Audio) -%}kept an audio message.
+{%- when Announcement::MessageKept(KeptMessage::Video) -%}kept a video message.
+{%- when Announcement::MessageKept(KeptMessage::App) | Announcement::MessageKept(KeptMessage::Unknown(_)) -%}kept a message.
 {%- when Announcement::FullyUnsent -%}unsent a message!
 {%- when Announcement::GroupAction(group) -%}
 {%- match group -%}

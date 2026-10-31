@@ -773,6 +773,7 @@ impl Config {
             share_direction: None,
             group_title: None,
             group_action_type: 0,
+            message_action_type: 0,
             associated_message_guid: None,
             associated_message_type: Some(i32::default()),
             balloon_bundle_id: None,
