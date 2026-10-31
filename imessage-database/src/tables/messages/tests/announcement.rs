@@ -461,3 +461,41 @@ mod unattributed_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod failed_tests {
+    use crate::tables::messages::message::Message;
+
+    fn event(item_type: i32, error: i64) -> Message {
+        let mut msg = Message::blank();
+        msg.item_type = item_type;
+        msg.error = error;
+        msg
+    }
+
+    #[test]
+    fn group_events_fail_on_low_bits() {
+        for item_type in 1..=3 {
+            assert!(!event(item_type, 0).is_failed(), "({item_type}, 0)");
+            assert!(event(item_type, 1).is_failed(), "({item_type}, 1)");
+            assert!(
+                event(item_type, 0xFFFF_FFFF).is_failed(),
+                "({item_type}, 0xFFFF_FFFF)"
+            );
+        }
+    }
+
+    #[test]
+    fn group_events_ignore_high_bits() {
+        for item_type in 1..=3 {
+            assert!(!event(item_type, 1 << 32).is_failed(), "{item_type}");
+        }
+    }
+
+    #[test]
+    fn other_item_types_never_fail() {
+        for item_type in [0, 4, 5, 6, 7, 8] {
+            assert!(!event(item_type, 1).is_failed(), "{item_type}");
+        }
+    }
+}

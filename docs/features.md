@@ -159,4 +159,5 @@ This tool targets the current latest public release for Messages.app. It may wor
     - Locations sent to emergency services
     - Chat background settings, including backgrounds marked as possibly sensitive in Messages and changes recorded but hidden from the conversation
     - No actor attribution for group changes recorded without an actor in Messages
+    - Failed group changes marked after the timestamp
     - Unknown group, location sharing, and other events, with raw codes for rows displayed without text in Messages

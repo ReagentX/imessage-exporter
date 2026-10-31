@@ -20,7 +20,8 @@ pub(crate) const YOU: &str = "You";
 /// - `who`: the actor's display name after the `ME` → caller-supplied
 ///   `self_name` substitution, or `None` for an event displayed without an
 ///   actor in Messages;
-/// - `timestamp`: the formatted timestamp;
+/// - `timestamp`: the formatted timestamp, followed by ` (Failed)` for a
+///   failed group event ([`Message::is_failed`]);
 /// - `announcement`: the library's [`Announcement`], unchanged.
 ///
 /// For [`GroupAction::ParticipantAdded`] / [`GroupAction::ParticipantRemoved`],
@@ -108,7 +109,10 @@ pub fn resolve_announcement<'a>(
         })
     };
 
-    let timestamp = format_message_date(msg, &config.options.timezone);
+    let mut timestamp = format_message_date(msg, &config.options.timezone);
+    if msg.is_failed() {
+        timestamp.push_str(" (Failed)");
+    }
 
     let participant_name = match &announcement {
         Announcement::GroupAction(

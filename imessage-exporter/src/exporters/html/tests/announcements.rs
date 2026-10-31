@@ -600,3 +600,61 @@ fn can_format_html_unknown_item_type() {
 
     assert_eq!(actual, expected);
 }
+
+/// Group photo removal by the database owner at `SAMPLE_DATE` with `error` set.
+fn group_icon_removed(error: i64) -> Message {
+    let mut message = Config::fake_message();
+    message.date = SAMPLE_DATE;
+    message.is_from_me = true;
+    message.item_type = 3;
+    message.group_action_type = 2;
+    message.error = error;
+    message
+}
+
+#[test]
+fn can_format_html_failed_group_event() {
+    let mut config = config(ExportType::Html);
+    with_me(&mut config);
+
+    let exporter = HTML::new(&config).unwrap();
+
+    let mut actual = String::new();
+    exporter.format_announcement(&group_icon_removed(1), &mut actual);
+    let expected = "\n<div class=\"announcement\">\n    <p><span class=\"timestamp\">May 17, 2022  5:29:42 PM (Failed)</span> You removed the group photo.</p>\n</div>\n";
+
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn can_format_html_failed_unattributed_group_event() {
+    let mut config = config(ExportType::Html);
+    with_me(&mut config);
+
+    let exporter = HTML::new(&config).unwrap();
+
+    let mut message = unattributed(3, 2);
+    message.error = 1;
+
+    let mut actual = String::new();
+    exporter.format_announcement(&message, &mut actual);
+    let expected = "\n<div class=\"announcement\">\n    <p><span class=\"timestamp\">May 17, 2022  5:29:42 PM (Failed)</span> The group photo was removed.</p>\n</div>\n";
+
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn can_format_html_unfailed_group_event() {
+    let mut config = config(ExportType::Html);
+    with_me(&mut config);
+
+    let exporter = HTML::new(&config).unwrap();
+
+    for error in [0, 1 << 32] {
+        let mut actual = String::new();
+        exporter.format_announcement(&group_icon_removed(error), &mut actual);
+        let expected = "\n<div class=\"announcement\">\n    <p><span class=\"timestamp\">May 17, 2022  5:29:42 PM</span> You removed the group photo.</p>\n</div>\n";
+
+        assert_eq!(actual, expected, "{error}");
+    }
+}
