@@ -19,6 +19,7 @@ lzma-rs = "=0.3.0"
 crabstep = { version = "=0.7.0", features = ["foundation"] }
 base64 = "=0.23.1"
 jzon = "=0.12.5"
+memchr = "=2.8.3"
 
 [features]
 proto-regen = ["dep:protobuf-codegen"]
