@@ -4,6 +4,8 @@ These are [sticker messages](https://support.apple.com/guide/iphone/send-sticker
 
 use std::fmt::{Display, Formatter};
 
+use memchr::memmem;
+
 use crate::util::bundle_id::parse_balloon_bundle_id;
 
 /// Bytes for `stickerEffect:type="`
@@ -88,6 +90,8 @@ pub enum StickerEffect {
     Puffy,
     /// `iridescent` effect in sticker EXIF metadata.
     Shiny,
+    /// Effect name without a closing `"/>` after the first `stickerEffect:type="` prefix.
+    Malformed,
     /// Unrecognized sticker effect name.
     Other(String),
 }
@@ -113,42 +117,30 @@ impl Display for StickerEffect {
             StickerEffect::Comic => write!(fmt, "Comic"),
             StickerEffect::Puffy => write!(fmt, "Puffy"),
             StickerEffect::Shiny => write!(fmt, "Shiny"),
+            StickerEffect::Malformed => write!(fmt, "Unknown"),
             StickerEffect::Other(name) => write!(fmt, "{name}"),
         }
     }
 }
 
 /// Parse the sticker effect type from HEIC EXIF data.
+///
+/// Read the name after the first `stickerEffect:type="` prefix, up to the next `"/>`:
+/// - No prefix: [`StickerEffect::Normal`].
+/// - Prefix without a closing `"/>`: [`StickerEffect::Malformed`].
+/// - Known name: the matching effect.
+/// - Unrecognized or empty name: [`StickerEffect::Other`] with that name.
 #[must_use]
-pub fn get_sticker_effect(mut heic_data: &[u8]) -> StickerEffect {
-    // Find the start index and drain
-    for idx in 0..heic_data.len() {
-        if idx + STICKER_EFFECT_PREFIX.len() < heic_data.len() {
-            let part = &heic_data[idx..idx + STICKER_EFFECT_PREFIX.len()];
-            if part == STICKER_EFFECT_PREFIX {
-                // Remove the start pattern from the blob
-                heic_data = &heic_data[idx + STICKER_EFFECT_PREFIX.len()..];
-                break;
-            }
-        } else {
-            return StickerEffect::Normal;
-        }
-    }
+pub fn get_sticker_effect(heic_data: &[u8]) -> StickerEffect {
+    let Some(start) = memmem::find(heic_data, &STICKER_EFFECT_PREFIX) else {
+        return StickerEffect::Normal;
+    };
+    let name = &heic_data[start + STICKER_EFFECT_PREFIX.len()..];
 
-    // Find the end index and truncate
-    for idx in 1..heic_data.len() {
-        if idx >= heic_data.len() - 2 {
-            return StickerEffect::Other("Unknown".to_string());
-        }
-        let part = &heic_data[idx..idx + STICKER_EFFECT_SUFFIX.len()];
-
-        if part == STICKER_EFFECT_SUFFIX {
-            // Remove the end pattern from the string
-            heic_data = &heic_data[..idx];
-            break;
-        }
+    match memmem::find(name, &STICKER_EFFECT_SUFFIX) {
+        Some(end) => StickerEffect::from_exif(&String::from_utf8_lossy(&name[..end])),
+        None => StickerEffect::Malformed,
     }
-    StickerEffect::from_exif(&String::from_utf8_lossy(heic_data))
 }
 
 #[cfg(test)]
@@ -157,7 +149,52 @@ mod tests {
     use std::fs::File;
     use std::io::Read;
 
-    use crate::message_types::sticker::{StickerEffect, get_sticker_effect};
+    use crate::message_types::sticker::{STICKER_EFFECT_PREFIX, StickerEffect, get_sticker_effect};
+
+    fn with_prefix(tail: &[u8]) -> Vec<u8> {
+        let mut out = STICKER_EFFECT_PREFIX.to_vec();
+        out.extend_from_slice(tail);
+        out
+    }
+
+    #[test]
+    fn test_parse_sticker_edges() {
+        let mut two_tags = with_prefix(b"puffy\"/>");
+        two_tags.extend_from_slice(&with_prefix(b"comic\"/>"));
+        let mut junk_first = b"junk".to_vec();
+        junk_first.extend_from_slice(&with_prefix(b"comic\"/>!"));
+
+        let cases: Vec<(Vec<u8>, StickerEffect)> = vec![
+            (vec![], StickerEffect::Normal),
+            (b"abc".to_vec(), StickerEffect::Normal),
+            (with_prefix(b""), StickerEffect::Malformed),
+            (with_prefix(b"x"), StickerEffect::Malformed),
+            (with_prefix(b"xy"), StickerEffect::Malformed),
+            (with_prefix(b"strokeXYZ"), StickerEffect::Malformed),
+            (with_prefix(b"stroke\"/>"), StickerEffect::Outline),
+            (with_prefix(b"stroke\"/>tail"), StickerEffect::Outline),
+            (with_prefix(b"\"/>"), StickerEffect::Other(String::new())),
+            (
+                with_prefix(b"\"/>abc\"/>z"),
+                StickerEffect::Other(String::new()),
+            ),
+            (
+                with_prefix(b"Unknown\"/>"),
+                StickerEffect::Other("Unknown".to_string()),
+            ),
+            (junk_first, StickerEffect::Comic),
+            (two_tags, StickerEffect::Puffy),
+        ];
+
+        for (input, expected) in cases {
+            assert_eq!(get_sticker_effect(&input), expected, "on {input:?}");
+        }
+    }
+
+    #[test]
+    fn test_sticker_effect_malformed_displays_unknown() {
+        assert_eq!(StickerEffect::Malformed.to_string(), "Unknown");
+    }
 
     #[test]
     fn test_parse_sticker_normal() {
